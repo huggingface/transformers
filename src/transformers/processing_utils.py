@@ -24,7 +24,7 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
@@ -74,6 +74,9 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+# type hinting: specifying the type of processor class that inherits from ProcessorMixin
+SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor from their names.
 transformers_module = direct_transformers_import(Path(__file__).parent)
@@ -248,7 +251,7 @@ class VideosKwargs(TypedDict, total=False):
             Metadata of the video containing information about total duration, fps and total number of frames.
         num_frames (`int`, *optional*):
             Maximum number of frames to sample when `do_sample_frames=True`.
-        fps (`int`, *optional*):
+        fps (`int` or `float`, *optional*):
             Target frames to sample per second when `do_sample_frames=True`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
@@ -277,7 +280,7 @@ class VideosKwargs(TypedDict, total=False):
     device: Optional[str]
     do_sample_frames: Optional[bool]
     video_metadata: Optional[Union[VideoMetadata, dict]]
-    fps: Optional[int]
+    fps: Optional[Union[int, float]]
     num_frames: Optional[int]
 
 
@@ -1097,9 +1100,13 @@ class ProcessorMixin(PushToHubMixin):
             processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
         )
 
-        # remove args that are in processor_dict to avoid duplicate arguments
-        args_to_remove = [i for i, arg in enumerate(accepted_args_and_kwargs) if arg in processor_dict]
-        args = [arg for i, arg in enumerate(args) if i not in args_to_remove]
+        # update args that are already in processor_dict to avoid duplicate arguments
+        args_to_update = {
+            i: valid_kwargs.pop(arg)
+            for i, arg in enumerate(accepted_args_and_kwargs)
+            if (arg in valid_kwargs and i < len(args))
+        }
+        args = [arg if i not in args_to_update else args_to_update[i] for i, arg in enumerate(args)]
 
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
@@ -1242,7 +1249,7 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[SpecificProcessorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -1250,7 +1257,7 @@ class ProcessorMixin(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ):
+    ) -> SpecificProcessorType:
         r"""
         Instantiate a processor associated with a pretrained model.
 

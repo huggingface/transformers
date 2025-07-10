@@ -127,7 +127,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         max_frames: int,
         metadata: Optional[Union[VideoMetadata, dict]] = None,
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
@@ -147,7 +147,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
@@ -208,7 +208,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         min_frames: Optional[int] = None,
         max_frames: Optional[int] = None,

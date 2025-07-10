@@ -18,6 +18,7 @@ import unittest
 
 from transformers import pipeline
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_timm,
     require_torch,
@@ -154,7 +155,15 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
 
     @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
@@ -296,10 +305,16 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         expected_label = 281  # tabby cat
         self.assertEqual(torch.argmax(outputs.logits).item(), expected_label)
 
-        expected_slice = torch.tensor([-11.2618, -9.6192, -10.3205]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-11.2618, -9.6192, -10.3205],
+                ("cuda", 8): [-11.2634, -9.6208, -10.3199],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+
         resulted_slice = outputs.logits[0, :3]
-        is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-3)
-        self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+        torch.testing.assert_close(resulted_slice, expected_slice, atol=1e-3, rtol=1e-3)
 
     @slow
     def test_inference_with_pipeline(self):
@@ -341,10 +356,16 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         expected_label = 281  # tabby cat
         self.assertEqual(torch.argmax(outputs.logits).item(), expected_label)
 
-        expected_slice = torch.tensor([-2.4043, 1.4492, -0.5127]).to(outputs.logits.dtype)
-        resulted_slice = outputs.logits[0, :3].cpu()
-        is_close = torch.allclose(resulted_slice, expected_slice, atol=0.1)
-        self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+        expectations = Expectations(
+            {
+                (None, None): [-2.4043, 1.4492, -0.5127],
+                ("cuda", 8): [-2.2676, 1.5303, -0.4409],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        resulted_slice = outputs.logits[0, :3].to(dtype=torch.float32)
+        torch.testing.assert_close(resulted_slice, expected_slice, atol=0.1, rtol=0.1)
 
     @slow
     def test_transformers_model_for_classification_is_equivalent_to_timm(self):
