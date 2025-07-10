@@ -365,8 +365,16 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_attention_outputs(self):
+        pass
 
-TEST_MODEL_PATH = "shumingh/plm_1b_hf"
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+
+TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 
 @require_torch
