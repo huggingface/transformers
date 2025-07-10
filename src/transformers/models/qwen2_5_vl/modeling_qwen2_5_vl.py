@@ -1289,6 +1289,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             )
             if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
                 attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
+                    # 🔧 Fix: Cast to float before applying torch.finfo
+                if not attention_mask_tensor.dtype.is_floating_point:
+                    attention_mask_tensor = attention_mask_tensor.float()
                 attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
                 attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
