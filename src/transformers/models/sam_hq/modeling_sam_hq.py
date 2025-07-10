@@ -787,7 +787,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
-        return query, keys, attn_out
+        return queries, keys, attn_out
 
 
 class SamHQTwoWayTransformer(nn.Module):

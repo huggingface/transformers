@@ -990,6 +990,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     ]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

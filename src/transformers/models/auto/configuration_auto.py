@@ -36,6 +36,8 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
+        ("aimv2", "Aimv2Config"),
+        ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -99,6 +101,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("deberta", "DebertaConfig"),
         ("deberta-v2", "DebertaV2Config"),
         ("decision_transformer", "DecisionTransformerConfig"),
+        ("deepseek_v2", "DeepseekV2Config"),
         ("deepseek_v3", "DeepseekV3Config"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
@@ -198,6 +201,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("layoutlmv3", "LayoutLMv3Config"),
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
+        ("lfm2", "Lfm2Config"),
         ("lightglue", "LightGlueConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
@@ -407,6 +411,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
+        ("aimv2", "AIMv2"),
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -477,6 +483,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("deberta", "DeBERTa"),
         ("deberta-v2", "DeBERTa-v2"),
         ("decision_transformer", "Decision Transformer"),
+        ("deepseek_v2", "DeepSeek-V2"),
         ("deepseek_v3", "DeepSeek-V3"),
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
@@ -585,6 +592,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("layoutxlm", "LayoutXLM"),
         ("led", "LED"),
         ("levit", "LeViT"),
+        ("lfm2", "Lfm2"),
         ("lightglue", "LightGlue"),
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
@@ -859,6 +867,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_text", "glm4v"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
+        ("aimv2_vision_model", "aimv2"),
         ("smolvlm_vision", "smolvlm"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
