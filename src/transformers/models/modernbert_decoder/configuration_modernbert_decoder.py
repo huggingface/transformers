@@ -189,7 +189,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.local_rope_theta = local_rope_theta
         # for consistency with ModernBert
         self.reference_compile = False
-        self._attn_implementation = "eager"
 
         # Set up layer_types for standardized layer type detection
         self.layer_types = layer_types
