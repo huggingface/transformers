@@ -81,7 +81,7 @@ class ServeCLITest(unittest.TestCase):
         self.assertIn('"choices": [{"delta": {"tool_calls": [{"foo1": "bar1", "foo2": "bar2"}]}, "index": 0}]', chunk)
 
 
-def async_retry(fn, max_attempts=5, delay=1):
+def async_retry(fn, max_attempts=5, delay=2):
     """
     Retry a function up to `max_attempts` times with a `delay` between attempts.
     Useful for testing async functions that may fail due to server not being ready.
@@ -119,7 +119,7 @@ class ServeCompletionsMixin:
         [
             ("default_request", {}),
             ("one_token", {"max_tokens": 1}),
-            #  TODO: CB fails next case, fix me
+            #  TODO: CB fails next case, seems like it is unable to switch models. fix me
             # ("different_model", {"model": "HuggingFaceTB/SmolLM2-135M-Instruct"}),
             (
                 "tool_call",
