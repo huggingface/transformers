@@ -1336,7 +1336,6 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
 
 
 @auto_docstring
-# Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     base_model_prefix = "model"
 
