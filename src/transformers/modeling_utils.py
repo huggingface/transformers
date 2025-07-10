@@ -2743,33 +2743,67 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Returns:
             `nn.Module`: A torch module mapping vocabulary to hidden states.
         """
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            return self.model.embed_tokens
+
+        # 2) vanilla decoder‑only architectures
+        if hasattr(self, "embed_tokens"):
+            return self.embed_tokens
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
             return base_model.get_input_embeddings()
         else:
-            raise NotImplementedError
+            raise NotImplementedError(
+                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
+                "please override in the subclass."
+            )
 
     def set_input_embeddings(self, value: nn.Module):
-        """
-        Set model's input embeddings.
+        """Fallback setter that handles **~70 %** of models in the code‑base.
 
-        Args:
-            value (`nn.Module`): A module mapping vocabulary to hidden states.
+        Order of attempts:
+        1. `self.model.embed_tokens`
+        2. `self.embed_tokens`
+        3. delegate to the *base model* if one exists
+        4. otherwise raise `NotImplementedError` so subclasses still can (and
+            should) override for exotic layouts.
         """
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
-            base_model.set_input_embeddings(value)
-        else:
-            raise NotImplementedError
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            self.model.embed_tokens = value
+
+        # 2) vanilla decoder‑only architectures
+        if hasattr(self, "embed_tokens"):
+            self.embed_tokens = value
+
+        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        base_attr = getattr(self, "base_model_prefix", None)
+        if base_attr:
+            base_model = getattr(self, base_attr, None)
+            if base_model is not None and base_model is not self and hasattr(base_model, "set_input_embeddings"):
+                base_model.set_input_embeddings(value)
+
+        raise NotImplementedError(
+            f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+        )
 
     def get_output_embeddings(self) -> nn.Module:
         """
-        Returns the model's output embeddings.
+        Returns the model's output embedding, defaulting to lm_head.
 
         Returns:
             `nn.Module`: A torch module mapping hidden states to vocabulary.
         """
-        return None  # Overwrite for models with output embeddings
+
+        return getattr(self, "lm_head", None)
+
+    def set_output_embeddings(self, new_embeddings):
+        """
+        Sets the model's output embedding, defaulting to setting new_embeddings to lm_head.
+        """
+        if getattr(self, "lm_head"):
+            self.lm_head = new_embeddings
 
     def _init_weights(self, module):
         """
