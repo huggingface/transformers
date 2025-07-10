@@ -46,7 +46,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, get_torch_version, logging
-from utils.deprecation import deprecate_kwarg
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_bert import BertConfig
 
 

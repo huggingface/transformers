@@ -37,6 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -429,6 +430,7 @@ class BridgeTowerSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

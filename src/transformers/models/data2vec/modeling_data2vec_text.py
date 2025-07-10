@@ -39,6 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_data2vec_text import Data2VecTextConfig
 
 
@@ -167,6 +168,7 @@ class Data2VecTextSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
