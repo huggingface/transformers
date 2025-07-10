@@ -33,6 +33,8 @@ class Lfm2Config(PretrainedConfig):
             `inputs_ids` passed when calling [`Lfm2Model`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 11008):
+            Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -86,6 +88,7 @@ class Lfm2Config(PretrainedConfig):
         self,
         vocab_size: int = 65536,
         hidden_size: int = 2560,
+        intermediate_size: int = 12288,
         num_hidden_layers: int = 32,
         num_attention_heads: int = 32,
         num_key_value_heads: int = 8,
@@ -99,10 +102,7 @@ class Lfm2Config(PretrainedConfig):
         tie_embedding: bool = True,
         rope_theta: float = 1000000.0,
         conv_bias: bool = False,
-        conv_dim: int = 2560,
         conv_L_cache: int = 3,
-        block_dim: int = 2560,
-        block_ff_dim: int = 12288,
         block_multiple_of: int = 256,
         block_ffn_dim_multiplier: float = 1.0,
         block_auto_adjust_ff_dim: bool = True,
@@ -125,15 +125,18 @@ class Lfm2Config(PretrainedConfig):
 
         # custom operator config
         self.conv_bias = conv_bias
-        self.conv_dim = conv_dim
         self.conv_L_cache = conv_L_cache
 
-        # block config
-        self.block_dim = block_dim
-        self.block_ff_dim = block_ff_dim
-        self.block_multiple_of = block_multiple_of
-        self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
-        self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
+        # MLP config
+        self.intermediate_size = kwargs.get("block_ff_dim", intermediate_size)  # to fit original config keys
+        if block_auto_adjust_ff_dim:
+            self.intermediate_size = int(2 * self.intermediate_size / 3)
+            # custom dim factor multiplier
+            if block_ffn_dim_multiplier is not None:
+                self.intermediate_size = int(block_ffn_dim_multiplier * self.intermediate_size)
+            self.intermediate_size = block_multiple_of * (
+                (self.intermediate_size + block_multiple_of - 1) // block_multiple_of
+            )
 
         self.layer_types = layer_types
         if self.layer_types is None:

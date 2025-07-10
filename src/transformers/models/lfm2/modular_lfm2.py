@@ -63,19 +63,9 @@ class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
 class Lfm2MLP(nn.Module):
     def __init__(self, config: Lfm2Config):
         super().__init__()
-        ff_dim = config.block_ff_dim
-        if config.block_auto_adjust_ff_dim:
-            ff_dim = int(2 * ff_dim / 3)
-            # custom dim factor multiplier
-            multiple_of = config.block_multiple_of
-            ffn_dim_multiplier = config.block_ffn_dim_multiplier
-            if ffn_dim_multiplier is not None:
-                ff_dim = int(ffn_dim_multiplier * ff_dim)
-            ff_dim = multiple_of * ((ff_dim + multiple_of - 1) // multiple_of)
-
-        self.w1 = nn.Linear(config.block_dim, ff_dim, bias=False)
-        self.w3 = nn.Linear(config.block_dim, ff_dim, bias=False)
-        self.w2 = nn.Linear(ff_dim, config.block_dim, bias=False)
+        self.w1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.w3 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.w2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
@@ -87,7 +77,7 @@ class Lfm2HybridConvCache(DynamicCache):
 
     It stores the Key and Value states as a list of tensors, one for each layer.
     Attention layer cache shape: `[batch_size, num_heads, seq_len, head_dim]`.
-    Conv layer cache shape: `[batch_size, conv_dim, L_cache-1]`.
+    Conv layer cache shape: `[batch_size, hidden_size, L_cache-1]`.
     """
 
     def __init__(
@@ -110,7 +100,7 @@ class Lfm2HybridConvCache(DynamicCache):
         for _ in range(config.num_hidden_layers):
             conv_state = torch.zeros(
                 self.max_batch_size,
-                config.conv_dim,
+                config.hidden_size,
                 self.conv_L_cache,
                 dtype=self._dtype,
                 device=device,
@@ -264,15 +254,15 @@ class Lfm2ShortConv(nn.Module):
         self.bias = config.conv_bias
 
         self.conv = nn.Conv1d(
-            in_channels=config.conv_dim,
-            out_channels=config.conv_dim,
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
             kernel_size=self.L_cache,
-            groups=config.conv_dim,
+            groups=config.hidden_size,
             bias=self.bias,
             padding=self.L_cache - 1,
         )
-        self.in_proj = nn.Linear(config.conv_dim, 3 * config.conv_dim, bias=self.bias)
-        self.out_proj = nn.Linear(config.conv_dim, config.conv_dim, bias=self.bias)
+        self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
     def cuda_kernels_forward(
         self,
