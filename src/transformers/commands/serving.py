@@ -329,7 +329,7 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def validate_request(self, request: dict, schema: _TypedDictMeta, validator: TypeAdapter, unused_fields: set):
+    def validate_request(self, request: dict, schema: "_TypedDictMeta", validator: TypeAdapter, unused_fields: set):
         """
         Validates the request against the schema, and checks for unexpected keys.
 
@@ -337,7 +337,7 @@ class ServeCommand(BaseTransformersCLICommand):
             request (`dict`):
                 The request to validate.
             schema (`_TypedDictMeta`):
-                The schema of the request to validate. It is a TypedDict definition.
+                The schema of the request to validate. It is a `TypedDict` definition.
             validator (`TypeAdapter`):
                 The validator to use to validate the request. Built from `schema`.
             unused_fields (`set`):
