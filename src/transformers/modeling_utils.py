@@ -106,6 +106,7 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_kernels_available,
     is_offline_mode,
     is_optimum_available,
@@ -2287,6 +2288,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             and attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys()
         ):
             message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+            if cls._supports_flash_attn_3:
+                message += ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
             if cls._supports_flash_attn_2:
                 message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
             if cls._supports_sdpa:
@@ -2322,6 +2325,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             ):
                 sub_config._attn_implementation_internal = curr_attn_implementation
 
+        if requested_attn_implementation == "flash_attention_3" and self._flash_attn_3_can_dispatch():
+            self.config._attn_implementation = "flash_attention_3"
         if requested_attn_implementation == "flash_attention_2" and self._flash_attn_2_can_dispatch():
             self.config._attn_implementation = "flash_attention_2"
         elif requested_attn_implementation == "flex_attention" and self._flex_attn_can_dispatch():
@@ -2427,7 +2432,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         torch_dtype = self.config.torch_dtype if hasattr(self.config, "torch_dtype") else torch.get_default_dtype()
         device_map = self.hf_device_map if hasattr(self, "hf_device_map") else None
 
-        if not self._supports_flash_attn_2:
+        if not self._supports_flash_attn:
             raise ValueError(
                 f"{self.__class__.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
@@ -2510,6 +2515,91 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         # If no error raise by this point, we can return `True`
+        return True
+
+    def _flash_attn_3_can_dispatch(
+        self,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, dict[str, int]]] = None,
+    ) -> bool:
+        """
+        Checks the availability of Flash Attention 3 and compatibility with the current model.
+
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_3" so that the model can initialize the correct attention module.
+        """
+        # Config always has `torch_dtype` but we need the next line for `no_super_init()` tests
+        torch_dtype = self.config.torch_dtype if hasattr(self.config, "torch_dtype") else torch.get_default_dtype()
+        device_map = self.hf_device_map if hasattr(self, "hf_device_map") else None
+
+        if not self._supports_flash_attn:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support Flash Attention 3.0 yet. Please request to add support where"
+                f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+            )
+
+        if not is_flash_attn_3_available():
+            preface = "FlashAttention3 has been toggled on, but it cannot be used due to the following error:"
+
+            if importlib.util.find_spec("flash_attn_3") is None:
+                raise ImportError(f"{preface} the package flash_attn_3 seems to be not installed.")
+
+            if torch.cuda.is_available():
+                major, _ = torch.cuda.get_device_capability()
+                if major < 9:
+                    raise ValueError(
+                        f"{preface} Flash Attention 3 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
+                    )
+                else:
+                    raise ImportError(f"{preface} Flash Attention 3 is not available.")
+            else:
+                raise ValueError(
+                    f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
+                )
+
+        if torch_dtype is None:
+            logger.warning_once(
+                "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
+            )
+        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+            logger.warning_once(
+                "Flash Attention 3 only supports torch.float16 and torch.bfloat16 dtypes, but"
+                f" the current dype in {self.__class__.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", torch_dtype=torch.float16)`'
+            )
+
+        if getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False):
+            raise ValueError("Model is configured to use ALiBi, which is not supported by Flash Attention 3.")
+
+        # Check for attention dropout, which is incompatible with FA3
+        if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
+            raise ValueError(
+                f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
+            )
+
+        # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
+        # or the model may be initialized under the context manager `with torch.device("cuda"):`.
+        if device_map is None and torch.empty(0).device.type not in ["cuda", "mlu"]:
+            if torch.cuda.is_available():
+                logger.warning_once(
+                    "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
+                    " after initializing it on CPU with `model.to('cuda')`."
+                )
+            else:
+                raise ValueError(
+                    "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
+                    "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                    "or initialising the model on CPU and then moving it to GPU."
+                )
+        elif (
+            device_map is not None
+            and isinstance(device_map, dict)
+            and ("cpu" in device_map.values() or "disk" in device_map.values())
+        ):
+            raise ValueError(
+                "You are attempting to use Flash Attention 3 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
+                "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
+            )
         return True
 
     def _sdpa_can_dispatch(self, hard_check_only: bool = False) -> bool:
