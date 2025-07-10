@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,9 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Conf
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
+    IS_XPU_SYSTEM,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -42,6 +43,7 @@ from transformers.utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -259,6 +261,7 @@ class Kosmos2ModelTester:
 @require_torch
 class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
+    additional_model_inputs = ["input_ids", "image_embeds_position_mask"]
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
@@ -454,12 +457,12 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
-    @pytest.mark.generate
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip(
-        "KOSMOS-2 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten"
-    )
-    def test_generate_from_inputs_embeds(self):
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @pytest.mark.generate
@@ -602,6 +605,53 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
+    @pytest.mark.generate
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
+        # NOTE: overwritten because Kosmos with ids prepares position ids differently from embeds
+        # If the model get ids, all pad tokens are masked from position ids. That is not possible with embeds
+
+        # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
+        # if fails, you should probably update the `prepare_inputs_for_generation` function
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            config.is_decoder = True
+
+            # Skip models without explicit support
+            model = model_class(config).to(torch_device).eval()
+
+            # Traditional way of generating text
+            input_ids = inputs_dict.pop("input_ids")
+            input_ids[input_ids == config.get_text_config().pad_token_id] = 0
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "num_beams": num_beams,
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,  # generate exactly 5 tokens
+                "use_cache": True,
+            }
+            outputs_from_ids = model.generate(input_ids=input_ids, **generation_kwargs, **inputs_dict)
+            self.assertEqual(outputs_from_ids.sequences.shape[:2], (input_ids.shape[0], input_ids.shape[1] + 5))
+
+            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output).
+            # The output of the two calls should be the same.
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs_from_embeds = model.generate(
+                input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+            )
+            self._check_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
+
+            # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
+            # be the same
+            outputs_from_embeds_wo_ids = model.generate(
+                inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+            )
+            outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
+            self._check_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -656,7 +706,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
-        atol = 1e-4 if IS_ROCM_SYSTEM else 1e-5
+        atol = 1e-4 if (IS_ROCM_SYSTEM or IS_XPU_SYSTEM) else 1e-5
 
         np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),

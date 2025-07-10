@@ -14,7 +14,6 @@
 
 import ast
 import collections
-import datetime
 import functools
 import json
 import operator
@@ -22,17 +21,37 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
-from get_previous_daily_ci import get_last_daily_ci_reports
+from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
-api = HfApi()
-client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+# A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
+# `additional_files`.
+job_to_test_map = {
+    "run_models_gpu": "Models",
+    "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
+    "run_pipelines_torch_gpu": "PyTorch pipelines",
+    "run_pipelines_tf_gpu": "TensorFlow pipelines",
+    "run_examples_gpu": "Examples directory",
+    "run_torch_cuda_extensions_gpu": "DeepSpeed",
+    "run_quantization_torch_gpu": "Quantization",
+}
+
+# The values are used as the file names where to save the corresponding CI job results.
+test_to_result_name = {
+    "Models": "model",
+    "Trainer & FSDP": "trainer_and_fsdp",
+    "PyTorch pipelines": "torch_pipeline",
+    "TensorFlow pipelines": "tf_pipeline",
+    "Examples directory": "example",
+    "DeepSpeed": "deepspeed",
+    "Quantization": "quantization",
+}
 
 NON_MODEL_TEST_MODULES = [
     "deepspeed",
@@ -45,6 +64,8 @@ NON_MODEL_TEST_MODULES = [
     "sagemaker",
     "trainer",
     "utils",
+    "fsdp",
+    "quantization",
 ]
 
 
@@ -88,7 +109,7 @@ def handle_stacktraces(test_results):
     return stacktraces
 
 
-def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
+def dicts_to_sum(objects: Union[dict[str, dict], list[dict]]):
     if isinstance(objects, dict):
         lists = objects.values()
     else:
@@ -105,10 +126,11 @@ class Message:
         self,
         title: str,
         ci_title: str,
-        model_results: Dict,
-        additional_results: Dict,
-        selected_warnings: List = None,
+        model_results: dict,
+        additional_results: dict,
+        selected_warnings: Optional[list] = None,
         prev_ci_artifacts=None,
+        other_ci_artifacts=None,
     ):
         self.title = title
         self.ci_title = ci_title
@@ -159,6 +181,7 @@ class Message:
         self.selected_warnings = selected_warnings
 
         self.prev_ci_artifacts = prev_ci_artifacts
+        self.other_ci_artifacts = other_ci_artifacts
 
     @property
     def time(self) -> str:
@@ -180,15 +203,15 @@ class Message:
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
     @property
-    def header(self) -> Dict:
+    def header(self) -> dict:
         return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
 
     @property
-    def ci_title_section(self) -> Dict:
+    def ci_title_section(self) -> dict:
         return {"type": "section", "text": {"type": "mrkdwn", "text": self.ci_title}}
 
     @property
-    def no_failures(self) -> Dict:
+    def no_failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -204,14 +227,13 @@ class Message:
         }
 
     @property
-    def failures(self) -> Dict:
+    def failures(self) -> dict:
         return {
             "type": "section",
             "text": {
                 "type": "plain_text",
                 "text": (
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
-                    f"Number of model failures: {self.n_model_failures}.\n"
                     f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
@@ -224,7 +246,7 @@ class Message:
         }
 
     @property
-    def warnings(self) -> Dict:
+    def warnings(self) -> dict:
         # If something goes wrong, let's avoid the CI report failing to be sent.
         button_text = "Check warnings (Link not found)"
         # Use the workflow run link
@@ -265,7 +287,11 @@ class Message:
             return f"{'0'.rjust(rjust)} | {str(report['multi']).rjust(rjust)} | "
 
     @property
-    def category_failures(self) -> Dict:
+    def category_failures(self) -> dict:
+        if job_name != "run_models_gpu":
+            category_failures_report = ""
+            return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
+
         model_failures = [v["failed"] for v in self.model_results.values()]
 
         category_failures = {}
@@ -291,7 +317,7 @@ class Message:
 
         header = "Single |  Multi | Category\n"
         category_failures_report = prepare_reports(
-            title="The following modeling categories had failures", header=header, reports=individual_reports
+            title="The following categories had failures", header=header, reports=individual_reports
         )
 
         return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
@@ -334,7 +360,7 @@ class Message:
         return entries_changed
 
     @property
-    def model_failures(self) -> List[Dict]:
+    def model_failures(self) -> list[dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
@@ -345,25 +371,40 @@ class Message:
         }
 
         for k, v in self.model_results.items():
+            # The keys in `model_results` may contain things like `models_vit` or `quantization_autoawq`
+            # Remove the prefix to make the report cleaner.
+            k = k.replace("models_", "").replace("quantization_", "")
             if k in NON_MODEL_TEST_MODULES:
-                pass
+                continue
 
             if sum(per_model_sum(v).values()):
                 dict_failed = dict(v["failed"])
-                pytorch_specific_failures = dict_failed.pop("PyTorch")
-                tensorflow_specific_failures = dict_failed.pop("TensorFlow")
-                other_failures = dicts_to_sum(dict_failed.values())
 
-                failures[k] = {
-                    "PyTorch": pytorch_specific_failures,
-                    "TensorFlow": tensorflow_specific_failures,
-                    "other": other_failures,
-                }
+                # Model job has a special form for reporting
+                if job_name == "run_models_gpu":
+                    pytorch_specific_failures = dict_failed.pop("PyTorch")
+                    tensorflow_specific_failures = dict_failed.pop("TensorFlow")
+                    other_failures = dicts_to_sum(dict_failed.values())
+
+                    failures[k] = {
+                        "PyTorch": pytorch_specific_failures,
+                        "TensorFlow": tensorflow_specific_failures,
+                        "other": other_failures,
+                    }
+
+                else:
+                    test_name = job_to_test_map[job_name]
+                    specific_failures = dict_failed.pop(test_name)
+                    failures[k] = {
+                        test_name: specific_failures,
+                    }
 
         model_reports = []
         other_module_reports = []
 
         for key, value in non_model_failures.items():
+            key = key.replace("models_", "").replace("quantization_", "")
+
             if key in NON_MODEL_TEST_MODULES:
                 device_report = self.get_device_report(value)
 
@@ -376,44 +417,60 @@ class Message:
                     other_module_reports.append(report)
 
         for key, value in failures.items():
-            device_report_values = [
-                value["PyTorch"]["single"],
-                value["PyTorch"]["multi"],
-                value["TensorFlow"]["single"],
-                value["TensorFlow"]["multi"],
-                sum(value["other"].values()),
-            ]
+            # Model job has a special form for reporting
+            if job_name == "run_models_gpu":
+                device_report_values = [
+                    value["PyTorch"]["single"],
+                    value["PyTorch"]["multi"],
+                    value["TensorFlow"]["single"],
+                    value["TensorFlow"]["multi"],
+                    sum(value["other"].values()),
+                ]
+
+            else:
+                test_name = job_to_test_map[job_name]
+                device_report_values = [
+                    value[test_name]["single"],
+                    value[test_name]["multi"],
+                ]
 
             if sum(device_report_values):
-                device_report = " | ".join([str(x).rjust(9) for x in device_report_values]) + " | "
+                # This is related to `model_header` below
+                rjust_width = 9 if job_name == "run_models_gpu" else 6
+                device_report = " | ".join([str(x).rjust(rjust_width) for x in device_report_values]) + " | "
                 report = f"{device_report}{key}"
 
                 model_reports.append(report)
 
         # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
-        model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+        if job_name == "run_models_gpu":
+            model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+        else:
+            model_header = "Single |  Multi | Category\n"
+
+        # Used when calling `prepare_reports` below to prepare the `title` argument
+        label = test_to_result_name[job_to_test_map[job_name]]
+
         sorted_model_reports = sorted(model_reports, key=lambda s: s.split("| ")[-1])
         model_failures_report = prepare_reports(
-            title="These following model modules had failures", header=model_header, reports=sorted_model_reports
+            title=f"These following {label} modules had failures", header=model_header, reports=sorted_model_reports
         )
 
         module_header = "Single |  Multi | Category\n"
         sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("| ")[-1])
         module_failures_report = prepare_reports(
-            title="The following non-model modules had failures", header=module_header, reports=sorted_module_reports
+            title=f"The following {label} modules had failures", header=module_header, reports=sorted_module_reports
         )
 
         # To be sent to Slack channels
-        model_failure_sections = [
-            {"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
-        ]
+        model_failure_sections = [{"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}}]
+        model_failure_sections.append({"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}})
 
         # Save the complete (i.e. no truncation) failure tables (of the current workflow run)
         # (to be uploaded as artifacts)
 
         model_failures_report = prepare_reports(
-            title="These following model modules had failures",
+            title=f"These following {label} modules had failures",
             header=model_header,
             reports=sorted_model_reports,
             to_truncate=False,
@@ -423,7 +480,7 @@ class Message:
             fp.write(model_failures_report)
 
         module_failures_report = prepare_reports(
-            title="The following non-model modules had failures",
+            title=f"The following {label} modules had failures",
             header=module_header,
             reports=sorted_module_reports,
             to_truncate=False,
@@ -466,7 +523,7 @@ class Message:
         return model_failure_sections
 
     @property
-    def additional_failures(self) -> Dict:
+    def additional_failures(self) -> dict:
         failures = {k: v["failed"] for k, v in self.additional_results.items()}
         errors = {k: v["error"] for k, v in self.additional_results.items()}
 
@@ -501,7 +558,10 @@ class Message:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
-            blocks.append(self.category_failures)
+            block = self.category_failures
+            if block["text"]["text"]:
+                blocks.append(block)
+
             for block in self.model_failures:
                 if block["text"]["text"]:
                     blocks.append(block)
@@ -515,68 +575,105 @@ class Message:
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
 
-        new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
+        new_failure_blocks = []
+        for idx, (prev_workflow_run_id, prev_ci_artifacts) in enumerate(
+            [self.prev_ci_artifacts] + self.other_ci_artifacts
+        ):
+            if idx == 0:
+                # This is the truncated version to show on slack. For now.
+                new_failure_blocks = self.get_new_model_failure_blocks(
+                    prev_ci_artifacts=prev_ci_artifacts, with_header=False
+                )
+
+            # To save the list of new model failures and uploaed to hub repositories
+            extra_blocks = self.get_new_model_failure_blocks(prev_ci_artifacts=prev_ci_artifacts, to_truncate=False)
+            if extra_blocks:
+                filename = "new_failures"
+                if idx > 0:
+                    filename = f"{filename}_against_{prev_workflow_run_id}"
+
+                failure_text = extra_blocks[-1]["text"]["text"]
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
+                with open(file_path, "w", encoding="UTF-8") as fp:
+                    fp.write(failure_text)
+
+                # upload results to Hub dataset
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
+                _ = api.upload_file(
+                    path_or_fileobj=file_path,
+                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.txt",
+                    repo_id=report_repo_id,
+                    repo_type="dataset",
+                    token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+                )
+
+                # extra processing to save to json format
+                new_failed_tests = {}
+                nb_new_failed_tests = 0
+                for line in failure_text.split():
+                    if "https://github.com/huggingface/transformers/actions/runs" in line:
+                        pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
+                        items = re.findall(pattern, line)
+                    elif "tests/" in line:
+                        # TODO: Improve the condition here.
+                        if "tests/models/" in line or (
+                            "tests/quantization/" in line and job_name == "run_quantization_torch_gpu"
+                        ):
+                            model = line.split("/")[2]
+                        else:
+                            model = line.split("/")[1]
+                        if model not in new_failed_tests:
+                            new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
+                        for _, device in items:
+                            new_failed_tests[model][f"{device}-gpu"].append(line)
+                            nb_new_failed_tests += 1
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.json")
+                with open(file_path, "w", encoding="UTF-8") as fp:
+                    json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
+
+                # upload results to Hub dataset
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.json")
+                commit_info = api.upload_file(
+                    path_or_fileobj=file_path,
+                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.json",
+                    repo_id=report_repo_id,
+                    repo_type="dataset",
+                    token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+                )
+                new_failures_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.json"
+
+                if idx == 0:
+                    block = {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*There are {nb_new_failed_tests} new failed tests*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                        },
+                        "accessory": {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Check new failures"},
+                            "url": new_failures_url,
+                        },
+                    }
+                    blocks.append(block)
+                else:
+                    block = {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'this run' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                        },
+                        "accessory": {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Check failures"},
+                            "url": new_failures_url,
+                        },
+                    }
+                    blocks.append(block)
+
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
-
-        # To save the list of new model failures
-        extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
-        if extra_blocks:
-            failure_text = extra_blocks[-1]["text"]["text"]
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                fp.write(failure_text)
-
-            # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            commit_info = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
-            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
-
-            # extra processing to save to json format
-            new_failed_tests = {}
-            for line in failure_text.split():
-                if "https://github.com/huggingface/transformers/actions/runs" in line:
-                    pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
-                    items = re.findall(pattern, line)
-                elif "tests/models/" in line:
-                    model = line.split("/")[2]
-                    if model not in new_failed_tests:
-                        new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
-                    for url, device in items:
-                        new_failed_tests[model][f"{device}-gpu"].append(line)
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
-
-            # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
-            _ = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.json",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
-
-            block = {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": " ",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check New model failures"},
-                    "url": url,
-                },
-            }
-            blocks.append(block)
 
         return json.dumps(blocks)
 
@@ -665,7 +762,7 @@ class Message:
 
         failure_text = ""
         for idx, error in enumerate(failures):
-            new_text = failure_text + f'*{error["line"]}*\n_{error["trace"]}_\n\n'
+            new_text = failure_text + f"*{error['line']}*\n_{error['trace']}_\n\n"
             if len(new_text) > MAX_ERROR_TEXT:
                 # `failure_text` here has length <= 3000
                 failure_text = failure_text + "[Truncated]"
@@ -697,18 +794,32 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
-    def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
-        if self.prev_ci_artifacts is None:
+    def get_new_model_failure_blocks(self, prev_ci_artifacts, with_header=True, to_truncate=True):
+        if prev_ci_artifacts is None:
             return []
 
-        sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
+        if len(self.model_results) > 0:
+            target_results = self.model_results
+        else:
+            target_results = self.additional_results[job_to_test_map[job_name]]
 
+        # Make the format uniform between `model_results` and `additional_results[XXX]`
+        if "failures" in target_results:
+            target_results = {job_name: target_results}
+        sorted_dict = sorted(target_results.items(), key=lambda t: t[0])
+
+        job = job_to_test_map[job_name]
         prev_model_results = {}
         if (
-            f"ci_results_{job_name}" in self.prev_ci_artifacts
-            and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
+            f"ci_results_{job_name}" in prev_ci_artifacts
+            and f"{test_to_result_name[job]}_results.json" in prev_ci_artifacts[f"ci_results_{job_name}"]
         ):
-            prev_model_results = json.loads(self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
+            prev_model_results = json.loads(
+                prev_ci_artifacts[f"ci_results_{job_name}"][f"{test_to_result_name[job]}_results.json"]
+            )
+            # Make the format uniform between `model_results` and `additional_results[XXX]`
+            if "failures" in prev_model_results:
+                prev_model_results = {job_name: prev_model_results}
 
         all_failure_lines = {}
         for job, job_result in sorted_dict:
@@ -728,14 +839,14 @@ class Message:
                         if error["line"] in prev_error_lines:
                             continue
 
-                        new_text = f'{error["line"]}\n\n'
+                        new_text = f"{error['line']}\n\n"
 
                         if new_text not in all_failure_lines:
                             all_failure_lines[new_text] = []
 
                         all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
 
-        MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New failures```\n\n")
         if not to_truncate:
             MAX_ERROR_TEXT = float("inf")
         failure_text = ""
@@ -752,10 +863,10 @@ class Message:
         if failure_text:
             if with_header:
                 blocks.append(
-                    {"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}}
+                    {"type": "header", "text": {"type": "plain_text", "text": "New failures", "emoji": True}}
                 )
             else:
-                failure_text = f"*New model failures*\n\n{failure_text}"
+                failure_text = f"{failure_text}"
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
 
         return blocks
@@ -794,7 +905,7 @@ class Message:
                         job_result,
                         failures,
                         device,
-                        text=f'Number of failures: {job_result["failed"][device]}',
+                        text=f"Number of failures: {job_result['failed'][device]}",
                     )
 
                     print("Sending the following reply")
@@ -808,20 +919,6 @@ class Message:
                     )
 
                     time.sleep(1)
-
-        blocks = self.get_new_model_failure_blocks()
-        if blocks:
-            print("Sending the following reply")
-            print(json.dumps({"blocks": blocks}))
-
-            client.chat_postMessage(
-                channel=SLACK_REPORT_CHANNEL_ID,
-                text="Results for new failures",
-                blocks=blocks,
-                thread_ts=self.thread_ts["ts"],
-            )
-
-            time.sleep(1)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -853,10 +950,10 @@ def retrieve_available_artifacts():
         def __str__(self):
             return self.name
 
-        def add_path(self, path: str, gpu: str = None):
+        def add_path(self, path: str, gpu: Optional[str] = None):
             self.paths.append({"name": self.name, "path": path, "gpu": gpu})
 
-    _available_artifacts: Dict[str, Artifact] = {}
+    _available_artifacts: dict[str, Artifact] = {}
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
@@ -917,7 +1014,17 @@ def prepare_reports(title, header, reports, to_truncate=True):
     return report
 
 
+def pop_default(l: list[Any], i: int, default: Any) -> Any:
+    try:
+        return l.pop(i)
+    except IndexError:
+        return default
+
+
 if __name__ == "__main__":
+    api = HfApi()
+    client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
 
     # runner_status = os.environ.get("RUNNER_STATUS")
@@ -942,7 +1049,6 @@ if __name__ == "__main__":
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    title = f"🤗 Results of {ci_event} - {os.getenv('CI_TEST_JOB')}."
     # Add Commit/PR title with a link for push CI
     # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
     ci_title_push = os.environ.get("CI_TITLE_PUSH")
@@ -994,6 +1100,8 @@ if __name__ == "__main__":
     else:
         ci_title = ""
 
+    # `title` will be updated at the end before calling `Message()`.
+    title = f"🤗 Results of {ci_event}"
     if runner_not_available or runner_failed or setup_failed:
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
@@ -1003,13 +1111,24 @@ if __name__ == "__main__":
     # In our usage in `.github/workflows/slack-report.yml`, we always pass an argument when calling this script.
     # The argument could be an empty string `""` if a job doesn't depend on the job `setup`.
     if arguments[0] == "":
-        models = []
+        job_matrix = []
     else:
-        model_list_as_str = arguments[0]
+        job_matrix_as_str = arguments[0]
         try:
-            folder_slices = ast.literal_eval(model_list_as_str)
-            # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-            models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
+            folder_slices = ast.literal_eval(job_matrix_as_str)
+            if len(folder_slices) > 0:
+                if isinstance(folder_slices[0], list):
+                    # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
+                    job_matrix = [
+                        x.replace("models/", "models_").replace("quantization/", "quantization_")
+                        for folders in folder_slices
+                        for x in folders
+                    ]
+                elif isinstance(folder_slices[0], str):
+                    job_matrix = [
+                        x.replace("models/", "models_").replace("quantization/", "quantization_")
+                        for x in folder_slices
+                    ]
         except Exception:
             Message.error_out(title, ci_title)
             raise ValueError("Errored out.")
@@ -1029,7 +1148,7 @@ if __name__ == "__main__":
 
     available_artifacts = retrieve_available_artifacts()
 
-    modeling_categories = [
+    test_categories = [
         "PyTorch",
         "TensorFlow",
         "Flax",
@@ -1038,41 +1157,53 @@ if __name__ == "__main__":
         "Trainer",
         "ONNX",
         "Auto",
+        "Quantization",
         "Unclassified",
     ]
+
+    job_name = os.getenv("CI_TEST_JOB")
+    report_name_prefix = job_name
 
     # This dict will contain all the information relative to each model:
     # - Failures: the total, as well as the number of failures per-category defined above
     # - Success: total
     # - Time spent: as a comma-separated list of elapsed time
     # - Failures: as a line-break separated list of errors
-    model_results = {
-        model: {
-            "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in modeling_categories},
+    matrix_job_results = {
+        matrix_name: {
+            "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in test_categories},
             "success": 0,
             "time_spent": "",
             "failures": {},
             "job_link": {},
         }
-        for model in models
-        if f"run_models_gpu_{model}_test_reports" in available_artifacts
+        for matrix_name in job_matrix
+        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
-    for model in model_results.keys():
-        for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
-            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
+    for matrix_name in matrix_job_results.keys():
+        for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
+            path = artifact_path_dict["path"]
+            artifact_gpu = artifact_path_dict["gpu"]
+
+            if path not in artifact_name_to_job_map:
+                # Mismatch between available artifacts and reported jobs on github. It happens.
+                continue
+
+            artifact = retrieve_artifact(path, artifact_gpu)
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                job = artifact_name_to_job_map[artifact_path["path"]]
-                model_results[model]["job_link"][artifact_path["gpu"]] = job["html_url"]
+                job = artifact_name_to_job_map[path]
+                matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
                 failed, success, time_spent = handle_test_results(artifact["stats"])
-                model_results[model]["success"] += success
-                model_results[model]["time_spent"] += time_spent[1:-1] + ", "
+                matrix_job_results[matrix_name]["success"] += success
+                matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
+                # TODO: ???
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
                         # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
@@ -1083,39 +1214,45 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path["gpu"] not in model_results[model]["failures"]:
-                            model_results[model]["failures"][artifact_path["gpu"]] = []
+                        if artifact_gpu not in matrix_job_results[matrix_name]["failures"]:
+                            matrix_job_results[matrix_name]["failures"][artifact_gpu] = []
 
-                        model_results[model]["failures"][artifact_path["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
+                        trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
+                        matrix_job_results[matrix_name]["failures"][artifact_gpu].append(
+                            {"line": line, "trace": trace}
                         )
 
-                        if re.search("test_modeling_tf_", line):
-                            model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
+                        # TODO: How to deal wit this
+
+                        if re.search("tests/quantization", line):
+                            matrix_job_results[matrix_name]["failed"]["Quantization"][artifact_gpu] += 1
+
+                        elif re.search("test_modeling_tf_", line):
+                            matrix_job_results[matrix_name]["failed"]["TensorFlow"][artifact_gpu] += 1
 
                         elif re.search("test_modeling_flax_", line):
-                            model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["Flax"][artifact_gpu] += 1
 
                         elif re.search("test_modeling", line):
-                            model_results[model]["failed"]["PyTorch"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["PyTorch"][artifact_gpu] += 1
 
                         elif re.search("test_tokenization", line):
-                            model_results[model]["failed"]["Tokenizers"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["Tokenizers"][artifact_gpu] += 1
 
                         elif re.search("test_pipelines", line):
-                            model_results[model]["failed"]["Pipelines"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["Pipelines"][artifact_gpu] += 1
 
                         elif re.search("test_trainer", line):
-                            model_results[model]["failed"]["Trainer"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["Trainer"][artifact_gpu] += 1
 
                         elif re.search("onnx", line):
-                            model_results[model]["failed"]["ONNX"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["ONNX"][artifact_gpu] += 1
 
                         elif re.search("auto", line):
-                            model_results[model]["failed"]["Auto"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["Auto"][artifact_gpu] += 1
 
                         else:
-                            model_results[model]["failed"]["Unclassified"][artifact_path["gpu"]] += 1
+                            matrix_job_results[matrix_name]["failed"]["Unclassified"][artifact_gpu] += 1
                             unclassified_model_failures.append(line)
 
     # Additional runs
@@ -1123,7 +1260,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
         "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
-        "Torch CUDA extension tests": "run_torch_cuda_extensions_gpu_test_reports",
+        "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1132,23 +1269,31 @@ if __name__ == "__main__":
         del additional_files["TensorFlow pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
         del additional_files["TensorFlow pipelines"]
-        del additional_files["Torch CUDA extension tests"]
+        del additional_files["DeepSpeed"]
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}
 
-    # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
-    # `additional_files`. This is used to remove some entries in `additional_files` that are not concerned by a
-    # specific job. See below.
-    job_to_test_map = {
-        "run_pipelines_torch_gpu": "PyTorch pipelines",
-        "run_pipelines_tf_gpu": "TensorFlow pipelines",
-        "run_examples_gpu": "Examples directory",
-        "run_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
-    }
+    report_repo_id = os.getenv("REPORT_REPO_ID")
+
+    # if it is not a scheduled run, upload the reports to a subfolder under `report_repo_folder`
+    report_repo_subfolder = ""
+    if os.getenv("GITHUB_EVENT_NAME") != "schedule":
+        report_repo_subfolder = f"{os.getenv('GITHUB_RUN_NUMBER')}-{os.getenv('GITHUB_RUN_ID')}"
+        report_repo_subfolder = f"runs/{report_repo_subfolder}"
+
+    workflow_run = get_last_daily_ci_run(
+        token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=os.getenv("GITHUB_RUN_ID")
+    )
+    workflow_run_created_time = workflow_run["created_at"]
+    workflow_id = workflow_run["workflow_id"]
+
+    report_repo_folder = workflow_run_created_time.split("T")[0]
+
+    if report_repo_subfolder:
+        report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
 
     # Remove some entries in `additional_files` if they are not concerned.
     test_name = None
-    job_name = os.getenv("CI_TEST_JOB")
     if job_name in job_to_test_map:
         test_name = job_to_test_map[job_name]
     additional_files = {k: v for k, v in additional_files.items() if k == test_name}
@@ -1171,16 +1316,19 @@ if __name__ == "__main__":
             additional_results[key]["error"] = True
             continue
 
-        for artifact_path in available_artifacts[additional_files[key]].paths:
-            # Link to the GitHub Action job
-            job = artifact_name_to_job_map[artifact_path["path"]]
-            additional_results[key]["job_link"][artifact_path["gpu"]] = job["html_url"]
+        for artifact_path_dict in available_artifacts[additional_files[key]].paths:
+            path = artifact_path_dict["path"]
+            artifact_gpu = artifact_path_dict["gpu"]
 
-            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
+            # Link to the GitHub Action job
+            job = artifact_name_to_job_map[path]
+            additional_results[key]["job_link"][artifact_gpu] = job["html_url"]
+
+            artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])
-            additional_results[key]["failed"][artifact_path["gpu"] or "unclassified"] += failed
+            additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
             additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
 
@@ -1198,12 +1346,11 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path["gpu"] not in additional_results[key]["failures"]:
-                            additional_results[key]["failures"][artifact_path["gpu"]] = []
+                        if artifact_gpu not in additional_results[key]["failures"]:
+                            additional_results[key]["failures"][artifact_gpu] = []
 
-                        additional_results[key]["failures"][artifact_path["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
-                        )
+                        trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
+                        additional_results[key]["failures"][artifact_gpu].append({"line": line, "trace": trace})
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
     # when `inputs.job` (in the workflow file) is `run_models_gpu`. The reason is: otherwise we need to save several
@@ -1218,65 +1365,133 @@ if __name__ == "__main__":
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
-    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
-    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+    nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
+    amd_daily_ci_workflows = (
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
+    )
+    is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
+    is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
 
-    # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
-    # results.
-    if job_name == "run_models_gpu":
-        with open(f"ci_results_{job_name}/model_results.json", "w", encoding="UTF-8") as fp:
-            json.dump(model_results, fp, indent=4, ensure_ascii=False)
+    is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
+    #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
+    if is_amd_daily_ci_workflow:
+        # Get the path to the file on the runner that contains the full event webhook payload.
+        event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
+        # Load the event payload
+        with open(event_payload_path) as fp:
+            event_payload = json.load(fp)
+            # The event that triggers the `workflow_run` event.
+            if "workflow_run" in event_payload:
+                is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 
-        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
-            api.upload_file(
-                path_or_fileobj=f"ci_results_{job_name}/model_results.json",
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
+    test_name_and_result_pairs = []
+    if len(matrix_job_results) > 0:
+        test_name = job_to_test_map[job_name]
+        test_name_and_result_pairs.append((test_name, matrix_job_results))
 
-    # Must have the same keys as in `additional_results`.
-    # The values are used as the file names where to save the corresponding CI job results.
-    test_to_result_name = {
-        "PyTorch pipelines": "torch_pipeline",
-        "TensorFlow pipelines": "tf_pipeline",
-        "Examples directory": "example",
-        "Torch CUDA extension tests": "deepspeed",
-    }
-    for job, job_result in additional_results.items():
-        with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
-            json.dump(job_result, fp, indent=4, ensure_ascii=False)
+    for test_name, result in additional_results.items():
+        test_name_and_result_pairs.append((test_name, result))
 
-        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
-            api.upload_file(
-                path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
+    for test_name, result in test_name_and_result_pairs:
+        with open(f"ci_results_{job_name}/{test_to_result_name[test_name]}_results.json", "w", encoding="UTF-8") as fp:
+            json.dump(result, fp, indent=4, ensure_ascii=False)
 
-    prev_ci_artifacts = None
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
+
+    # Let's create a file contain job --> job link
+    if len(matrix_job_results) > 0:
+        target_results = matrix_job_results
+    else:
+        target_results = additional_results[job_to_test_map[job_name]]
+
+    # Make the format uniform between `model_results` and `additional_results[XXX]`
+    if "failures" in target_results:
+        target_results = {job_name: target_results}
+
+    job_links = {}
+    sorted_dict = sorted(target_results.items(), key=lambda t: t[0])
+    for job, job_result in sorted_dict:
+        if job.startswith("models_"):
+            job = job[len("models_") :]
+        elif job.startswith("quantization_"):
+            job = job[len("quantization_") :]
+        job_links[job] = job_result["job_link"]
+
+    with open(f"ci_results_{job_name}/job_links.json", "w", encoding="UTF-8") as fp:
+        json.dump(job_links, fp, indent=4, ensure_ascii=False)
+
+    api.upload_file(
+        path_or_fileobj=f"ci_results_{job_name}/job_links.json",
+        path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/job_links.json",
+        repo_id=report_repo_id,
+        repo_type="dataset",
+        token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+    )
+
+    prev_workflow_run_id = None
+    other_workflow_run_ids = []
+
     if is_scheduled_ci_run:
-        if job_name == "run_models_gpu":
-            # Get the last previously completed CI's failure tables
+        prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
+            token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=workflow_id
+        )
+        # For a scheduled run that is not the Nvidia's scheduled daily CI, add Nvidia's scheduled daily CI run as a target to compare.
+        if not is_nvidia_daily_ci_workflow:
+            # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
+            other_workflow_id = "90575235"
+            # We need to get the Nvidia's scheduled daily CI run that match the current run (i.e. run with the same commit SHA)
+            other_workflow_run_id = get_last_daily_ci_workflow_run_id(
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
+            )
+            other_workflow_run_ids.append(other_workflow_run_id)
+    else:
+        prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
+        other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]
+        other_workflow_run_ids.append(other_workflow_run_id)
+
+    prev_ci_artifacts = (None, None)
+    other_ci_artifacts = []
+
+    for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
+        if target_workflow_run_id is None or target_workflow_run_id == "":
+            continue
+        else:
             artifact_names = [f"ci_results_{job_name}"]
             output_dir = os.path.join(os.getcwd(), "previous_reports")
             os.makedirs(output_dir, exist_ok=True)
-            prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+            ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=artifact_names,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id=target_workflow_run_id,
             )
+            if idx == 0:
+                prev_ci_artifacts = (target_workflow_run_id, ci_artifacts)
+            else:
+                other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
+
+    ci_name_in_report = ""
+    if job_name in job_to_test_map:
+        ci_name_in_report = job_to_test_map[job_name]
+
+    title = f"🤗 Results of {ci_event}: {ci_name_in_report}"
 
     message = Message(
         title,
         ci_title,
-        model_results,
+        matrix_job_results,
         additional_results,
         selected_warnings=selected_warnings,
         prev_ci_artifacts=prev_ci_artifacts,
+        other_ci_artifacts=other_ci_artifacts,
     )
 
     # send report only if there is any failure (for push CI)

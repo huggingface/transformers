@@ -15,7 +15,7 @@
 """PyTorch CPMAnt"""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -27,19 +27,16 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_cpmant import CpmAntConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openbmb/cpm-ant-10b"
-_CONFIG_FOR_DOC = "CpmAntConfig"
-
 
 class CpmAntLayerNorm(nn.Module):
     """
-    We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."
+    We use Root Mean Square (RMS) Layer Normalization, please see https://huggingface.co/papers/1910.07467 for details."
     """
 
     def __init__(self, config: CpmAntConfig):
@@ -89,7 +86,7 @@ class CpmAntAttention(nn.Module):
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
         output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
     ):
         """
@@ -104,7 +101,7 @@ class CpmAntAttention(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            past_key_values (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -182,7 +179,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
         attention_mask: torch.Tensor,
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
     ):
         """
@@ -300,7 +297,7 @@ class CpmAntTransformerBlock(nn.Module):
         attention_mask: torch.Tensor,
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
     ):
         """
@@ -313,7 +310,7 @@ class CpmAntTransformerBlock(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -350,7 +347,7 @@ class CpmAntEncoder(nn.Module):
         position_bias: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
     ):
         """
@@ -365,7 +362,7 @@ class CpmAntEncoder(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -454,7 +451,7 @@ class CpmAntSegmentPositionEmbedding(nn.Module):
                 )
             if querylen != query_segment.size(1):
                 raise AssertionError(
-                    f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.szie(1)}!"
+                    f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.size(1)}!"
                 )
 
             key_pos = key_pos.view(batch, -1, keylen)
@@ -523,12 +520,8 @@ class CpmAntOutput(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class CpmAntPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = CpmAntConfig
     base_model_prefix = "cpmant"
 
@@ -551,45 +544,7 @@ class CpmAntPreTrainedModel(PreTrainedModel):
             module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
 
 
-CPMANT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters
-        config ([`~CpmAntConfig`]): Model configuration class with all the parameters of the
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-CPMANT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare CPMAnt Model outputting raw hidden-states without any specific head on top.",
-    CPMANT_START_DOCSTRING,
-)
+@auto_docstring
 class CpmAntModel(CpmAntPreTrainedModel):
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
@@ -628,22 +583,26 @@ class CpmAntModel(CpmAntPreTrainedModel):
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
 
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPast]:
+        r"""
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -731,11 +690,10 @@ class CpmAntModel(CpmAntPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
-    """,
-    CPMANT_START_DOCSTRING,
+    """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
@@ -750,16 +708,11 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         )
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+        past_key_values: Optional[list[tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -767,33 +720,17 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
-                Indices of input sequence tokens in the vocabulary.
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
+            Indices of input sequence tokens in the vocabulary.
 
-                Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-                [What are input IDs?](../glossary#input-ids)
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                CPMAnt will process attention mask automatically, this parameter is a dummy parameter for
-                text-generation pipeline.
+            [What are input IDs?](../glossary#input-ids)
+        labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss.
 
         Example:
 

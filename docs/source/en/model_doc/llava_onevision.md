@@ -16,9 +16,15 @@ rendered properly in your Markdown viewer.
 
 # LLaVA-OneVision
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The LLaVA-OneVision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://arxiv.org/abs/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
+The LLaVA-OneVision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://huggingface.co/papers/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
 
 LLaVA-OneVision is a Vision-Language Model that can generate text conditioned on one or several images/videos. The model consists of SigLIP vision encoder and a Qwen2 language backbone. The images are processed with anyres-9 technique where the image is split into 9 patches to better process high resolution images and capture as much details as possible. However, videos are pooled to a total sequence length of 196 tokens each frame for more memory efficient computation. LLaVA-OneVision is available in three sizes: 0.5B, 7B and 72B and achieves remarkable performance on benchmark evaluations.
 
@@ -35,7 +41,7 @@ videos.*
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-acrhitecture.png"
 alt="drawing" width="600"/>
 
-<small> LLaVA-OneVision architecture. Taken from the <a href="https://arxiv.org/abs/2408.03326">original paper.</a> </small>
+<small> LLaVA-OneVision architecture. Taken from the <a href="https://huggingface.co/papers/2408.03326">original paper.</a> </small>
 
 Tips:
 
@@ -115,7 +121,6 @@ processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     device_map="cuda:0"
 )
 
@@ -141,7 +146,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 ### Multi image inference
 
-LLaVa-OneVision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. Here is how you can do it:
+LLaVa-OneVision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. For multi-image cases, we recommend using a **nested list of images** as input. Otherwise, every image will be patchified and consume a lot of memory. Here is how you can do it:
 
 ```python
 import requests
@@ -280,7 +285,6 @@ from transformers import LlavaOnevisionForConditionalGeneration
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     use_flash_attention_2=True
 ).to(0)
 ```
@@ -297,6 +301,7 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionImageProcessor
 
 [[autodoc]] LlavaOnevisionImageProcessor
+    - preprocess
 
 ## LlavaOnevisionImageProcessorFast
 
@@ -306,6 +311,14 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionVideoProcessor
 
 [[autodoc]] LlavaOnevisionVideoProcessor
+
+## LlavaOnevisionVideoProcessor
+
+[[autodoc]] LlavaOnevisionVideoProcessor
+
+## LlavaOnevisionModel
+
+[[autodoc]] LlavaOnevisionModel
 
 ## LlavaOnevisionForConditionalGeneration
 

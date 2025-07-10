@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,6 +38,9 @@ if is_librosa_available():
 
 
 class AudioUtilsFunctionTester(unittest.TestCase):
+    # will be set in `def _load_datasamples`
+    _dataset = None
+
     def test_hertz_to_mel(self):
         self.assertEqual(hertz_to_mel(0.0), 0.0)
         self.assertAlmostEqual(hertz_to_mel(100), 150.48910241)
@@ -194,26 +196,38 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             triangularize_in_mel_space=True,
         )
         # fmt: off
+        # here the expected values from torchaudio.compliance.kaldi.get_mel_banks
+        # note that we compute values in float64 while they do it in float32
         expected = np.array(
-        [[0.0000, 0.0000, 0.0000, 0.0000],
-        [0.6086, 0.0000, 0.0000, 0.0000],
-        [0.8689, 0.1311, 0.0000, 0.0000],
-        [0.4110, 0.5890, 0.0000, 0.0000],
-        [0.0036, 0.9964, 0.0000, 0.0000],
-        [0.0000, 0.6366, 0.3634, 0.0000],
-        [0.0000, 0.3027, 0.6973, 0.0000],
-        [0.0000, 0.0000, 0.9964, 0.0036],
-        [0.0000, 0.0000, 0.7135, 0.2865],
-        [0.0000, 0.0000, 0.4507, 0.5493],
-        [0.0000, 0.0000, 0.2053, 0.7947],
-        [0.0000, 0.0000, 0.0000, 0.9752],
-        [0.0000, 0.0000, 0.0000, 0.7585],
-        [0.0000, 0.0000, 0.0000, 0.5539],
-        [0.0000, 0.0000, 0.0000, 0.3599],
-        [0.0000, 0.0000, 0.0000, 0.1756]]
+            [
+                [0.0000000000000000, 0.0000000000000000, 0.0000000000000000, 0.0000000000000000],
+                [0.6457883715629578, 0.0000000000000000, 0.0000000000000000, 0.0000000000000000],
+                [0.8044781088829041, 0.1955219060182571, 0.0000000000000000, 0.0000000000000000],
+                [0.3258901536464691, 0.6741098165512085, 0.0000000000000000, 0.0000000000000000],
+                [0.0000000000000000, 0.9021250009536743, 0.0978749766945839, 0.0000000000000000],
+                [0.0000000000000000, 0.5219038724899292, 0.4780961275100708, 0.0000000000000000],
+                [0.0000000000000000, 0.1771058291196823, 0.8228941559791565, 0.0000000000000000],
+                [0.0000000000000000, 0.0000000000000000, 0.8616894483566284, 0.1383105516433716],
+                [0.0000000000000000, 0.0000000000000000, 0.5710380673408508, 0.4289619624614716],
+                [0.0000000000000000, 0.0000000000000000, 0.3015440106391907, 0.6984559893608093],
+                [0.0000000000000000, 0.0000000000000000, 0.0503356307744980, 0.9496643543243408],
+                [0.0000000000000000, 0.0000000000000000, 0.0000000000000000, 0.8150880336761475],
+                [0.0000000000000000, 0.0000000000000000, 0.0000000000000000, 0.5938932299613953],
+                [0.0000000000000000, 0.0000000000000000, 0.0000000000000000, 0.3851676583290100],
+                [0.0000000000000000, 0.0000000000000000, 0.0000000000000000, 0.1875794380903244],
+            ],
+            dtype=np.float64,
         )
         # fmt: on
-        self.assertTrue(np.allclose(mel_filters, expected, atol=5e-5))
+
+        # kaldi implementation does not compute values for last fft bin
+        # indeed, they enforce max_frequency <= sampling_rate / 2 and
+        # therefore they know that last fft bin filter bank values will be all 0
+        # and pad after with zeros
+        # to comply with our API for `mel_filter_bank`, we need to also pad here
+        expected = np.pad(expected, ((0, 1), (0, 0)))
+
+        self.assertTrue(np.allclose(mel_filters, expected))
 
     def test_mel_filter_bank_slaney_norm(self):
         mel_filters = mel_filter_bank(
@@ -262,8 +276,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        if self._dataset is None:
+            self._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        speech_samples = self._dataset.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
     def test_spectrogram_impulse(self):
@@ -369,7 +384,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         self.assertTrue(np.allclose(spec[:64, 400], expected))
 
         mel_filters = mel_filter_bank(
-            num_frequency_bins=256,
+            num_frequency_bins=257,
             num_mel_filters=400,
             min_frequency=20,
             max_frequency=8000,
@@ -378,8 +393,6 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
         )
-
-        mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
 
         spec = spectrogram(
             waveform,
@@ -510,7 +523,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         self.assertTrue(np.allclose(spec_list[2][:64, 400], expected3))
 
         mel_filters = mel_filter_bank(
-            num_frequency_bins=256,
+            num_frequency_bins=257,
             num_mel_filters=400,
             min_frequency=20,
             max_frequency=8000,
@@ -519,8 +532,6 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
         )
-
-        mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
 
         spec_list = spectrogram_batch(
             waveform_list,

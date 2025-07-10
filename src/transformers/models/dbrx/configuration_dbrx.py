@@ -89,7 +89,7 @@ class DbrxFFNConfig(PretrainedConfig):
 
     def __init__(
         self,
-        ffn_act_fn: dict = None,
+        ffn_act_fn: Optional[dict] = None,
         ffn_hidden_size: int = 3584,
         moe_num_experts: int = 4,
         moe_top_k: int = 1,

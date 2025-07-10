@@ -16,7 +16,7 @@
 
 import collections.abc
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -185,9 +185,11 @@ class FlaxDinov2Embeddings(nn.Module):
             antialias=False,
         )
         patch_pos_embed = patch_pos_embed.astype(target_dtype)
-        patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((hidden_states.shape[0], -1, dim))
+        patch_pos_embed = jnp.transpose(patch_pos_embed, (0, 2, 3, 1)).reshape((position_embeddings.shape[0], -1, dim))
+        patch_pos_embed_expanded = jnp.tile(patch_pos_embed, (hidden_states.shape[0], 1, 1))
+        class_pos_embed_expanded = jnp.tile(class_pos_embed, (hidden_states.shape[0], 1, 1))
 
-        return jnp.concatenate((class_pos_embed[jnp.newaxis, :], patch_pos_embed), axis=1)
+        return jnp.concatenate((class_pos_embed_expanded, patch_pos_embed_expanded), axis=1)
 
     def __call__(self, pixel_values, deterministic=True):
         batch_size = pixel_values.shape[0]
@@ -401,7 +403,7 @@ class FlaxDinov2SwiGLUFFN(nn.Module):
 
     def setup(self):
         hidden_features = int(self.config.hidden_size * self.config.mlp_ratio)
-        hidden_features = (int(self.hidden_features * 2 / 3) + 7) // 8 * 8
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
 
         self.weights_in = nn.Dense(
             2 * hidden_features,
@@ -566,7 +568,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
             input_shape = (1, config.image_size, config.image_size, config.num_channels)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
@@ -590,7 +592,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -778,7 +780,7 @@ FLAX_VISION_CLASSIFICATION_DOCSTRING = """
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
     >>> image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base-imagenet1k-1-layer")
-    >>> model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base-imagenet1k-1-layer")
+    >>> model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base-imagenet1k-1-layer", from_pt=True)
 
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)

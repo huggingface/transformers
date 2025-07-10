@@ -15,7 +15,7 @@
 """PyTorch SpeechT5 model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -24,9 +24,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,7 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import auto_docstring, logging
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
@@ -45,7 +47,6 @@ logger = logging.get_logger(__name__)
 _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
-_CONFIG_FOR_DOC = "SpeechT5Config"
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -88,7 +89,7 @@ def shift_spectrograms_right(
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -96,7 +97,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -142,7 +143,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -207,7 +208,7 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5NoLayerNormConvLayer(nn.Module):
+class SpeechT5NoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -229,7 +230,7 @@ class SpeechT5NoLayerNormConvLayer(nn.Module):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5LayerNormConvLayer(nn.Module):
+class SpeechT5LayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -257,7 +258,7 @@ class SpeechT5LayerNormConvLayer(nn.Module):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5GroupNormConvLayer(nn.Module):
+class SpeechT5GroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -298,9 +299,7 @@ class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.weights = nn.Parameter(emb_weights)
-        self.weights.requires_grad = False
-        self.weights.detach_()
+        self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -400,13 +399,13 @@ class SpeechT5PositionalConvEmbedding(nn.Module):
 
 class SpeechT5ScaledPositionalEncoding(nn.Module):
     """
-    Scaled positional encoding, see §3.2 in https://arxiv.org/abs/1809.08895
+    Scaled positional encoding, see §3.2 in https://huggingface.co/papers/1809.08895
     """
 
     def __init__(self, dropout, dim, max_len=5000):
         pe = torch.zeros(max_len, dim)
         position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp((torch.arange(0, dim, 2, dtype=torch.int64).float() * -(math.log(10000.0) / dim)))
+        div_term = torch.exp(torch.arange(0, dim, 2, dtype=torch.int64).float() * -(math.log(10000.0) / dim))
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         pe = pe.unsqueeze(0)
@@ -431,7 +430,7 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
 
     def forward(self, hidden_states):
         seq_len = hidden_states.shape[1]
-        pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
+        pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
         pos_seq[pos_seq < -self.max_length] = -self.max_length
@@ -489,13 +488,7 @@ class SpeechT5FeatureEncoder(nn.Module):
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -612,7 +605,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -684,7 +677,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         input_values: torch.Tensor,
         speaker_embeddings: Optional[torch.Tensor] = None,
     ):
-        # Dropout is always applied, even when evaluating. See §2.2 in https://arxiv.org/abs/1712.05884.
+        # Dropout is always applied, even when evaluating. See §2.2 in https://huggingface.co/papers/1712.05884.
 
         inputs_embeds = input_values
         for layer in self.layers:
@@ -816,7 +809,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
     ):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -890,12 +883,12 @@ class SpeechT5Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1034,7 +1027,7 @@ class SpeechT5FeedForward(nn.Module):
         return hidden_states
 
 
-class SpeechT5EncoderLayer(nn.Module):
+class SpeechT5EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SpeechT5Config):
         super().__init__()
         self.attention = SpeechT5Attention(
@@ -1095,7 +1088,7 @@ class SpeechT5EncoderLayer(nn.Module):
         return outputs
 
 
-class SpeechT5DecoderLayer(nn.Module):
+class SpeechT5DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SpeechT5Config):
         super().__init__()
         self.self_attn = SpeechT5Attention(
@@ -1126,7 +1119,7 @@ class SpeechT5DecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
     ):
@@ -1203,12 +1196,8 @@ class SpeechT5DecoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class SpeechT5PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SpeechT5Config
     base_model_prefix = "speecht5"
     main_input_name = "input_values"
@@ -1275,7 +1264,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         """
         Args:
             hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
@@ -1336,7 +1325,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             skip_the_layer = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -1344,23 +1333,13 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        position_bias,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        position_bias=position_bias,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_bias=position_bias,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -1404,7 +1383,7 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         hidden_states, attention_mask = self.prenet(input_values, attention_mask)
 
         outputs = self.wrapped_encoder(
@@ -1446,7 +1425,7 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         hidden_states = self.prenet(input_values)
 
         outputs = self.wrapped_encoder(
@@ -1482,7 +1461,7 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         return self.wrapped_encoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
@@ -1517,12 +1496,12 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
             hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
@@ -1632,7 +1611,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             skip_the_layer = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -1642,33 +1621,17 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1723,12 +1686,12 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         speaker_embeddings: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
         outputs = self.wrapped_decoder(
@@ -1775,12 +1738,12 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         decoder_hidden_states, attention_mask = self.prenet(input_values, attention_mask, past_key_values)
 
         outputs = self.wrapped_decoder(
@@ -1821,12 +1784,12 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         outputs = self.wrapped_decoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
@@ -1846,7 +1809,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
 class SpeechT5GuidedMultiheadAttentionLoss(nn.Module):
     """
     Guided attention loss from the paper [Efficiently Trainable Text-to-Speech System Based on Deep Convolutional
-    Networks with Guided Attention](https://arxiv.org/abs/1710.08969), adapted for multi-head attention.
+    Networks with Guided Attention](https://huggingface.co/papers/1710.08969), adapted for multi-head attention.
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -1963,136 +1926,10 @@ class SpeechT5SpectrogramLoss(nn.Module):
         return loss
 
 
-SPEECHT5_BASE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SpeechT5Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`SpeechT5EncoderWithSpeechPrenet`] or [`SpeechT5EncoderWithTextPrenet`] or `None`):
-            The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`SpeechT5EncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`SpeechT5DecoderWithSpeechPrenet`] or [`SpeechT5DecoderWithTextPrenet`] or `None`):
-            The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`SpeechT5DecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
-            states.
-"""
-
-
-SPEECHT5_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SpeechT5Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-SPEECHT5_INPUTS_DOCSTRING = r"""
-    Args:
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-            **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-            models also yield slightly different results depending on whether `input_values` is padded or not.
-
-            </Tip>
-
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
-            also be used by default.
-
-            If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-        head_mask (`torch.FloatTensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.FloatTensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_values` (those
-            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_values` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`torch.FloatTensor`
-            of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_values` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_values` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare SpeechT5 Encoder-Decoder Model outputting raw hidden-states without any specific pre- or post-nets.",
-    SPEECHT5_BASE_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The bare SpeechT5 Encoder-Decoder Model outputting raw hidden-states without any specific pre- or post-nets.
+    """
 )
 class SpeechT5Model(SpeechT5PreTrainedModel):
     def __init__(
@@ -2101,6 +1938,12 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         encoder: Optional[nn.Module] = None,
         decoder: Optional[nn.Module] = None,
     ):
+        r"""
+        encoder (`PreTrainedModel`, *optional*):
+            The encoder model to use.
+        decoder (`PreTrainedModel`, *optional*):
+            The decoder model to use.
+        """
         super().__init__(config)
         self.config = config
         self.encoder = SpeechT5EncoderWithoutPrenet(config) if encoder is None else encoder
@@ -2136,8 +1979,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         if isinstance(self.encoder, SpeechT5EncoderWithSpeechPrenet):
             self.encoder.prenet.freeze_feature_encoder()
 
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
@@ -2147,28 +1989,36 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Depending on which encoder is being used, the `input_values` are either: float values of the input raw
             speech waveform, or indices of input sequence tokens in the vocabulary, or hidden states.
-
         decoder_input_values (`torch.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Depending on which decoder is being used, the `decoder_input_values` are either: float values of log-mel
             filterbank features extracted from the raw speech waveform, or indices of decoder input sequence tokens in
             the vocabulary, or hidden states.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
+            also be used by default.
 
+            If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+            information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
-
-        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2238,11 +2088,12 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """SpeechT5 Model with a speech encoder and a text decoder.""",
-    SPEECHT5_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SpeechT5 Model with a speech encoder and a text decoder.
+    """
 )
-class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
+class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["text_decoder_postnet.lm_head.weight"]
 
     def __init__(self, config: SpeechT5Config):
@@ -2284,8 +2135,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.text_decoder_postnet.set_output_embeddings(new_embeddings)
 
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
@@ -2295,21 +2145,21 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -2321,7 +2171,18 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
             SpeechT5 uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
+            also be used by default.
 
+            If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+            information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
             or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
@@ -2330,8 +2191,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
             Label indices can be obtained using [`SpeechT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-        Returns:
-
         Example:
 
         ```python
@@ -2339,7 +2198,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         >>> from datasets import load_dataset
 
         >>> dataset = load_dataset(
-        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
         ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
@@ -2413,44 +2272,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # Note that this model doesn't inherit from the generation mixin, has unique generate function
-
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -2472,7 +2293,7 @@ def _generate_speech(
     vocoder: Optional[nn.Module] = None,
     output_cross_attentions: bool = False,
     return_output_lengths: bool = False,
-) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
+) -> Union[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor]]:
     if speaker_embeddings is None:
         raise ValueError(
             """`speaker_embeddings` must be specified. For example, you can use a speaker embeddings by following
@@ -2604,9 +2425,10 @@ def _generate_speech(
     return outputs
 
 
-@add_start_docstrings(
-    """SpeechT5 Model with a text encoder and a speech decoder.""",
-    SPEECHT5_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SpeechT5 Model with a text encoder and a speech decoder.
+    """
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     main_input_name = "input_ids"
@@ -2631,14 +2453,20 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @classmethod
+    def can_generate(cls) -> bool:
+        # Speecht5 has a unique model structure, where the external class (`SpeechT5ForTextToSpeech`) doesn't need to inherit from
+        # `GenerationMixin` (it has a non-standard generation method). This means that the base `can_generate()` will return `False`,
+        # but we need to override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
+        return True
+
     def get_encoder(self):
         return self.speecht5.get_encoder()
 
     def get_decoder(self):
         return self.speecht5.get_decoder()
 
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2648,8 +2476,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2657,7 +2485,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
         stop_labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
+    ) -> Union[tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -2672,14 +2500,26 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             SpeechT5 uses an all-zero spectrum as the starting token for `decoder_input_values` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_values` have to be input (see
             `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
+            also be used by default.
+
+            If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+            information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
             Float values of target mel spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation. Spectrograms can be obtained using [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`]
             for details.
-
-        Returns:
+        stop_labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Binary tensor indicating the position of the stop token in the sequence.
 
         Example:
 
@@ -2772,7 +2612,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         output_cross_attentions: bool = False,
         return_output_lengths: bool = False,
         **kwargs,
-    ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> Union[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor]]:
         r"""
         Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
         speech waveform using a vocoder.
@@ -2818,11 +2658,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
-                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `list[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
-                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `list[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
@@ -2863,7 +2703,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         vocoder: Optional[nn.Module] = None,
         output_cross_attentions: bool = False,
         return_output_lengths: bool = False,
-    ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> Union[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor]]:
         r"""
         Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
         speech waveform using a vocoder.
@@ -2914,11 +2754,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
-                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `list[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
-                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `list[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
@@ -2948,9 +2788,10 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """SpeechT5 Model with a speech encoder and a speech decoder.""",
-    SPEECHT5_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SpeechT5 Model with a speech encoder and a speech decoder.
+    """
 )
 class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
@@ -2978,8 +2819,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         """
         self.get_encoder().prenet.freeze_feature_encoder()
 
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
@@ -2989,8 +2829,8 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2998,26 +2838,39 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
         stop_labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
+    ) -> Union[tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into
+            a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
             Float values of input mel spectrogram.
 
             SpeechT5 uses an all-zero spectrum as the starting token for `decoder_input_values` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_values` have to be input (see
             `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_values`. Causal mask will
+            also be used by default.
+
+            If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+            information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
             Float values of target mel spectrogram. Spectrograms can be obtained using [`SpeechT5Processor`]. See
             [`SpeechT5Processor.__call__`] for details.
-
-        Returns:
+        stop_labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Binary tensor indicating the position of the stop token in the sequence.
 
         Example:
 
@@ -3027,7 +2880,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> import torch
 
         >>> dataset = load_dataset(
-        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
         ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
@@ -3115,10 +2968,11 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Float values of input raw speech waveform.
 
-                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `List[float]` or
-                a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
-                into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into a tensor
-                of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
+                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `list[float]`,
+                a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`)
+                or the soundfile library (`pip install soundfile`).
+                To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding and
+                conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3157,11 +3011,11 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
-                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `list[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
-                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `list[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
@@ -3182,23 +3036,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             output_cross_attentions,
             return_output_lengths,
         )
-
-
-HIFIGAN_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SpeechT5HifiGanConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 class HifiGanResidualBlock(nn.Module):
@@ -3263,9 +3100,10 @@ class HifiGanResidualBlock(nn.Module):
         return hidden_states
 
 
-@add_start_docstrings(
-    """HiFi-GAN vocoder.""",
-    HIFIGAN_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    HiFi-GAN vocoder.
+    """
 )
 class SpeechT5HifiGan(PreTrainedModel):
     config_class = SpeechT5HifiGanConfig
@@ -3336,16 +3174,18 @@ class SpeechT5HifiGan(PreTrainedModel):
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
 
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
-        r"""
+    @auto_docstring(
+        custom_intro="""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
         waveform.
-
-        Args:
-            spectrogram (`torch.FloatTensor`):
-                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
+        """
+    )
+    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+        r"""
+        spectrogram (`torch.FloatTensor`):
+            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+            config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
 
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of

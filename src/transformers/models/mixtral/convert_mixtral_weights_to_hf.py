@@ -94,7 +94,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     loaded = [
-        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu") for i in range(8)
+        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu", weights_only=True)
+        for i in range(8)
     ]
 
     merged_state_dict = {}
@@ -148,7 +149,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         w3 = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.w3"]
 
         experts_w1 = [
-            w1[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            w1[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].clone(memory_format=torch.contiguous_format)
             for expert_idx in range(num_local_experts)
         ]
 
@@ -157,16 +158,16 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
             state_dict[expert_key + ".weight"] = expert_block.clone()
 
         experts_w2 = [
-            w2[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            w2[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].clone(memory_format=torch.contiguous_format)
             for expert_idx in range(num_local_experts)
         ]
 
         for idx, expert_block in enumerate(experts_w2):
             expert_key = f"model.layers.{layer_i}.block_sparse_moe.experts.{idx}.w2"
-            state_dict[expert_key + ".weight"] = expert_block.T.clone().contiguous()
+            state_dict[expert_key + ".weight"] = expert_block.T.clone(memory_format=torch.contiguous_format)
 
         experts_w3 = [
-            w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].clone(memory_format=torch.contiguous_format)
             for expert_idx in range(num_local_experts)
         ]
 
@@ -226,7 +227,7 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, check out the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
     parser.add_argument("--output_dir", help="Location to write HF model", required=True)

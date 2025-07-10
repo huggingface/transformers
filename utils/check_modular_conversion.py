@@ -23,7 +23,7 @@ def process_file(modular_file_path, generated_modeling_content, file_type="model
     file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
     file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
-    with open(file_path, "r") as modeling_file:
+    with open(file_path, "r", encoding="utf-8") as modeling_file:
         content = modeling_file.read()
     output_buffer = StringIO(generated_modeling_content[file_type][0])
     output_buffer.seek(0)
@@ -39,7 +39,7 @@ def process_file(modular_file_path, generated_modeling_content, file_type="model
     # Check for differences
     if diff_list:
         if fix_and_overwrite:
-            with open(file_path, "w") as modeling_file:
+            with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
                 modeling_file.write(generated_modeling_content[file_type][0])
             console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         else:
@@ -115,7 +115,7 @@ def guaranteed_no_diff(modular_file_path, dependencies, models_in_diff):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare modular_xxx.py files with modeling_xxx.py files.")
     parser.add_argument(
-        "--files", default=["all"], type=list, nargs="+", help="List of modular_xxx.py files to compare."
+        "--files", default=["all"], type=str, nargs="+", help="List of modular_xxx.py files to compare."
     )
     parser.add_argument(
         "--fix_and_overwrite", action="store_true", help="Overwrite the modeling_xxx.py file if differences are found."
@@ -133,10 +133,19 @@ if __name__ == "__main__":
     # Assuming there is a topological sort on the dependency mapping: if the file being checked and its dependencies
     # are not in the diff, then there it is guaranteed to have no differences. If no models are in the diff, then this
     # script will do nothing.
-    models_in_diff = get_models_in_diff()
-    if not models_in_diff:
-        console.print("[bold green]No models files or model tests in the diff, skipping modular checks[/bold green]")
-        exit(0)
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if current_branch == "main":
+        console.print(
+            "[bold red]You are developing on the main branch. We cannot identify the list of changed files and will have to check all files. This may take a while.[/bold red]"
+        )
+        models_in_diff = {file_path.split("/")[-2] for file_path in args.files}
+    else:
+        models_in_diff = get_models_in_diff()
+        if not models_in_diff:
+            console.print(
+                "[bold green]No models files or model tests in the diff, skipping modular checks[/bold green]"
+            )
+            exit(0)
 
     skipped_models = set()
     non_matching_files = 0
@@ -149,7 +158,8 @@ if __name__ == "__main__":
                 skipped_models.add(model_name)
                 continue
             non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
-            models_in_diff = get_models_in_diff()  # When overwriting, the diff changes
+            if current_branch != "main":
+                models_in_diff = get_models_in_diff()  # When overwriting, the diff changes
     else:
         new_ordered_files = []
         for modular_file_path in ordered_files:
@@ -173,5 +183,5 @@ if __name__ == "__main__":
     if skipped_models:
         console.print(
             f"[bold green]Skipped {len(skipped_models)} models and their dependencies that are not in the diff: "
-            f"{', '.join(skipped_models)}[/bold green]"
+            f"{', '.join(sorted(skipped_models))}[/bold green]"
         )

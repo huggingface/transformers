@@ -26,7 +26,7 @@ _import_structure = {
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
     ],
-    "streamers": ["AsyncTextIteratorStreamer", "TextIteratorStreamer", "TextStreamer"],
+    "streamers": ["AsyncTextIteratorStreamer", "BaseStreamer", "TextIteratorStreamer", "TextStreamer"],
 }
 
 try:
@@ -96,6 +96,9 @@ else:
         "StoppingCriteriaList",
         "validate_stopping_criteria",
         "StopStringCriteria",
+    ]
+    _import_structure["continuous_batching"] = [
+        "ContinuousMixin",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -197,7 +200,7 @@ if TYPE_CHECKING:
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
     )
-    from .streamers import AsyncTextIteratorStreamer, TextIteratorStreamer, TextStreamer
+    from .streamers import AsyncTextIteratorStreamer, BaseStreamer, TextIteratorStreamer, TextStreamer
 
     try:
         if not is_torch_available():
@@ -213,6 +216,7 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
+        from .continuous_batching import ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,

@@ -14,12 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
+
+import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_vision_available
+
+
+if is_vision_available():
+    from .image_processing_emu3 import smart_resize
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
@@ -37,6 +44,7 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "ratio": "1:1",
@@ -63,7 +71,6 @@ class Emu3Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
     image_processor_class = "Emu3ImageProcessor"
 
@@ -75,6 +82,7 @@ class Emu3Processor(ProcessorMixin):
         **kwargs,
     ):
         self.image_token = tokenizer.image_token  # image_token as placeholder to be replaced by vq-vae tokens
+        self.image_token_id = tokenizer.image_token_id
         self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
         self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
         self.fake_token_around_image = tokenizer.image_wrapper_token  # "<|image token|>"  every image starts with it
@@ -86,7 +94,7 @@ class Emu3Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
@@ -95,14 +103,14 @@ class Emu3Processor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Emu3TokenizerFast's [`~Emu3TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -165,7 +173,7 @@ class Emu3Processor(ProcessorMixin):
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
-                    sample = f"{self.bos_token}{sample}"  # add BOS because PT tokenizer doesn't add it
+                    sample = f"{self.bos_token}{sample}"  # add BOS because GPT tokenizer doesn't add it
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
@@ -177,10 +185,52 @@ class Emu3Processor(ProcessorMixin):
             image_features["image_sizes"] = [[height, width]] * len(text)
 
         # else just generate from text-only input, and we do no special treatment for text
-        data = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        data.update(**image_features)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].pop("return_tensors", None))
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_features}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = []
+            for height, width in image_sizes:
+                height, width = smart_resize(
+                    height,
+                    width,
+                    self.image_processor.spatial_factor,
+                    self.image_processor.min_pixels,
+                    self.image_processor.max_pixels,
+                )
+                height = height // self.downsample_ratio
+                width = width // self.downsample_ratio
+                image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+                num_image_tokens.append(image_seq_length)
+
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def calculate_generate_size(self, ratio, image_area, spatial_factor):
         width, height = map(int, ratio.split(":"))

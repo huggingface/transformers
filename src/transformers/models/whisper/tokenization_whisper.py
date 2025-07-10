@@ -18,7 +18,7 @@ import json
 import os
 import warnings
 from functools import lru_cache
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import regex as re
@@ -377,7 +377,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def set_prefix_tokens(self, language: str = None, task: str = None, predict_timestamps: bool = None):
+    def set_prefix_tokens(
+        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+    ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
         update the prefix tokens as required when fine-tuning. Example:
@@ -402,7 +404,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.predict_timestamps = predict_timestamps if predict_timestamps is not None else self.predict_timestamps
 
     @property
-    def prefix_tokens(self) -> List[int]:
+    def prefix_tokens(self) -> list[int]:
         bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
         translate_token_id = self.convert_tokens_to_ids("<|translate|>")
         transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
@@ -436,7 +438,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return bos_sequence
 
     # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
@@ -445,22 +447,22 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -513,7 +515,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -522,7 +524,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @staticmethod
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
@@ -575,7 +577,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Compute offsets for a given tokenized input
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
@@ -654,7 +656,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
@@ -674,7 +676,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -690,7 +692,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
@@ -750,7 +752,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def _decode(
         self,
-        token_ids: Union[int, List[int]],
+        token_ids: Union[int, list[int]],
         skip_special_tokens: bool = False,
         normalize: bool = False,
         basic_normalize: bool = False,
@@ -796,7 +798,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -874,7 +876,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         batch_encoding.convert_to_tensors(tensor_type=return_tensors)
         return batch_encoding["input_ids"]
 
-    def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+    def _strip_prompt(self, token_ids: list[int], prompt_token_id: int, decoder_start_token_id: int):
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
 
@@ -908,7 +910,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return token_ids
 
 
-def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
+def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision, segment_size=1500):
     """
     Internal method meant to only be used by asr pipeline. Handles all the little quirks specific to whisper to handle
     the various options not allowed in other seq2seq models
@@ -959,6 +961,12 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
         # chunk.
         last_timestamp = None
         first_timestamp = timestamp_begin
+
+        # long form generation: we need to handle the case where the call to generate returns concatenated segments,
+        # with underlying multiple calls to generate
+        cur_max_timestamp = 0.0
+        prev_segments_len = 0.0
+        penultimate_timestamp = 0.0
 
         if "stride" in output:
             chunk_len, stride_left, stride_right = output["stride"]
@@ -1022,7 +1030,24 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                     pass
             elif token >= timestamp_begin:
                 # 3/ Timestamp token
-                time = (token - timestamp_begin) * time_precision + time_offset
+
+                timestamp = float((token - timestamp_begin) * time_precision)
+                if timestamp < cur_max_timestamp:
+                    # next segment has started
+                    last_was_single_ending = i >= 2 and not (
+                        token_ids[i - 1] >= timestamp_begin and token_ids[i - 2] >= timestamp_begin
+                    )
+                    if last_was_single_ending:
+                        prev_segments_len += time_precision * segment_size
+                    else:
+                        cur_max_timestamp = penultimate_timestamp
+                        prev_segments_len += penultimate_timestamp
+
+                penultimate_timestamp = cur_max_timestamp
+                cur_max_timestamp = timestamp
+
+                time = (token - timestamp_begin) * time_precision + time_offset + prev_segments_len
+
                 time = round(time, 2)
                 if last_timestamp and token >= last_timestamp:
                     # Whisper outputted a timestamp token, but it falls within
@@ -1043,7 +1068,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         # as a stop where it should be a start.
                         # This is an issue in the underlying model output
                         # Let's just skip it so it becomes de-factor
-                        # a start agin
+                        # a start again
                         pass
                     else:
                         chunk["timestamp"][1] = time
@@ -1074,11 +1099,11 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 # merges later and decode into text.
                 current_tokens.append(token)
                 if return_timestamps == "word":
-                    start_time = round(token_timestamps[i] + time_offset, 2)
-                    if i + 1 < len(token_timestamps):
-                        end_time = round(token_timestamps[i + 1] + time_offset, 2)
+                    if i == 0:
+                        start_time = round(0.0 + time_offset, 2)
                     else:
-                        end_time = None  # should never happen
+                        start_time = round(token_timestamps[i - 1] + time_offset, 2)
+                    end_time = round(token_timestamps[i] + time_offset, 2)
                     current_token_timestamps.append((start_time, end_time))
 
         if "stride" in output:
@@ -1275,8 +1300,8 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, retu
 
 def _combine_tokens_into_words(
     tokenizer,
-    tokens: List[int],
-    language: str = None,
+    tokens: list[int],
+    language: Optional[str] = None,
     prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):
@@ -1299,7 +1324,7 @@ def _combine_tokens_into_words(
     return words, word_tokens, token_indices
 
 
-def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
+def _split_tokens_on_unicode(tokenizer, tokens: list[int]):
     """Combine tokens into words by splitting at any position where the tokens are decoded as valid unicode points."""
     decoded_full = tokenizer.decode(tokens, decode_with_timestamps=True)
     replacement_char = "\ufffd"
@@ -1330,7 +1355,7 @@ def _split_tokens_on_unicode(tokenizer, tokens: List[int]):
     return words, word_tokens, token_indices
 
 
-def _split_tokens_on_spaces(tokenizer, tokens: List[int]):
+def _split_tokens_on_spaces(tokenizer, tokens: list[int]):
     """Combine tokens into words by splitting at whitespace and punctuation tokens."""
     subwords, subword_tokens_list, subword_indices_list = _split_tokens_on_unicode(tokenizer, tokens)
     words = []

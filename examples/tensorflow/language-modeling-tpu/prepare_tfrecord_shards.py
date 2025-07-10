@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -178,7 +177,7 @@ def main(args):
             for i in range(len(serialized_examples)):
                 example = serialized_examples[i]
                 out_file.write(example)
-            print("Wrote file {} containing {} records".format(filename, records_containing))
+            print(f"Wrote file {filename} containing {records_containing} records")
 
         shard_count += 1
         total_records += records_containing

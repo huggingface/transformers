@@ -8,18 +8,8 @@ from transformers.models.ijepa.configuration_ijepa import IJepaConfig
 
 from ...modeling_outputs import ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    torch_int,
-)
-from ..vit.modeling_vit import (
-    ViTEmbeddings,
-    ViTForImageClassification,
-    ViTModel,
-)
-
-
-_CHECKPOINT_FOR_DOC = "facebook/ijepa_vith14_1k"
+from ...utils import auto_docstring, torch_int
+from ..vit.modeling_vit import ViTEmbeddings, ViTForImageClassification, ViTModel
 
 
 class IJepaEmbeddings(ViTEmbeddings):
@@ -96,18 +86,18 @@ class IJepaEmbeddings(ViTEmbeddings):
         return embeddings
 
 
+@auto_docstring
 class IJepaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = IJepaConfig
     base_model_prefix = "ijepa"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -128,39 +118,25 @@ class IJepaPreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]
-
-IJEPA_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`IJepaConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare IJepa Model transformer outputting raw hidden-states without any specific head on top.",
-    IJEPA_START_DOCSTRING,
-)
 class IJepaModel(IJepaPreTrainedModel, ViTModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
+        """
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
 
 
-_IMAGE_CLASS_CHECKPOINT = "facebook/ijepa_vith14_1k"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     IJepa Model transformer with an image classification head on top (a linear layer on top of the final hidden states)
     e.g. for ImageNet.
 
@@ -171,8 +147,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
         position embeddings to the higher resolution.
 
     </Tip>
-    """,
-    IJEPA_START_DOCSTRING,
+    """
 )
 class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassification):
     def __init__(self, config: IJepaConfig):

@@ -15,9 +15,13 @@ rendered properly in your Markdown viewer.
 
 # SuperGlue
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The SuperGlue model was proposed in [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://arxiv.org/abs/1911.11763) by Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
+The SuperGlue model was proposed in [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://huggingface.co/papers/1911.11763) by Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
 
 This model consists of matching two sets of interest points detected in an image. Paired with the 
 [SuperPoint model](https://huggingface.co/magic-leap-community/superpoint), it can be used to match two images and 

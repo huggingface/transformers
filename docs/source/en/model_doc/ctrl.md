@@ -17,17 +17,13 @@ rendered properly in your Markdown viewer.
 # CTRL
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=ctrl">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-ctrl-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/tiny-ctrl">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-CTRL model was proposed in [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
+CTRL model was proposed in [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://huggingface.co/papers/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
 Richard Socher. It's a causal (unidirectional) transformer pre-trained using language modeling on a very large corpus
 of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
 
