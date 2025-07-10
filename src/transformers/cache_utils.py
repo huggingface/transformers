@@ -309,8 +309,9 @@ class Cache:
         Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
         to the number of layers in the model.
         """
+        # Empty dynamic caches initialize an empty layer to be ready for first update
         dynamic_empty = (
-            self.layers is not None
+            getattr(self, "layers", None) is not None
             and len(self.layers) == 1
             and isinstance(self.layers[0], DynamicLayer)
             and self.key_cache[0] is None
