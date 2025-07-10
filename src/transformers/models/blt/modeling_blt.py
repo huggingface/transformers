@@ -598,6 +598,10 @@ class BLTLocalEncoder(nn.Module):
         **kwargs,
     ):
         """ """
+        # Initialize output collections
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         if input_embeds is None:
             input_embeds = self.embed_tokens(input_ids)
 
@@ -611,8 +615,14 @@ class BLTLocalEncoder(nn.Module):
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
         for idx, layer in enumerate(self.layers):
-            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
 
             if idx == len(self.layers) - 1 or self.config.cross_attn_all_layers:
                 patch_embeds = self.patch_reduce(hidden_states, num_patches, "amax", patch_ids)
@@ -634,7 +644,7 @@ class BLTLocalEncoder(nn.Module):
                 patch_embeds = patch_embeds + cross_attention_output
 
         encoder_cross_states = patch_embeds
-        return hidden_states, encoder_cross_states
+        return hidden_states, encoder_cross_states, all_hidden_states, all_attentions
 
     def patch_reduce(self, hidden_states, max_num_patches, reduction, patch_ids):
         """
@@ -719,6 +729,10 @@ class BLTLocalDecoder(nn.Module):
         cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
         **kwargs,
     ):
+        # Initialize output collections
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         batch_size, _, _ = embeds.shape
 
         hidden_states = embeds
@@ -736,6 +750,9 @@ class BLTLocalDecoder(nn.Module):
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         for i, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
             if i == 0 or self.config.cross_attn_all_layers:
                 # Use cross attention to extract info from patch_embeds into hidden_states
                 cross_attention_output, _, _ = self.cross_attn_layers[i](
@@ -749,12 +766,15 @@ class BLTLocalDecoder(nn.Module):
                 )
                 hidden_states = hidden_states + cross_attention_output
 
-            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         logits = self.norm(hidden_states)
         #  logits = self.lm_head(logits)
-        return logits, cache
+        return logits, all_hidden_states, all_attentions
 
 
 class BLTCrossAttention(nn.Module):
@@ -887,6 +907,10 @@ class BLTGlobalTransformer(nn.Module):
         cache: Optional[list[tuple[torch.Tensor, torch.Tensor, int]]] = None,
         **kwargs,
     ):
+        # Initialize output collections
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         batch_size, seq_len, _ = input_embeds.shape
 
         hidden_states = input_embeds
@@ -897,10 +921,16 @@ class BLTGlobalTransformer(nn.Module):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, layer in enumerate(self.layers):
-            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
-        return hidden_states, cache
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        return hidden_states, all_hidden_states, all_attentions
 
 
 class BLTPreTrainedModel(PreTrainedModel):
@@ -1003,10 +1033,19 @@ class BLTModel(BLTPreTrainedModel):
         Returns:
             Union[BaseModelOutputWithPast, tuple]: Model outputs.
         """
+        # Set defaults from config when parameters are None
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Initialize collections to None - we will ONLY collect from decoder
+        all_hidden_states = None
+        all_attentions = None
+
         batch_size, sequence_length = input_ids.shape
         # Handle patching
         if patch_lengths is None:
-            if self.config.patching_mode == PatchingModeEnum.entropy:
+            if self.config.patching_mode == PatchingModeEnum.entropy and self.patcher is not None:
                 _, patch_lengths, _ = self.patcher(
                     input_ids,
                     patch_size=self.config.patch_size,
@@ -1032,7 +1071,7 @@ class BLTModel(BLTPreTrainedModel):
         cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
-        encoder_hidden_states, encoder_cross_states = self.local_encoder(
+        encoder_hidden_states, encoder_cross_states, encoder_hidden_states_all, encoder_attentions_all = self.local_encoder(
             input_ids=input_ids,
             input_embeds=encoder_embeds,
             patch_embeds=None,
@@ -1040,11 +1079,17 @@ class BLTModel(BLTPreTrainedModel):
             full_text_row_masked_out_mask=full_text_row_masked_out_mask_enc,
             num_patches=patch_lengths.shape[1],
             patch_ids=patch_ids,
+            output_attentions=False,  # Don't collect encoder attentions
+            output_hidden_states=False,  # Don't collect encoder hidden states
         )
+
         global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
-        global_hidden_states, _ = self.global_transformer(
+        global_hidden_states, global_hidden_states_all, global_attentions_all = self.global_transformer(
             input_embeds=global_hidden_states,
+            output_attentions=False,  # Don't collect global transformer attentions
+            output_hidden_states=False,  # Don't collect global transformer hidden states
         )
+
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec, full_text_row_masked_out_mask_dec = _prepare_patch_cross_attention_mask(
             decoder_patch_ids,
@@ -1054,23 +1099,43 @@ class BLTModel(BLTPreTrainedModel):
             self.config.cross_attn_k,
             encoder_embeds.dtype,
         )
-        output, _ = self.local_decoder(
+        output, decoder_hidden_states_all, decoder_attentions_all = self.local_decoder(
             input_ids=input_ids,
             embeds=encoder_hidden_states,
             patch_embeds=global_hidden_states,
             mask=None,
             cross_mask=cross_attn_mask_dec,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask_dec,
+            output_attentions=output_attentions,  # Only collect decoder attentions
+            output_hidden_states=output_hidden_states,  # Only collect decoder hidden states
         )
 
+        # Only use decoder outputs (which match the expected num_hidden_layers)
+        if output_hidden_states and decoder_hidden_states_all is not None:
+            all_hidden_states = decoder_hidden_states_all
+        else:
+            all_hidden_states = None
+            
+        if output_attentions and decoder_attentions_all is not None:
+            all_attentions = decoder_attentions_all
+        else:
+            all_attentions = None
+
         if not return_dict:
-            return (output, past_key_values) if use_cache else (output,)
+            output = (output,)
+            if past_key_values is not None:
+                output = output + (past_key_values,)
+            if all_hidden_states is not None:
+                output = output + (all_hidden_states,)
+            if all_attentions is not None:
+                output = output + (all_attentions,)
+            return output
 
         return BaseModelOutputWithPast(
             last_hidden_state=output,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=None,  # BLT doesn't currently support output_hidden_states
-            attentions=None,  # BLT doesn't currently support output_attentions
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
     def _patch_ids_from_lengths(self, patch_lengths: torch.Tensor, seq_len: int) -> torch.Tensor:
@@ -1293,8 +1358,13 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
         Returns:
             Union[CausalLMOutputWithPast, tuple]: Standard transformers output.
         """
+        # Set defaults from config when parameters are None
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         # Route only input_ids to BLTModel (as tokens)
-        hidden_states = self.model(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1307,12 +1377,37 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             **kwargs,
         )
-        if isinstance(hidden_states, dict):
-            sequence_output = hidden_states["last_hidden_state"]
-        elif isinstance(hidden_states, tuple):
-            sequence_output = hidden_states[0]
+        
+        if isinstance(outputs, dict):
+            sequence_output = outputs["last_hidden_state"]
+            past_key_values = outputs.get("past_key_values")
+            hidden_states = outputs.get("hidden_states")
+            attentions = outputs.get("attentions")
+        elif isinstance(outputs, tuple):
+            sequence_output = outputs[0]
+            # Handle tuple format: (output, past_key_values?, hidden_states?, attentions?)
+            idx = 1
+            past_key_values = None
+            hidden_states = None
+            attentions = None
+            
+            if len(outputs) > idx and use_cache:
+                past_key_values = outputs[idx]
+                idx += 1
+            
+            if len(outputs) > idx and output_hidden_states:
+                hidden_states = outputs[idx]
+                idx += 1
+                
+            if len(outputs) > idx and output_attentions:
+                attentions = outputs[idx]
+                idx += 1
         else:
-            sequence_output = hidden_states
+            sequence_output = outputs
+            past_key_values = None
+            hidden_states = None
+            attentions = None
+
         logits = self.lm_head(sequence_output)
         loss = None
         if labels is not None:
@@ -1329,9 +1424,9 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=None,
-            hidden_states=None,
-            attentions=None,
+            past_key_values=past_key_values,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 

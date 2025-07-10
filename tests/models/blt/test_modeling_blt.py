@@ -42,6 +42,118 @@ class BLTModelTester(CausalLMModelTester):
         base_model_class = BLTModel
         causal_lm_class = BLTForCausalLM
 
+    def __init__(
+        self,
+        parent,
+        ignore_index=-100,
+        seq_length=7,
+        is_training=True,
+    ):
+        super().__init__(parent)
+        self.parent = parent
+        self.ignore_index = ignore_index
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.batch_size = 3
+
+        # Common parameters for all configs
+        self.hidden_size = 32
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 4
+        self.num_key_value_heads = 4
+        self.intermediate_size = 37
+        self.hidden_act = "silu"
+        self.max_position_embeddings = 512
+        self.vocab_size = 99
+        self.rope_theta = 500000.0
+        self.rope_scaling = {"rope_type": "default"}
+        self.norm_eps = 1e-5
+        self.dropout = 0.0
+
+        self.patcher_config = {
+            "hidden_size": self.hidden_size,
+            "num_hidden_layers": self.num_hidden_layers,
+            "num_attention_heads": self.num_attention_heads,
+            "num_key_value_heads": self.num_key_value_heads,
+            "intermediate_size": self.intermediate_size,
+            "max_position_embeddings": self.max_position_embeddings,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "_attn_implementation": "eager"
+        }
+
+        self.encoder_config = {
+            "hidden_size": self.hidden_size,
+            "num_hidden_layers": self.num_hidden_layers,
+            "num_attention_heads": self.num_attention_heads,
+            "num_key_value_heads": self.num_key_value_heads,
+            "intermediate_size": self.intermediate_size,
+            "max_position_embeddings": self.max_position_embeddings,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "_attn_implementation": "eager"
+        }
+
+        self.decoder_config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "hidden_size_global": self.hidden_size * 2,  # Must match global transformer output size
+            "num_hidden_layers": self.num_hidden_layers,
+            "num_attention_heads": self.num_attention_heads,
+            "num_key_value_heads": self.num_key_value_heads,
+            "intermediate_size": self.intermediate_size,
+            "max_position_embeddings": self.max_position_embeddings,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "_attn_implementation": "eager"
+        }
+
+        self.global_config = {
+            "hidden_size": self.hidden_size * 2,  # Double the hidden size for global transformer
+            "num_hidden_layers": self.num_hidden_layers,
+            "num_attention_heads": self.num_attention_heads,
+            "num_key_value_heads": self.num_key_value_heads,
+            "intermediate_size": self.intermediate_size,
+            "max_position_embeddings": self.max_position_embeddings,
+            "rope_theta": self.rope_theta,
+            "rope_scaling": self.rope_scaling,
+            "hidden_act": self.hidden_act,
+            "norm_eps": self.norm_eps,
+            "dropout": self.dropout,
+            "_attn_implementation": "eager"
+        }
+
+    def get_config(self):
+        return BLTConfig(
+            vocab_size=self.vocab_size,
+            max_position_embeddings=self.max_position_embeddings,
+            patch_in_forward=False,  # Disable patching for tests
+            patch_size=4,
+            patching_mode="entropy",
+            patching_threshold=1.335442066192627,
+            patching_batch_size=1,
+            max_patch_length=None,
+            cross_attn_k=2,
+            encoder_hash_byte_group_size=[3, 4, 5, 6, 7, 8],
+            encoder_hash_byte_group_vocab=500002,
+            encoder_hash_byte_group_nb_functions=1,
+            patcher_config=self.patcher_config,
+            encoder_config=self.encoder_config,
+            decoder_config=self.decoder_config,
+            global_config=self.global_config,
+            tie_word_embeddings=False,
+            _attn_implementation="eager"
+        )
+
 
 @require_torch
 class BLTModelTest(CausalLMModelTest, unittest.TestCase):
