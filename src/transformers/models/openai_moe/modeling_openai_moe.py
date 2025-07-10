@@ -241,9 +241,12 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
+    sinks = module.sinks.view(1, -1, 1, 1).expand(query.shape[0], query.shape[1], query.shape[2], 1)
+    attn_weights = torch.cat([attn_weights, sinks], dim=-1)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
+    attn_weights_real = attn_weights[..., :-1]
+    attn_output = torch.matmul(attn_weights_real, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
