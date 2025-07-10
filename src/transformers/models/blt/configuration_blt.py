@@ -65,7 +65,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"rope_type": "default"}
+        self.rope_scaling = rope_scaling or {"type": "default"}
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
@@ -114,7 +114,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"rope_type": "default"}
+        self.rope_scaling = rope_scaling or {"type": "default"}
         self.hidden_act = hidden_act
         self._attn_implementation = _attn_implementation
 
@@ -156,7 +156,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"rope_type": "default"}
+        self.rope_scaling = rope_scaling or {"type": "default"}
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
@@ -230,7 +230,7 @@ class BLTPatcherConfig(PretrainedConfig):
         self.attn_bias_type = attn_bias_type
         self.hidden_act = "silu"  # BLT uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
-        self.rope_scaling = {"rope_type": "default"}
+        self.rope_scaling = {"type": "default"}
         super().__init__(**kwargs)
 
         self._attn_implementation = _attn_implementation
@@ -333,6 +333,9 @@ class BLTConfig(PretrainedConfig):
         global_config=None,
         tie_word_embeddings=False,
         _attn_implementation="sdpa",
+        initializer_range=0.02,
+        rope_theta=500000.0,
+        rope_scaling=None,
         **kwargs,
     ):
         # Basic model configuration
@@ -340,6 +343,9 @@ class BLTConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self._attn_implementation = _attn_implementation
+        self.initializer_range = initializer_range
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling or {"type": "default"}
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
@@ -396,6 +402,12 @@ class BLTConfig(PretrainedConfig):
             self.global_config = global_config
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+        # Add decoder config attributes to main config for compatibility with tests
+        # These mirror the decoder config attributes since the main model interface uses the decoder
+        # self.hidden_size = self.decoder_config.hidden_size
+        # self.num_hidden_layers = self.decoder_config.num_hidden_layers
+        # self.num_attention_heads = self.decoder_config.num_attention_heads
 
 
 __all__ = [

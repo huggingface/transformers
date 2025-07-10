@@ -524,7 +524,7 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optiona
 class BLTRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
-        self.rope_type = config.rope_scaling["rope_type"]
+        self.rope_type = config.rope_scaling.get("type", "default")
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -609,7 +609,7 @@ class BLTLocalEncoder(nn.Module):
 
         hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training)
 
-        position_ids = torch.arange(input_ids.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+        position_ids = torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
@@ -705,12 +705,6 @@ class BLTLocalDecoder(nn.Module):
                 BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
 
-        # self.lm_head = nn.Linear(
-        #     config.hidden_size,
-        #     config.vocab_size,
-        #     bias=False,
-        # )
-
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -745,7 +739,9 @@ class BLTLocalDecoder(nn.Module):
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
 
-        position_ids = torch.arange(input_ids.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
+        # Use sequence length from embeds (standard transformers pattern)
+        seq_len = embeds.shape[1]
+        position_ids = torch.arange(seq_len, device=embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
@@ -771,6 +767,10 @@ class BLTLocalDecoder(nn.Module):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
+
+        # Add final hidden state after all layers
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.norm(hidden_states)
         #  logits = self.lm_head(logits)
@@ -944,50 +944,23 @@ class BLTPreTrainedModel(PreTrainedModel):
     _supports_cache_class = False
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            std = getattr(module, "_custom_std", module.in_features ** (-0.5))
-            nn.init.trunc_normal_(
-                module.weight,
-                mean=0.0,
-                std=std,
-                a=-3 * std,
-                b=3 * std,
-            )
+        std = self.config.initializer_range
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
-
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            std = getattr(module, "_custom_std", module.embedding_dim ** (-0.5))
-            nn.init.trunc_normal_(
-                module.weight,
-                mean=0.0,
-                std=std,
-                a=-3 * std,
-                b=3 * std,
-            )
-
-        elif isinstance(module, BLTModel):
-            if module.encoder_hash_tok_embedding is not None:
-                emb_std = module.config.encoder_config.hidden_size ** (-0.5)
-                for emb in module.encoder_hash_tok_embedding:
-                    emb._custom_std = emb_std
-
-        elif isinstance(module, BLTLocalEncoder):
-            if module.patch_embedding_projection is not None:
-                module.patch_embedding_projection._custom_std = module.config.hidden_size ** (-0.5)
-
-        elif isinstance(module, BLTLocalDecoder):
-            if module.patch_embedding_projection is not None:
-                module.patch_embedding_projection._custom_std = module.config.hidden_size ** (-0.5)
-
-        elif isinstance(module, BLTPatcher):
-            emb_std = module.config.hidden_size ** (-0.5)
-            module.embed_tokens._custom_std = emb_std
-            module.lm_head._custom_std = emb_std
-
-        elif isinstance(module, BLTForCausalLM):
-            if module.lm_head is not None:
-                module.lm_head._custom_std = module.config.decoder_config.hidden_size ** (-0.5)
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, BLTRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class BLTModel(BLTPreTrainedModel):
@@ -1009,6 +982,9 @@ class BLTModel(BLTPreTrainedModel):
                 param.requires_grad = False
         else:
             self.patcher = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -1042,10 +1018,18 @@ class BLTModel(BLTPreTrainedModel):
         all_hidden_states = None
         all_attentions = None
 
-        batch_size, sequence_length = input_ids.shape
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape
+        else:
+            batch_size, sequence_length, _ = inputs_embeds.shape
         # Handle patching
         if patch_lengths is None:
             if self.config.patching_mode == PatchingModeEnum.entropy and self.patcher is not None:
+                if input_ids is None:
+                    raise ValueError("input_ids is required for entropy-based patching")
                 _, patch_lengths, _ = self.patcher(
                     input_ids,
                     patch_size=self.config.patch_size,
@@ -1055,19 +1039,24 @@ class BLTModel(BLTPreTrainedModel):
                     device=input_ids.device,
                 )
             else:
+                device = input_ids.device if input_ids is not None else inputs_embeds.device
+                dtype = input_ids.dtype if input_ids is not None else inputs_embeds.dtype
                 patch_lengths = process_patch_lengths(
-                    torch.ones((batch_size, sequence_length + 1), dtype=input_ids.dtype, device=input_ids.device),
+                    torch.ones((batch_size, sequence_length + 1), dtype=dtype, device=device),
                     self.config.max_patch_length,
                 )
         patch_ids = self._patch_ids_from_lengths(patch_lengths, sequence_length)
-        encoder_embeds = compute_hash_embeddings(
-            input_ids,
-            self.local_encoder,
-            self.encoder_hash_tok_embedding,
-            self.config.encoder_hash_byte_group_nb_functions,
-            self.config.encoder_hash_byte_group_size,
-            self.config.encoder_hash_byte_group_vocab,
-        )
+        if inputs_embeds is not None:
+            encoder_embeds = inputs_embeds
+        else:
+            encoder_embeds = compute_hash_embeddings(
+                input_ids,
+                self.local_encoder,
+                self.encoder_hash_tok_embedding,
+                self.config.encoder_hash_byte_group_nb_functions,
+                self.config.encoder_hash_byte_group_size,
+                self.config.encoder_hash_byte_group_vocab,
+            )
         cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
@@ -1137,6 +1126,14 @@ class BLTModel(BLTPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+
+    def get_input_embeddings(self):
+        """Returns the model's input embeddings."""
+        return self.local_encoder.embed_tokens
+
+    def set_input_embeddings(self, value):
+        """Sets the model's input embeddings."""
+        self.local_encoder.embed_tokens = value
 
     def _patch_ids_from_lengths(self, patch_lengths: torch.Tensor, seq_len: int) -> torch.Tensor:
         """Convert patch lengths to patch IDs for each token position."""

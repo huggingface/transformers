@@ -15,7 +15,9 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available
+import pytest
+from parameterized import parameterized
+from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -27,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -133,7 +136,7 @@ class BLTModelTester(CausalLMModelTester):
         }
 
     def get_config(self):
-        return BLTConfig(
+        config = BLTConfig(
             vocab_size=self.vocab_size,
             max_position_embeddings=self.max_position_embeddings,
             patch_in_forward=False,  # Disable patching for tests
@@ -153,6 +156,12 @@ class BLTModelTester(CausalLMModelTester):
             tie_word_embeddings=False,
             _attn_implementation="eager"
         )
+
+        config.num_attention_heads = config.decoder_config.num_attention_heads
+        config.num_hidden_layers = config.decoder_config.num_hidden_layers
+        config.hidden_size = config.decoder_config.hidden_size
+
+        return config
 
 
 @require_torch
@@ -185,6 +194,58 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = BLTForCausalLM if is_torch_available() else None
+
+    @pytest.mark.generate
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        """Skip this test for BLT as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
+        self.skipTest("BLT requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs")
+
+    @pytest.mark.generate
+    def test_inputs_embeds_matches_input_ids(self):
+        """Skip this test for BLT as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
+        self.skipTest("BLT requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs")
+
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        """Override rope scaling from config test to handle BLT's sub-config structure."""
+        if self.rotary_embedding_layer is None:
+            self.skipTest("Rotary embedding layer not set")
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        original_model = self.model_tester_class.base_model_class(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        # Propagate rope_scaling to sub-configs for BLT
+        config.encoder_config.rope_scaling = config.rope_scaling
+        config.decoder_config.rope_scaling = config.rope_scaling
+        config.global_config.rope_scaling = config.rope_scaling
+        config.patcher_config.rope_scaling = config.rope_scaling
+        
+        scaled_model = self.model_tester_class.base_model_class(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
 
 @require_torch_accelerator
