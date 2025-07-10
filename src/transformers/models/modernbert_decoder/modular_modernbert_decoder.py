@@ -609,7 +609,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-
             [`~modeling_outputs.CausalLMOutputWithPast`]
             comprising various elements depending on the configuration and inputs.
 
