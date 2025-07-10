@@ -72,3 +72,14 @@ try:
     print("Number of TF GPUs available:", len(tf.config.list_physical_devices("GPU")))
 except ImportError:
     print("TensorFlow version:", None)
+
+
+try:
+    import torchcodec
+
+    versions = torchcodec._core.get_ffmpeg_library_versions()
+    print("FFmpeg version:", versions["ffmpeg_version"])
+except ImportError:
+    print("FFmpeg version:", None)
+except (AttributeError, KeyError):
+    print("Failed to get FFmpeg version")
