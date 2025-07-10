@@ -63,21 +63,19 @@ class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
 class Lfm2MLP(nn.Module):
     def __init__(self, config: Lfm2Config):
         super().__init__()
-        dim = config.block_dim
         ff_dim = config.block_ff_dim
-        multiple_of = config.block_multiple_of
-        auto_adjust_ff_dim = config.block_auto_adjust_ff_dim
-        ffn_dim_multiplier = config.block_ffn_dim_multiplier
-        if auto_adjust_ff_dim:
+        if config.block_auto_adjust_ff_dim:
             ff_dim = int(2 * ff_dim / 3)
             # custom dim factor multiplier
+            multiple_of = config.block_multiple_of
+            ffn_dim_multiplier = config.block_ffn_dim_multiplier
             if ffn_dim_multiplier is not None:
                 ff_dim = int(ffn_dim_multiplier * ff_dim)
             ff_dim = multiple_of * ((ff_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = nn.Linear(dim, ff_dim, bias=False)
-        self.w3 = nn.Linear(dim, ff_dim, bias=False)
-        self.w2 = nn.Linear(ff_dim, dim, bias=False)
+        self.w1 = nn.Linear(config.block_dim, ff_dim, bias=False)
+        self.w3 = nn.Linear(config.block_dim, ff_dim, bias=False)
+        self.w2 = nn.Linear(ff_dim, config.block_dim, bias=False)
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))

@@ -36,6 +36,18 @@ class Lfm2ModelTester(CausalLMModelTester):
         base_model_class = Lfm2Model
         causal_lm_class = Lfm2ForCausalLM
 
+    def __init__(
+        self,
+        parent,
+        conv_dim=32,
+        block_dim: int = 24,
+        block_ff_dim: int = 36,
+    ):
+        super().__init__(parent)
+        self.conv_dim = conv_dim
+        self.block_dim = block_dim
+        self.block_ff_dim = block_ff_dim
+
 
 @require_torch
 class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
