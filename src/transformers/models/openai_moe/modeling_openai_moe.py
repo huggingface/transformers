@@ -82,40 +82,34 @@ class OpenAIMoeExperts(nn.Module):
         Args:
             hidden_states (torch.Tensor): (batch_size, seq_len, hidden_size)
             selected_experts (torch.Tensor): (batch_size * token_num, top_k)
-            routing_weights (torch.Tensor): (batch_size * token_num, top_k)
+            routing_weights (torch.Tensor): (batch_size * token_num, num_experts)
         Returns:
             torch.Tensor
         """
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.hidden_size) # (num_tokens, hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
         num_experts = routing_weights.shape[1]
         if self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
-                expert_mask = expert_mask.permute(2,1,0)
+                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts + 1)
+                expert_mask = expert_mask.permute(2, 1, 0)
+                # we sum on the top_k and on the sequence lenght to get which experts
+                # are hit this time around
                 expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-            for expert_idx in expert_hitted[0]:
+            for expert_idx in expert_hitted[:]:
                 with torch.no_grad():
-                    routing_idx, token_idx = torch.where(
-                        expert_mask[expert_idx]
-                    )  # idx: top-1/top-2 indicator, top_x: token indices
-                print(expert_idx)
-                current_state = hidden_states[token_idx]  # (num_tokens, hidden_dim)
-                gate_up = (
-                    current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
-                )  # (num_tokens, 2 * interm_dim)
-                gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
-                glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
-                gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
-                out = (
-                    gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
-                )  # (num_tokens, hidden_dim)
-                weighted_output = out * routing_weights[token_idx, routing_idx, None]  # (num_tokens, hidden_dim)
-                print(token_idx.shape, weighted_output.shape)
+                    _, token_idx = torch.where(expert_mask[expert_idx[0]])
+                current_state = hidden_states[token_idx]
+                expert_idx -= 1  # because the index given by expert mask is off by one
+                gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
+                gate, up = gate_up.chunk(2, dim=-1)
+                glu = gate * torch.sigmoid(gate * self.alpha)
+                gated_output = (up + 1) * glu
+                out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
+                weighted_output = out[0] * routing_weights[token_idx - 1, expert_idx, None]
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
-            routing_weights = torch.ones_like(next_states)
         else:
             hidden_states = hidden_states.repeat(num_experts, 1)
             hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
@@ -124,10 +118,11 @@ class OpenAIMoeExperts(nn.Module):
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
-            next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size) # (num_experts, batch_size, seq_len, hidden_size)
-            next_states = next_states * routing_weights.transpose(0,1).view(num_experts, batch_size, -1)[...,None]
+            next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size)
+            next_states = next_states * routing_weights.transpose(0, 1).view(num_experts, batch_size, -1)[..., None]
             next_states = next_states.sum(dim=0)
         return next_states, routing_weights
+
 
 class TopKRouter(nn.Module):
     def __init__(self, config):
@@ -137,14 +132,15 @@ class TopKRouter(nn.Module):
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.bias = nn.Parameter(torch.empty(self.num_experts))
-    
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight, self.bias) # (seq_len, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1) # (seq_len, top_k)
+        router_logits = F.linear(hidden_states, self.weight, self.bias)  # (seq_len, num_experts)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
         return router_scores, router_indices
+
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class OpenAIMoeMLP(nn.Module):
@@ -154,8 +150,10 @@ class OpenAIMoeMLP(nn.Module):
         self.experts = OpenAIMoeExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices = self.router(hidden_states) # (num_experts, seq_len)
-        routed_out, router_weights = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores) #TODO: router_indices isn't used inside this func
+        router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
+        routed_out, router_weights = self.experts(
+            hidden_states, router_indices=router_indices, routing_weights=router_scores
+        )
         return routed_out, router_scores
 
 
@@ -245,13 +243,16 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    # scale the logits to prevent overflows
+    # # scale the logits to prevent overflows
     logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
     sinks = torch.exp(sinks - logits_max)
     unnormalized_scores = torch.exp(attn_weights - logits_max)
     normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
     scores = unnormalized_scores / normalizer
 
+    # sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    # combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+    # scores = nn.functional.softmax(combined_logits, dim=-1)[..., :-1]
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)  # ignore the sinks
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -479,7 +480,7 @@ class OpenAIMoeModel(OpenAIMoePreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "position_ids": position_ids
+                "position_ids": position_ids,
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -583,9 +584,11 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
             router_per_expert_attention_mask, dim=0
         )
-    
-    rank = routing_weights.shape[1]*int(routing_weights.device.index)
-    overall_loss = torch.sum(tokens_per_expert[:,rank: rank +routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0))
+
+    rank = routing_weights.shape[1] * int(routing_weights.device.index)
+    overall_loss = torch.sum(
+        tokens_per_expert[:, rank : rank + routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0)
+    )
     return overall_loss * num_experts
 
 

@@ -34,12 +34,11 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "local_rowwise",
-
         "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
         "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
         "layers.*.mlp.experts.down_proj": "local_colwise",
-        "layers.*.mlp.experts.down_proj_bias": "local", # TODO: add smthg that says bias exists only once for all TPs
-        "layers.*.mlp.experts": "gather", # TODO: same, this should mean i want to allreduce output 
+        "layers.*.mlp.experts.down_proj_bias": "local",  # TODO: add smthg that says bias exists only once for all TPs
+        # "layers.*.mlp.experts": "gather",  # TODO: same, this should mean i want to allreduce output
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -52,19 +51,18 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "local_rowwise",
-
-        "layers.*.mlp.experts": "gather", # TODO: same, this should mean i want to allreduce output 
+        "layers.*.mlp": "gather",
         "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj_bias": "grouped_gemm", 
+        "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
     }
 
     def __init__(
         self,
         num_hidden_layers: int = 36,
-        num_local_experts: int = 128, #TODO: rename to num_experts otherwise confusing with EP
+        num_local_experts: int = 128,  # TODO: rename to num_experts otherwise confusing with EP
         vocab_size: int = 201088,
         hidden_size: int = 2880,
         intermediate_size: int = 2880,
