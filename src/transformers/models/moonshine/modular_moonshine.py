@@ -495,6 +495,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoonshineEncoderLayer", "MoonshineDecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -759,7 +760,7 @@ class MoonshineModel(WhisperModel):
             and conversion into a tensor of type `torch.FloatTensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
-            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
 
         Example:
 
@@ -865,7 +866,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             and conversion into a tensor of type `torch.FloatTensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
-            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
 
         Example:
 
