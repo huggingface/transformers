@@ -418,15 +418,27 @@ class CanineSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch_size, seq_length, _ = hidden_states.shape
+        batch_size, seq_length, _ = from_tensor.shape
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
 
-        key_layer = self.key(to_tensor).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(to_tensor).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        mixed_query_layer = self.query(from_tensor).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        key_layer = (
+            self.key(to_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(to_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        query_layer = (
+            self.query(from_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))

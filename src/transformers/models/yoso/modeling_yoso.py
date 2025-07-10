@@ -343,9 +343,21 @@ class YosoSelfAttention(nn.Module):
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         batch_size, seq_length, _ = hidden_states.shape
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         if self.use_conv:
             conv_value_layer = self.conv(value_layer * attention_mask[:, None, :, None])

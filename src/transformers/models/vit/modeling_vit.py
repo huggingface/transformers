@@ -225,9 +225,21 @@ class ViTSelfAttention(nn.Module):
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         batch_size, seq_length, _ = hidden_states.shape
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

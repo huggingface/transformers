@@ -302,9 +302,21 @@ class VJEPA2RopeAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         batch_size, seq_length, _ = hidden_states.shape
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         pos_ids = self.get_position_ids(hidden_states, masks=position_mask)
         key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)

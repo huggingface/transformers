@@ -161,11 +161,23 @@ class GitSelfAttention(nn.Module):
         pixel_values_present: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         cutoff = self.image_patch_tokens if pixel_values_present else 0
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
         if past_key_value is not None:
             # NOTE: like in other caches, we store the text component. In GIT it means we discard the image component.
             key_layer_past, value_layer_past = past_key_value.update(

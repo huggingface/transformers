@@ -201,9 +201,21 @@ class VisualBertSelfAttention(nn.Module):
         output_attentions=False,
     ):
         batch_size, seq_length, _ = hidden_states.shape
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -1366,8 +1378,12 @@ class VisualBertRegionToPhraseAttention(nn.Module):
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         attention_mask = (1.0 - attention_mask) * torch.finfo(query.dtype).min
 
-        query_layer = self.query(query).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = self.key(key).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(query).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        key_layer = (
+            self.key(key).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
 
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 

@@ -300,9 +300,13 @@ class AlbertAttention(nn.Module):
         query_layer = self.query(hidden_states)
         key_layer = self.key(hidden_states)
         value_layer = self.value(hidden_states)
-        query_layer = query_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = query_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
         key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = value_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        value_layer = value_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -372,9 +376,21 @@ class AlbertSdpaAttention(AlbertAttention):
             return super().forward(hidden_states, attention_mask, output_attentions=output_attentions)
 
         batch_size, seq_len, _ = hidden_states.size()
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
         # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.

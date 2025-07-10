@@ -556,15 +556,30 @@ class MraSelfAttention(nn.Module):
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
 
     def forward(self, hidden_states, attention_mask=None):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        batch_size, seq_len, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
-            attention_mask.squeeze().repeat(1, self.num_attention_heads, 1).reshape(batch_size * self.num_attention_heads, seq_len).int()
+            attention_mask.squeeze()
+            .repeat(1, self.num_attention_heads, 1)
+            .reshape(batch_size * self.num_attention_heads, seq_len)
+            .int()
         )
 
         # The CUDA kernels are most efficient with inputs whose size is a multiple of a GPU's warp size (32). Inputs
@@ -590,7 +605,7 @@ class MraSelfAttention(nn.Module):
         )
 
         if self.attention_head_size < gpu_warp_size:
-            context_layer = context_layer[:, :, :, :self.attention_head_size]
+            context_layer = context_layer[:, :, :, : self.attention_head_size]
 
         context_layer = context_layer.reshape(batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
 

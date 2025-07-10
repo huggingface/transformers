@@ -295,7 +295,9 @@ ALT_ROBERTA_SELF_ATTENTION_CLASSES = {
 class AltRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ALT_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](config, position_embedding_type=position_embedding_type)
+        self.self = ALT_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = AltRobertaSelfOutput(config)
         self.pruned_heads = set()
 

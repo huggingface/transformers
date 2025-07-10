@@ -328,7 +328,12 @@ class BigBirdSelfAttention(nn.Module):
         output_attentions=False,
         cache_position=None,
     ):
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # NOTE: BigBird has only cross attention layers so we can ignore self attn path
         current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
@@ -337,8 +342,12 @@ class BigBirdSelfAttention(nn.Module):
             key_layer = past_key_value.key_cache[self.layer_idx]
             value_layer = past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.key(current_states)(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-            value_layer = self.value(current_states)(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+            key_layer = self.key(current_states)(
+                batch_size, -1, self.num_attention_heads, self.attention_head_size
+            ).transpose(1, 2)
+            value_layer = self.value(current_states)(
+                batch_size, -1, self.num_attention_heads, self.attention_head_size
+            ).transpose(1, 2)
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -426,9 +435,21 @@ class BigBirdBlockSparseAttention(nn.Module):
         if to_seq_length % to_block_size != 0:
             raise ValueError("Key/Value sided sequence length must be multiple of block size")
 
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         context_layer, attention_probs = self.bigbird_block_sparse_attention(
             query_layer,

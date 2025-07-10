@@ -223,7 +223,11 @@ class RoFormerSelfAttention(nn.Module):
         cache_position=None,
     ):
         batch_size, seq_length, _ = hidden_states.shape
-        query_layer = self.query(hidden_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -246,8 +250,16 @@ class RoFormerSelfAttention(nn.Module):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.key(current_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-            value_layer = self.value(current_states).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+            key_layer = (
+                self.key(current_states)
+                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
+            value_layer = (
+                self.value(current_states)
+                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation

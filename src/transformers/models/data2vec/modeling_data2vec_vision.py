@@ -353,6 +353,7 @@ class Data2VecVisionSdpaSelfAttention(Data2VecVisionSelfAttention):
                 resolution=resolution,
             )
 
+        batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)

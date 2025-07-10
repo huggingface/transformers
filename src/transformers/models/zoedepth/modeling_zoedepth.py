@@ -807,7 +807,7 @@ class ZoeDepthMultiheadAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
+        batch_size, seq_length, _ = queries.shape
         query_layer = (
             self.query(queries)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)

@@ -139,6 +139,7 @@ class BigBirdPegasusSelfAttention(nn.Module):
         output_attentions=False,
         cache_position=None,
     ):
+        batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
             self.query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)

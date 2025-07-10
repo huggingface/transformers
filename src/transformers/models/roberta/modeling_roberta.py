@@ -316,7 +316,9 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
 
         bsz, tgt_len, _ = hidden_states.size()
 
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        query_layer = (
+            self.query(hidden_states).view(bsz, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
 
         # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
         # mask needs to be such that the encoder's padding tokens are not attended to.
@@ -340,8 +342,16 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.key(current_states))
-            value_layer = self.transpose_for_scores(self.value(current_states))
+            key_layer = (
+                self.key(current_states)
+                .view(bsz, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
+            value_layer = (
+                self.value(current_states)
+                .view(bsz, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
