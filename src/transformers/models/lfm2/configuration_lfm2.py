@@ -16,9 +16,9 @@ from typing import Optional
 from ...configuration_utils import PretrainedConfig
 
 
-class Lfm2Config(PretrainedConfig):
+class LFM2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Lfm2Model`]. It is used to instantiate a LFM2
+    This is the configuration class to store the configuration of a [`LFM2Model`]. It is used to instantiate a LFM2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LFM2-1.2B model.
     e.g. [LiquidAI/LFM2-1.2B](https://huggingface.co/LiquidAI/LFM2-1.2B)
@@ -30,7 +30,7 @@ class Lfm2Config(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 65536):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Lfm2Model`]
+            `inputs_ids` passed when calling [`LFM2Model`]
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 12288):
@@ -48,8 +48,8 @@ class Lfm2Config(PretrainedConfig):
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
-            The maximum sequence length that this model might ever be used with. Lfm2 1 supports up to 2048 tokens,
-            Lfm2 2 up to 4096, CodeLfm2 up to 16384.
+            The maximum sequence length that this model might ever be used with. LFM2 1 supports up to 2048 tokens,
+            LFM2 2 up to 4096, CodeLFM2 up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -83,13 +83,13 @@ class Lfm2Config(PretrainedConfig):
             Type of each layers.
 
     ```python
-    >>> from transformers import Lfm2Model, Lfm2Config
+    >>> from transformers import LFM2Model, LFM2Config
 
     >>> # Initializing a LFM2 model
-    >>> configuration = Lfm2Config()
+    >>> configuration = LFM2Config()
 
     >>> # Initializing a model from the LFM2-1.2B style configuration
-    >>> model = Lfm2Model(configuration)
+    >>> model = LFM2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -162,4 +162,4 @@ class Lfm2Config(PretrainedConfig):
         )
 
 
-__all__ = ["Lfm2Config"]
+__all__ = ["LFM2Config"]

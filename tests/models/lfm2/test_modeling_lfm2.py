@@ -27,14 +27,14 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import Lfm2Config, Lfm2ForCausalLM, Lfm2Model
+    from transformers import LFM2Config, LFM2ForCausalLM, LFM2Model
 
 
-class Lfm2ModelTester(CausalLMModelTester):
+class LFM2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Lfm2Config
-        base_model_class = Lfm2Model
-        causal_lm_class = Lfm2ForCausalLM
+        config_class = LFM2Config
+        base_model_class = LFM2Model
+        causal_lm_class = LFM2ForCausalLM
 
     def __init__(
         self,
@@ -46,12 +46,12 @@ class Lfm2ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (Lfm2Model, Lfm2ForCausalLM) if is_torch_available() else ()
+class LFM2ModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (LFM2Model, LFM2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": Lfm2Model,
-            "text-generation": Lfm2ForCausalLM,
+            "feature-extraction": LFM2Model,
+            "text-generation": LFM2ForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -59,29 +59,29 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
-    model_tester_class = Lfm2ModelTester
+    model_tester_class = LFM2ModelTester
     # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
+    _torch_compile_train_cls = LFM2ForCausalLM if is_torch_available() else None
 
     @unittest.skip(
-        "Lfm2 alternates between attention and conv layers, so attention are only returned for attention layers"
+        "LFM2 alternates between attention and conv layers, so attention are only returned for attention layers"
     )
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format as it alternates between attention and conv layers")
+    @unittest.skip("LFM2 has a special cache format as it alternates between attention and conv layers")
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    @unittest.skip("LFM2 has a special cache format which is not compatible with contrastive search")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    @unittest.skip("LFM2 has a special cache format which is not compatible with contrastive search")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    @unittest.skip("LFM2 has a special cache format which is not compatible with contrastive search")
     def test_contrastive_generate_low_memory(self):
         pass
 
@@ -89,5 +89,5 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @require_read_token
 @slow
-class Lfm2IntegrationTest(unittest.TestCase):
+class LFM2IntegrationTest(unittest.TestCase):
     pass

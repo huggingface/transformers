@@ -35,7 +35,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available
-from .configuration_lfm2 import Lfm2Config
+from .configuration_lfm2 import LFM2Config
 
 
 if is_causal_conv1d_available():
@@ -45,10 +45,10 @@ else:
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Lfm2RMSNorm(nn.Module):
+class LFM2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Lfm2RMSNorm is equivalent to T5LayerNorm
+        LFM2RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -65,8 +65,8 @@ class Lfm2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Lfm2RotaryEmbedding(nn.Module):
-    def __init__(self, config: Lfm2Config, device=None):
+class LFM2RotaryEmbedding(nn.Module):
+    def __init__(self, config: LFM2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
@@ -99,8 +99,8 @@ class Lfm2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class Lfm2MLP(nn.Module):
-    def __init__(self, config: Lfm2Config):
+class LFM2MLP(nn.Module):
+    def __init__(self, config: LFM2Config):
         super().__init__()
         intermediate_size = config.intermediate_size
         if config.block_auto_adjust_ff_dim:
@@ -119,9 +119,9 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2HybridConvCache(DynamicCache):
+class LFM2HybridConvCache(DynamicCache):
     """
-    Attention and conv cache for Lfm2.
+    Attention and conv cache for LFM2.
 
     It stores the Key and Value states as a list of tensors, one for each layer.
     Attention layer cache shape: `[batch_size, num_heads, seq_len, head_dim]`.
@@ -130,7 +130,7 @@ class Lfm2HybridConvCache(DynamicCache):
 
     def __init__(
         self,
-        config: Lfm2Config,
+        config: LFM2Config,
         max_batch_size: int,
         dtype: torch.dtype = torch.float32,
         device: Union[torch.device, str, None] = None,
@@ -219,11 +219,11 @@ class Lfm2HybridConvCache(DynamicCache):
         return self.key_cache[layer_idx].shape[-2]
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
-        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
+        raise NotImplementedError("LFM2HybridConvCache does not have a legacy cache equivalent.")
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
+        raise NotImplementedError("LFM2HybridConvCache does not have a legacy cache equivalent.")
 
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
@@ -303,10 +303,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Lfm2Attention(nn.Module):
+class LFM2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Lfm2Config, layer_idx: int):
+    def __init__(self, config: LFM2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -318,15 +318,15 @@ class Lfm2Attention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.out_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.q_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
-        self.k_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
+        self.q_layernorm = LFM2RMSNorm(self.head_dim, eps=config.norm_eps)
+        self.k_layernorm = LFM2RMSNorm(self.head_dim, eps=config.norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_value: Optional[LFM2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -378,10 +378,10 @@ kernel_modules = (causal_conv1d_fn, causal_conv1d_update)
 is_fast_path_available = all(kernel_modules)
 
 
-class Lfm2ShortConv(nn.Module):
+class LFM2ShortConv(nn.Module):
     def __init__(
         self,
-        config: Lfm2Config,
+        config: LFM2Config,
         layer_idx: int,
     ):
         super().__init__()
@@ -404,7 +404,7 @@ class Lfm2ShortConv(nn.Module):
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_value: Optional[LFM2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -438,7 +438,7 @@ class Lfm2ShortConv(nn.Module):
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_value: Optional[LFM2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -476,7 +476,7 @@ class Lfm2ShortConv(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_value: Optional[LFM2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -485,18 +485,18 @@ class Lfm2ShortConv(nn.Module):
         return self.slow_forward(hidden_states, past_key_value, cache_position, attention_mask)
 
 
-class Lfm2DecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Lfm2Config, layer_idx: int):
+class LFM2DecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: LFM2Config, layer_idx: int):
         super().__init__()
         self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"
 
         if self.is_attention_layer:
-            self.self_attn = Lfm2Attention(config, layer_idx)
+            self.self_attn = LFM2Attention(config, layer_idx)
         else:
-            self.conv = Lfm2ShortConv(config, layer_idx)
-        self.feed_forward = Lfm2MLP(config)
-        self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
+            self.conv = LFM2ShortConv(config, layer_idx)
+        self.feed_forward = LFM2MLP(config)
+        self.operator_norm = LFM2RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.ffn_norm = LFM2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
     def forward(
         self,
@@ -533,11 +533,11 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Lfm2PreTrainedModel(PreTrainedModel):
-    config_class = Lfm2Config
+class LFM2PreTrainedModel(PreTrainedModel):
+    config_class = LFM2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Lfm2DecoderLayer"]
+    _no_split_modules = ["LFM2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_flash_attn_3 = True
@@ -548,8 +548,8 @@ class Lfm2PreTrainedModel(PreTrainedModel):
     _supports_static_cache = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Lfm2DecoderLayer,
-        "attentions": Lfm2Attention,
+        "hidden_states": LFM2DecoderLayer,
+        "attentions": LFM2Attention,
     }
 
     def _init_weights(self, module):
@@ -562,25 +562,25 @@ class Lfm2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Lfm2RMSNorm):
+        elif isinstance(module, LFM2RMSNorm):
             module.weight.data.fill_(1.0)
 
 
 @auto_docstring
-class Lfm2Model(Lfm2PreTrainedModel):
-    def __init__(self, config: Lfm2Config):
+class LFM2Model(LFM2PreTrainedModel):
+    def __init__(self, config: LFM2Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Lfm2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [LFM2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = Lfm2RotaryEmbedding(config=config)
+        self.rotary_emb = LFM2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.pos_emb = Lfm2RotaryEmbedding(config)
-        self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.pos_emb = LFM2RotaryEmbedding(config)
+        self.embedding_norm = LFM2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -598,7 +598,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[LFM2HybridConvCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -612,7 +612,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
 
         if use_cache and past_key_values is None:
             batch_size = inputs_embeds.shape[0]
-            past_key_values = Lfm2HybridConvCache(
+            past_key_values = LFM2HybridConvCache(
                 config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
             )
 
@@ -658,14 +658,14 @@ class Lfm2Model(Lfm2PreTrainedModel):
 
 
 @auto_docstring
-class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
+class LFM2ForCausalLM(LFM2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Lfm2Model(config)
+        self.model = LFM2Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -714,10 +714,10 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Lfm2ForCausalLM
+        >>> from transformers import AutoTokenizer, LFM2ForCausalLM
 
-        >>> model = Lfm2ForCausalLM.from_pretrained("meta-lfm2/Lfm2-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-lfm2/Lfm2-2-7b-hf")
+        >>> model = LFM2ForCausalLM.from_pretrained("meta-lfm2/LFM2-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-lfm2/LFM2-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -756,4 +756,4 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["Lfm2ForCausalLM", "Lfm2Model", "Lfm2PreTrainedModel"]
+__all__ = ["LFM2ForCausalLM", "LFM2Model", "LFM2PreTrainedModel"]
