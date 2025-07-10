@@ -214,6 +214,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("esm", ("EsmTokenizer", None)),
         ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("falcon_mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+        ("fastconformer", ("FastConformerTokenizer", None)),
         (
             "fastspeech2_conformer",
             ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
@@ -457,6 +458,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("paligemma", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        ("parakeet_ctc", ("FastConformerTokenizer", None)),
         (
             "pegasus",
             (
