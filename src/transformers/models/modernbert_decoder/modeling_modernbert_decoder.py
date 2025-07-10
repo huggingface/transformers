@@ -121,7 +121,7 @@ class ModernBertDecoderAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -202,7 +202,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
-
         hidden_states = attn_outputs[0]
 
         # Add residual connection
@@ -407,6 +406,12 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.decoder = new_embeddings
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -457,6 +462,7 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
