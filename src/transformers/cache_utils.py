@@ -231,10 +231,6 @@ class Cache:
         - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
     """
 
-    layers: list[CacheLayerMixin] = None
-    key_cache: list[torch.Tensor] = None
-    value_cache: list[torch.Tensor] = None
-
     def __init__(
         self,
         model_config: Optional[PretrainedConfig] = None,
@@ -312,49 +308,6 @@ class Cache:
         )
         return len(self.key_cache) if not dynamic_empty else 0
 
-    def __getattr__(self, name):
-        """
-        Forward a *shared* operation or property to every layer.
-
-        - If every layer defines a callable `name`, we return a proxy that
-          calls each layer in turn and updates `key_cache` / `value_cache`.
-        - If every layer defines a boolean `name`, we return `all(values)`.
-        - If every layer defines a constant property `name`, we return it.
-        - Otherwise we raise AttributeError.
-        """
-        if not self.layers:
-            return object.__getattribute__(self, name)
-
-        # 1) Gather the attribute from every layer
-        values = []
-        for layer in self.layers:
-            values.append(getattr(layer, name, None))
-
-        # 2) All callables  →  make a forwarding function
-        if all(callable(v) for v in values):
-
-            def _proxy(*args, **kwargs):
-                for i in range(len(self.layers)):
-                    self.key_cache[i], self.value_cache[i], ret = values[i](
-                        key_cache=self.key_cache[i], value_cache=self.value_cache[i], *args, **kwargs
-                    )
-                    if ret is not None:
-                        break
-                return ret
-
-            return _proxy
-
-        # 3) All booleans   →  reduce with `all`
-        if all(isinstance(v, bool) for v in values):
-            return all(values)
-
-        # 4) All identical → return first
-        if all(v == values[0] for v in values):
-            return values[0]
-
-        # 5) Anything else  →  unsupported mixed attribute
-        raise AttributeError(f"{self.__class__.__name__}: layers disagree on attribute {name!r}: {values}")
-
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
 
@@ -415,9 +368,7 @@ class Cache:
         """Returns the sequence length of the cache for the given layer. TODO: deprecate in favor of cache_position"""
         if layer_idx >= len(self.layers):
             return 0
-        _, _, seq_length = self.layers[layer_idx].get_seq_length(
-            self.key_cache[layer_idx], self.value_cache[layer_idx]
-        )
+        seq_length = self.layers[layer_idx].get_seq_length(self.key_cache[layer_idx], self.value_cache[layer_idx])
         # Hack since QuantizedCache messes with keys shape as it becomes the residual cache
         if self.cache_processor is not None and isinstance(self.cache_processor, QuantizedCacheProcessor):
             return self.cache_processor.erased_length + seq_length
@@ -430,10 +381,68 @@ class Cache:
         The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
         for each layer.
         """
-        _, _, (kv_length, kv_offset) = self.layers[layer_idx].get_mask_sizes(
+        kv_length, kv_offset = self.layers[layer_idx].get_mask_sizes(
             cache_position, self.key_cache[layer_idx], self.value_cache[layer_idx]
         )
         return kv_length, kv_offset
+
+    ### Wrappers for layer operations and properties ###
+
+    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
+        """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
+        return self.layers[layer_idx].get_max_cache_shape(self.key_cache[layer_idx], self.value_cache[layer_idx])
+
+    def reset(self):
+        for layer_idx in range(len(self.layers)):
+            self.key_cache[layer_idx], self.value_cache[layer_idx] = self.layers[layer_idx].reset(
+                self.key_cache[layer_idx], self.value_cache[layer_idx]
+            )
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        for layer_idx in range(len(self.layers)):
+            self.key_cache[layer_idx], self.value_cache[layer_idx] = self.layers[layer_idx].reorder_cache(
+                beam_idx, self.key_cache[layer_idx], self.value_cache[layer_idx]
+            )
+
+    def crop(self, max_length: int):
+        for layer_idx in range(len(self.layers)):
+            self.key_cache[layer_idx], self.value_cache[layer_idx] = self.layers[layer_idx].crop(
+                max_length, self.key_cache[layer_idx], self.value_cache[layer_idx]
+            )
+
+    def batch_repeat_interleave(self, repeats: int):
+        for layer_idx in range(len(self.layers)):
+            self.key_cache[layer_idx], self.value_cache[layer_idx] = self.layers[layer_idx].batch_repeat_interleave(
+                repeats, self.key_cache[layer_idx], self.value_cache[layer_idx]
+            )
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        for layer_idx in range(len(self.layers)):
+            self.key_cache[layer_idx], self.value_cache[layer_idx] = self.layers[layer_idx].batch_select_indices(
+                indices, self.key_cache[layer_idx], self.value_cache[layer_idx]
+            )
+
+    @property
+    def max_batch_size(self) -> int:
+        values = [layer.max_batch_size for layer in self.layers]
+        if len(set(values)) > 1:
+            raise ValueError(f"Max batch size is not consistent across layers: {values}")
+        return values[0]
+
+    @property
+    def max_cache_len(self) -> int:
+        values = [layer.max_cache_len for layer in self.layers]
+        if len(set(values)) > 1:
+            raise ValueError(f"Max cache length is not consistent across layers: {values}")
+        return values[0]
+
+    @property
+    def is_compileable(self) -> bool:
+        return all(layer.is_compileable for layer in self.layers)
+
+    @property
+    def is_sliding(self) -> bool:
+        return all(layer.is_sliding for layer in self.layers)
 
 
 class DynamicLayer(CacheLayerMixin):
@@ -474,7 +483,7 @@ class DynamicLayer(CacheLayerMixin):
 
     def new_tensors(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Returns a new key and value tensor for this layer's cache."""
-        return None, None  # They get initialized in the update()
+        return None, None  # They are initialized in update()
 
     def get_seq_length(
         self,
@@ -485,8 +494,8 @@ class DynamicLayer(CacheLayerMixin):
         """Returns the sequence length of the cached states."""
         # TODO: deprecate this function in favor of `cache_position`
         if key_cache is None or key_cache.numel() == 0:
-            return key_cache, value_cache, 0
-        return key_cache, value_cache, key_cache.shape[-2]
+            return 0
+        return key_cache.shape[-2]
 
     def get_max_cache_shape(
         self,
@@ -494,7 +503,7 @@ class DynamicLayer(CacheLayerMixin):
         value_cache: torch.Tensor,
     ) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
-        return key_cache, value_cache, -1
+        return -1
 
     def reset(
         self,
@@ -504,7 +513,7 @@ class DynamicLayer(CacheLayerMixin):
         """Resets the cache values while preserving the objects"""
         key_cache.zero_()
         value_cache.zero_()
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def reorder_cache(
         self,
@@ -516,7 +525,7 @@ class DynamicLayer(CacheLayerMixin):
         if key_cache is not None and key_cache.numel():
             key_cache = key_cache.index_select(0, beam_idx.to(key_cache.device))
             value_cache = value_cache.index_select(0, beam_idx.to(value_cache.device))
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def crop(
         self,
@@ -529,15 +538,15 @@ class DynamicLayer(CacheLayerMixin):
         negative to remove `max_length` tokens.
         """
         if max_length < 0:
-            max_length = self.get_seq_length(key_cache, value_cache)[-1] - abs(max_length)
+            max_length = self.get_seq_length(key_cache, value_cache) - abs(max_length)
 
-        if self.get_seq_length(key_cache, value_cache)[-1] <= max_length:
-            return key_cache, value_cache, None
+        if self.get_seq_length(key_cache, value_cache) <= max_length:
+            return key_cache, value_cache
 
         if key_cache is not None and key_cache.numel():
             key_cache = key_cache[..., :max_length, :]
             value_cache = value_cache[..., :max_length, :]
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def batch_repeat_interleave(
         self, repeats: int, key_cache: torch.Tensor, value_cache: torch.Tensor
@@ -546,7 +555,7 @@ class DynamicLayer(CacheLayerMixin):
         if key_cache.numel():
             key_cache = key_cache.repeat_interleave(repeats, dim=0)
             value_cache = value_cache.repeat_interleave(repeats, dim=0)
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def batch_select_indices(
         self, indices: torch.Tensor, key_cache: torch.Tensor, value_cache: torch.Tensor
@@ -555,7 +564,7 @@ class DynamicLayer(CacheLayerMixin):
         if key_cache.numel():
             key_cache = key_cache[indices, ...]
             value_cache = value_cache[indices, ...]
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def get_mask_sizes(
         self,
@@ -565,9 +574,9 @@ class DynamicLayer(CacheLayerMixin):
     ) -> tuple[int, int]:
         full_mask_kv_offset = 0
         query_length = cache_position.shape[0]
-        _, _, past_seen_tokens = self.get_seq_length(key_cache, value_cache, cache_position)
+        past_seen_tokens = self.get_seq_length(key_cache, value_cache, cache_position)
         kv_length = query_length + past_seen_tokens
-        return key_cache, value_cache, (kv_length, full_mask_kv_offset)
+        return kv_length, full_mask_kv_offset
 
 
 class DynamicCache(Cache):
@@ -740,7 +749,7 @@ class StaticLayer(CacheLayerMixin):
         self.device = device
 
     def get_max_cache_shape(self, key_cache: torch.Tensor, value_cache: torch.Tensor) -> int:
-        return key_cache, value_cache, self.max_cache_len
+        return self.max_cache_len
 
     def _static_update(
         self,
@@ -819,12 +828,12 @@ class StaticLayer(CacheLayerMixin):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         seq_length = (key_cache[0, 0].any(dim=-1)).sum() if key_cache is not None else 0
-        return key_cache, value_cache, seq_length
+        return seq_length
 
     def reset(self, key_cache: torch.Tensor, value_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         key_cache.zero_()
         value_cache.zero_()
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def reorder_cache(
         self, beam_idx: torch.LongTensor, key_cache: torch.Tensor, value_cache: torch.Tensor
@@ -833,14 +842,14 @@ class StaticLayer(CacheLayerMixin):
         beam_idx_dev = beam_idx.to(dev)
         key_cache = key_cache.index_select(0, beam_idx_dev)
         value_cache = value_cache.index_select(0, beam_idx_dev)
-        return key_cache, value_cache, None
+        return key_cache, value_cache
 
     def get_mask_sizes(
         self, cache_position: torch.Tensor, key_cache: torch.Tensor, value_cache: torch.Tensor
     ) -> tuple[int, int]:
         full_mask_kv_offset = 0
         full_mask_kv_length = self.max_cache_len
-        return key_cache, value_cache, (full_mask_kv_length, full_mask_kv_offset)
+        return full_mask_kv_length, full_mask_kv_offset
 
 
 class StaticCache(Cache):
@@ -950,7 +959,7 @@ class SlidingWindowLayer(StaticLayer):
         local_mask_kv_offset = torch.clamp(first_cache_position - self.max_cache_len + 1, min=0)
         # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
         local_mask_kv_length = max(query_length, self.max_cache_len)
-        return key_cache, value_cache, (local_mask_kv_length, local_mask_kv_offset)
+        return local_mask_kv_length, local_mask_kv_offset
 
 
 class SlidingWindowCache(Cache):
@@ -1018,6 +1027,9 @@ class EncoderDecoderCache(Cache):
         ```
 
     """
+
+    # Override @property from Cache
+    is_compileable = None
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
         super().__init__()
@@ -1241,8 +1253,9 @@ class HybridChunkedCache(Cache):
 
     is_compileable = True
     # Override @property since HybridChunked does not conform to layered caches yet
-    key_cache = None
-    value_cache = None
+    is_sliding = None
+    max_batch_size = None
+    max_cache_len = None
 
     def __init__(
         self,
