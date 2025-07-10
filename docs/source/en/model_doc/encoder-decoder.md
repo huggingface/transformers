@@ -26,19 +26,13 @@ rendered properly in your Markdown viewer.
 
 [`EncoderDecoderModel`](https://huggingface.co/papers/1706.03762) has two main parts:
 
-Encoder: This part reads the input text and converts it into a set of numerical features capturing the meaning and context 
-of the input.
 
-Decoder: This part takes the numerical features from the encoder and generates the output text step by step. It uses the information from the encoder to produce meaningful and relevant output, such as a translation, a summary, or an answer.
 
-We can be use this model class to initialize a sequence-to-sequence model with any pretrained autoencoding model as the 
-encoder and any pretrained autoregressive model as the decoder.
 
 > [!TIP]
-> This model was contributed by [thomwolf](https://github.com/thomwolf). This model's TensorFlow and Flax versions
-> were contributed by [ydshieh](https://github.com/ydshieh).
-> Click on the Encoder Decoder models in the right sidebar for more examples of how to apply Encoder Decoder to different 
-> language tasks.
+> This model was contributed by [thomwolf](https://huggingface.co/thomwolf) and the TensorFlow/Flax version by [ydshieh](https://huggingface.co/ydshieh).
+>
+> Click on the Encoder Decoder models in the right sidebar for more examples of how to apply Encoder Decoder to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -102,8 +96,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- Encoder Decoder models can be fine-tuned similar to BART, T5 or any other encoder-decoder model.
-- The example below below demonstrates how to fine-tune the model with [Transformers](https://huggingface.co/docs/transformers).
+- Encoder Decoder models can be fine-tuned like BART, T5 or any other encoder-decoder model. Only 2 inputs are required to compute a loss, `input_ids` and `labels`. Refer to this [notebook](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for a more detailed training example.
 
 ```python
 >>> from transformers import BertTokenizer, EncoderDecoderModel
@@ -127,10 +120,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 >>> # the forward function automatically creates the correct decoder_input_ids
 >>> loss = model(input_ids=input_ids, labels=labels).loss
 ```
-- The following [colab example](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
 
-- [`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show    
-  how to do this using the default [`BertModel`] configuration for the encoder and the default [`BertForCausalLM`] configuration for the decoder.
+- [`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config as shown below.
 
 ```python
 >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel

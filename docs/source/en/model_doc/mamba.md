@@ -28,8 +28,7 @@ You can find all the original Mamba checkpoints under the [State Space Models](h
 
 
 > [!TIP]
-> This model was contributed by [Molbap](https://huggingface.co/Molbap), with tremendous help from 
-> [Anton Vlasjuk](https://github.com/vasqu).
+> This model was contributed by [Molbap](https://huggingface.co/Molbap) and [Anton Vlasjuk](https://huggingface.co/AntonV).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
