@@ -201,31 +201,26 @@ def parse_layer_args_from_model_config(
         return {k: v for k, v in layer_args.items() if v is not None}
 
 
-class CacheBase:
-    layers: list[CacheLayerMixin] = None
-    key_cache: list[torch.Tensor] = None
-    value_cache: list[torch.Tensor] = None
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+def apply_processors(fn):
+    def _wrapped_update(self, key_states, value_states, layer_idx, cache_kwargs=None):
         if self.cache_processor is not None:
             key_states, value_states = self.cache_processor.pre_update(
                 self, key_states, value_states, layer_idx, cache_kwargs
             )
-        key_tensors, value_tensors = self._update(key_states, value_states, layer_idx, cache_kwargs)
+
+        key_tensors, value_tensors = fn(self, key_states, value_states, layer_idx, cache_kwargs)
+
         if self.cache_processor is not None:
             key_tensors, value_tensors = self.cache_processor.post_update(
                 self, key_tensors, value_tensors, layer_idx, cache_kwargs
             )
+
         return key_tensors, value_tensors
 
+    return _wrapped_update
 
-class Cache(CacheBase):
+
+class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to the layers.
     This class handles propagation of operations across layers.
@@ -235,6 +230,10 @@ class Cache(CacheBase):
         - Uses `sliding_window_pattern` (default: 2) to determine layer alternation if pattern not specified
         - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
     """
+
+    layers: list[CacheLayerMixin] = None
+    key_cache: list[torch.Tensor] = None
+    value_cache: list[torch.Tensor] = None
 
     def __init__(
         self,
@@ -374,7 +373,8 @@ class Cache(CacheBase):
             self.key_cache.append(new_key)
             self.value_cache.append(new_value)
 
-    def _update(
+    @apply_processors
+    def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
