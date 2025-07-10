@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PretrainedConfig
 
 
@@ -151,7 +150,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         use_cache=True,
         local_attention=128,
         global_attn_every_n_layers=3,
-        local_rope_theta=None,
+        local_rope_theta=160000.0,
         layer_types=None,
         **kwargs,
     ):
@@ -188,6 +187,9 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_rope_theta = local_rope_theta
+        # for consistency with ModernBert
+        self.reference_compile = False
+        self._attn_implementation = "eager"
 
         # Set up layer_types for standardized layer type detection
         self.layer_types = layer_types
@@ -200,7 +202,8 @@ class ModernBertDecoderConfig(PretrainedConfig):
                 else:
                     self.layer_types.append("full_attention")
 
-        self.sliding_window = local_attention
+        # NOTE: sliding window numbers matches ModernBERT but is only half of it
+        self.sliding_window = local_attention // 2 if local_attention else -1
 
 
 __all__ = ["ModernBertDecoderConfig"]

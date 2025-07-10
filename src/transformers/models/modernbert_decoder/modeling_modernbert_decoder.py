@@ -19,8 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -41,6 +41,7 @@ from ...models.modernbert.modeling_modernbert import (
     ModernBertRotaryEmbedding,
     apply_rotary_pos_emb,
 )
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from .configuration_modernbert_decoder import ModernBertDecoderConfig
@@ -76,7 +77,6 @@ def eager_attention_forward(
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
     return attn_output, attn_weights
 
 
@@ -88,6 +88,7 @@ class ModernBertDecoderAttention(nn.Module):
 
     def __init__(self, config: ModernBertDecoderConfig, layer_idx: Optional[int] = None):
         super().__init__()
+        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = config.hidden_size // config.num_attention_heads
@@ -128,9 +129,6 @@ class ModernBertDecoderAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -166,11 +164,11 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.layer_idx = layer_idx
         self.attention_type = config.layer_types[layer_idx]
-
-        if layer_idx == 0:
-            self.attn_norm = nn.Identity()
-        else:
-            self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.attn_norm = (
+            nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+            if layer_idx != 0
+            else nn.Identity()
+        )
         self.attn = ModernBertDecoderAttention(config=config, layer_idx=layer_idx)
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
@@ -178,7 +176,8 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings_global: torch.Tensor,
+        position_embeddings_local: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
@@ -187,6 +186,12 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states)
+
+        # apply global RoPE to non-sliding layer only
+        if self.attn.is_sliding:
+            position_embeddings = position_embeddings_local
+        else:
+            position_embeddings = position_embeddings_global
 
         # Self Attention
         attn_outputs = self.attn(
@@ -291,12 +296,9 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         self.global_rotary_emb = ModernBertRotaryEmbedding(
             config=config, dim=config.hidden_size // config.num_attention_heads, base=config.global_rope_theta
         )
-        if config.local_rope_theta is not None:
-            self.local_rotary_emb = ModernBertRotaryEmbedding(
-                config=config, dim=config.hidden_size // config.num_attention_heads, base=config.local_rope_theta
-            )
-        else:
-            self.local_rotary_emb = self.global_rotary_emb
+        self.local_rotary_emb = ModernBertRotaryEmbedding(
+            config=config, dim=config.hidden_size // config.num_attention_heads, base=config.local_rope_theta
+        )
 
         self.post_init()
 
@@ -317,7 +319,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPast]:
         if (input_ids is None) == (inputs_embeds is None):
@@ -356,44 +357,35 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-            # NOTE: sliding window numbers matches ModernBERT but is only half of it +1 is because it is inclusive of that number
-            self.config.sliding_window = (
-                self.config.local_attention // 2 + 1 if self.config.local_attention is not None else -1
-            )
-            causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings_global = self.global_rotary_emb(hidden_states, position_ids)
+        position_embeddings_local = self.local_rotary_emb(hidden_states, position_ids)
 
         for idx, decoder_layer in enumerate(self.layers):
-            # Get the appropriate rotary embedding for this layer
-            if decoder_layer.attention_type == "sliding_attention":
-                rotary_emb = self.local_rotary_emb
-            else:
-                rotary_emb = self.global_rotary_emb
-            cos, sin = rotary_emb(hidden_states, position_ids)
-            position_embeddings = (cos, sin)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings_global=position_embeddings_global,
+                position_embeddings_local=position_embeddings_local,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                past_key_value=next_decoder_cache,
+                past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
         hidden_states = self.final_norm(hidden_states)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
+            past_key_values=past_key_values,
         )
 
 
@@ -426,7 +418,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
@@ -437,8 +428,8 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`: A
-            [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of `torch.FloatTensor` (if `return_dict=False`)
+
+            [`~modeling_outputs.CausalLMOutputWithPast`]
             comprising various elements depending on the configuration and inputs.
 
         Example:
@@ -466,7 +457,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
@@ -483,11 +473,7 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            loss = loss_fct(shift_logits, shift_labels)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -534,6 +520,7 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
     def forward(
         self,
@@ -544,7 +531,6 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
@@ -553,8 +539,6 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -562,7 +546,6 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=return_dict,
             **kwargs,
         )
         hidden_states = transformer_outputs[0]
@@ -605,19 +588,15 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
                 if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze(), **kwargs)
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
                 else:
-                    loss = loss_fct(pooled_logits, labels, **kwargs)
+                    loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1), **kwargs)
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels, **kwargs)
-
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+                loss = loss_fct(pooled_logits, labels)
 
         return SequenceClassifierOutputWithPast(
             loss=loss,

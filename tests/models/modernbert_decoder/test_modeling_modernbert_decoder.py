@@ -97,9 +97,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertDecoderForCausalLM.from_pretrained(
-            "blab-jhu/test-32m-dec", reference_compile=False, attn_implementation="sdpa"
-        )
+        model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec", attn_implementation="eager")
         tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
         inputs = tokenizer("Paris is the capital of", return_tensors="pt")
@@ -118,9 +116,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertDecoderModel.from_pretrained(
-            "blab-jhu/test-32m-dec", reference_compile=False, attn_implementation="sdpa"
-        )
+        model = ModernBertDecoderModel.from_pretrained("blab-jhu/test-32m-dec", attn_implementation="eager")
         tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
         inputs = tokenizer("Paris is the capital of", return_tensors="pt")
@@ -131,7 +127,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
 
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[0.3151, -0.6417, -0.7027], [-0.7834, -1.5810, 0.4576], [1.0614, -0.7268, -0.0871]]]
+            [[[-0.0306, -0.0115, 0.0007], [-0.2485, -0.1381, 0.0872], [0.3133, -0.1777, 0.1667]]]
         )
         torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
@@ -139,7 +135,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec")
+        model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec", attn_implementation="eager")
         tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
         inputs = tokenizer("The weather today is", return_tensors="pt")
@@ -157,7 +153,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec")
+        model = ModernBertDecoderForCausalLM.from_pretrained("blab-jhu/test-32m-dec", attn_implementation="eager")
         tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
         # Create a longer input to test sliding window attention
@@ -177,7 +173,9 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertDecoderForSequenceClassification.from_pretrained("blab-jhu/test-32m-dec", num_labels=2)
+        model = ModernBertDecoderForSequenceClassification.from_pretrained(
+            "blab-jhu/test-32m-dec", num_labels=2, attn_implementation="eager"
+        )
         tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
 
         # Test with sample input
