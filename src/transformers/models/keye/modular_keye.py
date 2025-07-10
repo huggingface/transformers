@@ -207,7 +207,12 @@ class KeyeConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-
+        head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each attention head.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the attention mechanism.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import KeyeForConditionalGeneration, KeyeConfig
 
