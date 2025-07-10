@@ -120,7 +120,7 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2Cache(DynamicCache):
+class Lfm2HybridConvCache(DynamicCache):
     """
     Attention and conv cache for Lfm2.
 
@@ -138,7 +138,8 @@ class Lfm2Cache(DynamicCache):
     ):
         super().__init__()  # initialize key and value cache
         self.max_batch_size = max_batch_size
-        self.full_attn_idxs = config.full_attn_idxs
+        self.layer_types = config.layer_types
+        self.first_attention_layer = self.layer_types.index("full_attention")
         self.conv_L_cache = config.conv_L_cache
         self._dtype = dtype
 
@@ -180,7 +181,7 @@ class Lfm2Cache(DynamicCache):
             A tuple containing the updated key and value states.
         """
         # Update the number of seen tokens
-        if layer_idx == self.full_attn_idxs[0]:
+        if layer_idx == self.first_attention_layer:
             self._seen_tokens += key_states.shape[-2]
 
         # Update the cache
@@ -217,17 +218,17 @@ class Lfm2Cache(DynamicCache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
-        layer_idx = self.full_attn_idxs[0] if layer_idx not in self.full_attn_idxs else layer_idx
+        layer_idx = self.first_attention_layer if self.layer_types[layer_idx] != "full_attention" else layer_idx
         if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
-        raise NotImplementedError("Lfm2Cache does not have a legacy cache equivalent.")
+        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("Lfm2Cache does not have a legacy cache equivalent.")
+        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
 
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
@@ -330,7 +331,7 @@ class Lfm2Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Lfm2Cache] = None,
+        past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -408,7 +409,7 @@ class Lfm2ShortConv(nn.Module):
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2Cache] = None,
+        past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -442,7 +443,7 @@ class Lfm2ShortConv(nn.Module):
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2Cache] = None,
+        past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -480,7 +481,7 @@ class Lfm2ShortConv(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_value: Optional[Lfm2Cache] = None,
+        past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -602,7 +603,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2Cache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -616,7 +617,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
 
         if use_cache and past_key_values is None:
             batch_size = inputs_embeds.shape[0]
-            past_key_values = Lfm2Cache(
+            past_key_values = Lfm2HybridConvCache(
                 config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
             )
 
@@ -762,7 +763,7 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: Optional[Lfm2Cache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -770,7 +771,7 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         **kwargs,
     ):
-        # Overwritten -- Support custom Lfm2Cache.
+        # Overwritten -- Support custom Lfm2HybridConvCache.
 
         empty_past_kv = past_key_values is None or (
             isinstance(past_key_values, DynamicCache) and past_key_values._seen_tokens == 0
@@ -790,7 +791,9 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
         else:
-            past_key_values = Lfm2Cache(self.config, input_ids.shape[0], dtype=self.dtype, device=self.device)
+            past_key_values = Lfm2HybridConvCache(
+                self.config, input_ids.shape[0], dtype=self.dtype, device=self.device
+            )
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation

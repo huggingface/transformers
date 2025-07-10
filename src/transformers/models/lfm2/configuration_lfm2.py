@@ -21,7 +21,7 @@ class Lfm2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Lfm2Model`]. It is used to instantiate a LFM2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LFM2-1.2B model.
-    e.g. ["LiquidAI/LFM2-1.2B"](https://huggingface.co/LiquidAI/LFM2-1.2B)
+    e.g. [LiquidAI/LFM2-1.2B](https://huggingface.co/LiquidAI/LFM2-1.2B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -122,7 +122,6 @@ class Lfm2Config(PretrainedConfig):
         # attn operator config
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
-        self.full_attn_idxs = full_attn_idxs
 
         # custom operator config
         self.conv_bias = conv_bias
@@ -138,9 +137,8 @@ class Lfm2Config(PretrainedConfig):
 
         self.layer_types = layer_types
         if self.layer_types is None:
-            self.layer_types = [
-                "full_attention" if i in self.full_attn_idxs else "conv" for i in range(self.num_hidden_layers)
-            ]
+            full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
+            self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
         super().__init__(
             pad_token_id=pad_token_id,
