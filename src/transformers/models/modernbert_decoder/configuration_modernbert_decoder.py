@@ -117,6 +117,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernbert-decoder"
+    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
