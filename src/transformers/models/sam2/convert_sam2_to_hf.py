@@ -232,46 +232,29 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     input_points = [[[1000, 600]]]
     input_labels = [[1]]
 
+    inputs = processor(
+        images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
+    ).to(device)
+
+    with torch.no_grad():
+        output = hf_model(**inputs)
+    scores = output.iou_scores.squeeze()
+
+    # commented scores are from original sam2.1 model with Sam2Processor input, changes might be from bfloat16
     if model_name == "sam2.1_hiera_tiny":
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(device)
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert torch.allclose(scores, torch.tensor([0.0314, 0.9649, 0.1026]).cuda(), atol=1e-3)
+        # [0.03112793 0.96484375 0.10253906]
+        assert torch.allclose(scores, torch.tensor([0.0316, 0.9647, 0.1029]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_small":
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(device)
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-        # [0.953125   0.15625    0.05175781]
-        assert torch.allclose(scores, torch.tensor([0.9664, 0.1494, 0.0456]).cuda(), atol=1e-3)
+        # [0.96484375 0.1484375  0.04614258]
+        assert torch.allclose(scores, torch.tensor([0.9648, 0.1507, 0.0466]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_base_plus":
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(device)
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-        # [0.0378418  0.9765625  0.12255859]
-        assert torch.allclose(scores, torch.tensor([0.0361, 0.9775, 0.1308]).cuda(), atol=1e-3)
+        # [0.03613281 0.9765625  0.12695312]
+        assert torch.allclose(scores, torch.tensor([0.0364, 0.9773, 0.1285]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_large":
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to(device)
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-        # [0.96484375 0.03564453 0.1953125 ]
-        assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1899]).cuda(), atol=1e-3)
+        # [0.96484375 0.03613281 0.19042969]
+        assert torch.allclose(scores, torch.tensor([0.9660, 0.0362, 0.1927]).cuda(), atol=1e-3)
+    else:
+        raise ValueError(f"Model {model_name} not supported")
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
