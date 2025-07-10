@@ -206,7 +206,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
         self.use_cache = use_cache
-        self.local_attention = local_attention
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_rope_theta = local_rope_theta
         # for consistency with ModernBert

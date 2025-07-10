@@ -286,6 +286,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "mlp_dropout",
         "classifier_activation",
         "global_attn_every_n_layers",
+        "local_attention",
     ],
     # position_embedding_type not used and deprecated. Should be deleted in v4.55
     "LayoutLMConfig": ["position_embedding_type"],
