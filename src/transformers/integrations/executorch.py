@@ -107,7 +107,17 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
-        model_device = self.model.model.device
+        if hasattr(self.model, "base_model_prefix"):
+            base = getattr(self.model, self.model.base_model_prefix, self.model)
+            model_device = base.device
+        elif hasattr(self.model, "model"):
+            model_device = self.model.model.device
+        else:
+            model_device = "cpu"
+            logging.warning(
+                "TorchExportableModuleForDecoderOnlyLM.export Can't infer device from the model. Set to CPU by default."
+            )
+
         example_input_ids = (
             input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long, device=model_device)
         )
