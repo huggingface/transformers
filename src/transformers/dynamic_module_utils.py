@@ -132,8 +132,15 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]
         module_path = Path(module_file).parent
         new_import_files = [str(module_path / m) for m in new_imports]
         new_import_files = [f for f in new_import_files if f not in all_relative_imports]
-        files_to_check = [f"{f}.py" for f in new_import_files]
-
+        files_to_check = []
+        for f in new_import_files:
+            file_path = None
+            if os.path.isdir(f):
+                file_path = os.path.join(f, "__init__.py")
+            elif os.path.exists(f"{f}.py"):
+                file_path = f"{f}.py"
+            if file_path is not None and file_path not in files_to_check:
+                files_to_check.append(file_path)
         no_change = len(new_import_files) == 0
         all_relative_imports.extend(files_to_check)
 
