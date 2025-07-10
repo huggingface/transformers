@@ -27,7 +27,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -132,9 +131,6 @@ class LlavaProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least one of `images` or `text`.")
-
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             LlavaProcessorKwargs,
