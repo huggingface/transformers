@@ -2,6 +2,7 @@ import copy
 import importlib.metadata
 import json
 import os
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Optional, Union
@@ -698,7 +699,7 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
     return torch.fx._pytree._dict_flatten_spec(dictionary, spec)
 
 
-if is_torch_greater_or_equal("2.3"):
+if is_torch_greater_or_equal("2.3") and "torch.distributed.fsdp" not in sys.modules:
     torch.utils._pytree.register_pytree_node(
         DynamicCache,
         _flatten_dynamic_cache,
