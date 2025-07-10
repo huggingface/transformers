@@ -33,7 +33,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -2064,6 +2064,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         :str: Identifies that this is a PyTorch model.
         """
         return "pt"
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        annotations = get_type_hints(cls)
+        if "config" in annotations:
+            cls.config_class = annotations["config"]
+        elif cls.config_class is None:
+            raise RuntimeError(
+                f"Model {cls.__name__} doesn't have annotated `config` attribute, "
+                "please add `config: <ConfigClass>` to the model class, otherwise you will not have "
+                "access to <Model>.config_class attribute."
+            )
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
