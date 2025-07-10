@@ -69,6 +69,22 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
+    @unittest.skip("Lfm2 has a special cache format as it alternates between attention and conv layers")
+    def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
 
 @require_torch_accelerator
 @require_read_token

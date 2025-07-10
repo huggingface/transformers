@@ -405,6 +405,8 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
+    _supports_static_cache = False
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv1d)):
