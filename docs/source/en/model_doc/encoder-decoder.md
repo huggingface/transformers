@@ -84,6 +84,20 @@ transformers-cli run \
 
 ## Notes
 
+- [`EncoderDecoderModel`] can be initialized using any pretrained encoder (e.g. BERT) and decoder (e.g. BERT, GPT2, or the decoder of BART). Note that cross-attention layers may be randomly initialized depending on the decoder type.
+
+Such models require downstream fine-tuning, as discussed in [this blog post](https://huggingface.co/blog/warm-starting-encoder-decoder). Use `from_encoder_decoder_pretrained` to combine encoder and decoder checkpoints:
+
+```python
+from transformers import EncoderDecoderModel, BertTokenizer
+
+tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+    "google-bert/bert-base-uncased", 
+    "google-bert/bert-base-uncased"
+)
+```
+
 - Encoder Decoder models can be fine-tuned like BART, T5 or any other encoder-decoder model. Only 2 inputs are required to compute a loss, `input_ids` and `labels`. Refer to this [notebook](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for a more detailed training example.
 
 ```python
@@ -125,12 +139,12 @@ transformers-cli run \
 English to French model using transformers
 
 ```python
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, EncoderDecoderModel
 
 # Load a pre-trained translation model
-model_name = "Helsinki-NLP/opus-mt-en-de" 
+model_name = "google/bert2bert_L-24_wmt_en_de" 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+model = EncoderDecoderModel.from_pretrained(model_name)
 
 # Input sentence to translate
 input_text = "Plants create energy through a process known as"
