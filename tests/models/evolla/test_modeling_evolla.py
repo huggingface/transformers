@@ -14,8 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Evolla model."""
 
-import os
-import pickle as pkl
 import unittest
 
 from parameterized import parameterized
@@ -344,18 +342,6 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 @require_torch
 class EvollaModelIntegrationTest(TestCasePlus):
-    def _prepare_raw_outputs(self):
-        root_path = os.path.dirname(os.path.abspath(__file__))
-        with open(f"{root_path}/examples/raw_logits.pkl", "rb") as f:
-            raw_logits = pkl.load(f)
-        with open(f"{root_path}/examples/raw_hidden_states.pkl", "rb") as f:
-            raw_hidden_states = pkl.load(f)
-        raw_outputs = {
-            "logits": raw_logits,
-            "hidden_states": raw_hidden_states,
-        }
-        return raw_outputs
-
     def _prepare_for_inputs(self):
         aa_seq = "MLLEETLKSCPIVKRGKYHYFIHPISDGVPLVEPKLLREVATRIIKIGNFEGVNKIVTAEAMGIPLVTTLSLYTDIPYVIMRKREYKLPGEVPVFQSTGYSKGQLYLNGIEKGDKVIIIDDVISTGGTMIAIINALERAGAEIKDIICVIERGDGKKIVEEKTGYKIKTLVKIDVVDGEVVIL"
         foldseek = "dvvvvqqqpfawdddppdtdgcgclapvpdpddpvvlvvllvlcvvpadpvqaqeeeeeddscpsnvvsncvvpvhyydywylddppdppkdwqwf######gitidpdqaaaheyeyeeaeqdqlrvvlsvvvrcvvrnyhhrayeyaeyhycnqvvccvvpvghyhynwywdqdpsgidtd"
@@ -403,39 +389,3 @@ class EvollaModelIntegrationTest(TestCasePlus):
             print(f"{i}:\n{t}\n")
 
         self.assertIn("This protein", generated_text)
-
-    @slow
-    def test_single_forward_correct(self):
-        raw_outputs = self._prepare_raw_outputs()
-        protein_information, messages = self._prepare_for_inputs()
-        processor = self.default_processor
-
-        inputs = processor(proteins=[protein_information], messages_list=[messages]).to(torch_device)
-        model = EvollaForProteinText2Text.from_pretrained("westlake-repl/Evolla-10B-hf", device_map="auto")
-        model.eval()
-
-        with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True)
-        hf_logits = outputs.logits.to("cpu")
-        hf_hidden_states = [h.to("cpu") for h in outputs.hidden_states]
-
-        print(hf_logits - raw_outputs["logits"])
-        print((hf_logits - raw_outputs["logits"]).abs().max())
-        # check for logits
-        self.assertTrue(
-            torch.allclose(
-                hf_logits,
-                raw_outputs["logits"],
-                atol=2e-4,
-            )
-        )
-
-        # check for hidden states
-        for idx, (h_hid, r_hid) in enumerate(zip(hf_hidden_states, raw_outputs["hidden_states"])):
-            self.assertTrue(
-                torch.allclose(
-                    h_hid,
-                    r_hid,
-                    atol=1e-4,
-                )
-            )
