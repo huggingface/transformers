@@ -132,6 +132,17 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             )
         self.assertEqual(reloaded_feature_extractor.__class__.__name__, "NewFeatureExtractor")
 
+        # Test the dynamic module is reloaded and module objects are different.
+        # The module file is not changed after dumping,
+        # but since we're loading from local file - the module code should be reloaded for the new model.
+        self.assertIsNot(feature_extractor.__class__, reloaded_feature_extractor.__class__)
+
+        # Test the dynamic module is reloaded if we force it.
+        reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(
+            "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True, force_download=True
+        )
+        self.assertIsNot(feature_extractor.__class__, reloaded_feature_extractor.__class__)
+
     def test_new_feature_extractor_registration(self):
         try:
             AutoConfig.register("custom", CustomConfig)
