@@ -295,7 +295,7 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
         if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
             logger.warning_once(
-                "XLMRobertaSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "RobertaSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
                 "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
                 "the manual attention implementation, but specifying the manual implementation will be required from "
                 "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
@@ -320,7 +320,6 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
         is_cross_attention = encoder_hidden_states is not None
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
@@ -604,7 +603,7 @@ class RobertaEncoder(nn.Module):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and self.config.is_decoder and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
