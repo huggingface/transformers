@@ -59,12 +59,7 @@ from ..llama.modeling_llama import (
 from .configuration_evolla import EvollaConfig, SaProtConfig
 
 
-if is_torch_flex_attn_available():
-    pass
-
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "EvollaConfig"
 
 
 @dataclass
@@ -228,6 +223,7 @@ class EvollaSaProtProteinEncoder(nn.Module):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @auto_docstring
     @can_return_tuple
     def forward(
         self,
@@ -241,34 +237,6 @@ class EvollaSaProtProteinEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        input_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        position_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -282,7 +250,6 @@ class EvollaSaProtProteinEncoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -388,41 +355,6 @@ class EvollaSaProtProteinEncoder(nn.Module):
         extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
         return extended_attention_mask
 
-    def warn_if_padding_and_no_attention_mask(self, input_ids, attention_mask):
-        """
-        Shows a one-time warning if the input_ids appear to contain padding and no attention mask was given.
-        """
-
-        # Skip the check during tracing.
-        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing() or is_torchdynamo_compiling():
-            return
-
-        if (attention_mask is not None) or (self.config.pad_token_id is None):
-            return
-
-        # Check only the first and last input IDs to reduce overhead.
-        if self.config.pad_token_id in input_ids[:, [-1, 0]]:
-            warn_string = (
-                "We strongly recommend passing in an `attention_mask` since your input_ids may be padded. See "
-                "https://huggingface.co/docs/transformers/troubleshooting"
-                "#incorrect-output-when-padding-tokens-arent-masked."
-            )
-
-            # If the pad token is equal to either BOS, EOS, or SEP, we do not know whether the user should use an
-            # attention_mask or not. In this case, we should still show a warning because this is a rare case.
-            if (
-                (self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id)
-                or (self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id)
-                or (self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id)
-            ):
-                warn_string += (
-                    f"\nYou may ignore this warning if your `pad_token_id` ({self.config.pad_token_id}) is identical "
-                    f"to the `bos_token_id` ({self.config.bos_token_id}), `eos_token_id` ({self.config.eos_token_id}), "
-                    f"or the `sep_token_id` ({self.config.sep_token_id}), and your input is not padded."
-                )
-
-            logger.warning_once(warn_string)
-
     def get_head_mask(
         self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
     ) -> Tensor:
@@ -477,23 +409,6 @@ class EvollaProteinEncoder(nn.Module):
         self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
 
     @can_return_tuple
-    def sequence_encode(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ):
-        sequence_repr = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        return sequence_repr
-
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -502,7 +417,7 @@ class EvollaProteinEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ):
-        protein_output = self.sequence_encode(
+        protein_output = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_attentions=output_attentions,

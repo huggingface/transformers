@@ -30,8 +30,6 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
 
 
 EVOLLA_VALID_AA = list("ACDEFGHIKLMNPQRSTVWY#")

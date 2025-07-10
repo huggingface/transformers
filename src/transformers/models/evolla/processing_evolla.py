@@ -27,13 +27,6 @@ from ...utils import is_tf_available, is_torch_available
 from ..auto import AutoTokenizer
 
 
-if is_torch_available():
-    pass
-
-if is_tf_available():
-    pass
-
-
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
 
 

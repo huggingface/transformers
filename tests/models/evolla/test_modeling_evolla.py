@@ -45,16 +45,12 @@ from ...test_modeling_common import (
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_accelerate_available():
-    pass
 
 if is_torch_available():
     import torch
 
     from transformers import EvollaForProteinText2Text, EvollaModel, EvollaProcessor
 
-if is_vision_available():
-    pass
 
 
 class EvollaModelTester:
@@ -279,7 +275,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            protein_encoder_outputs = model.protein_encoder.sequence_encode(**protein_informations, return_dict=True)
+            protein_encoder_outputs = model.protein_encoder.model(**protein_informations, return_dict=True)
             print(model_class, protein_encoder_outputs)
 
     def test_protein_encoder_output(self):
@@ -426,6 +422,8 @@ class EvollaModelIntegrationTest(TestCasePlus):
         hf_logits = outputs.logits.to("cpu")
         hf_hidden_states = [h.to("cpu") for h in outputs.hidden_states]
 
+        print(hf_logits-raw_outputs["logits"])
+        print((hf_logits-raw_outputs["logits"]).abs().max())
         # check for logits
         self.assertTrue(
             torch.allclose(
