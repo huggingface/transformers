@@ -154,8 +154,6 @@ class Glm4MoeConfig(PretrainedConfig):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 1):
             Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        num_nextn_predict_layers (`int`, *optional*, defaults to 0):
-            Number of next-n prediction layers in the MoE model. If set to 0, no next-n prediction layers are used.
         first_k_dense_replace (`int`, *optional*, defaults to 1):
             Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                             \--k dense layers--/
@@ -230,7 +228,6 @@ class Glm4MoeConfig(PretrainedConfig):
         routed_scaling_factor=1.0,
         n_group=1,
         topk_group=1,
-        num_nextn_predict_layers=0,
         first_k_dense_replace=1,
         norm_topk_prob=True,
         output_router_logits=False,
@@ -255,7 +252,6 @@ class Glm4MoeConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.num_nextn_predict_layers = num_nextn_predict_layers
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
@@ -561,10 +557,7 @@ class Glm4MoeModel(MixtralModel):
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [
-                Glm4MoeDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers - config.num_nextn_predict_layers)
-            ]
+            [Glm4MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     def forward(
