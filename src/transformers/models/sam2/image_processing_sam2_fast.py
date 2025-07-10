@@ -578,18 +578,19 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("data_format")
 
         original_sizes = [image.shape[-2:] for image in images]
-        reshaped_input_sizes = [(kwargs["size"].height, kwargs["size"].width) for _ in range(len(images))]
 
         images = self._preprocess(
             images=images,
             **kwargs,
         )
+        reshaped_input_sizes = [image.shape[-2:] for image in images]
 
         if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
                 **kwargs,
             )
+
             return BatchFeature(
                 data={
                     "pixel_values": images,

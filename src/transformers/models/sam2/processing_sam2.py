@@ -46,10 +46,10 @@ class Sam2Processor(ProcessorMixin):
     [`~Sam2ImageProcessor.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor ([`Sam2ImageProcessor`]):
-            An instance of [`Sam2ImageProcessor`]. The image processor is a required input.
-        video_processor ([`Sam2VideoProcessor`]):
-            An instance of [`Sam2VideoProcessor`]. The video processor is a required input.
+        image_processor (`Sam2ImageProcessor`):
+            An instance of [`Sam2ImageProcessor`].
+        video_processor (`Sam2VideoProcessor`):
+            An instance of [`Sam2VideoProcessor`].
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
         point_pad_value (`int`, *optional*, defaults to -10):
@@ -176,6 +176,16 @@ class Sam2Processor(ProcessorMixin):
     ) -> "torch.Tensor":
         """
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
+
+        Args:
+            target_size (`int`):
+                The target size of the image.
+            coords (`torch.Tensor`):
+                The coordinates to be normalized.
+            original_size (`tuple`):
+                The original size of the image.
+            is_bounding_box (`bool`, *optional*, defaults to `False`):
+                Whether the coordinates are bounding boxes.
         """
         old_h, old_w = original_size
         new_h, new_w = target_size, target_size
@@ -234,11 +244,13 @@ class Sam2Processor(ProcessorMixin):
         Get the maximum dimensions at each level of nesting.
 
         Args:
-            nested_list: Nested list structure
-            max_dims: Current maximum dimensions (for recursion)
+            nested_list (`list`):
+                Nested list structure.
+            max_dims (`list`, *optional*):
+                Current maximum dimensions (for recursion).
 
         Returns:
-            List of maximum dimensions for each nesting level
+            `list`: A list of maximum dimensions for each nesting level.
         """
         if max_dims is None:
             max_dims = []
@@ -269,13 +281,17 @@ class Sam2Processor(ProcessorMixin):
         Recursively pad a nested list to match target dimensions.
 
         Args:
-            nested_list: Nested list to pad
-            target_dims: Target dimensions for each level
-            current_level: Current nesting level
-            pad_value: Value to use for padding
+            nested_list (`list`):
+                Nested list to pad.
+            target_dims (`list`):
+                Target dimensions for each level.
+            current_level (`int`, *optional*, defaults to 0):
+                Current nesting level.
+            pad_value (`int`, *optional*):
+                Value to use for padding.
 
         Returns:
-            Padded nested list
+            `list`: The padded nested list.
         """
         if pad_value is None:
             pad_value = self.point_pad_value
@@ -323,14 +339,28 @@ class Sam2Processor(ProcessorMixin):
         return nested_list
 
     def _create_empty_nested_structure(self, dims, pad_value):
-        """Create an empty nested structure with given dimensions filled with pad_value."""
+        """
+        Create an empty nested structure with given dimensions filled with pad_value.
+
+        Args:
+            dims (`list`):
+                The dimensions of the nested structure.
+            pad_value (`int`):
+                The value to fill the structure with.
+        """
         if len(dims) == 1:
             return [pad_value] * dims[0]
         else:
             return [self._create_empty_nested_structure(dims[1:], pad_value) for _ in range(dims[0])]
 
     def _get_nesting_level(self, input_list):
-        """Get the nesting level of a list structure."""
+        """
+        Get the nesting level of a list structure.
+
+        Args:
+            input_list (`list`):
+                The list to get the nesting level of.
+        """
         if isinstance(input_list, list):
             if len(input_list) == 0:
                 return 1
@@ -345,12 +375,13 @@ class Sam2Processor(ProcessorMixin):
         Ensure data has the proper nesting level by unsqueezing from the first dimensions if needed.
 
         Args:
-            data: Input data (tensor, numpy array, or nested list)
-            expected_depth: Expected nesting depth
-            data_type: Type of data for error messages ("points", "labels", "boxes")
+            data (`torch.Tensor`, `np.ndarray`, or `list`):
+                Input data.
+            expected_depth (`int`):
+                Expected nesting depth.
 
         Returns:
-            Data with proper nesting level
+            The data with proper nesting level.
         """
         if data is None:
             return None
@@ -390,13 +421,19 @@ class Sam2Processor(ProcessorMixin):
         Process a single input by ensuring proper nesting and converting to nested list format.
 
         Args:
-            data: Input data to process
-            expected_depth: Expected nesting depth
-            input_name: Name of the input for error messages
-            expected_coord_size: Expected coordinate size (2 for points, 4 for boxes, None for labels)
+            data (`torch.Tensor`, `np.ndarray`, or `list`):
+                Input data to process.
+            expected_depth (`int`):
+                Expected nesting depth.
+            input_name (`str`):
+                Name of the input for error messages.
+            expected_format (`str`):
+                The expected format of the input.
+            expected_coord_size (`int`, *optional*):
+                Expected coordinate size (2 for points, 4 for boxes, None for labels).
 
         Returns:
-            Processed nested list or None if data is None
+            Processed nested list or `None` if data is `None`.
         """
         if data is None:
             return None
@@ -416,10 +453,14 @@ class Sam2Processor(ProcessorMixin):
         Helper method to normalize coordinates in a tensor across multiple images.
 
         Args:
-            tensor: Input tensor with coordinates
-            original_sizes: Original image sizes
-            is_bounding_box: Whether coordinates are bounding boxes
-            preserve_padding: Whether to preserve padding values (for points)
+            tensor (`torch.Tensor`):
+                Input tensor with coordinates.
+            original_sizes (`list`):
+                Original image sizes.
+            is_bounding_box (`bool`, *optional*, defaults to `False`):
+                Whether coordinates are bounding boxes.
+            preserve_padding (`bool`, *optional*, defaults to `False`):
+                Whether to preserve padding values (for points).
         """
         if preserve_padding:
             # For points: avoid normalizing pad values
@@ -454,6 +495,23 @@ class Sam2Processor(ProcessorMixin):
         video_storage_device: Union[str, "torch.device"] = None,
         torch_dtype: torch.dtype = torch.float32,
     ):
+        """
+        Initializes a video session for inference.
+
+        Args:
+            video (`VideoInput`):
+                The video to process.
+            inference_device (`str` or `torch.device`, *optional*, defaults to "cpu"):
+                The device to use for inference.
+            inference_state_device (`str` or `torch.device`, *optional*):
+                The device to store the inference state on.
+            processing_device (`str` or `torch.device`, *optional*):
+                The device to use for video processing.
+            video_storage_device (`str` or `torch.device`, *optional*):
+                The device to store the processed video frames on.
+            torch_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+                The torch dtype to use for the whole session.
+        """
         video_storage_device = video_storage_device if video_storage_device is not None else inference_device
         inference_state_device = inference_state_device if inference_state_device is not None else inference_device
         processing_device = processing_device if processing_device is not None else inference_device
@@ -485,7 +543,26 @@ class Sam2Processor(ProcessorMixin):
         input_boxes: Optional[list[list[float]]] = None,
         clear_old_inputs: bool = True,
     ) -> dict[str, Any]:
-        """Process new points or box for a video frame and return preprocessed inputs for model."""
+        """
+        Process new points or box for a video frame and return preprocessed inputs for model.
+
+        Args:
+            inference_state (`Sam2VideoSessionState`):
+                The inference state for the video session.
+            frame_idx (`int`):
+                The index of the frame to process.
+            obj_ids (`list[int]` or `int`):
+                The object ID(s) to associate with the points or box.
+                These can be any integers and can be reused later on to specify an object.
+            input_points (`list[list[float]]`, *optional*):
+                The points to add to the frame.
+            input_labels (`list[int]`, *optional*):
+                The labels for the points.
+            input_boxes (`list[list[float]]`, *optional*):
+                The bounding boxes to add to the frame.
+            clear_old_inputs (`bool`, *optional*, defaults to `True`):
+                Whether to clear old inputs for the object.
+        """
 
         if isinstance(obj_ids, int):
             obj_ids = [obj_ids]
@@ -571,7 +648,20 @@ class Sam2Processor(ProcessorMixin):
         obj_ids: Union[list[int], int],
         input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
     ) -> dict[str, Any]:
-        """Add new mask to a frame and return preprocessed inputs for model."""
+        """
+        Add new mask to a frame and return preprocessed inputs for model.
+
+        Args:
+            inference_state (`Sam2VideoSessionState`):
+                The inference state for the video session.
+            frame_idx (`int`):
+                The index of the frame to process.
+            obj_ids (`list[int]` or `int`):
+                The object ID(s) to associate with the mask.
+                These can be any integers and can be reused later on to specify an object.
+            input_masks (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, or `list[torch.Tensor]`):
+                The mask(s) to add to the frame.
+        """
         if isinstance(obj_ids, int):
             obj_ids = [obj_ids]
         if not isinstance(input_masks, list):

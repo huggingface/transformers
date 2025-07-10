@@ -310,18 +310,19 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("data_format")
 
         original_sizes = [image.shape[-2:] for image in images]
-        reshaped_input_sizes = [(kwargs["size"].height, kwargs["size"].width) for _ in range(len(images))]
 
         images = self._preprocess(
             images=images,
             **kwargs,
         )
+        reshaped_input_sizes = [image.shape[-2:] for image in images]
 
         if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
                 **kwargs,
             )
+
             return BatchFeature(
                 data={
                     "pixel_values": images,
@@ -481,8 +482,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         mask_threshold=0.0,
         binarize=True,
         pad_size=None,
-        max_hole_area=0.0,
-        max_sprinkle_area=0.0,
     ):
         """
         Remove padding and upscale masks to the original image size.
