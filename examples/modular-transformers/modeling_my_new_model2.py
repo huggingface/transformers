@@ -333,10 +333,6 @@ class MyNewModel2Model(MyNewModel2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-
-
-
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -430,10 +426,6 @@ class MyNewModel2ForSequenceClassification(MyNewModel2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-
-
-
 
     @can_return_tuple
     @auto_docstring
