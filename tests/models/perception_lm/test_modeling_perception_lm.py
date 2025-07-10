@@ -359,7 +359,9 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
-    @unittest.skip("PerceptionLMForConditionalGeneration does not have language_model, vision_tower, multi_modal_projector.")
+    @unittest.skip(
+        "PerceptionLMForConditionalGeneration does not have language_model, vision_tower, multi_modal_projector."
+    )
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
