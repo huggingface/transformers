@@ -44,7 +44,6 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_flash_attn_3 = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = (
