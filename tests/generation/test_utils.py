@@ -2106,7 +2106,7 @@ class GenerationTesterMixin:
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
             # is the one that gets compiled.
             # (Note for the future: if BLIP starts causing problems, let's stop testing it)
-            if any(model_name in model.__class__.__name__.lower() for model_name in ("blip", "florence2")):
+            if "blip" in model.__class__.__name__.lower():
                 model_to_be_compiled = model.language_model
             else:
                 model_to_be_compiled = model
@@ -2224,7 +2224,7 @@ class GenerationTesterMixin:
             # compatible with multimodality
             compile_config = CompileConfig()
             compile_config._compile_all_devices = True
-            if any(model_name in model.__class__.__name__.lower() for model_name in ("blip", "florence2")):
+            if "blip" in model.__class__.__name__.lower():
                 model.language_model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.language_model.generation_config.cache_implementation = "static"
@@ -2250,7 +2250,7 @@ class GenerationTesterMixin:
                 **inputs_dict,
             )
 
-            if any(model_name in model.__class__.__name__.lower() for model_name in ("blip", "florence2")):
+            if "blip" in model.__class__.__name__.lower():
                 self.assertTrue(hasattr(model.language_model, "_compiled_call"))
             else:
                 self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called

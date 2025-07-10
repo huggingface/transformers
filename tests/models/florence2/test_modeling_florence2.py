@@ -213,7 +213,7 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     Model tester for `Florence2ForConditionalGeneration`.
     """
 
-    all_model_classes = (Florence2ForConditionalGeneration, Florence2Model) if is_torch_available() else ()
+    all_model_classes = (Florence2Model, Florence2ForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-to-text": Florence2ForConditionalGeneration,

@@ -14,7 +14,7 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -30,12 +30,12 @@ from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForSeq2SeqLM
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..beit.modeling_beit import BeitDropPath
 from ..detr.modeling_detr import DetrLearnedPositionEmbedding
 
@@ -835,7 +835,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
 )
 class Florence2Model(Florence2PreTrainedModel):
     _tied_weights_keys = [
-        "language_model.shared.weight",
         "language_model.encoder.embed_tokens.weight",
         "language_model.decoder.embed_tokens.weight",
     ]
@@ -883,8 +882,13 @@ class Florence2Model(Florence2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -927,54 +931,64 @@ class Florence2Model(Florence2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
-
         image_embeds = None
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
-            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
-            inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
-            attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
+        if encoder_outputs is None:
+            if inputs_embeds is None:
+                inputs_embeds = self.get_input_embeddings()(input_ids)
+
+            if attention_mask is None:
+                attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
+
+            if pixel_values is not None:
+                image_embeds = self.get_image_features(pixel_values)
+                image_attention_mask = torch.ones(
+                    image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device
+                )
+                inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
+                attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
+
+            encoder_outputs = self.language_model.encoder(
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
         if decoder_input_ids is None:
             decoder_start_token_id = self.config.text_config.decoder_start_token_id
             decoder_input_ids = torch.ones((inputs_embeds.size()[0], 1), dtype=torch.long, device=inputs_embeds.device)
             decoder_input_ids *= decoder_start_token_id
 
-        outputs = self.language_model(
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
+        decoder_outputs = self.language_model.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
             image_hidden_states=image_embeds,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -983,53 +997,58 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
     """
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
+    _checkpoint_conversion_mapping = {
+        "^language_model.model": "model.language_model",
+        "^vision_tower": "model.vision_tower",
+        "^vision_projector": "model.vision_projector",
+        "^language_model.lm_head": "lm_head",
+    }
     _tied_weights_keys = [
-        "language_model.model.shared.weight",
-        "language_model.model.encoder.embed_tokens.weight",
-        "language_model.model.decoder.embed_tokens.weight",
+        "model.language_model.shared.weight",
+        "model.language_model.encoder.embed_tokens.weight",
+        "model.language_model.decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
-        self.vocab_size = config.text_config.vocab_size
-
-        self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
-        self.vision_projector = Florence2VisionProjector(config=config.vision_config)
-        self.language_model = AutoModelForSeq2SeqLM.from_config(config=config.text_config)
-
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.model = Florence2Model(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
     def get_encoder(self):
-        return self.language_model.get_encoder()
+        return self.model.get_encoder()
 
     def get_decoder(self):
-        return self.language_model.get_decoder()
+        return self.model.get_decoder()
 
     def set_input_embeddings(self, value: nn.Module) -> None:
-        self.language_model.set_input_embeddings(value)
+        self.model.set_input_embeddings(value)
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.language_model.get_input_embeddings()
+        return self.model.get_input_embeddings()
 
     def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
-        self.language_model.set_output_embeddings(new_embeddings)
+        self.model.set_output_embeddings(new_embeddings)
 
     def get_output_embeddings(self) -> nn.Linear:
-        return self.language_model.get_output_embeddings()
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
+        return self.model.get_output_embeddings()
 
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
-        image_features = self.vision_tower(pixel_values, **kwargs)
-        image_embeds = self.vision_projector(image_features)
-        return image_embeds
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def vision_projector(self):
+        return self.model.vision_projector
 
     @can_return_tuple
     @auto_docstring
@@ -1040,15 +1059,21 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1083,44 +1108,41 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
-
-        image_embeds = None
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
-            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
-            inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
-            attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
-
-        if decoder_input_ids is None:
-            decoder_start_token_id = self.config.text_config.decoder_start_token_id
-            decoder_input_ids = torch.ones((inputs_embeds.size()[0], 1), dtype=torch.long, device=inputs_embeds.device)
-            decoder_input_ids *= decoder_start_token_id
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
-            labels=labels,
-            inputs_embeds=inputs_embeds,
             decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
         return Florence2Seq2SeqLMOutput(
-            loss=outputs.loss,
-            logits=outputs.logits,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
@@ -1128,35 +1150,41 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
-            image_hidden_states=image_embeds,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
-    def generate(
+    def _prepare_encoder_decoder_kwargs_for_generation(
         self,
-        input_ids: torch.LongTensor,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs,
-    ):
+        inputs_tensor: torch.Tensor,
+        model_kwargs,
+        model_input_name: Optional[str],
+        generation_config,
+    ) -> dict[str, Any]:
+        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
+        attention_mask = model_kwargs.pop("attention_mask", None)
+        pixel_values = model_kwargs.pop("pixel_values", None)
+
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            if inputs_tensor is not None:
+                inputs_embeds = self.get_input_embeddings()(inputs_tensor)
+            else:
+                raise ValueError("Either input_ids or inputs_embeds must be provided")
 
         if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=inputs_embeds.device)
+            attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
-            image_attention_mask = torch.ones(
-                image_features.size()[:-1], dtype=torch.long, device=image_features.device
-            )
-            inputs_embeds = torch.cat([image_features, inputs_embeds], dim=1)
+            image_embeds = self.get_image_features(pixel_values)
+            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+            inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
             attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
 
-        return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, **kwargs)
+        model_kwargs["inputs_embeds"] = inputs_embeds
+        model_kwargs["attention_mask"] = attention_mask
 
-    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return self.language_model.shift_tokens_right(labels)
+        return super()._prepare_encoder_decoder_kwargs_for_generation(
+            None, model_kwargs, model_input_name, generation_config
+        )
 
 
 __all__ = [
