@@ -439,6 +439,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_compute_loss(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called during `Trainer.compute_loss` method right after the `loss` is fully calculated. Useful to track activations memory consumption and stats about model inputs.
+        """
+        pass
+
 
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
@@ -550,6 +556,9 @@ class CallbackHandler(TrainerCallback):
 
     def on_prediction_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_prediction_step", args, state, control)
+
+    def on_compute_loss(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, inputs, loss):
+        return self.call_event("on_compute_loss", args, state, control, inputs=inputs, loss=loss)
 
     def call_event(self, event, args, state, control, **kwargs):
         for callback in self.callbacks:
