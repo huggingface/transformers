@@ -235,20 +235,26 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(
+        query.shape[0], -1, query.shape[-2], -1
+    )  # TODO make sure the sink is like a new token
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    sinks = module.sinks.view(1, -1, 1, 1).expand(query.shape[0], query.shape[1], query.shape[2], 1)
-    attn_weights = torch.cat([attn_weights, sinks], dim=-1)
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_weights_real = attn_weights[..., :-1]
-    attn_output = torch.matmul(attn_weights_real, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
+    # scale the logits to prevent overflows
+    logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
+    logits_max = torch.where(logits_max < 1e9, torch.tensor(0.0, device=logits_max.device), logits_max) # when logits_max is <1e9, just use 0
+    sinks = torch.exp(sinks - logits_max)
+    unnormalized_scores = torch.exp(attn_weights - logits_max)
+    normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
+    scores = unnormalized_scores / normalizer
 
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)  # ignore the sinks
+    attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
@@ -345,7 +351,7 @@ class OpenAIMoeDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        # residual = hidden_states
+        residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
@@ -357,11 +363,11 @@ class OpenAIMoeDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        # hidden_states = residual + hidden_states
-        # residual = hidden_states
-        # hidden_states = self.post_attention_layernorm(hidden_states)
-        # hidden_states, _ = self.mlp(hidden_states)
-        # hidden_states = residual + hidden_states
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
@@ -482,7 +488,7 @@ class OpenAIMoeModel(OpenAIMoePreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[:1]:
+        for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
