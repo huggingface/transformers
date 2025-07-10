@@ -99,7 +99,7 @@ class Lfm2Config(PretrainedConfig):
         pad_token_id: int = 0,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
-        tie_embedding: bool = True,
+        tie_word_embeddings: bool = True,
         rope_theta: float = 1000000.0,
         conv_bias: bool = False,
         conv_L_cache: int = 3,
@@ -129,25 +129,21 @@ class Lfm2Config(PretrainedConfig):
 
         # MLP config
         self.intermediate_size = kwargs.get("block_ff_dim", intermediate_size)  # to fit original config keys
-        if block_auto_adjust_ff_dim:
-            self.intermediate_size = int(2 * self.intermediate_size / 3)
-            # custom dim factor multiplier
-            if block_ffn_dim_multiplier is not None:
-                self.intermediate_size = int(block_ffn_dim_multiplier * self.intermediate_size)
-            self.intermediate_size = block_multiple_of * (
-                (self.intermediate_size + block_multiple_of - 1) // block_multiple_of
-            )
+        self.block_multiple_of = block_multiple_of
+        self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
+        self.block_auto_adjust_ffn_dim = block_auto_adjust_ff_dim
 
         self.layer_types = layer_types
         if self.layer_types is None:
             full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
+        tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_embedding,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
