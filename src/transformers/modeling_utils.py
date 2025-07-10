@@ -1960,11 +1960,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     supports_gradient_checkpointing = False
     _is_stateful = False
 
-    # Flash Attention 2 support
-    _supports_flash_attn_2 = False
-
-    # Flash Attention 3 support
-    _supports_flash_attn_3 = False
+    # Flash Attention support
+    _supports_flash_attn = False
 
     # SDPA support
     _supports_sdpa = False
