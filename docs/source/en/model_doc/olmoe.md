@@ -89,3 +89,17 @@ with torch.no_grad():
    outputs = model.generate(**inputs, max_length=64, do_sample=True, temperature=0.7)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
+## OlmoeConfig
+
+[[autodoc]] OlmoeConfig
+
+## OlmoeModel
+
+[[autodoc]] OlmoeModel
+    - forward
+
+## OlmoeForCausalLM
+
+[[autodoc]] OlmoeForCausalLM
+    - forward
