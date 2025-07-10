@@ -130,7 +130,6 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -495,6 +494,10 @@ def require_jinja(test_case):
 
 
 def require_tf2onnx(test_case):
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tf2onnx`, is deprecated and will be removed in "
+        "Transformers v4.55"
+    )
     return unittest.skipUnless(is_tf2onnx_available(), "test requires tf2onnx")(test_case)
 
 
@@ -652,7 +655,7 @@ def require_torchcodec(test_case):
     These tests are skipped when Torchcodec isn't installed.
 
     """
-    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchvision")(test_case)
+    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
 
 
 def require_torch_or_tf(test_case):
@@ -689,6 +692,10 @@ def require_tensorflow_probability(test_case):
     These tests are skipped when TensorFlow probability isn't installed.
 
     """
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tensorflow_probability`, is deprecated and will be "
+        "removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_tensorflow_probability_available(), "test requires TensorFlow probability")(
         test_case
     )
@@ -715,6 +722,9 @@ def require_flax(test_case):
     """
     Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
     """
+    logger.warning_once(
+        "JAX test-related code, including `require_flax`, is deprecated and will be removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_flax_available(), "test requires JAX & Flax")(test_case)
 
 
@@ -758,6 +768,10 @@ def require_tensorflow_text(test_case):
     Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
     installed.
     """
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tensorflow_text`, is deprecated and will be "
+        "removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
@@ -1251,16 +1265,6 @@ def require_clearml(test_case):
 
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
-
-
-def require_soundfile(test_case):
-    """
-    Decorator marking a test that requires soundfile
-
-    These tests are skipped when soundfile isn't installed.
-
-    """
-    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -3323,17 +3327,25 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return [(unpack_device_properties(k), v) for k, v in self.data.items()]
 
     @staticmethod
-    def is_default(properties: DeviceProperties) -> bool:
-        return all(p is None for p in properties)
+    def is_default(expectation_key: PackedDeviceProperties) -> bool:
+        """
+        This function returns True if the expectation_key is the Default expectation (None, None).
+        When an Expectation dict contains a Default value, it is generally because the test existed before Expectations.
+        When we modify a test to use Expectations for a specific hardware, we don't want to affect the tests on other
+        hardwares. Thus we set the previous value as the Default expectation with key (None, None) and add a value for
+        the specific hardware with key (hardware_type, (major, minor)).
+        """
+        return all(p is None for p in expectation_key)
 
     @staticmethod
     def score(properties: DeviceProperties, other: DeviceProperties) -> float:
         """
         Returns score indicating how similar two instances of the `Properties` tuple are.
         Rules are as follows:
-            * Matching `type` adds one point, semi-matching `type` adds half a point (e.g. cuda and rocm).
+            * Matching `type` adds one point, semi-matching `type` adds 0.1 point (e.g. cuda and rocm).
             * If types match, matching `major` adds another point, and then matching `minor` adds another.
-            * Default expectation (if present) is worth 0.1 point to distinguish it from a straight-up zero.
+            * The Default expectation (None, None) is worth 0.5 point, which is better than semi-matching. More on this
+            in the `is_default` function.
         """
         device_type, major, minor = properties
         other_device_type, other_major, other_minor = other
@@ -3346,13 +3358,13 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
                 score += 1
                 if minor is not None and minor == other_minor:
                     score += 1
-        # Semi-matching device type
+        # Semi-matching device type, which carries less importance than the default expectation
         elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
-            score = 0.5
+            score = 0.1
 
         # Default expectation
         if Expectations.is_default(other):
-            score = 0.1
+            score = 0.5
 
         return score
 

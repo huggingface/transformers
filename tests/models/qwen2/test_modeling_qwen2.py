@@ -256,6 +256,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
             ("cuda", None): [
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
             ],
+            ("cuda", 8): [
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+            ],
             ("rocm", (9, 5)): [
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ]

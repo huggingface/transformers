@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .aimv2 import *
     from .albert import *
     from .align import *
     from .altclip import *
@@ -81,6 +82,7 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_v2 import *
     from .deepseek_v3 import *
     from .deformable_detr import *
     from .deit import *
@@ -88,6 +90,7 @@ if TYPE_CHECKING:
     from .depth_anything import *
     from .depth_pro import *
     from .detr import *
+    from .dia import *
     from .dialogpt import *
     from .diffllama import *
     from .dinat import *

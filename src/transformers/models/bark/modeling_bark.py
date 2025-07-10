@@ -356,6 +356,7 @@ class BarkPreTrainedModel(PreTrainedModel):
     config_class = BarkConfig
     supports_gradient_checkpointing = False
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -1265,6 +1266,7 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         coarse_output: torch.Tensor,

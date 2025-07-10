@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.53.0.dev0")
+check_min_version("4.54.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -460,7 +460,10 @@ def main():
         dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
-    categories = dataset["train"].features["objects"].feature["category"].names
+    if isinstance(dataset["train"].features["objects"], dict):
+        categories = dataset["train"].features["objects"]["category"].feature.names
+    else:  # (for old versions of `datasets` that used Sequence({...}) of the objects)
+        categories = dataset["train"].features["objects"].feature["category"].names
     id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 

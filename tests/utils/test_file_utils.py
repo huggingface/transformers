@@ -21,15 +21,12 @@ import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, require_torch
-from transformers.utils import ContextManagers, find_labels, is_flax_available, is_torch_available
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torch
+from transformers.utils import ContextManagers, find_labels, is_torch_available
 
 
 if is_torch_available():
     from transformers import BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification
-
-if is_flax_available():
-    from transformers import FlaxBertForPreTraining, FlaxBertForQuestionAnswering, FlaxBertForSequenceClassification
 
 
 MODEL_ID = DUMMY_UNKNOWN_IDENTIFIER
@@ -103,16 +100,3 @@ class GenericUtilTests(unittest.TestCase):
             pass
 
         self.assertEqual(find_labels(DummyModel), ["labels"])
-
-    @require_flax
-    def test_find_labels_flax(self):
-        # Flax models don't have labels
-        self.assertEqual(find_labels(FlaxBertForSequenceClassification), [])
-        self.assertEqual(find_labels(FlaxBertForPreTraining), [])
-        self.assertEqual(find_labels(FlaxBertForQuestionAnswering), [])
-
-        # find_labels works regardless of the class name (it detects the framework through inheritance)
-        class DummyModel(FlaxBertForSequenceClassification):
-            pass
-
-        self.assertEqual(find_labels(DummyModel), [])
