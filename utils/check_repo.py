@@ -165,6 +165,8 @@ IGNORE_NON_TESTED = (
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "KeyeSiglipVisionModel",
+        "KeyeModel",
     ]
 )
 
