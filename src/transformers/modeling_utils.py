@@ -2067,11 +2067,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # Override the `config_class`` if it is annotated in the subclass.
         # For BC we keep the original `config_class` definition in case
-        # there is no annotated `config` attribute
-        annotations = get_type_hints(cls)
-        cls.config_class = annotations.get("config", cls.config_class)
+        # there is a `config_class` attribute (e.g. remote code models),
+        # otherwise we derive it from the annotated `config` attribute.
+        if cls.config_class is None:
+            annotations = get_type_hints(cls)
+            cls.config_class = annotations.get("config", cls.config_class)
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
