@@ -68,9 +68,9 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         ResponseContentPartDoneEvent,
         ResponseCreatedEvent,
         ResponseInProgressEvent,
-        ResponseOutputItem,
         ResponseOutputItemAddedEvent,
         ResponseOutputItemDoneEvent,
+        ResponseOutputMessage,
         ResponseOutputText,
         ResponseTextDeltaEvent,
         ResponseTextDoneEvent,
@@ -415,7 +415,7 @@ class ServeCommand(BaseTransformersCLICommand):
         )
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    def build_responses_chunk(self, response: BaseModel) -> str:
+    def build_responses_event(self, response: BaseModel) -> str:
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
@@ -442,9 +442,9 @@ class ServeCommand(BaseTransformersCLICommand):
             )
 
             if self.use_continuous_batching:
-                output = self.continuous_batching(request)
+                output = self.continuous_batching_completion(request)
             else:
-                output = self.generate(request)
+                output = self.generate_completion(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
@@ -499,7 +499,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model_info("meta-llama/Llama-3.3-70B-Instruct"),
         ]
 
-    def continuous_batching(self, req: dict) -> Generator:
+    def continuous_batching_completion(self, req: dict) -> Generator:
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
 
         if update_model:
@@ -533,7 +533,7 @@ class ServeCommand(BaseTransformersCLICommand):
             req["messages"], return_tensors="pt", add_generation_prompt=True
         ).to(self.model.device)
 
-        def stream_response(_inputs):
+        def stream_chat_completion(_inputs):
             try:
                 max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 1024
                 request_id = self.running_continuous_batching_manager.add_request(
@@ -566,9 +566,9 @@ class ServeCommand(BaseTransformersCLICommand):
                 logger.error(str(e))
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        return stream_response(inputs[0])
+        return stream_chat_completion(inputs[0])
 
-    def generate(self, req: dict) -> Generator:
+    def generate_completion(self, req: dict) -> Generator:
         update_model = req["model"] != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
@@ -620,7 +620,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "past_key_values": last_kv_cache,
         }
 
-        def stream_response(streamer, _request_id):
+        def stream_chat_completion(streamer, _request_id):
             # Thin wrapper to save the KV cache after generation
             def generate_with_cache(**kwargs):
                 generate_output = self.model.generate(**kwargs)
@@ -716,7 +716,7 @@ class ServeCommand(BaseTransformersCLICommand):
             finally:
                 thread.join()
 
-        return stream_response(generation_streamer, request_id)
+        return stream_chat_completion(generation_streamer, request_id)
 
     def generate_response(self, req: dict) -> Generator:
         # TODO
@@ -753,27 +753,37 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_response(streamer, _request_id):
             thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+            sequence_number = 0
 
             try:
                 thread.start()
+                created_at = time.time()  # the spec expects a unix timestamp in seconds
 
-                created_at = time.time_ns()
-
+                # We start by acknowledging the request (the request has `status="queued"`), and then by moving it to
+                # in progress (`status="in_progress"`)
                 response_created = ResponseCreatedEvent(
                     type="response.created",
+                    sequence_number=sequence_number,
                     response=Response(
                         id=f"resp_{request_id}",
                         created_at=created_at,
-                        status="in_progress",
+                        status="queued",
                         model=self.loaded_model,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
+                        object="response",
+                        tools=[],
+                        output=[],
+                        parallel_tool_calls=False,
+                        tool_choice="auto",
                     ),
                 )
-                yield self.build_responses_chunk(response_created)
+                sequence_number += 1
+                yield self.build_responses_event(response_created)
 
                 response_in_progress = ResponseInProgressEvent(
                     type="response.in_progress",
+                    sequence_number=sequence_number,
                     response=Response(
                         id=f"resp_{request_id}",
                         created_at=created_at,
@@ -781,73 +791,101 @@ class ServeCommand(BaseTransformersCLICommand):
                         model=self.loaded_model,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
+                        object="response",
+                        tools=[],
+                        output=[],
+                        parallel_tool_calls=False,
+                        tool_choice="auto",
                     ),
                 )
-                yield self.build_responses_chunk(response_in_progress)
+                sequence_number += 1
+                yield self.build_responses_event(response_in_progress)
 
+                # Start the output item. Emit the assistant role to start the stream. Other chunks won't have a role,
+                # as it is implicit
                 response_output_item_added = ResponseOutputItemAddedEvent(
-                    type="response.output_item_added",
+                    type="response.output_item.added",
+                    sequence_number=sequence_number,
                     output_index=0,
-                    item=ResponseOutputItem(
+                    item=ResponseOutputMessage(
                         id=f"msg_{request_id}", type="message", status="in_progress", role="assistant", content=[]
                     ),
                 )
-                yield self.build_responses_chunk(response_output_item_added)
+                sequence_number += 1
+                yield self.build_responses_event(response_output_item_added)
 
+                # Start the content part of the event
                 response_content_part_added = ResponseContentPartAddedEvent(
                     type="response.content_part.added",
                     item_id=f"msg_{request_id}",
+                    sequence_number=sequence_number,
                     output_index=0,
                     content_index=0,
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
-                yield self.build_responses_chunk(response_content_part_added)
+                sequence_number += 1
+                yield self.build_responses_event(response_content_part_added)
 
+                # Stream the actual generated text
                 results = ""
                 for result in streamer:
                     results += result
                     response_output_text_delta = ResponseTextDeltaEvent(
-                        type="response.output_text_delta",
+                        type="response.output_text.delta",
                         item_id=f"msg_{request_id}",
+                        sequence_number=sequence_number,
                         output_index=0,
                         content_index=0,
                         delta=result,
                     )
-                    yield self.build_responses_chunk(response_output_text_delta)
+                    sequence_number += 1
+                    yield self.build_responses_event(response_output_text_delta)
 
+                # Signal the end of the text generation
                 response_output_text_done = ResponseTextDoneEvent(
-                    type="response.output_text_done",
+                    type="response.output_text.done",
                     item_id=f"msg_{request_id}",
+                    sequence_number=sequence_number,
                     output_index=0,
                     content_index=0,
                     text=results,
                 )
-                yield self.build_responses_chunk(response_output_text_done)
+                sequence_number += 1
+                yield self.build_responses_event(response_output_text_done)
 
+                # Complete the content part
                 response_content_part_done = ResponseContentPartDoneEvent(
-                    type="response.content_part_done",
+                    type="response.content_part.done",
                     item_id=f"msg_{request_id}",
+                    sequence_number=sequence_number,
                     output_index=0,
                     content_index=0,
                     part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
                 )
-                yield self.build_responses_chunk(response_content_part_done)
+                sequence_number += 1
+                yield self.build_responses_event(response_content_part_done)
 
+                # Complete the output item
                 response_output_item_done = ResponseOutputItemDoneEvent(
-                    type="response.output_item_done",
+                    type="response.output_item.done",
+                    sequence_number=sequence_number,
                     output_index=0,
-                    item=ResponseOutputItem(
+                    item=ResponseOutputMessage(
                         id=f"msg_{request_id}",
                         type="message",
                         status="completed",
                         role="assistant",
                         content=[response_content_part_done.part],
+                        annotations=[],
                     ),
                 )
-                yield self.build_responses_chunk(response_output_item_done)
+                sequence_number += 1
+                yield self.build_responses_event(response_output_item_done)
 
+                # Finally, Complete the event
                 response_completed = ResponseCompletedEvent(
                     type="response.completed",
+                    sequence_number=sequence_number,
                     response=Response(
                         id=f"resp_{request_id}",
                         created_at=created_at,
@@ -855,10 +893,15 @@ class ServeCommand(BaseTransformersCLICommand):
                         model=self.loaded_model,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
-                        output=response_output_item_done.item,
+                        output=[response_output_item_done.item],
+                        object="response",
+                        tools=[],
+                        parallel_tool_calls=False,
+                        tool_choice="auto",
                     ),
                 )
-                yield self.build_responses_chunk(response_completed)
+                sequence_number += 1
+                yield self.build_responses_event(response_completed)
 
                 thread.join()
             except Exception as e:
