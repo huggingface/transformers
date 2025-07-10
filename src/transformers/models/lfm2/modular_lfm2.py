@@ -1,37 +1,30 @@
-from typing import Callable, Optional, Union, Any
+from typing import Any, Callable, Optional, Union
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
-from transformers.utils.generic import check_model_inputs
-
-from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...cache_utils import DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, QuestionAnsweringModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils.generic import check_model_inputs
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, logging
 from ...utils.import_utils import is_causal_conv1d_available
-
+from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    LlamaAttention,
-    LlamaPreTrainedModel,
-    LlamaModel,
-    LlamaForCausalLM,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..bamba.modeling_bamba import (
-    apply_mask_to_padding_states
-)
 from .configuration_lfm2 import Lfm2Config
+
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
@@ -49,6 +42,7 @@ logger = logging.get_logger(__name__)
 class Lfm2RMSNorm(LlamaRMSNorm):
     pass
 
+
 class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
@@ -56,11 +50,11 @@ class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
 class Lfm2MLP(nn.Module):
     def __init__(self, config: Lfm2Config):
         super().__init__()
-        dim = config.block_dim,
-        ff_dim = config.block_ff_dim,
-        multiple_of = config.block_multiple_of,
-        auto_adjust_ff_dim = config.block_auto_adjust_ff_dim,
-        ffn_dim_multiplier = config.block_ffn_dim_multiplier,
+        dim = config.block_dim
+        ff_dim = config.block_ff_dim
+        multiple_of = config.block_multiple_of
+        auto_adjust_ff_dim = config.block_auto_adjust_ff_dim
+        ffn_dim_multiplier = config.block_ffn_dim_multiplier
         if auto_adjust_ff_dim:
             ff_dim = int(2 * ff_dim / 3)
             # custom dim factor multiplier
@@ -242,7 +236,8 @@ class Lfm2Attention(LlamaAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         output = self.out_proj(attn_output)
         return output, attn_weights
-    
+
+
 class Lfm2ShortConv(nn.Module):
     def __init__(
         self,
@@ -348,7 +343,7 @@ class Lfm2ShortConv(nn.Module):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not torch._dynamo.is_compiling():
             return self.cuda_kernels_forward(hidden_states, past_key_value, cache_position, attention_mask)
         return self.slow_forward(hidden_states, past_key_value, cache_position, attention_mask)
-    
+
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Lfm2Config, layer_idx: int):
@@ -395,7 +390,8 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
 
         return hidden_states
-    
+
+
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -409,6 +405,7 @@ class Lfm2PreTrainedModel(LlamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, Lfm2RMSNorm):
             module.weight.data.fill_(1.0)
+
 
 class Lfm2Model(LlamaModel):
     def __init__(self, config: Lfm2Config):
@@ -480,7 +477,7 @@ class Lfm2Model(LlamaModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-    
+
 
 class Lfm2ForCausalLM(LlamaForCausalLM):
     def prepare_inputs_for_generation(
