@@ -66,7 +66,7 @@ class TestContinuousBatchingSlidingWindow(unittest.TestCase):
 
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
 
-        for attn_impl in ["sdpa_paged"]:  # ["flash_attention_2", "sdpa"]:
+        for attn_impl in ["eager_paged", "sdpa_paged"]:
             with self.subTest(attn_impl=attn_impl):
                 # Configure model for this attention implementation
                 self.model.config._attn_implementation = attn_impl
