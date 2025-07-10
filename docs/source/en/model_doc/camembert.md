@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# CamemBERT
+
 <div style="float: right;">
 	<div class="flex flex-wrap space-x-1">
 		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -21,6 +21,8 @@ rendered properly in your Markdown viewer.
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 	</div>
 </div>
+
+# CamemBERT
 
 [CamemBERT](https://huggingface.co/papers/1911.03894) is a language model based on [RoBERTa](./roberta), but trained specifically on French text from the OSCAR dataset, making it more effective for French language tasks.
 
@@ -77,11 +79,10 @@ print(f"The predicted token is: {predicted_token}")
 ```bash
 transformers-cli env
 python -m transformers.cli run camembert-base \
-    --task multiple-choice \
-    --context "The president of France is" \
-    --choices "Emmanuel Macron" "Napoleon Bonaparte" "Marie Curie" \
-    --framework pt
+    --task fill-mask \
+    --inputs "Le camembert est un délicieux fromage <mask>."
 ```
+
 </hfoption> 
 
 </hfoptions> 
@@ -93,14 +94,27 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) quantization
   
 ```python
 from transformers import AutoTokenizer, AutoModelForMaskedLM, BitsAndBytesConfig
+import torch
 
 quant_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForMaskedLM.from_pretrained(
-    "camembert-base",
+    "almanach/camembert-large",
     quantization_config=quant_config,
     device_map="auto"
 )
-tokenizer = AutoTokenizer.from_pretrained("camembert-base")
+tokenizer = AutoTokenizer.from_pretrained("almanach/camembert-large")
+
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
 ```
 
 ## CamembertConfig
