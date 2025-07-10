@@ -24,7 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -45,7 +45,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_falcon_h1 import FalconH1Config
 
@@ -84,14 +84,12 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
         config: FalconH1Config,
         batch_size: int,
         dtype: torch.dtype = torch.float16,
-        devices: Optional[List[str]] = None,
+        devices: Optional[list[str]] = None,
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
         self.has_previous_state = False
         self.conv_kernel_size = config.mamba_d_conv
-
-        self._seen_tokens = 0
 
         self.intermediate_size = (
             config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
@@ -123,16 +121,16 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
         for i in range(config.num_hidden_layers):
             self.transformer_layers.append(i)
 
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: list[torch.Tensor] = []
+        self.value_cache: list[torch.Tensor] = []
 
     def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -143,16 +141,12 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if len(self.key_cache) <= layer_idx:
             # There may be skipped layers, fill them with empty lists
@@ -191,11 +185,11 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
         raise NotImplementedError("FalconHybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         raise NotImplementedError("FalconHybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
     def update_conv_state(
@@ -225,7 +219,7 @@ class FalconH1RotaryEmbedding(nn.Module):
     def __init__(self, config: FalconH1Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -309,7 +303,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -357,12 +351,12 @@ class FalconH1Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -949,7 +943,7 @@ class FalconH1Mixer(nn.Module):
 
             # 2. Compute the state for each intra-chunk
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
             B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
             states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
 
@@ -1084,9 +1078,9 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1101,7 +1095,7 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
                 (see `past_key_values`).
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
@@ -1160,6 +1154,7 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconH1DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True  # Note: only supports FalconHybridMambaAttentionDynamicCache
     _is_stateful = True
@@ -1268,7 +1263,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwargs, for now
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1528,13 +1523,8 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

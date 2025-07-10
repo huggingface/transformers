@@ -17,7 +17,7 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
@@ -195,7 +195,7 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         self,
         config: PretrainedConfig,
         task: str = "default",
-        patching_specs: Optional[List[PatchingSpec]] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)

@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Iterable
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
@@ -37,11 +38,12 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
-from ...utils import LossKwargs, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
@@ -175,11 +177,11 @@ class AriaTextConfig(LlamaConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -270,7 +272,7 @@ class AriaConfig(PretrainedConfig):
         vision_config=None,
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: Optional[Dict] = None,
+        projector_patch_to_query_dict: Optional[dict] = None,
         image_token_index: int = 9,
         initializer_range: float = 0.02,
         **kwargs,
@@ -491,11 +493,11 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: Optional[List[float]] = None,
-        image_std: Optional[List[float]] = None,
+        image_mean: Optional[list[float]] = None,
+        image_std: Optional[list[float]] = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
-        split_resolutions: Optional[List[Tuple[int, int]]] = None,
+        split_resolutions: Optional[list[tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_rescale: bool = True,
@@ -527,9 +529,9 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, List[ImageInput]],
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        images: Union[ImageInput, list[ImageInput]],
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         max_image_size: Optional[int] = None,
         min_image_size: Optional[int] = None,
         split_image: Optional[bool] = None,
@@ -772,7 +774,7 @@ class AriaImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+        padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
         mode: PaddingMode = PaddingMode.CONSTANT,
         constant_values: Union[float, Iterable[float]] = 0.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -786,7 +788,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+            padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
                 Padding to apply to the edges of the height, width axes. Can be one of three formats:
                 - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
                 - `((before, after),)` yields same before and after pad for height and width.
@@ -838,19 +840,19 @@ class AriaImageProcessor(BaseImageProcessor):
     def get_image_patches(
         self,
         image: np.array,
-        grid_pinpoints: List[Tuple[int, int]],
+        grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> List[np.array]:
+    ) -> list[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
             image (`np.array`):
                 The input image to be processed.
-            grid_pinpoints (List[Tuple[int, int]]):
+            grid_pinpoints (list[tuple[int, int]]):
                 A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
@@ -862,7 +864,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
+            `list[np.array]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -945,7 +947,7 @@ class AriaProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
         chat_template: Optional[str] = None,
-        size_conversion: Optional[Dict[Union[float, int], int]] = None,
+        size_conversion: Optional[dict[Union[float, int], int]] = None,
     ):
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
@@ -960,7 +962,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: Optional[ImageInput] = None,
         audio=None,
         videos=None,
@@ -970,7 +972,7 @@ class AriaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s).
 
         Args:
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -1030,7 +1032,7 @@ class AriaProcessor(ProcessorMixin):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -1250,6 +1252,13 @@ class AriaTextMoELayer(nn.Module):
         return output + shared_expert_output
 
 
+class AriaTextAttention(LlamaAttention):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: AriaTextConfig, layer_idx: int):
+        super().__init__()
+
+
 class AriaTextDecoderLayer(LlamaDecoderLayer):
     """
     Aria Text Decoder Layer.
@@ -1279,6 +1288,10 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1327,9 +1340,6 @@ class AriaTextModel(LlamaModel):
         )
         self.gradient_checkpointing = False
         self.post_init()
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
@@ -1392,7 +1402,7 @@ class AriaModel(LlavaModel):
                The tensors corresponding to the input images.
             pixel_mask (`torch.FloatTensor]`, *optional*):
                 The tensors corresponding to the input image mask.
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -1422,7 +1432,7 @@ class AriaModel(LlavaModel):
         pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1430,7 +1440,7 @@ class AriaModel(LlavaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, AriaModelOutputWithPast]:
+    ) -> Union[tuple, AriaModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1446,11 +1456,12 @@ class AriaModel(LlavaModel):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                special_image_mask = special_image_mask.all(-1)
             else:
-                image_embeds = input_ids == self.config.image_token_id
-                special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
@@ -1518,7 +1529,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1527,8 +1538,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, AriaCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

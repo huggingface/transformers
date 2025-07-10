@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 import requests
 
 from ..generation import GenerationConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import is_torch_available, is_torchaudio_available, logging
+from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 
@@ -64,7 +64,12 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
     for chunk_start_idx in range(0, inputs_len, step):
         chunk_end_idx = chunk_start_idx + chunk_len
         chunk = inputs[chunk_start_idx:chunk_end_idx]
-        processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+        processed = feature_extractor(
+            chunk,
+            sampling_rate=feature_extractor.sampling_rate,
+            return_tensors="pt",
+            return_attention_mask=True,
+        )
         if dtype is not None:
             processed = processed.to(dtype=dtype)
         _stride_left = 0 if chunk_start_idx == 0 else stride_left
@@ -211,7 +216,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         super().__init__(model, tokenizer, feature_extractor, device=device, torch_dtype=torch_dtype, **kwargs)
 
-    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> List[Dict[str, Any]]:
+    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
         Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
@@ -262,7 +267,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         Return:
             `Dict`: A dictionary with the following keys:
                 - **text** (`str`): The recognized text.
-                - **chunks** (*optional(, `List[Dict]`)
+                - **chunks** (*optional(, `list[Dict]`)
                     When using `return_timestamps`, the `chunks` will become a list containing all the various text
                     chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text":
                     "there", "timestamp": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
@@ -283,13 +288,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # No parameters on this pipeline right now
         preprocess_params = {}
         if chunk_length_s is not None:
-            if self.type == "seq2seq" and not ignore_warning:
-                logger.warning(
+            if self.type in ["seq2seq", "seq2seq_whisper"] and not ignore_warning:
+                type_warning = (
                     "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
                     " be entirely accurate and will have caveats. More information:"
                     " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
-                    " ignore_warning=True)"
+                    " ignore_warning=True)."
                 )
+                if self.type == "seq2seq_whisper":
+                    type_warning += (
+                        " To use Whisper for long-form transcription, use rather the model's `generate` method directly "
+                        "as the model relies on it's own chunking mechanism (cf. Whisper original paper, section 3.8. "
+                        "Long-form Transcription)."
+                    )
+                logger.warning(type_warning)
             preprocess_params["chunk_length_s"] = chunk_length_s
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
@@ -352,6 +364,21 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         stride = None
         extra = {}
+
+        if is_torch_available():
+            import torch
+
+            if isinstance(inputs, torch.Tensor):
+                inputs = inputs.cpu().numpy()
+
+        if is_torchcodec_available():
+            import torchcodec
+
+            if isinstance(inputs, torchcodec.decoders.AudioDecoder):
+                _audio_samples = inputs.get_all_samples()
+                _array = _audio_samples.data
+                inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
+
         if isinstance(inputs, dict):
             stride = inputs.pop("stride", None)
             # Accepting `"array"` which is the key defined in `datasets` for
@@ -359,7 +386,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
                 raise ValueError(
                     "When passing a dictionary to AutomaticSpeechRecognitionPipeline, the dict needs to contain a "
-                    '"raw" key containing the numpy array representing the audio and a "sampling_rate" key, '
+                    '"raw" key containing the numpy array or torch tensor representing the audio and a "sampling_rate" key, '
                     "containing the sampling_rate associated with that array"
                 )
 
@@ -381,7 +408,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     )
 
                 inputs = F.resample(
-                    torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
+                    torch.from_numpy(inputs) if isinstance(inputs, np.ndarray) else inputs,
+                    in_sampling_rate,
+                    in_sampling_rate,
+                    self.feature_extractor.sampling_rate,
                 ).numpy()
                 ratio = self.feature_extractor.sampling_rate / in_sampling_rate
             else:
@@ -396,7 +426,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # of the original length in the stride so we can cut properly.
                 stride = (inputs.shape[0], int(round(stride[0] * ratio)), int(round(stride[1] * ratio)))
         if not isinstance(inputs, np.ndarray):
-            raise TypeError(f"We expect a numpy ndarray as input, got `{type(inputs)}`")
+            raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
@@ -483,28 +513,23 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # custom processing for Whisper timestamps and word-level timestamps
             return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
-                generate_kwargs["return_timestamps"] = return_timestamps
+                generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
-
-                    if stride is not None:
-                        if isinstance(stride, tuple):
-                            generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
-                        else:
-                            generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
-                    else:
-                        generate_kwargs["num_frames"] = num_frames
 
             # User-defined `generation_config` passed to the pipeline call take precedence
             if "generation_config" not in generate_kwargs:
                 generate_kwargs["generation_config"] = self.generation_config
 
-            tokens = self.model.generate(
-                inputs=inputs,
-                attention_mask=attention_mask,
+            main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
+            generate_kwargs = {
+                main_input_name: inputs,
+                "attention_mask": attention_mask,
                 **generate_kwargs,
-            )
+            }
+            tokens = self.model.generate(**generate_kwargs)
+
             # whisper longform generation stores timestamps in "segments"
             if return_timestamps == "word" and self.type == "seq2seq_whisper":
                 if "segments" not in tokens:
@@ -547,7 +572,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
-        self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None, return_language=None
+        self, model_outputs, decoder_kwargs: Optional[dict] = None, return_timestamps=None, return_language=None
     ):
         # Optional return types
         optional = {}
