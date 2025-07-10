@@ -2748,10 +2748,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return self.model.embed_tokens
 
         # 2) vanilla decoder‑only architectures
-        if hasattr(self, "embed_tokens"):
+        elif hasattr(self, "embed_tokens"):
             return self.embed_tokens
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
+        elif getattr(self, self.base_model_prefix, self) is not self:
+            base_model = getattr(self, self.base_model_prefix, self)
             return base_model.get_input_embeddings()
         else:
             raise NotImplementedError(
@@ -2774,19 +2774,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             self.model.embed_tokens = value
 
         # 2) vanilla decoder‑only architectures
-        if hasattr(self, "embed_tokens"):
+        elif hasattr(self, "embed_tokens"):
             self.embed_tokens = value
 
         # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
-        base_attr = getattr(self, "base_model_prefix", None)
-        if base_attr:
-            base_model = getattr(self, base_attr, None)
-            if base_model is not None and base_model is not self and hasattr(base_model, "set_input_embeddings"):
-                base_model.set_input_embeddings(value)
+        elif getattr(self, self.base_model_prefix, self) is not self:
+            base_model = getattr(self, self.base_model_prefix, self)
+            base_model.set_input_embeddings(value)
 
-        raise NotImplementedError(
-            f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
-        )
+        else:
+            raise NotImplementedError(
+                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+            )
 
     def get_output_embeddings(self) -> nn.Module:
         """
