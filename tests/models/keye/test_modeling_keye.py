@@ -182,6 +182,8 @@ class KeyeVisionText2TextModelTester:
 
 @require_torch
 class KeyeIntegrationTest(unittest.TestCase):
+    all_model_classes = (KeyeForConditionalGeneration,) if is_torch_available() else ()
+
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Kwai-Keye/Keye-VL-8B-Preview", trust_remote_code=True)
         self.messages = [
