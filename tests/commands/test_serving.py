@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import aiohttp.client_exceptions
 from huggingface_hub import AsyncInferenceClient
+from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
 from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
@@ -53,32 +54,44 @@ class ServeCLITest(unittest.TestCase):
         """Tests that the chunks are correctly built for the Completions API."""
         dummy = ServeCommand.__new__(ServeCommand)
         dummy.args = type("Args", (), {})()
+        dummy.loaded_model = "dummy_model"
 
         # Case 1: most fields are provided
-        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", content="hello", finish_reason="stop", role="user")
+        chunk = ServeCommand.build_chat_completions_chunk(
+            dummy, request_id="req0", content="hello", finish_reason="stop", role="user"
+        )
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn(
-            '"choices": [{"delta": {"content": "hello", "role": "user"}, "index": 0, "finish_reason": "stop"}]', chunk
+            '"choices":[{"delta":{"content":"hello","role":"user"},"finish_reason":"stop","index":0}]', chunk
         )
 
         # Case 2: only the role is provided -- other fields in 'choices' are omitted
         chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", role="user")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
-        self.assertIn('"choices": [{"delta": {"role": "user"}, "index": 0}]', chunk)
+        self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
 
         # Case 3: only the content is provided -- other fields in 'choices' are omitted
         chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", content="hello")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
-        self.assertIn('"choices": [{"delta": {"content": "hello"}, "index": 0}]', chunk)
+        self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
 
-        # Case 4: tool calls support a list of nested dictionaries
-        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", tool_calls=[{"foo1": "bar1", "foo2": "bar2"}])
+        # Case 4: tool calls support a list of ChoiceDeltaToolCall objects
+        tool_call = ChoiceDeltaToolCall(
+            index=0,
+            function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
+            type="function",
+        )
+        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", tool_calls=[tool_call])
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
-        self.assertIn('"choices": [{"delta": {"tool_calls": [{"foo1": "bar1", "foo2": "bar2"}]}, "index": 0}]', chunk)
+        expected_choices_content = (
+            'choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"foo1\\": \\"bar1\\", '
+            '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
+        )
+        self.assertIn(expected_choices_content, chunk)
 
 
 def async_retry(fn, max_attempts=5, delay=2):

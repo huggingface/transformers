@@ -20,7 +20,7 @@ import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Generator, Optional, Union
+from typing import Generator, Optional
 
 from huggingface_hub import ModelInfo, model_info
 
@@ -53,7 +53,13 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
-    from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
+    from openai.types.chat.chat_completion_chunk import (
+        ChatCompletionChunk,
+        Choice,
+        ChoiceDelta,
+        ChoiceDeltaToolCall,
+        ChoiceDeltaToolCallFunction,
+    )
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.responses import (
         Response,
@@ -159,7 +165,7 @@ def serve_command_factory(args: Namespace):
 
 
 def create_generation_config_from_req(
-    req: Union[TransformersCompletionCreateParamsStreaming, TransformersResponseCreateParamsStreaming],
+    req: dict,
     model_generation_config: "GenerationConfig",
     **kwargs,
 ) -> "GenerationConfig":
@@ -169,10 +175,12 @@ def create_generation_config_from_req(
     Other parameters in the request will be applied on top of the baseline.
 
     Args:
-        req (`ChatCompletionInput`):
+        req (`dict`):
             The request which may optionally contain generation parameters.
         model_generation_config (`GenerationConfig`):
             The model's default generation config.
+        kwargs (`dict`):
+            Additional parameters to set in the generation config.
 
     Returns:
         The prepared `GenerationConfig` object.
@@ -190,9 +198,7 @@ def create_generation_config_from_req(
         if v is not None:
             setattr(generation_config, k, v)
 
-    if isinstance(req, TransformersResponseCreateParamsStreaming):
-        return generation_config
-
+    # Completion-specific parameters
     if req.get("frequency_penalty") is not None:
         generation_config.repetition_penalty = float(req["frequency_penalty"])
     if req.get("logit_bias") is not None:
@@ -323,29 +329,25 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def validate_request(
-        self,
-        request: Union[TransformersCompletionCreateParamsStreaming, TransformersResponseCreateParamsStreaming],
-        request_cls: _TypedDictMeta,
-        validator: TypeAdapter,
-        unused_fields: set,
-    ):
+    def validate_request(self, request: dict, schema: _TypedDictMeta, validator: TypeAdapter, unused_fields: set):
         """
         Validates the request against the schema, and checks for unexpected keys.
 
         Args:
-            request (`TransformersCompletionCreateParamsStreaming` or `TransformersResponseCreateParamsStreaming`):
+            request (`dict`):
                 The request to validate.
-            request_cls (`_TypedDictMeta`):
-                The class of the request to validate.
+            schema (`_TypedDictMeta`):
+                The schema of the request to validate. It is a TypedDict definition.
             validator (`TypeAdapter`):
-                The validator to use to validate the request. Built from the schema in `request_cls`.
+                The validator to use to validate the request. Built from `schema`.
             unused_fields (`set`):
-                Fields accepted by `request_cls`, but not used in `transformers serve`.
+                Fields accepted by `schema`, but not used in `transformers serve`.
 
         Raises:
             HTTPException: If the request is invalid or contains unexpected or unused fields.
         """
+        logger.debug(f"Validating request: {request}")
+
         # Validate expected keys
         try:
             validator.validate_python(request)
@@ -354,7 +356,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         # Validate unexpected keys -- Pydantic doesn't validate extra keys in the request.
         input_keys = set(request.keys())
-        possible_keys = request_cls.__mutable_keys__
+        possible_keys = schema.__mutable_keys__
         unexpected_keys = input_keys - possible_keys
         if unexpected_keys:
             raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected_keys}")
@@ -370,13 +372,13 @@ class ServeCommand(BaseTransformersCLICommand):
         content: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
-        tool_calls: Optional[list[dict]] = None,
+        tool_calls: Optional[list[ChoiceDeltaToolCall]] = None,
     ) -> str:
         """
-        Builds a chunk of a streaming response.
+        Builds a chunk of a streaming chat completion response.
 
-        IMPORTANT: The built chunk won't contain empty fields (fields with `None`). Some downstream apps, like Cursor,
-        assume that when the field exists, it has data.
+        IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
+        like Cursor, assume that when the field exists, it has data.
 
         Args:
             request_id (`str`):
@@ -387,33 +389,34 @@ class ServeCommand(BaseTransformersCLICommand):
                 The role of the next content, until a new role is defined.
             finish_reason (`str`, *optional*):
                 The reason the generation by the model has finished.
-            tool_calls (`list[dict]`, *optional*):
+            tool_calls (`list[ChoiceDeltaToolCall]`, *optional*):
                 Data about the tool calls, when they are triggered.
 
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
-        payload = {
-            "object": "chat.completion.chunk",
-            "id": request_id,
-            "created": int(time.time()),
-            "model": self.loaded_model,
-            "choices": [{"delta": {}, "index": 0}],
-            "system_fingerprint": "",
-        }
-        if content is not None:
-            payload["choices"][0]["delta"]["content"] = content
-        if role is not None:
-            payload["choices"][0]["delta"]["role"] = role
-        if tool_calls is not None:
-            payload["choices"][0]["delta"]["tool_calls"] = tool_calls
-        if finish_reason is not None:
-            payload["choices"][0]["finish_reason"] = finish_reason
-
-        return f"data: {json.dumps(payload)}\n\n"
+        chunk = ChatCompletionChunk(
+            id=request_id,
+            created=int(time.time()),
+            model=self.loaded_model,
+            choices=[
+                Choice(
+                    delta=ChoiceDelta(
+                        content=content,
+                        role=role,
+                        tool_calls=tool_calls,
+                    ),
+                    index=0,
+                    finish_reason=finish_reason,
+                )
+            ],
+            system_fingerprint="",
+            object="chat.completion.chunk",
+        )
+        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def build_responses_chunk(self, response: BaseModel) -> str:
-        return f"data: {response.model_dump_json()}\n\n"
+        return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
         app = FastAPI()
@@ -430,10 +433,10 @@ class ServeCommand(BaseTransformersCLICommand):
             )
 
         @app.post("/v1/chat/completions")
-        def chat_completion(request: TransformersCompletionCreateParamsStreaming):
+        def chat_completion(request: dict):
             self.validate_request(
                 request=request,
-                request_cls=TransformersCompletionCreateParamsStreaming,
+                schema=TransformersCompletionCreateParamsStreaming,
                 validator=completion_validator,
                 unused_fields=UNUSED_COMPLETION_FIELDS,
             )
@@ -445,10 +448,10 @@ class ServeCommand(BaseTransformersCLICommand):
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
-        def responses(request: TransformersResponseCreateParamsStreaming):
+        def responses(request: dict):
             self.validate_request(
                 request=request,
-                request_cls=TransformersResponseCreateParamsStreaming,
+                schema=TransformersResponseCreateParamsStreaming,
                 validator=response_validator,
                 unused_fields=UNUSED_RESPONSE_FIELDS,
             )
@@ -496,7 +499,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model_info("meta-llama/Llama-3.3-70B-Instruct"),
         ]
 
-    def continuous_batching(self, req: TransformersCompletionCreateParamsStreaming) -> Generator:
+    def continuous_batching(self, req: dict) -> Generator:
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
 
         if update_model:
@@ -504,6 +507,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         generation_config = create_generation_config_from_req(
             req,
+            model_generation_config=self.model.generation_config,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             use_cache=False,
@@ -538,6 +542,10 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 queue_is_flushed = False
 
+                # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
+                # they come from the assistant.
+                yield self.build_chat_completions_chunk(request_id, role="assistant")
+
                 for result in self.running_continuous_batching_manager:
                     if result.request_id != request_id:
                         continue
@@ -548,21 +556,19 @@ class ServeCommand(BaseTransformersCLICommand):
                             queue_is_flushed = True
 
                     finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                    yield self.build_chat_completions_chunk(
-                        content=result.next_token, request_id=request_id, finish_reason=finish_reason
-                    )
-
                     if result.status == RequestStatus.FINISHED:
+                        yield self.build_chat_completions_chunk(request_id, finish_reason=finish_reason)
                         break
+                    else:
+                        yield self.build_chat_completions_chunk(request_id=request_id, content=result.next_token)
 
-                yield "data: [DONE]\n\n"
             except Exception as e:
                 logger.error(str(e))
                 yield f'data: {{"error": "{str(e)}"}}'
 
         return stream_response(inputs[0])
 
-    def generate(self, req: TransformersCompletionCreateParamsStreaming) -> Generator:
+    def generate(self, req: dict) -> Generator:
         update_model = req["model"] != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
@@ -595,7 +601,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
-        generation_config = create_generation_config_from_req(req)
+        generation_config = create_generation_config_from_req(
+            req, model_generation_config=self.model.generation_config
+        )
         max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 256
         generation_config.max_new_tokens = max_new_tokens
 
@@ -623,6 +631,10 @@ class ServeCommand(BaseTransformersCLICommand):
             try:
                 thread.start()
                 tool_state = ToolState()
+
+                # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
+                # they come from the assistant.
+                yield self.build_chat_completions_chunk(request_id, role="assistant")
 
                 for result in streamer:
                     # ====== TOOL CALL LOGIC ======
@@ -690,9 +702,10 @@ class ServeCommand(BaseTransformersCLICommand):
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
 
-                    # All non-tool related tokens are emitted as assistant messages
-                    yield self.build_chat_completions_chunk(content=result, request_id=_request_id, role="assistant")
-                yield self.build_chat_completions_chunk(request_id=_request_id, role=None, finish_reason="stop")
+                    # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
+                    if result != "":
+                        yield self.build_chat_completions_chunk(_request_id, content=result)
+                yield self.build_chat_completions_chunk(_request_id, finish_reason="stop")
 
                 thread.join()
             except Exception as e:
@@ -705,7 +718,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(generation_streamer, request_id)
 
-    def generate_response(self, req: TransformersResponseCreateParamsStreaming) -> Generator:
+    def generate_response(self, req: dict) -> Generator:
         # TODO
         # Check generation config parameters
         # Implement KV caching (with previous_request_id?)
@@ -724,7 +737,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
-        generation_config = create_generation_config_from_req(req)
+        generation_config = create_generation_config_from_req(
+            req, model_generation_config=self.model.generation_config
+        )
         max_new_tokens = req.get("max_output_tokens", generation_config.max_new_tokens) or 256
         generation_config.max_new_tokens = max_new_tokens
 
@@ -855,13 +870,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_response(generation_streamer, request_id)
 
-    def is_continuation(self, req: TransformersCompletionCreateParamsStreaming) -> bool:
+    def is_continuation(self, req: dict) -> bool:
         """
         Determines whether the current request is a continuation of the last request. In other words, if it is the
         same chat session.
 
         Args:
-            req (`TransformersCompletionCreateParamsStreaming`): The request to check.
+            req (`dict`): The request to check.
 
         Returns:
             `True` if the request is a continuation of the last request, `False` otherwise.
