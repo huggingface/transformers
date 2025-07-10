@@ -201,7 +201,7 @@ class KeyeIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    # @slow
+    @slow
     def test_small_model_integration_test(self):
         model = KeyeForConditionalGeneration.from_pretrained(
             "Kwai-Keye/Keye-VL-8B-Preview", torch_dtype="auto", device_map="auto", trust_remote_code=True
