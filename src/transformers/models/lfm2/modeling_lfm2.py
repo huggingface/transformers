@@ -179,10 +179,6 @@ class Lfm2HybridConvCache(DynamicCache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == self.first_attention_layer:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if key_states is not None:
             if len(self.key_cache) <= layer_idx:
