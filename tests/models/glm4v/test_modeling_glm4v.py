@@ -254,10 +254,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
-    # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
-    # TODO: @raushan
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -377,6 +373,44 @@ class Glm4vIntegrationTest(unittest.TestCase):
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_with_video(self):
+        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", max_image_size={"longest_edge": 50176})
+        model = Glm4vForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype=torch.float16, device_map="auto"
+        )
+        questions = ["Describe this video."] * 2
+        video_urls = [
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+        ] * 2
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": video_url,
+                        },
+                        {"type": "text", "text": question},
+                    ],
+                }
+            ]
+            for question, video_url in zip(questions, video_urls)
+        ]
+        inputs = processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
+        ).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=30)
+        EXPECTED_DECODED_TEXT = [
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami",
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
+        ]  # fmt: skip
+        self.assertEqual(
+            processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
