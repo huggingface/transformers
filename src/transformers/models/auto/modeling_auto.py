@@ -32,6 +32,8 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("aimv2", "Aimv2Model"),
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
@@ -93,6 +95,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaModel"),
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
+        ("deepseek_v2", "DeepseekV2Model"),
         ("deepseek_v3", "DeepseekV3Model"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
@@ -105,6 +108,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dinov2", "Dinov2Model"),
         ("dinov2_with_registers", "Dinov2WithRegistersModel"),
         ("distilbert", "DistilBertModel"),
+        ("doge", "DogeModel"),
         ("donut-swin", "DonutSwinModel"),
         ("dots1", "Dots1Model"),
         ("dpr", "DPRQuestionEncoder"),
@@ -576,8 +580,10 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("dbrx", "DbrxForCausalLM"),
+        ("deepseek_v2", "DeepseekV2ForCausalLM"),
         ("deepseek_v3", "DeepseekV3ForCausalLM"),
         ("diffllama", "DiffLlamaForCausalLM"),
+        ("doge", "DogeForCausalLM"),
         ("dots1", "Dots1ForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("emu3", "Emu3ForCausalLM"),
@@ -680,6 +686,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image mapping
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("beit", "BeitModel"),
         ("bit", "BitModel"),
         ("conditional_detr", "ConditionalDetrModel"),
@@ -1107,8 +1114,10 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForSequenceClassification"),
         ("deberta", "DebertaForSequenceClassification"),
         ("deberta-v2", "DebertaV2ForSequenceClassification"),
+        ("deepseek_v2", "DeepseekV2ForSequenceClassification"),
         ("diffllama", "DiffLlamaForSequenceClassification"),
         ("distilbert", "DistilBertForSequenceClassification"),
+        ("doge", "DogeForSequenceClassification"),
         ("electra", "ElectraForSequenceClassification"),
         ("ernie", "ErnieForSequenceClassification"),
         ("ernie_m", "ErnieMForSequenceClassification"),

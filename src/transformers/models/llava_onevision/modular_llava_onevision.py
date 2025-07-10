@@ -21,17 +21,18 @@ from torch import nn
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (
-    KwargsForCausalLM,
     LlavaNextVideoCausalLMOutputWithPast,
     LlavaNextVideoForConditionalGeneration,
     LlavaNextVideoModel,
     LlavaNextVideoModelOutputWithPast,
     LlavaNextVideoPreTrainedModel,
+    TransformersKwargs,
     get_anyres_image_grid_shape,
     image_size_to_num_patches,
     unpad_image,
 )
 
+from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -485,7 +486,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -635,7 +636,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -648,7 +649,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):

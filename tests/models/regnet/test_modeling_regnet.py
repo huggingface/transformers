@@ -17,7 +17,7 @@ import unittest
 
 from transformers import RegNetConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, is_flaky, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -146,6 +146,7 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @is_flaky(description="Larger difference with A10. Still flaky after setting larger tolerance")
     def test_batching_equivalence(self, atol=3e-5, rtol=3e-5):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
