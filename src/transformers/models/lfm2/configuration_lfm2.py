@@ -1,11 +1,11 @@
-from typing import ClassVar, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 
 
-class LFM2Config(PretrainedConfig):
+class Lfm2Config(PretrainedConfig):
     model_type = "lfm2"
-    keys_to_ignore_at_inference: ClassVar = ["past_key_values"]
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -73,4 +73,4 @@ class LFM2Config(PretrainedConfig):
         return ["attention" if i in self.full_attn_idxs else "conv" for i in range(self.num_hidden_layers)]
 
 
-__all__ = ["LFM2Config"]
+__all__ = ["Lfm2Config"]
