@@ -15,32 +15,19 @@
 
 import unittest
 
-from packaging import version
-
-from transformers import AutoTokenizer, StaticCache, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import is_torch_available
 from transformers.testing_utils import (
-    Expectations,
-    cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    run_test_using_subprocess,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    import torch
-
-    from transformers import (
-        Lfm2Config,
-        Lfm2Model,
-        Lfm2ForCausalLM
-    )
+    from transformers import Lfm2Config, Lfm2ForCausalLM, Lfm2Model
 
 
 class Lfm2ModelTester(CausalLMModelTester):
@@ -52,14 +39,7 @@ class Lfm2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Lfm2Model,
-            Lfm2ForCausalLM
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (Lfm2Model, Lfm2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Lfm2Model,
