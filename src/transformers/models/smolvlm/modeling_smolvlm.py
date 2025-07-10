@@ -55,6 +55,7 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -372,7 +373,8 @@ class SmolVLMEncoder(nn.Module):
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     config_class = SmolVLMVisionConfig
     _supports_sdpa = True
-    _supports_flash_attention_2 = True
+    _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_flex_attn = True
 
     def __init__(self, config: SmolVLMVisionConfig):
@@ -880,9 +882,8 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             The hidden states of the image encoder after modality projection.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
-            Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-            computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
