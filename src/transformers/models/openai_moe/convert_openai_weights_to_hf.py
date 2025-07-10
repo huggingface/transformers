@@ -133,9 +133,7 @@ def write_model(
     mxfp4=False,
 ):
     os.makedirs(model_path, exist_ok=True)
-    bos_token_id = 128000
-    eos_token_id = 199999 if not instruct else [199999, 200018]
-    pad_token_id = 128004
+    eos_token_id = 199999 if not instruct else 200002
 
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
@@ -149,7 +147,7 @@ def write_model(
         "original_max_position_embeddings": 4096
       }
 
-    config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, **original_config)
+    config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, eos_token_id=eos_token_id, **original_config)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
@@ -255,9 +253,7 @@ def write_model(
             do_sample=True,
             temperature=0.6,
             top_p=0.9,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
         )
         generation_config.save_pretrained(model_path)
 
@@ -396,6 +392,7 @@ class OpenAIMoeConverter(TikTokenConverter):
             kwargs["chat_template"] = chat_template
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
+            eos_token="<|return|>" if chat_template else "<|endoftext|>",
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=model_max_length,
             **kwargs,
