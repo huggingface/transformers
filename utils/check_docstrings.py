@@ -482,6 +482,7 @@ OBJECTS_TO_IGNORE = [
     "SEWDForCTC",
     "SEWForCTC",
     "SamConfig",
+    "SamImageProcessorFast",
     "SamPromptEncoderConfig",
     "SamHQConfig",
     "SamHQPromptEncoderConfig",
