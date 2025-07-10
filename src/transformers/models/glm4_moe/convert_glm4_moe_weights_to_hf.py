@@ -10,7 +10,7 @@ Steps
 5. Print progress throughout.
 
 Usage
-    python convert_to_hf.py <input_dir> <output_dir>
+    python convert_to_hf.py <input_dir> <output_dir> --model_size {100b|360b}
 """
 
 import argparse
@@ -22,9 +22,11 @@ from safetensors.torch import load_file, save_file
 
 MAX_SHARD_BYTES = 5 * 1024**3
 
-CONFIG = {
+# Original 100B configuration
+CONFIG_100B = {
     "architectures": ["Glm4MoeForCausalLM"],
     "attention_bias": True,
+    "add_qk_norm": False,
     "attention_dropout": 0.0,
     "pad_token_id": 151329,
     "eos_token_id": [151329, 151336, 151338],
@@ -41,16 +43,15 @@ CONFIG = {
     "num_attention_heads": 96,
     "n_group": 1,
     "topk_group": 1,
+    "num_experts": 128,
     "n_routed_experts": 128,
     "n_shared_experts": 1,
     "routed_scaling_factor": 1.0,
-    "topk_method": "noaux_tc",
     "moe_router_dtype": "float32",
     "num_experts_per_tok": 8,
     "first_k_dense_replace": 1,
     "num_hidden_layers": 46,
     "num_key_value_heads": 8,
-    "partial_rotary_factor": 0.5,
     "output_router_logits": False,
     "rms_norm_eps": 1e-5,
     "rope_scaling": None,
@@ -63,16 +64,78 @@ CONFIG = {
     "vocab_size": 151552,
 }
 
+# New 360B configuration
+CONFIG_360B = {
+    "architectures": ["Glm4MoeForCausalLM"],
+    "attention_bias": True,
+    "add_qk_norm": True,
+    "attention_dropout": 0.0,
+    "pad_token_id": 151329,
+    "eos_token_id": [151329, 151336, 151338],
+    "head_dim": 128,
+    "hidden_act": "silu",
+    "hidden_size": 5120,
+    "decoder_sparse_step": 1,
+    "initializer_range": 0.02,
+    "intermediate_size": 12288,
+    "max_position_embeddings": 32768,
+    "model_type": "glm4_moe",
+    "moe_intermediate_size": 1536,
+    "norm_topk_prob": True,
+    "num_attention_heads": 96,
+    "n_group": 1,
+    "topk_group": 1,
+    "num_experts": 160,
+    "n_routed_experts": 160,
+    "n_shared_experts": 1,
+    "routed_scaling_factor": 2.5,
+    "num_experts_per_tok": 8,
+    "first_k_dense_replace": 3,
+    "num_hidden_layers": 92,
+    "num_key_value_heads": 8,
+    "output_router_logits": False,
+    "rms_norm_eps": 1e-5,
+    "rope_scaling": None,
+    "rope_theta": 1000000,
+    "router_aux_loss_coef": 0.001,
+    "tie_word_embeddings": False,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.54.0dev",
+    "use_cache": True,
+    "vocab_size": 151552,
+}
+
+
+def get_config(model_size):
+    """Get configuration based on model size."""
+    if model_size == "100b":
+        return CONFIG_100B
+    elif model_size == "360b":
+        return CONFIG_360B
+    else:
+        raise ValueError(f"Unknown model size: {model_size}. Must be '100b' or '360b'")
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", type=str, help="Location of the local folder copied from the Hub.")
     parser.add_argument("output_dir", type=str, help="Location to write HF model and tokenizer")
+    parser.add_argument(
+        "--model_size",
+        type=str,
+        choices=["100b", "360b"],
+        required=True,
+        help="Model size configuration to use (100b or 360b)",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input_dir)
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Get appropriate config
+    config = get_config(args.model_size)
+    print(f"Using {args.model_size} configuration")
 
     tensors, total_bytes = [], 0
     for file in sorted(input_path.glob("*.safetensors")):
@@ -106,8 +169,8 @@ def main():
     print("Wrote model.safetensors.index.json")
 
     with open(output_path / "config.json", "w") as f:
-        json.dump(CONFIG, f, indent=2)
-    print("Wrote config.json")
+        json.dump(config, f, indent=2)
+    print(f"Wrote config.json with {args.model_size} configuration")
 
     print("Conversion complete.")
 

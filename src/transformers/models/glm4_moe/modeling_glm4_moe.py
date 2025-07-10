@@ -179,7 +179,7 @@ class Glm4MoeAttention(nn.Module):
 
         if self.config.add_qk_norm:
             query_states = self.q_norm(query_states)
-            key_states = self.k_norm(query_states)
+            key_states = self.k_norm(key_states)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
