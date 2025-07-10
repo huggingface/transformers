@@ -372,6 +372,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_with_video(self):
+        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype=torch.float16, device_map="auto"
         )
@@ -394,8 +395,8 @@ class Glm4vIntegrationTest(unittest.TestCase):
             ]
             for question, video_url in zip(questions, video_urls)
         ]
-        self.processor.video_processor.max_image_size["longest_edge"] = 50176
-        inputs = self.processor.apply_chat_template(
+        processor.video_processor.max_image_size["longest_edge"] = 50176
+        inputs = processor.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
@@ -404,10 +405,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-        self.processor.video_processor.max_image_size["longest_edge"] = 47040000
 
     @slow
     def test_small_model_integration_test_expand(self):
