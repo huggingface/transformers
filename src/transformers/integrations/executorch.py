@@ -15,7 +15,7 @@ from typing import Callable, Optional
 
 import torch
 
-from ..cache_utils import DynamicCache, HybridCache, StaticCache
+from ..cache_utils import DynamicCache, EncoderDecoderCache, HybridCache, StaticCache
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
@@ -548,7 +548,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.lm_head = model.lm_head
         self.config = model.config
 
-        # Initialize static cache
+        # Initialize static cache for decoder and DynamicCache for encoder
         self.static_cache = StaticCache(
             config=self.config,
             max_batch_size=batch_size,
@@ -556,6 +556,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             device="cpu",
             dtype=torch.float32,
         )
+        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
 
         # Register cache buffers to make them exportable
         for i in range(len(self.static_cache.key_cache)):
@@ -567,7 +568,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=self.static_cache,
+            past_key_values=self.cache,
             use_cache=True,
             cache_position=cache_position,
         )
