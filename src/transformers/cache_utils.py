@@ -698,7 +698,7 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
     }
     return torch.fx._pytree._dict_flatten_spec(dictionary, spec)
 
-
+# Register pytree node for DynamicCache if torch version is >= 2.3 and FSDP is not imported, FSDP will need more extra memory when using pytree node
 if is_torch_greater_or_equal("2.3") and "torch.distributed.fsdp" not in sys.modules:
     torch.utils._pytree.register_pytree_node(
         DynamicCache,
