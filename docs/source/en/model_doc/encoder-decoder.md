@@ -28,9 +28,6 @@ rendered properly in your Markdown viewer.
 
 [`EncoderDecoderModel`](https://huggingface.co/papers/1706.03762) initializes a sequence-to-sequence model with any pretrained autoencoder and pretrained autoregressive model. It is effective for sequence generation tasks as demonstrated in [Text Summarization with Pretrained Encoders](https://huggingface.co/papers/1908.08345) which uses [`BertModel`] as the encoder and decoder.
 
-
-
-
 > [!TIP]
 > This model was contributed by [thomwolf](https://huggingface.co/thomwolf) and the TensorFlow/Flax version by [ydshieh](https://huggingface.co/ydshieh).
 >
@@ -38,20 +35,20 @@ rendered properly in your Markdown viewer.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-hfoptions id="usage">
+<hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-generation",
+summarizer = pipeline(
+    "summarization",
     model="patrickvonplaten/bert2bert-cnn_dailymail-fp16",
-    torch_dtype=torch.bfloat16,
     device=0
 )
-pipeline("Plants create energy through a process known as")
+
+text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
+print(summarizer(text))
 ```
 
 </hfoption>
@@ -61,40 +58,29 @@ pipeline("Plants create energy through a process known as")
 import torch  
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
-tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto")  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, device_map="auto")  
+text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
 
-output = model.generate(**input_ids)  
-print(tokenizer.decode(output[0], skip_special_tokens=True))
+inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(model.device)
+
+summary = model.generate(**inputs, max_length=60, num_beams=4, early_stopping=True)
+print(tokenizer.decode(summary[0], skip_special_tokens=True))
 ```
 
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" --device 0
+echo -e "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen." | \
+transformers-cli run \
+  --task summarization \
+  --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" \
+  --device 0
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
-
-quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto")
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
-
-output = model.generate(**input_ids)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
 
 ## Notes
 
