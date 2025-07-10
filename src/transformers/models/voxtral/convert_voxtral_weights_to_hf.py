@@ -23,6 +23,7 @@ import gc
 
 import torch
 from transformers.utils.hub import cached_file
+from transformers.models.whisper.modeling_whisper import sinusoids
 from safetensors.torch import load_file
 
 from transformers import (
@@ -30,6 +31,9 @@ from transformers import (
     VoxtralConfig,
     VoxtralForConditionalGeneration,
 )
+
+
+# TODO: @eustlb, I don't really like the audio_tower name
 
 
 # fmt: off
@@ -48,21 +52,22 @@ STATE_DICT_MAPPING = {
     r"mm_whisper_embeddings.tok_embeddings.weight":                                     r"language_model.model.embed_tokens.weight",
 
     # audio model keys
-    r"mm_whisper_embeddings.whisper_encoder\.conv_layers\.0\.(weight|bias)": r"audio_tower.encoder.conv1.\1",
-    r"mm_whisper_embeddings.whisper_encoder\.conv_layers\.1\.(weight|bias)": r"audio_tower.encoder.conv2.\1",
+    r"mm_whisper_embeddings.whisper_encoder\.conv_layers\.0\.(weight|bias)": r"audio_tower.conv1.\1",
+    r"mm_whisper_embeddings.whisper_encoder\.conv_layers\.1\.(weight|bias)": r"audio_tower.conv2.\1",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.norm\.(weight|bias)": r"audio_tower.encoder.layer_norm.\1",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.norm\.(weight|bias)": r"audio_tower.layer_norm.\1",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.w([qkv])\.(weight|bias)": r"audio_tower.encoder.layers.\1.self_attn.\2_proj.\3",
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.wo\.(weight|bias)": r"audio_tower.encoder.layers.\1.self_attn.out_proj.\2",
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention_norm\.(weight|bias)": r"audio_tower.encoder.layers.\1.self_attn_layer_norm.\2",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.w([qkv])\.(weight|bias)": r"audio_tower.layers.\1.self_attn.\2_proj.\3",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention\.wo\.(weight|bias)": r"audio_tower.layers.\1.self_attn.out_proj.\2",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.attention_norm\.(weight|bias)": r"audio_tower.layers.\1.self_attn_layer_norm.\2",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w1\.(weight|bias)": r"audio_tower.encoder.layers.\1.fc1.\2",
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w2\.(weight|bias)": r"audio_tower.encoder.layers.\1.fc2.\2",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w1\.(weight|bias)": r"audio_tower.layers.\1.fc1.\2",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.feed_forward\.w2\.(weight|bias)": r"audio_tower.layers.\1.fc2.\2",
 
-    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.ffn_norm\.(weight|bias)": r"audio_tower.encoder.layers.\1.final_layer_norm.\2",
+    r"mm_whisper_embeddings.whisper_encoder\.transformer\.layers\.(\d+)\.ffn_norm\.(weight|bias)": r"audio_tower.layers.\1.final_layer_norm.\2",
 
-    r"mm_whisper_embeddings.audio_language_projection\.(\d+)\.weight":               r".multi_modal_projector.linear_\1.weight",
+    r"mm_whisper_embeddings.audio_language_projection\.0\.weight":               r"multi_modal_projector.linear_1.weight",
+    r"mm_whisper_embeddings.audio_language_projection\.2\.weight":               r"multi_modal_projector.linear_2.weight",
 }
 # fmt: on
 
@@ -201,6 +206,13 @@ def write_model(
     state_dict = load_file(model_path)
     print("Converting model...")
     converted_state_dict = convert_state_dict(state_dict, config.text_config)
+
+    # we need to add embed positions as they are not in the state dict
+    with (
+        torch.no_grad(),
+    ):
+        embed_positions_weight = sinusoids(config.audio_config.max_source_positions, config.audio_config.hidden_size)
+    converted_state_dict["audio_tower.embed_positions.weight"] = embed_positions_weight
     
     # -------------------------
     # load the weights and save
@@ -267,5 +279,5 @@ if __name__ == "__main__":
         "mistralai/voxtral-mini",
         "consolidated.safetensors",
         "params.json",
-        "/home/eustache_lebihan/add-voxtral-mini/voxtral-mini-converted",
+        "/Users/eustachelebihan/dev/add-voxtral-mini/voxtral-mini-converted",
     )
