@@ -652,7 +652,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
-                # Try to load with a new config name first and if not successfull try with
+                # Try to load with a new config name first and if not successful try with
                 # the old file name. In case we can load with old name only, raise a deprecation warning
                 # Deprecated until v5.0
                 video_processor_file = VIDEO_PROCESSOR_NAME
