@@ -561,7 +561,7 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
-      - local: model_doec/modernbert-decoder
+      - local: model_doc/modernbert-decoder
         title: ModernBERTDecoder
       - local: model_doc/mpnet
         title: MPNet
