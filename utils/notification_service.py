@@ -1492,20 +1492,16 @@ if __name__ == "__main__":
     current_artifacts_set = {}
     for d in current_artifacts:
         current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
-        print(current_artifacts_set[d])
-        print("====" * 30)
 
     prev_artifacts_set = {}
     for d in prev_artifacts:
         prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
-        print(prev_artifacts_set[d])
-        print("====" * 30)
-
-    print(current_artifacts_set)
-    print(prev_artifacts_set)
 
     report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
     print(report)
+
+    with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+        fp.write(report)
 
     # upload
     api.upload_file(
