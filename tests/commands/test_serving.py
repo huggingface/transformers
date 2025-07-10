@@ -197,6 +197,7 @@ class ServeCompletionsMixin:
     # TODO: speed-based test to confirm that KV cache is working across requests
 
 
+@slow
 class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `generate` version of the Completions API."""
 
@@ -286,6 +287,7 @@ class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
+@slow
 class ServeCompletionsContinuousBatchingTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `continuous_batching` version of the Completions API."""
 
