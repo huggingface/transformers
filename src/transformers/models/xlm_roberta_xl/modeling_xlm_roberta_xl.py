@@ -454,12 +454,14 @@ class XLMRobertaXLAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
+        encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
         cache_position=None,
@@ -470,6 +472,7 @@ class XLMRobertaXLAttention(nn.Module):
             attention_mask,
             head_mask,
             encoder_hidden_states,
+            encoder_attention_mask,
             past_key_value,
             output_attentions,
             cache_position,
