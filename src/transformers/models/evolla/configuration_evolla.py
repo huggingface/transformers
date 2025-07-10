@@ -111,7 +111,7 @@ class EvollaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`dict`, *optional*):
+        protein_encoder_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`SaProtConfig`].
         vocab_size (`int`, *optional*, defaults to 128256):
             Vocabulary size of the Evolla llama model. Defines the number of different tokens that can be represented by the
