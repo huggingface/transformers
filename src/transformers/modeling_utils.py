@@ -2285,10 +2285,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             and attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys()
         ):
             message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
-            if cls._supports_flash_attn_3:
-                message += ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
-            if cls._supports_flash_attn_2:
-                message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
+            if cls._supports_flash_attn:
+                message += (
+                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
+                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
+                )
             if cls._supports_sdpa:
                 message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
             if cls._supports_flex_attn:

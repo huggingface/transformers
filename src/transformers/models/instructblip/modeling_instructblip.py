@@ -989,7 +989,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     """
 
     _supports_attention_backend = False  # adds position on attn weights before last matmul
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
