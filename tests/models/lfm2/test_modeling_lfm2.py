@@ -63,6 +63,12 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
+    @unittest.skip(
+        "Lfm2 alternates between attention and conv layers, so attention are only returned for attention layers"
+    )
+    def test_attention_outputs(self):
+        pass
+
 
 @require_torch_accelerator
 @require_read_token
