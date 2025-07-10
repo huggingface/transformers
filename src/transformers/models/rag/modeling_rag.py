@@ -235,6 +235,7 @@ class RagPreTrainedModel(PreTrainedModel):
     config_class = RagConfig
     base_model_prefix = "rag"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     @classmethod
@@ -1201,6 +1202,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             reordered_past += (
                 tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
+        if isinstance(past_key_values, EncoderDecoderCache):
+            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
         if isinstance(past_key_values, EncoderDecoderCache):
             reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
@@ -1610,6 +1613,14 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             raise ValueError(
                 f"`num_beams` has to be an integer strictly superior to 0 (≥ 1), but is {generation_config.num_beams}"
             )
+
+    # Auxiliary functions for beam search
+    def _temporary_reorder_cache(self, past_key_values, beam_idx):
+        # RAG should always use the legacy path even though the LM backbone (T5) uses new cache format
+        # because RAG expands input for doc-size internally. TODO: raushan, remove me when all models support
+        # new cache format
+        past_key_values = self._reorder_cache(past_key_values, beam_idx)
+        return past_key_values
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()
