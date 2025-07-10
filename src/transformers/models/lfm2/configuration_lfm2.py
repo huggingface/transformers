@@ -131,7 +131,7 @@ class Lfm2Config(PretrainedConfig):
         self.intermediate_size = kwargs.get("block_ff_dim", intermediate_size)  # to fit original config keys
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
-        self.block_auto_adjust_ffn_dim = block_auto_adjust_ff_dim
+        self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
 
         self.layer_types = layer_types
         if self.layer_types is None:
