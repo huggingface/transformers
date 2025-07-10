@@ -140,8 +140,6 @@ class Glm4MoeConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         moe_intermediate_size (`int`, *optional*, defaults to 1408):
             Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of selected experts.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
