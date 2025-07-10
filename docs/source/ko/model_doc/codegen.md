@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[Overview]]
 
-CodeGen 모델은 Erik Nijkamp, Bo Pang, Hiroaki Hayashi, Lifu Tu, Huan Wang, Yingbo Zhou, Silvio Savarese, Caiming Xiong이 작성한 논문  [A Conversational Paradigm for Program Synthesis](https://arxiv.org/abs/2203.13474)에서 제안되었습니다.
+CodeGen 모델은 Erik Nijkamp, Bo Pang, Hiroaki Hayashi, Lifu Tu, Huan Wang, Yingbo Zhou, Silvio Savarese, Caiming Xiong이 작성한 논문  [A Conversational Paradigm for Program Synthesis](https://huggingface.co/papers/2203.13474)에서 제안되었습니다.
 
 CodeGen 모델은 프로그램 합성(program synthesis)을 위한 자기회귀(autoregressive) 언어 모델로, [The Pile](https://pile.eleuther.ai/), BigQuery, BigPython 데이터로 순차적으로 학습되었습니다.
 

@@ -15,7 +15,7 @@
 """LeViT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -50,20 +50,20 @@ class LevitConfig(PretrainedConfig):
             The padding size for the initial convolution layers of patch embedding.
         patch_size (`int`, *optional*, defaults to 16):
             The patch size for embeddings.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[128, 256, 384]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[128, 256, 384]`):
             Dimension of each of the encoder blocks.
-        num_attention_heads (`List[int]`, *optional*, defaults to `[4, 8, 12]`):
+        num_attention_heads (`list[int]`, *optional*, defaults to `[4, 8, 12]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        depths (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
+        depths (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
             The number of layers in each encoder block.
-        key_dim (`List[int]`, *optional*, defaults to `[16, 16, 16]`):
+        key_dim (`list[int]`, *optional*, defaults to `[16, 16, 16]`):
             The size of key in each of the encoder blocks.
         drop_path_rate (`int`, *optional*, defaults to 0):
             The dropout probability for stochastic depths, used in the blocks of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
+        mlp_ratios (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
-        attention_ratios (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
+        attention_ratios (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
             Ratio of the size of the output dimension compared to input dimension of attention layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

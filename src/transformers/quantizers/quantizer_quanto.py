@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from packaging import version
 
@@ -87,7 +87,7 @@ class QuantoHfQuantizer(HfQuantizer):
             torch_dtype = torch.float32
         return torch_dtype
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 
@@ -108,7 +108,7 @@ class QuantoHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         """
@@ -134,7 +134,7 @@ class QuantoHfQuantizer(HfQuantizer):
         else:
             return False
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
@@ -177,7 +177,7 @@ class QuantoHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
     ):
         from ..integrations import replace_with_quanto_layers
 

@@ -134,13 +134,13 @@ def _parse_type_hint(hint: str) -> dict:
                 f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
                 "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
                 "more than one element, we recommend "
-                "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
+                "using a list[] type instead, or if it really is a single element, remove the tuple[] wrapper and just "
                 "pass the element directly."
             )
         if ... in args:
             raise TypeHintParsingException(
                 "Conversion of '...' is not supported in Tuple type hints. "
-                "Use List[] types for variable-length"
+                "Use list[] types for variable-length"
                 " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}

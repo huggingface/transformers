@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -47,7 +47,7 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     via the [`~TFAutoModel.from_pretrained`] method. The projection layers are automatically added to the model and
     should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
+    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://huggingface.co/papers/2111.07991) it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement
     on new zero-shot vision tasks such as image classification or retrieval.
 
@@ -357,7 +357,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFCLIPOutput]:
+    ) -> Union[tuple[tf.Tensor], TFCLIPOutput]:
         r"""
         Returns:
 
@@ -602,7 +602,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
+            `dict[str, tf.Tensor]`: The dummy inputs.
         """
         input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         batch_size, seq_len = input_ids.shape

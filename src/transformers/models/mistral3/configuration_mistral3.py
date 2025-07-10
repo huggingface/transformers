@@ -37,7 +37,7 @@ class Mistral3Config(PretrainedConfig):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -1):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.

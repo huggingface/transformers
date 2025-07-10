@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Adding a new model to Transformers
+# Legacy model contribution
 
 > [!TIP]
 > Try adding new models with a more [modular](./modular_transformers) approach first. This makes it significantly easier to contribute a model to Transformers!
@@ -571,7 +571,7 @@ The processor should call the appropriate modality-specific processors within it
 def __call__(
     self,
     images: ImageInput = None,
-    text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+    text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
     audio=None,
     videos=None,
     **kwargs: Unpack[YourModelProcessorKwargs],

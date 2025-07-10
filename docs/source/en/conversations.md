@@ -25,7 +25,7 @@ Check model leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_
 
 This guide shows you how to quickly start chatting with Transformers from the command line, how build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
-## transformers CLI
+## chat CLI
 
 After you've [installed Transformers](./installation.md), chat with a model directly from the command line as shown below. It launches an interactive session with a model, with a few base commands listed at the start of the session.
 
@@ -49,7 +49,8 @@ For a full list of options, run the command below.
 transformers chat -h
 ```
 
-The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating).
+The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
+
 
 ## TextGenerationPipeline
 

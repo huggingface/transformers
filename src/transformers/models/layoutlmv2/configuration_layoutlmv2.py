@@ -78,7 +78,7 @@ class LayoutLMv2Config(PretrainedConfig):
             The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (`int`, *optional*, defaults to 64):
             The number of 2D relative position bins in the self-attention mechanism.
-        image_feature_pool_shape (`List[int]`, *optional*, defaults to [7, 7, 256]):
+        image_feature_pool_shape (`list[int]`, *optional*, defaults to [7, 7, 256]):
             The shape of the average-pooled feature map.
         coordinate_size (`int`, *optional*, defaults to 128):
             Dimension of the coordinate embeddings.

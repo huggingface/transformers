@@ -873,40 +873,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = T5ForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
 
 class T5EncoderOnlyModelTester:
     def __init__(
@@ -1143,14 +1109,16 @@ class T5ModelFp16Tests(unittest.TestCase):
 
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+            "google-t5/t5-small",
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load without using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
+            "google-t5/t5-small",
+            torch_dtype=torch.float16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)

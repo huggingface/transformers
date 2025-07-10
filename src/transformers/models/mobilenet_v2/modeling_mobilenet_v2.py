@@ -632,7 +632,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
 class MobileNetV2DeepLabV3Plus(nn.Module):
     """
     The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image
-    Segmentation" https://arxiv.org/abs/1802.02611
+    Segmentation" https://huggingface.co/papers/1802.02611
     """
 
     def __init__(self, config: MobileNetV2Config) -> None:

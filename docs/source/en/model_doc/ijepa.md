@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The I-JEPA model was proposed in [Image-based Joint-Embedding Predictive Architecture](https://arxiv.org/abs/2301.08243) by Mahmoud Assran, Quentin Duval, Ishan Misra, Piotr Bojanowski, Pascal Vincent, Michael Rabbat, Yann LeCun, Nicolas Ballas.
+The I-JEPA model was proposed in [Image-based Joint-Embedding Predictive Architecture](https://huggingface.co/papers/2301.08243) by Mahmoud Assran, Quentin Duval, Ishan Misra, Piotr Bojanowski, Pascal Vincent, Michael Rabbat, Yann LeCun, Nicolas Ballas.
 I-JEPA is a self-supervised learning method that predicts the representations of one part of an image based on other parts of the same image. This approach focuses on learning semantic features without relying on pre-defined invariances from hand-crafted data transformations, which can bias specific tasks, or on filling in pixel-level details, which often leads to less meaningful representations.
 
 The abstract from the paper is the following:
@@ -34,7 +34,7 @@ This paper demonstrates an approach for learning highly semantic image represent
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> I-JEPA architecture. Taken from the <a href="https://arxiv.org/abs/2301.08243">original paper.</a> </small>
+<small> I-JEPA architecture. Taken from the <a href="https://huggingface.co/papers/2301.08243">original paper.</a> </small>
 
 This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
 The original code can be found [here](https://github.com/facebookresearch/ijepa).

@@ -14,8 +14,6 @@
 # limitations under the License.
 """TimesFM model configuration"""
 
-from typing import List
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -57,7 +55,7 @@ class TimesFmConfig(PretrainedConfig):
             The tolerance for the quantile loss.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the RMS normalization layers.
-        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
+        quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
             The quantiles to predict.
         pad_val (`float`, *optional*, defaults to 1123581321.0):
             The value used to pad the predictions.
@@ -92,7 +90,7 @@ class TimesFmConfig(PretrainedConfig):
         num_attention_heads: int = 16,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
-        quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         attention_dropout: float = 0.0,
         use_positional_embedding: bool = False,

@@ -75,7 +75,7 @@ python run_clm_no_trainer.py \
 
 ### GPT-2/GPT and causal language modeling with fill-in-the middle objective
 
-The following example fine-tunes GPT-2 on WikiText-2 but using the Fill-in-middle training objective. FIM objective was proposed in [Efficient Training of Language Models to Fill in the Middle](https://arxiv.org/abs/2207.14255). They showed that autoregressive language models can learn to infill text after applying a straightforward transformation to the dataset, which simply moves a span of text from the middle of a document to its end.
+The following example fine-tunes GPT-2 on WikiText-2 but using the Fill-in-middle training objective. FIM objective was proposed in [Efficient Training of Language Models to Fill in the Middle](https://huggingface.co/papers/2207.14255). They showed that autoregressive language models can learn to infill text after applying a straightforward transformation to the dataset, which simply moves a span of text from the middle of a document to its end.
 
 We're using the raw WikiText-2 (no tokens were replaced before the tokenization). The loss here is that of causal language modeling.
 
@@ -228,10 +228,6 @@ sure all your batches have the same length.
 ## Streaming
 
 To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is supported by `run_mlm.py`, `run_clm.py` and `run_fim.py`. Make sure to adapt the other scripts to your use case by taking inspiration from them.
-
-## Low Cpu Memory Usage
-
-To use low cpu memory mode which can be very useful for LLM, add `--low_cpu_mem_usage` to the command line. This is currently supported by `run_clm.py`,`run_mlm.py`, `run_plm.py`, `run_fim.py`, `run_mlm_no_trainer.py`, `run_clm_no_trainer.py` and `run_fim_no_trainer.py`.
 
 ## Creating a model on the fly
 

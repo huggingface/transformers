@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for ConvNeXT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -84,7 +84,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     def resize(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: dict[str, int],
         crop_pct: float,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
@@ -95,7 +95,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
                 `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
                 Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,
@@ -141,9 +141,9 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
-        size: Dict[str, int],
+        size: dict[str, int],
         crop_pct: float,
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
@@ -151,12 +151,13 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -168,7 +169,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:

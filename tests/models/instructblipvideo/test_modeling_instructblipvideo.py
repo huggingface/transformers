@@ -20,7 +20,6 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -515,6 +514,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -533,12 +538,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @unittest.skip(reason="InstructBlipVideoModel does not have input/output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(
-        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     def test_forward_signature(self):
@@ -669,13 +668,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
-    @unittest.skip(
-        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -744,7 +736,8 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
     def test_inference_vicuna_7b(self):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b",
+            load_in_8bit=True,
         )
 
         clip = prepare_video()
@@ -762,7 +755,8 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
     def test_expansion_in_processing(self):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b",
+            load_in_8bit=True,
         )
 
         clip = prepare_video()

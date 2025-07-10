@@ -19,7 +19,7 @@ part from HuggingFace PyTorch version of Google AI Bert model (https://github.co
 """
 
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -31,6 +31,7 @@ from ...configuration_utils import PretrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -148,10 +149,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
-        self.pruned_heads: Set[int] = set()
+        self.pruned_heads: set[int] = set()
         self.attention_head_size = self.dim // self.n_heads
 
-    def prune_heads(self, heads: List[int]):
+    def prune_heads(self, heads: list[int]):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -175,7 +176,7 @@ class MultiHeadSelfAttention(nn.Module):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -255,7 +256,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -289,9 +290,14 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if query_states.dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -342,7 +348,7 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -436,7 +442,7 @@ DISTILBERT_ATTENTION_CLASSES = {
 }
 
 
-class TransformerBlock(nn.Module):
+class TransformerBlock(GradientCheckpointingLayer):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
@@ -456,7 +462,7 @@ class TransformerBlock(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim)
@@ -509,7 +515,7 @@ class Transformer(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
+    ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:  # docstyle-ignore
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -517,10 +523,10 @@ class Transformer(nn.Module):
 
         Returns:
             hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hidden states in the last (top)
-            layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)]
+            layer all_hidden_states: tuple[torch.tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
-            all_attentions: Tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
+            all_attentions: tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
                 Tuple of length n_layers with the attention weights from each layer
                 Optional: only if output_attentions=True
         """
@@ -532,21 +538,12 @@ class Transformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_state,
-                    attn_mask,
-                    head_mask[i],
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_state,
-                    attn_mask,
-                    head_mask[i],
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_state,
+                attn_mask,
+                head_mask[i],
+                output_attentions,
+            )
 
             hidden_state = layer_outputs[-1]
 
@@ -669,7 +666,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[List[int]]]):
+    def _prune_heads(self, heads_to_prune: dict[int, list[list[int]]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -687,7 +684,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -806,7 +803,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[MaskedLMOutput, tuple[torch.Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -908,7 +905,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1015,7 +1012,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[QuestionAnsweringModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1122,7 +1119,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[TokenClassifierOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[TokenClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1205,7 +1202,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[MultipleChoiceModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.

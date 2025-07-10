@@ -17,7 +17,7 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import List, Optional, Tuple, Union, get_args
+from typing import Optional, Union, get_args
 
 import regex as re
 
@@ -204,6 +204,15 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    disable_grouping = {
+        "description": """
+    Whether to disable grouping of images by size to process them individually and not in batches.
+    If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
+    empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
+    """,
+        "shape": None,
+    }
+
 
 class ModelArgs:
     labels = {
@@ -239,7 +248,7 @@ class ModelArgs:
     input_values = {
         "description": """
     Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-    into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+    into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
     soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
     conversion into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
     """,
@@ -560,6 +569,259 @@ class ModelArgs:
     }
 
 
+class ModelOutputArgs:
+    last_hidden_state = {
+        "description": """
+    Sequence of hidden-states at the output of the last layer of the model.
+    """,
+        "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
+    }
+
+    past_key_values = {
+        "description": """
+    It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+    Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+    input) to speed up sequential decoding.
+    """,
+        "shape": None,
+        "additional_info": "returned when `use_cache=True` is passed or when `config.use_cache=True`",
+    }
+
+    hidden_states = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+    Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`",
+    }
+
+    attentions = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    sequence_length)`.
+
+    Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+    heads.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_attentions=True` is passed or when `config.output_attentions=True`",
+    }
+
+    pooler_output = {
+        "description": """
+    Last layer hidden-state after a pooling operation on the spatial dimensions.
+    """,
+        "shape": "of shape `(batch_size, hidden_size)`",
+    }
+
+    cross_attentions = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    sequence_length)`.
+
+    Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+    weighted average in the cross-attention heads.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_attentions=True` is passed or when `config.output_attentions=True`",
+    }
+
+    decoder_hidden_states = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+    Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`",
+    }
+
+    decoder_attentions = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    sequence_length)`.
+
+    Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+    self-attention heads.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_attentions=True` is passed or when `config.output_attentions=True`",
+    }
+
+    encoder_last_hidden_state = {
+        "description": """
+    Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    """,
+        "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
+    }
+
+    encoder_hidden_states = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+    Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`",
+    }
+
+    encoder_attentions = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    sequence_length)`.
+
+    Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+    self-attention heads.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_attentions=True` is passed or when `config.output_attentions=True`",
+    }
+
+    router_logits = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+
+    Router logits of the model, useful to compute the auxiliary loss for Mixture of Experts models.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`",
+    }
+
+    router_probs = {
+        "description": """
+    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+
+    Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
+    loss and the z_loss for Mixture of Experts models.
+    """,
+        "shape": None,
+        "additional_info": "returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`",
+    }
+
+    z_loss = {
+        "description": """
+    z_loss for the sparse modules.
+    """,
+        "shape": None,
+        "additional_info": "returned when `labels` is provided",
+    }
+
+    aux_loss = {
+        "description": """
+    aux_loss for the sparse modules.
+    """,
+        "shape": None,
+        "additional_info": "returned when `labels` is provided",
+    }
+
+    start_logits = {
+        "description": """
+    Span-start scores (before SoftMax).
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
+    end_logits = {
+        "description": """
+    Span-end scores (before SoftMax).
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
+    feature_maps = {
+        "description": """
+    Feature maps of the stages.
+    """,
+        "shape": "of shape `(batch_size, num_channels, height, width)`",
+    }
+
+    reconstruction = {
+        "description": """
+    Reconstructed / completed images.
+    """,
+        "shape": "of shape `(batch_size, num_channels, height, width)`",
+    }
+
+    spectrogram = {
+        "description": """
+    The predicted spectrogram.
+    """,
+        "shape": "of shape `(batch_size, sequence_length, num_bins)`",
+    }
+
+    predicted_depth = {
+        "description": """
+    Predicted depth for each pixel.
+    """,
+        "shape": "of shape `(batch_size, height, width)`",
+    }
+
+    sequences = {
+        "description": """
+    Sampled values from the chosen distribution.
+    """,
+        "shape": "of shape `(batch_size, num_samples, prediction_length)` or `(batch_size, num_samples, prediction_length, input_size)`",
+    }
+
+    params = {
+        "description": """
+    Parameters of the chosen distribution.
+    """,
+        "shape": "of shape `(batch_size, num_samples, num_params)`",
+    }
+
+    loc = {
+        "description": """
+    Shift values of each time series' context window which is used to give the model inputs of the same
+    magnitude and then used to shift back to the original magnitude.
+    """,
+        "shape": "of shape `(batch_size,)` or `(batch_size, input_size)`",
+    }
+
+    scale = {
+        "description": """
+    Scaling values of each time series' context window which is used to give the model inputs of the same
+    magnitude and then used to rescale back to the original magnitude.
+    """,
+        "shape": "of shape `(batch_size,)` or `(batch_size, input_size)`",
+    }
+
+    static_features = {
+        "description": """
+    Static features of each time series' in a batch which are copied to the covariates at inference time.
+    """,
+        "shape": "of shape `(batch_size, feature size)`",
+    }
+
+    embeddings = {
+        "description": """
+    Utterance embeddings used for vector similarity-based retrieval.
+    """,
+        "shape": "of shape `(batch_size, config.xvector_output_dim)`",
+    }
+
+    extract_features = {
+        "description": """
+    Sequence of extracted feature vectors of the last convolutional layer of the model.
+    """,
+        "shape": "of shape `(batch_size, sequence_length, conv_dim[-1])`",
+    }
+
+    projection_state = {
+        "description": """
+    Text embeddings before the projection layer, used to mimic the last hidden state of the teacher encoder.
+    """,
+        "shape": "of shape `(batch_size,config.project_dim)`",
+    }
+
+
 class ClassDocstring:
     PreTrainedModel = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -664,6 +926,9 @@ class ClassAttrs:
     _skip_keys_device_placement = r"""
     A list of keys to ignore when moving inputs or outputs between devices when using the `accelerate` library.
     """
+    _supports_flash_attn_3 = r"""
+    Whether the model's attention implementation supports FlashAttention 3.0.
+    """
     _supports_flash_attn_2 = r"""
     Whether the model's attention implementation supports FlashAttention 2.0.
     """
@@ -731,13 +996,15 @@ def parse_default(docstring):
     return None
 
 
-def parse_docstring(docstring, max_indent_level=0):
+def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     """
     Parse the docstring to extract the Args section and return it as a dictionary.
     The docstring is expected to be in the format:
     Args:
-        arg1 (type): Description of arg1.
-        arg2 (type): Description of arg2.
+        arg1 (type):
+            Description of arg1.
+        arg2 (type):
+            Description of arg2.
 
     # This function will also return the remaining part of the docstring after the Args section.
     Returns:/Example:
@@ -753,13 +1020,21 @@ def parse_docstring(docstring, max_indent_level=0):
 
     args_match = args_pattern.search(docstring)
     # still try to find args description in the docstring, if args are not preceded by "Args:"
+    docstring_intro = None
+    if args_match:
+        docstring_intro = docstring[: args_match.start()]
+        if docstring_intro.split("\n")[-1].strip() == '"""':
+            docstring_intro = "\n".join(docstring_intro.split("\n")[:-1])
+        if docstring_intro.split("\n")[0].strip() == 'r"""' or docstring_intro.split("\n")[0].strip() == '"""':
+            docstring_intro = "\n".join(docstring_intro.split("\n")[1:])
+        if docstring_intro.strip() == "":
+            docstring_intro = None
     args_section = args_match.group(1).lstrip("\n") if args_match else docstring
     if args_section.split("\n")[-1].strip() == '"""':
         args_section = "\n".join(args_section.split("\n")[:-1])
     if args_section.split("\n")[0].strip() == 'r"""' or args_section.split("\n")[0].strip() == '"""':
         args_section = "\n".join(args_section.split("\n")[1:])
     args_section = set_min_indent(args_section, 0)
-
     params = {}
     if args_section:
         param_pattern = re.compile(
@@ -793,10 +1068,12 @@ def parse_docstring(docstring, max_indent_level=0):
 
     remainder_docstring = set_min_indent(remainder_docstring, 0)
 
+    if return_intro:
+        return params, remainder_docstring, docstring_intro
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> Tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -833,7 +1110,7 @@ def get_model_name(obj):
         return "model"
 
 
-def get_placeholders_dict(placeholders: List, model_name: str) -> dict:
+def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     """
     Get the dictionary of placeholders for the given model name.
     """
@@ -861,7 +1138,7 @@ def format_args_docstring(args, model_name):
     deducted from the model name and the auto modules.
     """
     # first check if there are any placeholders in the args, if not return them as is
-    placeholders = set(re.findall(r"{(.*?)}", "".join((args[arg]["description"] for arg in args))))
+    placeholders = set(re.findall(r"{(.*?)}", "".join(args[arg]["description"] for arg in args)))
     if not placeholders:
         return args
 
@@ -880,7 +1157,7 @@ def format_args_docstring(args, model_name):
     return args
 
 
-def source_args_doc(args_classes: Union[object, List[object]]) -> dict:
+def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
@@ -1031,10 +1308,15 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
     shape_string = ""
     is_documented = True
     additional_info = None
+    optional_string = r", *optional*" if optional else ""
 
     if param_name in documented_params:
         # Parameter is documented in the function's docstring
-        if param_type == "" and documented_params[param_name].get("type", None) is not None:
+        if (
+            param_type == ""
+            and documented_params[param_name].get("type", None) is not None
+            or documented_params[param_name]["additional_info"]
+        ):
             param_type = documented_params[param_name]["type"]
         optional = documented_params[param_name]["optional"]
         shape = documented_params[param_name]["shape"]
@@ -1046,16 +1328,19 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
         shape = source_args_dict[param_name]["shape"]
         shape_string = " " + shape if shape else ""
         description = source_args_dict[param_name]["description"]
-        additional_info = None
+        additional_info = source_args_dict[param_name].get("additional_info", None)
+        if additional_info:
+            additional_info = shape_string + optional_string + ", " + additional_info
     else:
         # Parameter is not documented
         is_documented = False
-    optional_string = r", *optional*" if optional else ""
 
     return param_type, optional_string, shape_string, additional_info, description, is_documented
 
 
-def _process_regular_parameters(sig, func, class_name, documented_params, indent_level, undocumented_parameters):
+def _process_regular_parameters(
+    sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+):
     """
     Process all regular parameters (not kwargs parameters) from the function signature.
 
@@ -1068,7 +1353,9 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
         undocumented_parameters (`list`): List to append undocumented parameters to
     """
     docstring = ""
-    source_args_dict = source_args_doc([ModelArgs, ImageProcessorArgs])
+    source_args_dict = (
+        get_args_doc_from_source([ModelArgs, ImageProcessorArgs]) if source_args_dict is None else source_args_dict
+    )
     missing_args = {}
 
     for param_name, param in sig.parameters.items():
@@ -1160,7 +1447,7 @@ def _process_kwargs_parameters(
         undocumented_parameters (`list`): List to append undocumented parameters to
     """
     docstring = ""
-    source_args_dict = source_args_doc(ImageProcessorArgs)
+    source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
 
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
@@ -1242,7 +1529,7 @@ def _process_kwargs_parameters(
 
 
 def _process_parameters_section(
-    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level
+    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
 ):
     """
     Process the parameters section of the docstring.
@@ -1270,7 +1557,7 @@ def _process_parameters_section(
 
     # Process regular parameters
     param_docstring, missing_args = _process_regular_parameters(
-        sig, func, class_name, documented_params, indent_level, undocumented_parameters
+        sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
     )
     docstring += param_docstring
 
@@ -1411,14 +1698,16 @@ def _process_example_section(
     return example_docstring
 
 
-def auto_method_docstring(func, parent_class=None, custom_intro=None, custom_args=None, checkpoint=None):
+def auto_method_docstring(
+    func, parent_class=None, custom_intro=None, custom_args=None, checkpoint=None, source_args_dict=None
+):
     """
     Wrapper that automatically generates docstring.
     """
 
     # Use inspect to retrieve the method's signature
     sig = inspect.signature(func)
-    indent_level = get_indent_level(func)
+    indent_level = get_indent_level(func) if not parent_class else get_indent_level(parent_class)
 
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
@@ -1431,6 +1720,8 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, custom_arg
     # Add intro to the docstring before args description if needed
     if custom_intro is not None:
         docstring = set_min_indent(custom_intro, indent_level + 4)
+        if not docstring.strip().endswith("\n"):
+            docstring += "\n"
     else:
         docstring = add_intro_docstring(
             func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
@@ -1438,7 +1729,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, custom_arg
 
     # Process Parameters section
     docstring += _process_parameters_section(
-        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level
+        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
     )
 
     # Process Returns section
@@ -1472,9 +1763,24 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     # import here to avoid circular import
     from transformers.models import auto as auto_module
 
-    docstring_init = auto_method_docstring(cls.__init__, parent_class=cls, custom_args=custom_args).__doc__.replace(
-        "Args:", "Parameters:"
-    )
+    is_dataclass = False
+    docstring_init = ""
+    if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
+        docstring_init = auto_method_docstring(
+            cls.__init__, parent_class=cls, custom_args=custom_args
+        ).__doc__.replace("Args:", "Parameters:")
+    elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
+        # We have a data class
+        is_dataclass = True
+        doc_class = cls.__doc__
+        if custom_args is None and doc_class:
+            custom_args = doc_class
+        docstring_args = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            source_args_dict=get_args_doc_from_source(ModelOutputArgs),
+        ).__doc__
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
@@ -1485,17 +1791,18 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-    if name == [] and cls.__doc__ is None and custom_intro is None:
+    if name == [] and custom_intro is None and not is_dataclass:
         raise ValueError(
-            f"`{cls.__name__}` is not part of the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}"
+            f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
+            "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None:
+    if name != [] or custom_intro is not None or is_dataclass:
         name = name[0] if name else None
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
                 pre_block += "\n"
-        elif model_name_title is None:
+        elif model_name_title is None or name is None:
             pre_block = ""
         else:
             pre_block = getattr(ClassDocstring, name).format(model_name=model_name_title)
@@ -1504,26 +1811,56 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
             docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
         # Add the __init__ docstring
-        docstring += set_min_indent(f"\n{docstring_init}", indent_level)
-        attr_docs = ""
-        # Get all attributes and methods of the class
+        if docstring_init:
+            docstring += set_min_indent(f"\n{docstring_init}", indent_level)
+        elif is_dataclass:
+            # No init function, we have a data class
+            docstring += "\nArgs:\n" if not docstring_args else docstring_args
+            source_args_dict = get_args_doc_from_source(ModelOutputArgs)
+            doc_class = cls.__doc__ if cls.__doc__ else ""
+            documented_kwargs, _ = parse_docstring(doc_class)
+            for param_name, param_type_annotation in cls.__annotations__.items():
+                param_type = str(param_type_annotation)
+                optional = False
 
-        for attr_name, attr_value in cls.__dict__.items():
-            if not callable(attr_value) and not attr_name.startswith("__"):
-                if attr_value.__class__.__name__ == "property":
-                    attr_type = "property"
+                # Process parameter type
+                if "typing" in param_type:
+                    param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
                 else:
-                    attr_type = type(attr_value).__name__
-                if name and "Config" in name:
-                    raise ValueError("Config should have explicit docstring")
-                indented_doc = getattr(ClassAttrs, attr_name, None)
-                if indented_doc is not None:
-                    attr_docs += set_min_indent(f"{attr_name} (`{attr_type}`): {indented_doc}", 0)
+                    param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
+                if "ForwardRef" in param_type:
+                    param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
+                if "Optional" in param_type:
+                    param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
+                    optional = True
 
-        # TODO: Add support for Attributes section in docs
-        # if len(attr_docs.replace(" ", "")):
-        #     docstring += set_min_indent("\nAttributes:\n", indent_level)
-        #     docstring += set_min_indent(attr_docs, indent_level + 4)
+                # Check for default value
+                param_default = ""
+                param_default = str(getattr(cls, param_name, ""))
+                param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+
+                param_type, optional_string, shape_string, additional_info, description, is_documented = (
+                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+                )
+
+                if is_documented:
+                    # Check if type is missing
+                    if param_type == "":
+                        print(f"🚨 {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type")
+                    param_type = param_type if "`" in param_type else f"`{param_type}`"
+                    # Format the parameter docstring
+                    if additional_info:
+                        docstring += set_min_indent(
+                            f"{param_name} ({param_type}{additional_info}):{description}",
+                            indent_level + 8,
+                        )
+                    else:
+                        docstring += set_min_indent(
+                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                            indent_level + 8,
+                        )
+        # TODO (Yoni): Add support for Attributes section in docs
+
     else:
         print(
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"

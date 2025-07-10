@@ -110,11 +110,11 @@ class MgpstrProcessor(ProcessorMixin):
                 List of tokenized input ids.
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the outputs of the decoded results.
-                generated_text (`List[str]`): The final results after fusion of char, bpe, and wp. scores
-                (`List[float]`): The final scores after fusion of char, bpe, and wp. char_preds (`List[str]`): The list
-                of character decoded sentences. bpe_preds (`List[str]`): The list of bpe decoded sentences. wp_preds
-                (`List[str]`): The list of wp decoded sentences.
+            `dict[str, any]`: Dictionary of all the outputs of the decoded results.
+                generated_text (`list[str]`): The final results after fusion of char, bpe, and wp. scores
+                (`list[float]`): The final scores after fusion of char, bpe, and wp. char_preds (`list[str]`): The list
+                of character decoded sentences. bpe_preds (`list[str]`): The list of bpe decoded sentences. wp_preds
+                (`list[str]`): The list of wp decoded sentences.
 
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
@@ -154,7 +154,7 @@ class MgpstrProcessor(ProcessorMixin):
                 Type of model prediction. Must be one of ['char', 'bpe', 'wp'].
         Returns:
             `tuple`:
-                dec_strs(`str`): The decode strings of model prediction. conf_scores(`List[float]`): The confidence
+                dec_strs(`str`): The decode strings of model prediction. conf_scores(`list[float]`): The confidence
                 score of model prediction.
         """
         if format == DecodeType.CHARACTER:
@@ -201,7 +201,7 @@ class MgpstrProcessor(ProcessorMixin):
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
         Returns:
-            `List[str]`: The list of char decoded sentences.
+            `list[str]`: The list of char decoded sentences.
         """
         decode_strs = [seq.replace(" ", "") for seq in self.char_tokenizer.batch_decode(sequences)]
         return decode_strs
@@ -214,7 +214,7 @@ class MgpstrProcessor(ProcessorMixin):
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
         Returns:
-            `List[str]`: The list of bpe decoded sentences.
+            `list[str]`: The list of bpe decoded sentences.
         """
         return self.bpe_tokenizer.batch_decode(sequences)
 
@@ -226,7 +226,7 @@ class MgpstrProcessor(ProcessorMixin):
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
         Returns:
-            `List[str]`: The list of wp decoded sentences.
+            `list[str]`: The list of wp decoded sentences.
         """
         decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs

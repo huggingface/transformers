@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Union
+from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
 from ..utils import (
@@ -111,12 +111,18 @@ class ImageToTextPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+
+    def __call__(self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image

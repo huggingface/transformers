@@ -202,10 +202,12 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         size_divisibility: Optional[int] = None,
+        disable_grouping: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images)
-        grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape in grouped_images:
             stacked_images = grouped_images[shape]

@@ -248,7 +248,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-        # Test np.ndarray vs List[np.ndarray]
+        # Test np.ndarray vs list[np.ndarray]
         encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor([np_speech_inputs], return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):

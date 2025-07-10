@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Idefics2 model was proposed in [What matters when building vision-language models?](https://arxiv.org/abs/2405.02246) by Léo Tronchon, Hugo Laurencon, Victor Sanh. The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
+The Idefics2 model was proposed in [What matters when building vision-language models?](https://huggingface.co/papers/2405.02246) by Léo Tronchon, Hugo Laurencon, Victor Sanh. The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
 
 Idefics2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
 outputs. The model can answer questions about images, describe visual content, create stories grounded on multiple
@@ -39,7 +39,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/idefics2_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Idefics2 architecture. Taken from the <a href="https://arxiv.org/abs/2405.02246">original paper.</a> </small>
+<small> Idefics2 architecture. Taken from the <a href="https://huggingface.co/papers/2405.02246">original paper.</a> </small>
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
@@ -162,7 +162,7 @@ To load and run a model using Flash Attention-2, simply change the code snippet 
 ```diff
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-+    torch_dtype=torch.float16,    
++    torch_dtype=torch.float16,
 +    attn_implementation="flash_attention_2",
 ).to(device)
 ```
@@ -184,7 +184,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 + )
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-+    torch_dtype=torch.float16,    
++    torch_dtype=torch.float16,
 +    quantization_config=quantization_config,
 ).to(device)
 ```
@@ -218,6 +218,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] Idefics2ImageProcessor
     - preprocess
 
+## Idefics2ImageProcessorFast
+[[autodoc]] Idefics2ImageProcessorFast
+    - preprocess
 
 ## Idefics2Processor
 [[autodoc]] Idefics2Processor

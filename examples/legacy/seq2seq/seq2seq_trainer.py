@@ -184,7 +184,7 @@ class Seq2SeqTrainer(Trainer):
         Args:
             model (:obj:`nn.Module`):
                 The model to evaluate.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (:obj:`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
@@ -193,7 +193,7 @@ class Seq2SeqTrainer(Trainer):
                 Whether or not to return the loss only.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+            tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
         inputs = self._prepare_inputs(inputs)

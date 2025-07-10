@@ -61,7 +61,7 @@ class SEWConfig(PretrainedConfig):
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`SEWForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -76,13 +76,13 @@ class SEWConfig(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
+        conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
+        conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
             of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
+        conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
             length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
@@ -96,7 +96,7 @@ class SEWConfig(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
@@ -231,7 +231,7 @@ class SEWConfig(PretrainedConfig):
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length

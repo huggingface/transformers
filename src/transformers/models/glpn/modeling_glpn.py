@@ -15,7 +15,7 @@
 """PyTorch GLPN model."""
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -65,7 +65,7 @@ class GLPNDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 # Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
@@ -97,7 +97,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
 # Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
 class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
-    paper](https://arxiv.org/abs/2102.12122)."""
+    paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
@@ -453,7 +453,7 @@ class GLPNModel(GLPNPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -480,7 +480,7 @@ class GLPNModel(GLPNPreTrainedModel):
 
 class GLPNSelectiveFeatureFusion(nn.Module):
     """
-    Selective Feature Fusion module, as explained in the [paper](https://arxiv.org/abs/2201.07436) (section 3.4). This
+    Selective Feature Fusion module, as explained in the [paper](https://huggingface.co/papers/2201.07436) (section 3.4). This
     module adaptively selects and integrates local and global features by attaining an attention map for each feature.
     """
 
@@ -557,7 +557,7 @@ class GLPNDecoder(nn.Module):
 
         self.final_upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
         stage_hidden_states = []
         stage_hidden_state = None
         for hidden_state, stage in zip(hidden_states[::-1], self.stages):
@@ -571,7 +571,7 @@ class GLPNDecoder(nn.Module):
 
 class SiLogLoss(nn.Module):
     r"""
-    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
+    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://huggingface.co/papers/1406.2283).
 
     $$L=\frac{1}{n} \sum_{i} d_{i}^{2}-\frac{1}{2 n^{2}}\left(\sum_{i} d_{i}^{2}\right)$$ where $d_{i}=\log y_{i}-\log
     y_{i}^{*}$.
@@ -603,7 +603,7 @@ class GLPNDepthEstimationHead(nn.Module):
             nn.Conv2d(channels, 1, kernel_size=3, stride=1, padding=1),
         )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # use last features of the decoder
         hidden_states = hidden_states[self.config.head_in_index]
 
@@ -639,7 +639,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
+    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.

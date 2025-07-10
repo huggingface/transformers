@@ -31,15 +31,15 @@ ocalhost:29504 test_train.py
 
 import logging
 import os
+from collections.abc import Iterable
 from contextlib import nullcontext
-from typing import Dict, Iterable, Optional
+from typing import Optional
 
 import torch
 import torch.distributed as dist
 import torch.distributed.checkpoint as dcp
 import torch.nn as nn
 import torch.optim as optim
-import wandb
 from datasets import load_dataset
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed.checkpoint.stateful import Stateful
@@ -52,6 +52,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.utils.data import DataLoader, default_collate
 from torch.utils.data.distributed import DistributedSampler
 
+import wandb
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -588,7 +589,7 @@ class ContextParallelCollator:
     def __init__(self, cp_mesh: Optional[DeviceMesh] = None):
         self.cp_mesh = cp_mesh
 
-    def __call__(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         batch = default_collate(batch)
         if self.cp_mesh is not None and self.cp_mesh.size() > 1:
             # Get sequence length from the input batch

@@ -17,7 +17,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The DINOv2 with Registers model was proposed in [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
+The DINOv2 with Registers model was proposed in [Vision Transformers Need Registers](https://huggingface.co/papers/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
 
 The [Vision Transformer](vit) (ViT) is a transformer encoder model (BERT-like) originally introduced to do supervised image classification on ImageNet.
 
@@ -35,7 +35,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dinov2_with_registers_visualization.png"
 alt="drawing" width="600"/>
 
-<small> Visualization of attention maps of various models trained with vs. without registers. Taken from the <a href="https://arxiv.org/abs/2309.16588">original paper</a>. </small>
+<small> Visualization of attention maps of various models trained with vs. without registers. Taken from the <a href="https://huggingface.co/papers/2309.16588">original paper</a>. </small>
 
 Tips:
 

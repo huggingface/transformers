@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The DeepSeek-V3 model was proposed in [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437) by DeepSeek-AI Team.
+The DeepSeek-V3 model was proposed in [DeepSeek-V3 Technical Report](https://huggingface.co/papers/2412.19437) by DeepSeek-AI Team.
 
 The abstract from the paper is the following:
 We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 671B total parameters with 37B activated for each token. To achieve efficient inference and cost-effective training, DeepSeek-V3 adopts Multi-head Latent Attention (MLA) and DeepSeekMoE architectures, which were thoroughly validated in DeepSeek-V2. Furthermore, DeepSeek-V3 pioneers an auxiliary-loss-free strategy for load balancing and sets a multi-token prediction training objective for stronger performance. We pre-train DeepSeek-V3 on 14.8 trillion diverse and high-quality tokens, followed by Supervised Fine-Tuning and Reinforcement Learning stages to fully harness its capabilities. Comprehensive evaluations reveal that DeepSeek-V3 outperforms other open-source models and achieves performance comparable to leading closed-source models. Despite its excellent performance, DeepSeek-V3 requires only 2.788M H800 GPU hours for its full training. In addition, its training process is remarkably stable. Throughout the entire training process, we did not experience any irrecoverable loss spikes or perform any rollbacks. The model checkpoints are available at https://github.com/deepseek-ai/DeepSeek-V3.
@@ -28,8 +28,8 @@ We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 67
 We are super happy to make this code community-powered, and would love to see how you can best optimize the following: 
 
 - current implementation uses the "naive" attention compution (so not really MLA)
-- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `intetrations/tensor_parallel`. 
-- current implementation uses the eleuther formula for ROPE, using the orginal one would be more efficient! (should still follow our API)
+- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `integrations/tensor_parallel`. 
+- current implementation uses the eleuther formula for ROPE, using the original one would be more efficient! (should still follow our API)
 - static cache is not supported (this should be just a generation config issue / config shape issues)
 
 ### Usage tips

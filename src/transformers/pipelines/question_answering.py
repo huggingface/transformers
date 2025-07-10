@@ -2,7 +2,7 @@ import inspect
 import types
 import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -45,7 +45,7 @@ if is_torch_available():
 
 def decode_spans(
     start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
-) -> Tuple:
+) -> tuple:
     """
     Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the actual
     answer.
@@ -285,8 +285,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     @staticmethod
     def create_sample(
-        question: Union[str, List[str]], context: Union[str, List[str]]
-    ) -> Union[SquadExample, List[SquadExample]]:
+        question: Union[str, list[str]], context: Union[str, list[str]]
+    ) -> Union[SquadExample, list[SquadExample]]:
         """
         QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method encapsulate all the
         logic for converting question(s) and context(s) to [`SquadExample`].
@@ -294,8 +294,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         We currently support extractive question answering.
 
         Arguments:
-            question (`str` or `List[str]`): The question(s) asked.
-            context (`str` or `List[str]`): The context(s) in which we will look for the answer.
+            question (`str` or `list[str]`): The question(s) asked.
+            context (`str` or `list[str]`): The context(s) in which we will look for the answer.
 
         Returns:
             One or a list of [`SquadExample`]: The corresponding [`SquadExample`] grouping question and context.
@@ -352,9 +352,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            question (`str` or `List[str]`):
+            question (`str` or `list[str]`):
                 One or several question(s) (must be used in conjunction with the `context` argument).
-            context (`str` or `List[str]`):
+            context (`str` or `list[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
                 `question` argument).
             top_k (`int`, *optional*, defaults to 1):
@@ -595,20 +595,27 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
+
                 for s, e, score in zip(starts, ends, scores):
                     s = s - offset
                     e = e - offset
 
                     start_index, end_index = self.get_indices(enc, s, e, sequence_index, align_to_words)
 
-                    answers.append(
-                        {
-                            "score": score.item(),
-                            "start": start_index,
-                            "end": end_index,
-                            "answer": example.context_text[start_index:end_index],
-                        }
-                    )
+                    target_answer = example.context_text[start_index:end_index]
+                    answer = self.get_answer(answers, target_answer)
+
+                    if answer:
+                        answer["score"] += score.item()
+                    else:
+                        answers.append(
+                            {
+                                "score": score.item(),
+                                "start": start_index,
+                                "end": end_index,
+                                "answer": example.context_text[start_index:end_index],
+                            }
+                        )
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
@@ -617,9 +624,15 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             return answers[0]
         return answers
 
+    def get_answer(self, answers: list[dict], target: str) -> Optional[dict]:
+        for answer in answers:
+            if answer["answer"].lower() == target.lower():
+                return answer
+        return None
+
     def get_indices(
         self, enc: "tokenizers.Encoding", s: int, e: int, sequence_index: int, align_to_words: bool
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         if align_to_words:
             try:
                 start_word = enc.token_to_word(s)
@@ -635,7 +648,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_index = enc.offsets[e][1]
         return start_index, end_index
 
-    def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
+    def span_to_answer(self, text: str, start: int, end: int) -> dict[str, Union[str, int]]:
         """
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 

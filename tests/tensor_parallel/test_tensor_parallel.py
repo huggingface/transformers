@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     backend_device_count,
     get_torch_dist_unique_port,
     require_huggingface_hub_greater_or_equal,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     torch_device,
 )
 
@@ -77,7 +77,7 @@ class TestTensorParallel(TestCasePlus):
                     f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
                 ).split()
             else:
-                cmd = ["python", tmp.name]
+                cmd = ["python3", tmp.name]
 
             # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
@@ -168,6 +168,6 @@ class TestTensorParallel(TestCasePlus):
                     del non_tp_tensor, tp_tensor
 
 
-@require_torch_multi_gpu
-class TestTensorParallelCuda(TestTensorParallel):
+@require_torch_multi_accelerator
+class TestTensorParallelAccelerator(TestTensorParallel):
     nproc_per_node = backend_device_count(torch_device)

@@ -26,7 +26,7 @@ way which enables simple and efficient model parallelism.
 ## Masked language modeling
 
 In the following, we demonstrate how to train a bi-directional transformer model
-using masked language modeling objective as introduced in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
+using masked language modeling objective as introduced in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://huggingface.co/papers/1810.04805).
 More specifically, we demonstrate how JAX/Flax can be leveraged
 to pre-train [**`FacebookAI/roberta-base`**](https://huggingface.co/FacebookAI/roberta-base)
 in Norwegian on a single TPUv3-8 pod.
@@ -229,7 +229,7 @@ look at [this](https://colab.research.google.com/github/huggingface/notebooks/bl
 ## T5-like span-masked language modeling
 
 In the following, we demonstrate how to train a T5 model using the span-masked language model
-objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
+objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://huggingface.co/papers/1910.10683).
 More specifically, we demonstrate how JAX/Flax can be leveraged
 to pre-train [**`google/t5-v1_1-base`**](https://huggingface.co/google/t5-v1_1-base)
 in Norwegian on a single TPUv3-8 pod.
@@ -341,7 +341,7 @@ Training statistics can be accessed on directly on the 🤗 [hub](https://huggin
 ## BART: Denoising language modeling
 
 In the following, we demonstrate how to train a BART model
-using denoising language modeling objective as introduced in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/abs/1910.13461).
+using denoising language modeling objective as introduced in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://huggingface.co/papers/1910.13461).
 More specifically, we demonstrate how JAX/Flax can be leveraged
 to pre-train [**`bart-base`**](https://huggingface.co/facebook/bart-base)
 in Norwegian on a single TPUv3-8 pod.

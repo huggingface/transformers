@@ -17,7 +17,7 @@
 """PyTorch MobileViT model."""
 
 import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -121,7 +122,7 @@ class MobileViTConvLayer(nn.Module):
 
 class MobileViTInvertedResidual(nn.Module):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -260,7 +261,7 @@ class MobileViTAttention(nn.Module):
         self.output = MobileViTSelfOutput(config, hidden_size)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -350,9 +351,9 @@ class MobileViTTransformer(nn.Module):
         return hidden_states
 
 
-class MobileViTLayer(nn.Module):
+class MobileViTLayer(GradientCheckpointingLayer):
     """
-    MobileViT block: https://arxiv.org/abs/2110.02178
+    MobileViT block: https://huggingface.co/papers/2110.02178
     """
 
     def __init__(
@@ -413,7 +414,7 @@ class MobileViTLayer(nn.Module):
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
+    def unfolding(self, features: torch.Tensor) -> tuple[torch.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -464,7 +465,7 @@ class MobileViTLayer(nn.Module):
         }
         return patches, info_dict
 
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, info_dict: dict) -> torch.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -603,13 +604,7 @@ class MobileViTEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -831,7 +826,7 @@ class MobileViTASPPPooling(nn.Module):
 
 class MobileViTASPP(nn.Module):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig) -> None:
@@ -890,7 +885,7 @@ class MobileViTASPP(nn.Module):
 
 class MobileViTDeepLabV3(nn.Module):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig) -> None:

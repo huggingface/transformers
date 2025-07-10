@@ -16,7 +16,7 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -78,14 +78,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "video_token",
-        "num_additional_image_tokens",
-    ]
     image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
@@ -123,7 +115,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
@@ -138,14 +130,14 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):

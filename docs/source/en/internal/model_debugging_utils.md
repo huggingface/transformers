@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Model debugging toolboxes
 
-This page lists all the debugging and model adding tools used by the library, as well as the utility functions it provides for it.
+This page lists all the debugging and model adding tools used by the library, as well as the utility functions it
+provides for it.
 
 Most of those are only useful if you are adding new models in the library.
 
@@ -26,13 +27,14 @@ Most of those are only useful if you are adding new models in the library.
 
 ### Model addition debugger - context manager for model adders
 
-This context manager is a power user tool intended for model adders.
-It tracks all forward calls within a model forward and logs a slice of each input and output on a nested Json.
-To note, this context manager enforces `torch.no_grad()`.
+This context manager is a power user tool intended for model adders. It tracks all forward calls within a model forward
+and logs a slice of each input and output on a nested JSON. To note, this context manager enforces `torch.no_grad()`.
 
 ### Rationale
 
-Because when porting models to transformers, even from python to python, model adders often have to do a lot of manual operations, involving saving and loading tensors, comparing dtypes, etc. This small tool can hopefully shave off some time.
+When porting models to transformers, even from python to python, model adders often have to do a lot of manual
+operations, involving saving and loading tensors, comparing dtypes, etc. This small tool can hopefully shave off some
+time.
 
 ### Usage
 
@@ -49,7 +51,7 @@ torch.random.manual_seed(673)
 # load pretrained model and processor
 model_id = "llava-hf/llava-1.5-7b-hf"
 processor = LlavaProcessor.from_pretrained(model_id)
-model = LlavaForConditionalGeneration.from_pretrained(model_id, low_cpu_mem_usage=True)
+model = LlavaForConditionalGeneration.from_pretrained(model_id)
 
 # create random image input
 random_image = Image.fromarray(torch.randint(0, 256, (224, 224, 3), dtype=torch.uint8).numpy())
@@ -62,10 +64,10 @@ inputs = processor(text=prompt, images=random_image, return_tensors="pt")
 
 # call forward method (not .generate!)
 with model_addition_debugger_context(
-  model,
-  debug_path="optional_path_to_your_directory",
-  do_prune_layers=False # This will output ALL the layers of a model.
-  ):
+    model,
+    debug_path="optional_path_to_your_directory",
+    do_prune_layers=False # This will output ALL the layers of a model.
+):
     output = model.forward(**inputs)
 
 ```
@@ -73,8 +75,8 @@ with model_addition_debugger_context(
 
 ### Reading results
 
-The debugger generates two files from the forward call, both with the same base name, 
-but ending either with `_SUMMARY.json` or with `_FULL_TENSORS.json`. 
+The debugger generates two files from the forward call, both with the same base name, but ending either with
+`_SUMMARY.json` or with `_FULL_TENSORS.json`.
 
 The first one will contain a summary of each module's _input_ and _output_ tensor values and shapes.
 
@@ -142,8 +144,8 @@ The first one will contain a summary of each module's _input_ and _output_ tenso
         { ... and so on
 ```
 
-The `_FULL_TENSORS.json` file will display a full view of all tensors, which is useful
-for comparing two files. 
+The `_FULL_TENSORS.json` file will display a full view of all tensors, which is useful for comparing two files.
+
 ```json
       "pixel_values": {
         "shape": "torch.Size([1, 5, 576, 588])",
@@ -196,9 +198,38 @@ for comparing two files.
       },
 ```
 
+#### Saving tensors to disk
+
+Some model adders may benefit from logging full tensor values to disk to support, for example, numerical analysis
+across implementations.
+
+Set `use_repr=False` to write tensors to disk using [SafeTensors](https://huggingface.co/docs/safetensors/en/index).
+
+```python
+with model_addition_debugger_context(
+    model,
+    debug_path="optional_path_to_your_directory",
+    do_prune_layers=False,
+    use_repr=False,   # Defaults to True
+):
+    output = model.forward(**inputs)
+```
+
+When using `use_repr=False`, tensors are written to the same disk location as the `_SUMMARY.json` and
+`_FULL_TENSORS.json` files. The `value` property of entries in the `_FULL_TENSORS.json` file will contain a relative
+path reference to the associated `.safetensors` file. Each tensor is written to its own file as the `data` property of
+the state dictionary. File names are constructed using the `module_path` as a prefix with a few possible postfixes that
+are built recursively.
+
+*   Module inputs are denoted with the `_inputs` and outputs by `_outputs`.
+*   `list` and `tuple` instances, such as `args` or function return values, will be postfixed with `_{index}`.
+*   `dict` instances will be postfixed with `_{key}`.
+
 ### Comparing between implementations
 
-Once the forward passes of two models have been traced by the debugger, one can compare the `json` output files. See below: we can see slight differences between these two implementations' key projection layer. Inputs are mostly identical, but not quite. Looking through the file differences makes it easier to pinpoint which layer is wrong. 
+Once the forward passes of two models have been traced by the debugger, one can compare the `json` output files. See
+below: we can see slight differences between these two implementations' key projection layer. Inputs are mostly
+identical, but not quite. Looking through the file differences makes it easier to pinpoint which layer is wrong.
 
 
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/files_difference_debugging.png)
@@ -206,8 +237,13 @@ Once the forward passes of two models have been traced by the debugger, one can 
 
 ### Limitations and scope
 
-This feature will only work for torch-based models, and would require more work and case-by-case approach for say `jax`-based models that are usually compiled. Models relying heavily on external kernel calls may work, but trace will probably miss some things. Regardless, any python implementation that aims at mimicking another implementation can be traced once instead of reran N times with breakpoints.
+This feature will only work for torch-based models, and would require more work and case-by-case approach for say
+`jax`-based models that are usually compiled. Models relying heavily on external kernel calls may work, but trace will
+probably miss some things. Regardless, any python implementation that aims at mimicking another implementation can be
+traced once instead of reran N times with breakpoints.
 
-If you pass `do_prune_layers=False` to your model debugger, ALL the layers will be outputted to `json`. Else, only the first and last layer will be shown. This is useful when some layers (typically cross-attention) appear only after N layers. 
+If you pass `do_prune_layers=False` to your model debugger, ALL the layers will be outputted to `json`. Else, only the
+first and last layer will be shown. This is useful when some layers (typically cross-attention) appear only after N
+layers.
 
 [[autodoc]] model_addition_debugger_context

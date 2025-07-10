@@ -115,7 +115,7 @@ class SamHQVisionConfig(PretrainedConfig):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
-        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             The indexes of the global attention layers.
         num_pos_feats (`int`, *optional*, defaults to 128):
             The dimensionality of the position embedding.
@@ -221,8 +221,6 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
             The dimensionality of the hidden states in the IoU head module.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-
-
         vit_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """

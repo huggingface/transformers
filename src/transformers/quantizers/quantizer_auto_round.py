@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 class AutoRoundQuantizer(HfQuantizer):
     """
-    Quantizer of the AutoRound method. (https://arxiv.org/pdf/2309.05516)
+    Quantizer of the AutoRound method. (https://huggingface.co/papers/2309.05516)
     """
 
     # AutoRound requires data calibration - we support only inference

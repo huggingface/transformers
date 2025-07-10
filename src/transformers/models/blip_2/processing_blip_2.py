@@ -16,17 +16,12 @@
 Processor class for BLIP-2.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    AddedToken,
-    BatchEncoding,
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import logging
 
 
@@ -67,7 +62,6 @@ class Blip2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["num_query_tokens"]
     image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
@@ -86,7 +80,7 @@ class Blip2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Blip2ProcessorKwargs],
@@ -100,7 +94,7 @@ class Blip2Processor(ProcessorMixin):
             images (`ImageInput`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).

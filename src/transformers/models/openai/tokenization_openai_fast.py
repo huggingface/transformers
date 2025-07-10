@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Tokenization classes for OpenAI GPT."""
 
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
@@ -58,7 +58,7 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     def do_lower_case(self):
         return True
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

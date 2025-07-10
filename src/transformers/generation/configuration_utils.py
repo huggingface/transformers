@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -149,7 +149,7 @@ class GenerationConfig(PushToHubMixin):
         max_time (`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
-        stop_strings (`str or List[str]`, *optional*):
+        stop_strings (`str or list[str]`, *optional*):
             A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
@@ -160,10 +160,10 @@ class GenerationConfig(PushToHubMixin):
             Number of beams for beam search. 1 means no beam search.
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            [this paper](https://huggingface.co/papers/1610.02424) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
-        dola_layers (`str` or `List[int]`, *optional*):
+        dola_layers (`str` or `list[int]`, *optional*):
             The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
             be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
             "low" means the first half of the layers up to the first 20 layers, and "high" means the last half of the
@@ -171,7 +171,7 @@ class GenerationConfig(PushToHubMixin):
             If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
             The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
             `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
-            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
+            or [the paper](https://huggingface.co/papers/2309.03883) for more details.
 
         > Parameters that control the cache
 
@@ -216,25 +216,25 @@ class GenerationConfig(PushToHubMixin):
             the expected conditional probability of predicting a random token next, given the partial text already
             generated. If set to float < 1, the smallest set of the most locally typical tokens with probabilities that
             add up to `typical_p` or higher are kept for generation. See [this
-            paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
+            paper](https://huggingface.co/papers/2202.00666) for more details.
         epsilon_cutoff (`float`, *optional*, defaults to 0.0):
             If set to float strictly between 0 and 1, only tokens with a conditional probability greater than
             `epsilon_cutoff` will be sampled. In the paper, suggested values range from 3e-4 to 9e-4, depending on the
             size of the model. See [Truncation Sampling as Language Model
-            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
         eta_cutoff (`float`, *optional*, defaults to 0.0):
             Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between
             0 and 1, a token is only considered if it is greater than either `eta_cutoff` or `sqrt(eta_cutoff) *
             exp(-entropy(softmax(next_token_logits)))`. The latter term is intuitively the expected next token
             probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
             depending on the size of the model. See [Truncation Sampling as Language Model
-            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
-            paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+            paper](https://huggingface.co/papers/1909.05858) for more details.
         encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
             original input. 1.0 means no penalty.
@@ -245,26 +245,26 @@ class GenerationConfig(PushToHubMixin):
             `length_penalty` < 0.0 encourages shorter sequences.
         no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
-        bad_words_ids (`List[List[int]]`, *optional*):
+        bad_words_ids (`list[list[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
-        force_words_ids (`List[List[int]]` or `List[List[List[int]]]`, *optional*):
-            List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
-            words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
+        force_words_ids (`list[list[int]]` or `list[list[list[int]]]`, *optional*):
+            List of token ids that must be generated. If given a `list[list[int]]`, this is treated as a simple list of
+            words that must be included, the opposite to `bad_words_ids`. If given `list[list[list[int]]]`, this
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
             can allow different forms of each word.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
             Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors break the normalization.
-        constraints (`List[Constraint]`, *optional*):
+        constraints (`list[Constraint]`, *optional*):
             Custom constraints that can be added to the generation to ensure that the output will contain the use of
             certain tokens as defined by `Constraint` objects, in the most sensible way possible.
         forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
             language token.
-        forced_eos_token_id (`int` or List[int]`, *optional*, defaults to `model.config.forced_eos_token_id`):
+        forced_eos_token_id (`int` or list[int]`, *optional*, defaults to `model.config.forced_eos_token_id`):
             The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
             list to set multiple *end-of-sequence* tokens.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
@@ -274,17 +274,13 @@ class GenerationConfig(PushToHubMixin):
             This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
-        suppress_tokens (`List[int]`, *optional*):
+        suppress_tokens (`list[int]`, *optional*):
             A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
-        begin_suppress_tokens  (`List[int]`, *optional*):
+        begin_suppress_tokens  (`list[int]`, *optional*):
             A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
-        forced_decoder_ids (`List[List[int]]`, *optional*):
-            A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
-            forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
-            of index 123.
-        sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
+        sequence_bias (`dict[tuple[int], float]`, *optional*)):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. Check
             [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
@@ -329,7 +325,7 @@ class GenerationConfig(PushToHubMixin):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*):
             The id of the *beginning-of-sequence* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
+        eos_token_id (`Union[int, list[int]]`, *optional*):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
         > Generation parameters exclusive to encoder-decoder models
@@ -337,7 +333,7 @@ class GenerationConfig(PushToHubMixin):
         encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
-        decoder_start_token_id (`int` or `List[int]`, *optional*):
+        decoder_start_token_id (`int` or `list[int]`, *optional*):
             If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token or a list of length
             `batch_size`. Indicating a list enables different start ids for each element in the batch
             (e.g. multilingual models with different target languages in one batch)
@@ -362,7 +358,7 @@ class GenerationConfig(PushToHubMixin):
             (defined by `num_assistant_tokens`) is not yet reached. The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes, biased towards avoiding false negatives.
             `assistant_confidence_threshold` value is persistent over multiple generation calls with the same assistant model.
             It is an unsupervised version of the dynamic speculation lookahead
-            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
+            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://huggingface.co/papers/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*):
@@ -388,12 +384,6 @@ class GenerationConfig(PushToHubMixin):
             Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
             specific criteria are met, including using a compilable cache. Please open an issue if you find the
             need to use this flag.
-
-        > Wild card
-
-        generation_kwargs:
-            Additional generation kwargs will be forwarded to the `generate` function of the model. Kwargs that are not
-            present in `generate`'s signature will be used in the model forward pass.
     """
 
     extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
@@ -449,7 +439,6 @@ class GenerationConfig(PushToHubMixin):
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
-        self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
@@ -494,8 +483,6 @@ class GenerationConfig(PushToHubMixin):
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
-        # Wild card
-        self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.
@@ -834,7 +821,7 @@ class GenerationConfig(PushToHubMixin):
                 warning_message = (
                     f"The following generation flags are not valid and may be ignored: {attributes_with_issues}."
                 )
-                if logger.getEffectiveLevel() >= logging.WARNING:
+                if logging.get_verbosity() >= logging.WARNING:
                     warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
                 logger.warning(warning_message)
                 logger.info(info_message)
@@ -859,7 +846,7 @@ class GenerationConfig(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
 
@@ -946,7 +933,7 @@ class GenerationConfig(PushToHubMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
@@ -972,7 +959,7 @@ class GenerationConfig(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the `return_unused_kwargs` keyword parameter.
@@ -1062,13 +1049,13 @@ class GenerationConfig(PushToHubMixin):
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the configuration of '{pretrained_model_name}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
                     f" name. Otherwise, make sure '{pretrained_model_name}' is the correct path to a directory"
@@ -1080,9 +1067,7 @@ class GenerationConfig(PushToHubMixin):
             config_dict = cls._dict_from_json_file(resolved_config_file)
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
-            raise EnvironmentError(
-                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
-            )
+            raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
@@ -1105,14 +1090,14 @@ class GenerationConfig(PushToHubMixin):
         return json.loads(text)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "GenerationConfig":
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs) -> "GenerationConfig":
         """
         Instantiates a [`GenerationConfig`] from a Python dictionary of parameters.
 
         Args:
-            config_dict (`Dict[str, Any]`):
+            config_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object.
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
@@ -1138,7 +1123,7 @@ class GenerationConfig(PushToHubMixin):
         else:
             return config
 
-    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+    def dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
         Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
@@ -1150,13 +1135,13 @@ class GenerationConfig(PushToHubMixin):
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         config_dict = self.to_dict()
 
@@ -1173,12 +1158,12 @@ class GenerationConfig(PushToHubMixin):
         self.dict_torch_dtype_to_str(serializable_config_dict)
         return serializable_config_dict
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
 
@@ -1304,11 +1289,11 @@ class GenerationConfig(PushToHubMixin):
         returning all the unused kwargs.
 
         Args:
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
 
         Returns:
-            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+            `dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
         """
         to_remove = []
         for key, value in kwargs.items():
@@ -1334,7 +1319,7 @@ class BaseWatermarkingConfig(ABC):
         Constructs a BaseWatermarkingConfig instance from a dictionary of parameters.
 
         Args:
-            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            config_dict (dict[str, Any]): Dictionary containing configuration parameters.
             **kwargs: Additional keyword arguments to override dictionary values.
 
         Returns:
@@ -1363,12 +1348,12 @@ class BaseWatermarkingConfig(ABC):
 
             writer.write(json_string)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
+            dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         return output
@@ -1411,7 +1396,7 @@ class BaseWatermarkingConfig(ABC):
 class WatermarkingConfig(BaseWatermarkingConfig):
     """
     Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
-    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
+    See [this paper](https://huggingface.co/papers/2306.04634) for more details on the arguments.
 
     Accepts the following keys:
         - greenlist_ratio (`float`):
@@ -1494,7 +1479,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     Args:
         ngram_len (`int`):
             Ngram length.
-        keys (`List[int]`):
+        keys (`list[int]`):
             A sequence of watermarking keys, one for each depth.
         context_history_size (`int`, *optional*, defaults to 1024):
             Size of the tensor to keep track of seen contexts.
@@ -1533,7 +1518,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
     def __init__(
         self,
         ngram_len: int,
-        keys: List[int],
+        keys: list[int],
         context_history_size: int = 1024,
         sampling_table_seed: int = 0,
         sampling_table_size: int = 2**16,
@@ -1620,6 +1605,6 @@ class CompileConfig:
     # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
     _compile_all_devices = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
         return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})

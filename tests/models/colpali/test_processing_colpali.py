@@ -1,3 +1,18 @@
+# Copyright 2024 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the ColPali processor."""
+
 import shutil
 import tempfile
 import unittest
@@ -89,7 +104,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
         self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
 
-        # The following tests are overwritten as ColPaliProcessor can only take one of images or text as input at a time
+    # The following tests override the parent tests because ColPaliProcessor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:

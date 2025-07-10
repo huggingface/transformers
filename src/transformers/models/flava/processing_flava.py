@@ -17,7 +17,7 @@ Image/Text processor class for FLAVA
 """
 
 import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -63,7 +63,7 @@ class FlavaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,

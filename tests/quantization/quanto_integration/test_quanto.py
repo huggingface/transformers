@@ -223,7 +223,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
+            self.assertIn(
+                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
+            )
             # TODO: replace by the following when it works
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
@@ -237,7 +239,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
+            self.assertIn(
+                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
+            )
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             # )

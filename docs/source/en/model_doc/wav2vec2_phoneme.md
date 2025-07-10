@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Wav2Vec2Phoneme model was proposed in [Simple and Effective Zero-shot Cross-lingual Phoneme Recognition (Xu et al.,
-2021](https://arxiv.org/abs/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
+2021)](https://huggingface.co/papers/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
 
 The abstract from the paper is the following:
 

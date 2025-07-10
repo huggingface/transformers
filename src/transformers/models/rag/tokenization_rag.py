@@ -16,7 +16,7 @@
 
 import os
 import warnings
-from typing import List, Optional
+from typing import Optional
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
@@ -76,8 +76,8 @@ class RagTokenizer:
 
     def prepare_seq2seq_batch(
         self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
+        src_texts: list[str],
+        tgt_texts: Optional[list[str]] = None,
         max_length: Optional[int] = None,
         max_target_length: Optional[int] = None,
         padding: str = "longest",

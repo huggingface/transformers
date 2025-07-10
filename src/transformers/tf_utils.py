@@ -33,7 +33,7 @@ def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> list[int]:
         tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
 
     Returns:
-        `List[int]`: The shape of the tensor as a list.
+        `list[int]`: The shape of the tensor as a list.
     """
     if isinstance(tensor, np.ndarray):
         return list(tensor.shape)

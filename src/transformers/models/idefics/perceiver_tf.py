@@ -37,7 +37,7 @@ References:
 
 """
 
-from typing import Optional, Tuple
+from typing import Optional
 
 import tensorflow as tf
 
@@ -186,7 +186,7 @@ class TFIdeficsMLP(tf.keras.layers.Layer):
         self.act = tf.keras.layers.ReLU(name="act")
         self.c_proj = tf.keras.layers.Dense(self.embed_dim, use_bias=False, name="c_proj")
 
-    def call(self, hidden_states: Optional[Tuple[tf.Tensor]]) -> tf.Tensor:
+    def call(self, hidden_states: Optional[tuple[tf.Tensor]]) -> tf.Tensor:
         hidden_states = self.ln(hidden_states)
         hidden_states = self.fc(hidden_states)
         hidden_states = self.act(hidden_states)

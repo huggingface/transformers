@@ -30,7 +30,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The MEGA model was proposed in [Mega: Moving Average Equipped Gated Attention](https://arxiv.org/abs/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.
+The MEGA model was proposed in [Mega: Moving Average Equipped Gated Attention](https://huggingface.co/papers/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.
 MEGA proposes a new approach to self-attention with each encoder layer having a multi-headed exponential moving average in addition to a single head of standard dot-product attention, giving the attention mechanism
 stronger positional biases. This allows MEGA to perform competitively to Transformers on standard benchmarks including LRA
 while also having significantly fewer parameters. MEGA's compute efficiency allows it to scale to very long sequences, making it an

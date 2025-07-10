@@ -15,7 +15,7 @@
 
 import copy
 import weakref
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 import torch
@@ -44,7 +44,7 @@ from ..utils.deprecation import deprecate_kwarg
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -108,7 +108,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
+        model_kwargs: dict,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
@@ -198,7 +198,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.probs = []
             self.matches = []
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -281,7 +281,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
                 self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
 
-    def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> Tuple[int, int]:
+    def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
@@ -305,7 +305,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         return has_past_key_values
 
-    def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> Dict:
+    def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> dict:
         """Prepare arguments for the generation call."""
         return {
             self.input_ids_key: input_ids,
@@ -315,7 +315,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "logits_processor": self.logits_processor,
         }
 
-    def _generate_candidates(self, generation_args: Dict) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """Generate candidate sequences using the assistant model."""
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
@@ -374,7 +374,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
+        model_kwargs: dict,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
@@ -495,7 +495,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -537,7 +537,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         return new_target_ids, None
 
-    def _prepare_assistant_input_ids(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, int]:
+    def _prepare_assistant_input_ids(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, int]:
         """Converts target input IDs to assistant input IDs, handling discrepancies."""
         convert_kwargs = {
             "source_tokenizer": self.target_tokenizer,
@@ -678,7 +678,7 @@ class AssistantToTargetTranslator:
     Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
     vocabulary mismatches when using different tokenizers for the assistant and target models in speculative decoding,
     as introduced in the paper "Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies"
-    (https://www.arxiv.org/abs/2502.05202).
+    (https://huggingface.co/papers/2502.05202).
     It maintains mappings between the two vocabularies and handles token/logit conversion.
 
     Args:
@@ -710,8 +710,8 @@ class AssistantToTargetTranslator:
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_prune_lm_head: bool = False,
     ):
-        self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
-        self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
+        self._target_tokenizer: PreTrainedTokenizerBase = target_tokenizer
+        self._assistant_tokenizer: PreTrainedTokenizerBase = assistant_tokenizer
         self._assistant_model_device: str = (
             assistant_model_device if assistant_model is None else assistant_model.device
         )
@@ -782,7 +782,7 @@ class AssistantToTargetTranslator:
 
         max_assistant_index = max(assistant_vocab.values())
         assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.SUPPRESS_TOKEN_ID, dtype=int)
-        target_to_assistant_input_ids: Dict[int, int] = {}
+        target_to_assistant_input_ids: dict[int, int] = {}
         for tok, assistant_id in assistant_vocab.items():
             target_id = target_vocab.get(tok)
             if target_id is not None:
@@ -909,7 +909,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
+        model_kwargs: dict,
         atm_translator: AssistantToTargetTranslator,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
@@ -930,7 +930,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self._target_seq_len_with_candidates: int = 0
         self._prev_assistant_ids: Optional[torch.LongTensor] = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Simplified version of get_candidates that uses the translator cache for token conversion.
         """
@@ -1043,7 +1043,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -1153,7 +1153,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        model_kwargs: Dict,
+        model_kwargs: dict,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
@@ -1170,7 +1170,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         self.assistant_early_exit = self.generation_config.assistant_early_exit
         self.generation_config.assistant_early_exit = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         # Temporarily sets the number of hidden layers to the early exit value
         base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
         original_num_hidden_layers = base_model.config.num_hidden_layers
@@ -1221,7 +1221,7 @@ def _crop_past_key_values(model, past_key_values, max_length):
     return past_key_values
 
 
-def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_encoder_decoder: bool) -> Dict[str, Any]:
+def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
     mask_key = "decoder_attention_mask" if is_encoder_decoder else "attention_mask"
@@ -1257,7 +1257,7 @@ def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_en
     return model_kwargs
 
 
-def _prepare_token_type_ids(model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
+def _prepare_token_type_ids(model_kwargs: dict[str, Any], new_length: int) -> dict[str, Any]:
     """Expands or crops the model's token_type_ids for decoding purposes, to the defined length"""
     if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
         return model_kwargs

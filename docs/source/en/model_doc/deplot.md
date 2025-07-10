@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview 
 
-DePlot was proposed in the paper [DePlot: One-shot visual language reasoning by plot-to-table translation](https://arxiv.org/abs/2212.10505) from Fangyu Liu, Julian Martin Eisenschlos, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun.
+DePlot was proposed in the paper [DePlot: One-shot visual language reasoning by plot-to-table translation](https://huggingface.co/papers/2212.10505) from Fangyu Liu, Julian Martin Eisenschlos, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun.
 
 The abstract of the paper states the following:
 

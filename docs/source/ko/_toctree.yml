@@ -225,7 +225,7 @@
 - sections:
   - local: philosophy
     title: 이념과 목표
-  - local: in_translation
+  - local: glossary
     title: (번역중) Glossary
   - local: task_summary
     title: 🤗 Transformers로 할 수 있는 작업

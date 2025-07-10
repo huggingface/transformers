@@ -36,7 +36,7 @@ class DepthAnythingConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):
@@ -57,9 +57,9 @@ class DepthAnythingConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         reassemble_hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the reassemble layers.
-        reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
             The hidden sizes to project to for the feature maps of the backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 64):
             The number of channels before fusion.
@@ -154,7 +154,7 @@ class DepthAnythingConfig(PretrainedConfig):
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
 

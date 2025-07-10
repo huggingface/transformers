@@ -21,6 +21,7 @@ from transformers import Dinov2Config, PromptDepthAnythingConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -284,7 +285,10 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
 
     def test_export(self):
-        for strict in [True, False]:
+        for strict in [False, True]:
+            if strict and get_torch_major_and_minor_version() == "2.7":
+                self.skipTest(reason="`strict=True` is currently failing with torch 2.7.")
+
             with self.subTest(strict=strict):
                 if not is_torch_greater_or_equal_than_2_4:
                     self.skipTest(reason="This test requires torch >= 2.4 to run.")

@@ -15,7 +15,7 @@
 
 """Configuration for TimmWrapper models"""
 
-from typing import Any, Dict
+from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
@@ -45,6 +45,9 @@ class TimmWrapperConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         do_pooling (`bool`, *optional*, defaults to `True`):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
+        model_args (`dict[str, Any]`, *optional*):
+            Additional keyword arguments to pass to the `timm.create_model` function. e.g. `model_args={"depth": 3}`
+            for `timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k` to create a model with 3 blocks. Defaults to `None`.
 
     Example:
     ```python
@@ -60,13 +63,20 @@ class TimmWrapperConfig(PretrainedConfig):
 
     model_type = "timm_wrapper"
 
-    def __init__(self, initializer_range: float = 0.02, do_pooling: bool = True, **kwargs):
+    def __init__(
+        self,
+        initializer_range: float = 0.02,
+        do_pooling: bool = True,
+        model_args: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ):
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
+        self.model_args = model_args  # named "model_args" for BC with timm
         super().__init__(**kwargs)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs):
         label_names = config_dict.get("label_names", None)
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
@@ -105,7 +115,7 @@ class TimmWrapperConfig(PretrainedConfig):
 
         return super().from_dict(config_dict, **kwargs)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
         output["num_classes"] = self.num_labels
         output["label_names"] = list(self.id2label.values())

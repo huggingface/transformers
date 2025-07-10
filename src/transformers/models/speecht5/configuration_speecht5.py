@@ -47,7 +47,7 @@ class SpeechT5Config(PretrainedConfig):
         encoder_ffn_dim (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer decoder.
@@ -56,7 +56,7 @@ class SpeechT5Config(PretrainedConfig):
         decoder_ffn_dim (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer decoder.
         decoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -84,14 +84,14 @@ class SpeechT5Config(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
+        conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             speech encoder pre-net. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
+        conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the speech encoder pre-net. The
             length of *conv_stride* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
+        conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the speech encoder pre-net.
             The length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
@@ -105,7 +105,7 @@ class SpeechT5Config(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the speech encoder pre-net. For
             reference see [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
@@ -291,7 +291,7 @@ class SpeechT5Config(PretrainedConfig):
                 f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
@@ -354,18 +354,18 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the upsampling network.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
+        upsample_rates (`tuple[int]` or `list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the upsampling network. The
             length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
+        upsample_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the upsampling network. The
             length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
             *upsample_rates*.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        resblock_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[3, 7, 11]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the multi-receptive field
             fusion (MRF) module.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             multi-receptive field fusion (MRF) module.
         initializer_range (`float`, *optional*, defaults to 0.01):

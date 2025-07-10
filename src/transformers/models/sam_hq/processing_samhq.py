@@ -17,7 +17,7 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -34,9 +34,9 @@ if is_torch_available():
 
 class SamHQImagesKwargs(ImagesKwargs):
     segmentation_maps: Optional[ImageInput]
-    input_points: Optional[List[List[float]]]
-    input_labels: Optional[List[List[int]]]
-    input_boxes: Optional[List[List[List[float]]]]
+    input_points: Optional[list[list[float]]]
+    input_labels: Optional[list[list[int]]]
+    input_boxes: Optional[list[list[list[float]]]]
     point_pad_value: Optional[int]
 
 
@@ -91,7 +91,7 @@ class SamHQProcessor(ProcessorMixin):
         # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
         # This behavior is only needed for backward compatibility and will be removed in future versions.
         *args,  # to be deprecated
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio: Optional[AudioInput] = None,
         video: Optional[VideoInput] = None,
         **kwargs: Unpack[SamHQProcessorKwargs],

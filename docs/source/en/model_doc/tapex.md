@@ -34,7 +34,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://arxiv.org/abs/2107.07653) by Qian Liu,
+The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://huggingface.co/papers/2107.07653) by Qian Liu,
 Bei Chen, Jiaqi Guo, Morteza Ziyadi, Zeqi Lin, Weizhu Chen, Jian-Guang Lou. TAPEX pre-trains a BART model to solve synthetic SQL queries, after
 which it can be fine-tuned to answer natural language questions related to tabular data, as well as performing table fact checking. 
 

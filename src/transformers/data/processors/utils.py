@@ -18,7 +18,7 @@ import csv
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...utils import is_tf_available, is_torch_available, logging
 
@@ -67,9 +67,9 @@ class InputFeatures:
             float for regression problems.
     """
 
-    input_ids: List[int]
-    attention_mask: Optional[List[int]] = None
-    token_type_ids: Optional[List[int]] = None
+    input_ids: list[int]
+    attention_mask: Optional[list[int]] = None
+    token_type_ids: Optional[list[int]] = None
     label: Optional[Union[int, float]] = None
 
     def to_json_string(self):

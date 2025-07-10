@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import collections
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -72,8 +72,8 @@ class TFSamVisionEncoderOutput(ModelOutput):
 
     image_embeds: tf.Tensor | None = None
     last_hidden_state: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -107,9 +107,9 @@ class TFSamImageSegmentationOutput(ModelOutput):
 
     iou_scores: Optional[tf.Tensor] = None
     pred_masks: Optional[tf.Tensor] = None
-    vision_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    vision_attentions: Tuple[tf.Tensor, ...] | None = None
-    mask_decoder_attentions: Tuple[tf.Tensor, ...] | None = None
+    vision_hidden_states: tuple[tf.Tensor, ...] | None = None
+    vision_attentions: tuple[tf.Tensor, ...] | None = None
+    mask_decoder_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 class TFSamPatchEmbeddings(keras.layers.Layer):
@@ -434,7 +434,7 @@ class TFSamTwoWayTransformer(keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -614,7 +614,7 @@ class TFSamMaskDecoder(keras.layers.Layer):
         dense_prompt_embeddings: tf.Tensor,
         multimask_output: bool,
         output_attentions: Optional[bool] = None,
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+    ) -> tuple[tf.Tensor, tf.Tensor]:
         batch_size, num_channels, height, width = shape_list(image_embeddings)
         point_batch_size = tf.math.maximum(1, tf.shape(sparse_prompt_embeddings)[1])
 
@@ -858,11 +858,11 @@ class TFSamPromptEncoder(keras.layers.Layer):
     def call(
         self,
         batch_size: Optional[int],
-        input_points: Optional[Tuple[tf.Tensor, tf.Tensor]],
+        input_points: Optional[tuple[tf.Tensor, tf.Tensor]],
         input_labels: tf.Tensor | None,
         input_boxes: tf.Tensor | None,
         input_masks: tf.Tensor | None,
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+    ) -> tuple[tf.Tensor, tf.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
@@ -993,8 +993,8 @@ class TFSamVisionAttention(keras.layers.Layer):
         query: tf.Tensor,
         rel_pos_h: tf.Tensor,
         rel_pos_w: tf.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
     ) -> tf.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
@@ -1081,7 +1081,7 @@ class TFSamVisionLayer(keras.layers.Layer):
         self.window_size = window_size
         self.config = config
 
-    def window_partition(self, hidden_states: tf.Tensor, window_size: int) -> Tuple[tf.Tensor, Tuple[int, int]]:
+    def window_partition(self, hidden_states: tf.Tensor, window_size: int) -> tuple[tf.Tensor, tuple[int, int]]:
         batch_size, height, width, channel = shape_list(hidden_states)
 
         pad_h = (window_size - height % window_size) % window_size
@@ -1100,7 +1100,7 @@ class TFSamVisionLayer(keras.layers.Layer):
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: tf.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
+        self, windows: tf.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
     ) -> tf.Tensor:
         pad_height, pad_width = padding_shape
         height, width = original_shape
@@ -1121,7 +1121,7 @@ class TFSamVisionLayer(keras.layers.Layer):
         hidden_states: tf.Tensor,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -1272,7 +1272,7 @@ class TFSamVisionEncoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSamVisionEncoderOutput]:
+    ) -> Union[tuple, TFSamVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1456,7 +1456,7 @@ class TFSamVisionModel(TFSamPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFSamVisionEncoderOutput | Tuple[tf.Tensor]:
+    ) -> TFSamVisionEncoderOutput | tuple[tf.Tensor]:
         r"""
         Returns:
 
@@ -1581,7 +1581,7 @@ class TFSamModel(TFSamPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFSamImageSegmentationOutput | Tuple[tf.Tensor]:
+    ) -> TFSamImageSegmentationOutput | tuple[tf.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1597,21 +1597,19 @@ class TFSamModel(TFSamPreTrainedModel):
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
                 "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
-                " got {}.".format(input_points.shape),
+                f" got {input_points.shape}.",
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
                 "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
-                " got {}.".format(input_boxes.shape),
+                f" got {input_boxes.shape}.",
             )
         if input_points is not None and input_boxes is not None:
             point_batch_size = shape_list(input_points)[1]
             box_batch_size = shape_list(input_boxes)[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
         if pixel_values is not None:
             # Ensures that later checks pass even with an all-None shape from the serving signature
@@ -1653,7 +1651,7 @@ class TFSamModel(TFSamPreTrainedModel):
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
                 "The batch size of the image embeddings and the input points must be the same. ",
-                "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
+                f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively.",
                 " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",

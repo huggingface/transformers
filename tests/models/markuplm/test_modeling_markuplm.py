@@ -309,7 +309,7 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         feature_extractor_name,
         processor_name,
     ):
-        # ValueError: Nodes must be of type `List[str]` (single pretokenized example), or `List[List[str]]`
+        # ValueError: Nodes must be of type `list[str]` (single pretokenized example), or `list[list[str]]`
         # (batch of pretokenized examples).
         return True
 
