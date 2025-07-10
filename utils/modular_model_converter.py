@@ -972,12 +972,37 @@ def replace_class_node(
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 
-    original_modeling_methods = {
-        node.name.value: node for node in original_modeling_node.body.body if m.matches(node, m.FunctionDef())
-    }
-    modular_methods = {
-        node.name.value: node for node in modular_class_node.body.body if m.matches(node, m.FunctionDef())
-    }
+    # Check class methods defined in the modular and associated modeling
+    original_modeling_methods = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in original_modeling_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    original_modeling_methods[f"{node.name.value}_setter"] = original_modeling_methods[node.name.value]
+                    original_modeling_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    original_modeling_methods[f"{node.name.value}_setter"] = node
+            else:
+                original_modeling_methods[node.name.value] = node
+    modular_methods = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in modular_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    modular_methods[f"{node.name.value}_setter"] = modular_methods[node.name.value]
+                    modular_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    modular_methods[f"{node.name.value}_setter"] = node
+            else:
+                modular_methods[node.name.value] = node
 
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
@@ -1750,6 +1775,7 @@ if __name__ == "__main__":
                 files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(files_to_parse)
+    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
     assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:
