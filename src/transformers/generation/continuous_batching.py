@@ -126,6 +126,11 @@ class RequestState:
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
 
+        # Only add the token if we're not finishing due to max length
+        # (EOS tokens should still be added to the output)
+        if not (is_max_len and not is_eos):
+            self.static_outputs.extend([token_id])
+
         if is_eos or is_max_len:
             self.status = RequestStatus.FINISHED
             return True
@@ -635,7 +640,7 @@ def compute_optimal_blocks(
     memory_per_token = 2 * num_kv_heads * head_dim * dtype_size * num_hidden_layers  # For K and V caches
 
     # Estimate sequence length requirements
-    tokens_to_generate = getattr(generation_config, "max_new_tokens", 20)
+    tokens_to_generate = getattr(generation_config, "max_new_tokens") or 20
 
     if median_prefill_length is None and inputs:
         non_empty_inputs = [len(seq) for seq in inputs if seq]
@@ -1019,7 +1024,6 @@ class ContinuousBatchProcessor:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
-                state.static_outputs.extend([token])
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
                     self.metrics.record_request_completion(state.created_time, state.request_id)

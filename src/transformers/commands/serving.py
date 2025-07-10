@@ -21,12 +21,7 @@ from dataclasses import dataclass, field
 from threading import Thread
 from typing import Any, Generator, Optional, Union
 
-from huggingface_hub import (
-    ChatCompletionStreamOutputDeltaToolCall,
-    ChatCompletionStreamOutputFunction,
-    ModelInfo,
-    model_info,
-)
+from huggingface_hub import ModelInfo, model_info
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -223,6 +218,9 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         # tool_prompt: Optional[str] = None
         # top_logprobs: Optional[int] = None
 
+        # transformers-specific request fields
+        generation_config: Optional[str] = None
+
 
 logger = logging.get_logger(__name__)
 
@@ -250,11 +248,15 @@ def create_generation_config_from_req(
     req: Union["ChatCompletionInput", "ResponsesInput"], **kwargs
 ) -> "GenerationConfig":
     """
-    Creates a generation config from the parameters of the request. Note that we can pass a `GenerationConfig`
-    (serialized into a `dict`) in `extra_body`, for full `generate` parameterization.
+    Creates a generation config from the parameters of the request. If a generation config is passed in the request,
+    it will be used as a baseline for parameterization. Otherwise, we will use the model's default generation config.
+    Other parameters in the request will be applied on top of the baseline.
 
     Args:
-        req (`ChatCompletionInput`): The request which may optionally contain generation parameters.
+        req (`ChatCompletionInput`):
+            The request which may optionally contain generation parameters.
+        model_generation_config (`GenerationConfig`):
+            The model's default generation config.
 
     Returns:
         The prepared `GenerationConfig` object.
@@ -267,7 +269,13 @@ def create_generation_config_from_req(
     if req.metadata is not None and "generation_config" in req.metadata:
         generation_config = GenerationConfig(**(req.metadata["generation_config"]), **kwargs)
     else:
-        generation_config = GenerationConfig(**kwargs)
+        generation_config = copy.deepcopy(model_generation_config)
+
+    non_standard_kwargs = generation_config.update(**kwargs)
+    # Set extra kwargs that are not in the `GenerationConfig` class (e.g. continuous batching flags)
+    for k, v in non_standard_kwargs.items():
+        if v is not None:
+            setattr(generation_config, k, v)
 
     if isinstance(req, ResponsesInput):
         return generation_config
@@ -408,7 +416,7 @@ class ServeCommand(BaseTransformersCLICommand):
         content: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
-        tool_calls: Optional[list[ChatCompletionStreamOutputDeltaToolCall]] = None,
+        tool_calls: Optional[list[dict]] = None,
     ) -> str:
         """
         Builds a chunk of a streaming response.
@@ -425,7 +433,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 The role of the next content, until a new role is defined.
             finish_reason (`str`, *optional*):
                 The reason the generation by the model has finished.
-            tool_calls (`list[ChatCompletionStreamOutputDeltaToolCall]`, *optional*):
+            tool_calls (`list[dict]`, *optional*):
                 Data about the tool calls, when they are triggered.
 
         Returns:

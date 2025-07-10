@@ -24,8 +24,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -36,7 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import LossKwargs, ModelOutput, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -409,6 +409,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -774,7 +775,7 @@ class Blip2QFormerAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.attention(
@@ -1146,7 +1147,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1250,9 +1251,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     BLIP-2 Model for generating text and image features. The model consists of a vision encoder, Querying Transformer
@@ -1322,7 +1320,7 @@ class Blip2Model(Blip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1510,7 +1508,7 @@ class Blip2Model(Blip2PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1988,7 +1986,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
