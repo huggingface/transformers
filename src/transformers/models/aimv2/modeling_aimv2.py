@@ -434,7 +434,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     models. The model is only intended for inference and doesn't support finetuning.
     """
 
-    config_class = Aimv2Config
+    config: Aimv2Config
     base_model_prefix = "aimv2"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -476,7 +476,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
 )
 class Aimv2VisionModel(Aimv2PreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = Aimv2VisionConfig
+    config: Aimv2VisionConfig
 
     def __init__(self, config: Aimv2VisionConfig):
         super().__init__(config)
@@ -641,7 +641,7 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class Aimv2Model(Aimv2PreTrainedModel):
-    config_class = Aimv2Config
+    config: Aimv2Config
     _no_split_modules = ["Aimv2TextEmbeddings", "Aimv2EncoderLayer", "Aimv2VisionEmbeddings"]
 
     def __init__(self, config: Aimv2Config):

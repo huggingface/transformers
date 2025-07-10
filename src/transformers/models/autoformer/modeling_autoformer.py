@@ -857,7 +857,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class AutoformerPreTrainedModel(PreTrainedModel):
-    config_class = AutoformerConfig
+    config: AutoformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True

@@ -538,7 +538,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Lfm2PreTrainedModel(PreTrainedModel):
-    config_class = Lfm2Config
+    config: Lfm2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Lfm2DecoderLayer"]
