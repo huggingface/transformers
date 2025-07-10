@@ -347,18 +347,17 @@ class ConvBertSelfAttention(nn.Module):
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(hidden_states.transpose(1, 2))
         mixed_key_conv_attn_layer = mixed_key_conv_attn_layer.transpose(1, 2)
 
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        mixed_query_layer = self.query(hidden_states)
+        query_layer = mixed_query_layer.view(
+            batch_size, -1, self.num_attention_heads, self.attention_head_size
+        ).transpose(1, 2)
         key_layer = mixed_key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
             1, 2
         )
         value_layer = mixed_value_layer.view(
             batch_size, -1, self.num_attention_heads, self.attention_head_size
         ).transpose(1, 2)
-        conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, query_layer)
+        conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
         conv_kernel_layer = torch.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])

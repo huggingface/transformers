@@ -342,12 +342,16 @@ class BigBirdSelfAttention(nn.Module):
             key_layer = past_key_value.key_cache[self.layer_idx]
             value_layer = past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.key(current_states)(
-                batch_size, -1, self.num_attention_heads, self.attention_head_size
-            ).transpose(1, 2)
-            value_layer = self.value(current_states)(
-                batch_size, -1, self.num_attention_heads, self.attention_head_size
-            ).transpose(1, 2)
+            key_layer = (
+                self.key(current_states)
+                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
+            value_layer = (
+                self.value(current_states)
+                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .transpose(1, 2)
+            )
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
