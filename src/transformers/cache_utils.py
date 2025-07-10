@@ -152,6 +152,7 @@ def parse_layer_args_from_model_config(
     device: Union[torch.device, str, None] = None,
     dtype: Optional[torch.dtype] = None,
     layer_device_map=None,
+    tp_size: Optional[int] = None,
     max_batch_size: Optional[int] = None,
 ) -> dict:
     # No model config -> must be a dynamic cache, return bare dict
@@ -188,6 +189,13 @@ def parse_layer_args_from_model_config(
             if getattr(model_config, "num_key_value_heads", None) is None
             else model_config.num_key_value_heads
         )
+        if tp_size is not None and tp_size > 1:
+            if num_heads % tp_size != 0:
+                raise ValueError(
+                    f"Number of key value heads {num_heads} must be divisible by tensor parallel size {tp_size}."
+                )
+            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
+            num_heads //= tp_size
         layer_args = {
             "batch_size": max_batch_size if max_batch_size is not None else batch_size,
             "max_cache_len": max_cache_len,
@@ -255,6 +263,7 @@ class Cache:
             - `device` (`torch.device`): Device for cache tensors
             - `dtype` (`torch.dtype`): Data type for cache tensors
             - `layer_device_map` (`dict[int, Union[str, torch.device]]`): Per-layer device mapping
+            - `tp_size` (`int`): Tensor parallel size to adjust the number of key/value heads
         """
         self.layers: list[CacheLayerMixin] = []
         self.key_cache: list[torch.Tensor] = []
@@ -1040,6 +1049,19 @@ class EncoderDecoderCache(Cache):
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache)):
             self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
+
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values
+        """
+        for layer_idx in range(len(self)):
+            yield (
+                self.self_attention_cache.key_cache[layer_idx],
+                self.self_attention_cache.value_cache[layer_idx],
+                self.cross_attention_cache.key_cache[layer_idx],
+                self.cross_attention_cache.value_cache[layer_idx],
+            )
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """

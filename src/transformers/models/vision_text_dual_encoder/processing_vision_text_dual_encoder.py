@@ -20,7 +20,7 @@ import warnings
 from typing import Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
@@ -111,8 +111,6 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
 
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             VisionTextDualEncoderProcessorKwargs,
