@@ -215,6 +215,7 @@ class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
 
         request = {
             # This model is a small model that's very eager to call tools
+            # TODO: this is a 4B model. Find a smaller model that's eager to call tools
             "model": "Menlo/Jan-nano",
             # The request should produce a tool call
             "messages": [{"role": "user", "content": "Generate an image of a cat."}],
