@@ -27,6 +27,7 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
+    slow,
     torch_device,
 )
 from transformers.utils import is_cv2_available
