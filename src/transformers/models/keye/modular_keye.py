@@ -207,12 +207,7 @@ class KeyeConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each attention head.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the attention mechanism.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
+
     ```python
     >>> from transformers import KeyeForConditionalGeneration, KeyeConfig
 
@@ -1287,7 +1282,7 @@ def default_flax_embed_init(tensor):
 
 @dataclass
 # Copied from ...models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Siglip
-class SiglipVisionModelOutput(ModelOutput):
+class KeyeSiglipVisionModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -2135,7 +2130,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
     """The vision model from SigLIP without any head or projection on top.""",
     SIGLIP_START_DOCSTRING,
 )
-class SiglipVisionModel(SiglipPreTrainedModel):
+class KeyeSiglipVisionModel(SiglipPreTrainedModel):
     config_class = KeyeVisionConfig
     main_input_name = "pixel_values"
 
@@ -2176,9 +2171,9 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, SiglipVisionModel
+        >>> from transformers import AutoProcessor, KeyeSiglipVisionModel
 
-        >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = KeyeSiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2511,7 +2506,7 @@ class Qwen3PreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class Qwen3Model(Qwen3PreTrainedModel):
+class KeyeModel(Qwen3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -2668,8 +2663,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.mlp_AR = Projector(config, config.vision_config)
-        self.visual = SiglipVisionModel(config.vision_config)
-        self.model = Qwen3Model(config)
+        self.visual = KeyeSiglipVisionModel(config.vision_config)
+        self.model = KeyeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
