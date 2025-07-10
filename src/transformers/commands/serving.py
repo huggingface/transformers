@@ -418,6 +418,9 @@ class ServeCommand(BaseTransformersCLICommand):
     def build_responses_chunk(self, response: BaseModel) -> str:
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
+    def build_responses_chunk(self, response: BaseModel) -> str:
+        return f"data: {response.model_dump_json()}\n\n"
+
     def run(self):
         app = FastAPI()
 
