@@ -24,25 +24,16 @@ rendered properly in your Markdown viewer.
 
 [CamemBERT](https://huggingface.co/papers/1911.03894) is a language model based on [RoBERTa](./roberta), but trained specifically on French text from the OSCAR dataset, making it more effective for French language tasks.
 
-## CamembertConfig
 What sets CamemBERT apart is that it learned from a huge, high quality collection of French data, as opposed to mixing lots of languages. This helps it really understand French better than many multilingual models.
 
 Common applications of CamemBERT include masked language modeling (Fill-mask prediction), text classification (sentiment analysis), token classification (entity recognition) and sentence pair classification (entailment tasks).
 
-[[autodoc]] CamembertConfig
-## CamembertTokenizer
 You can find all the original CamemBERT checkpoints under the [ALMAnaCH](https://huggingface.co/almanach/models?search=camembert) organization.
 
 > [!TIP]
 > This model was contributed by the [ALMAnaCH (Inria)](https://huggingface.co/almanach) team.
 >
 > Click on the CamemBERT models in the right sidebar for more examples of how to apply CamemBERT to different NLP tasks.
-[[autodoc]] CamembertTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-## CamembertTokenizerFast
 
 The examples below demonstrate how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -57,8 +48,7 @@ from transformers import pipeline
 pipeline = pipeline("fill-mask", model="camembert-base", torch_dtype=torch.float16, device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
-
-</hfoption>
+</hfoption> 
 
 <hfoption id="AutoModel">
 
@@ -80,25 +70,9 @@ predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
+</hfoption> 
 
-</hfoption>
-
-</hfoptions>
-[[autodoc]] CamembertTokenizerFast
-
-## CamembertModel
-[[autodoc]] CamembertModel
-
-## CamembertForMaskedLM
-[[autodoc]] CamembertForMaskedLM
-
-## CamembertForSequenceClassification
-
-[[autodoc]] CamembertForSequenceClassification
-
-## CamembertForMultipleChoice
-
-You can also use CamemBERT for multiple-choice tasks via the command line:
+<hfoption id="Command line">
 
 ```bash
 transformers-cli env
@@ -108,35 +82,10 @@ python -m transformers.cli run camembert-base \
     --choices "Emmanuel Macron" "Napoleon Bonaparte" "Marie Curie" \
     --framework pt
 ```
+</hfoption> 
 
-[[autodoc]] CamembertForMultipleChoice
-  
-## CamembertForTokenClassification
+</hfoptions> 
 
-You can use the `camembert/camembert-large` model for token classification tasks like Named Entity Recognition (NER).
-
-```python
-from transformers import AutoTokenizer, CamembertForTokenClassification
-import torch
-
-model_id = "camembert/camembert-large"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = CamembertForTokenClassification.from_pretrained(model_id)
-
-text = "Emmanuel Macron est le président de la République française."
-tokens = tokenizer(text, return_tensors="pt", truncation=True)
-
-with torch.no_grad():
-    outputs = model(**tokens)
-
-predictions = torch.argmax(outputs.logits, dim=2)
-
-for token, pred_id in zip(tokenizer.convert_ids_to_tokens(tokens["input_ids"][0]), predictions[0]):
-    label = model.config.id2label.get(pred_id.item(), "O")
-    print(f"{token}: {label}")
-```
-
-[[autodoc]] CamembertForTokenClassification
 
 Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
 
@@ -153,6 +102,51 @@ model = AutoModelForMaskedLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("camembert-base")
 ```
+
+## CamembertConfig
+
+[[autodoc]] CamembertConfig
+
+## CamembertTokenizer
+
+[[autodoc]] CamembertTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## CamembertTokenizerFast
+
+[[autodoc]] CamembertTokenizerFast
+
+<frameworkcontent>
+<pt>
+
+## CamembertModel
+
+[[autodoc]] CamembertModel
+
+## CamembertForCausalLM
+
+[[autodoc]] CamembertForCausalLM
+
+## CamembertForMaskedLM
+
+[[autodoc]] CamembertForMaskedLM
+
+## CamembertForSequenceClassification
+
+[[autodoc]] CamembertForSequenceClassification
+
+## CamembertForMultipleChoice
+
+[[autodoc]] CamembertForMultipleChoice
+
+## CamembertForTokenClassification
+
+[[autodoc]] CamembertForTokenClassification
+
+## CamembertForQuestionAnswering
 
 [[autodoc]] CamembertForQuestionAnswering
 
