@@ -853,7 +853,7 @@ class ModelTesterMixin:
             addition_year = int(match_object.group(1))
 
         for model_class in self.all_model_classes:
-            # For now, skip everything older than 2025 and "important models" (too much models to patch otherwise)
+            # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
             # Use `supports_cache_class` as a proxy to judge "important" models in order to prioritize them
             # TODO: relax this as we patch more and more models
             if addition_year < 2024:
