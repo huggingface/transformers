@@ -18,7 +18,7 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -819,7 +819,7 @@ class ParallelInterface(GeneralInterface):
     def register(cls, key: str, value: Callable):
         cls._global_mapping.update({key: value})
 
-    def valid_keys(self) -> List[str]:
+    def valid_keys(self) -> list[str]:
         return list(self.keys())
 
 
