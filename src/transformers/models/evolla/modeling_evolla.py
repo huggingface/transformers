@@ -198,7 +198,7 @@ def apply_rotary_pos_emb_esm(x, cos, sin):
     return (x * cos) + (rotate_half_esm(x) * sin)
 
 
-class RotaryEmbedding(torch.nn.Module):
+class EvollaSaProtRotaryEmbedding(nn.Module):
     """
     Rotary position embeddings based on those in
     [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
@@ -269,7 +269,7 @@ class EvollaSaProtSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
         elif self.position_embedding_type == "rotary":
-            self.rotary_embeddings = RotaryEmbedding(dim=self.attention_head_size)
+            self.rotary_embeddings = EvollaSaProtRotaryEmbedding(dim=self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 

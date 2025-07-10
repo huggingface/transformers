@@ -96,7 +96,7 @@ def apply_rotary_pos_emb_esm(x, cos, sin):
     return (x * cos) + (rotate_half_esm(x) * sin)
 
 
-class RotaryEmbedding(torch.nn.Module):
+class EvollaSaProtRotaryEmbedding(nn.Module):
     """
     Rotary position embeddings based on those in
     [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
@@ -139,8 +139,37 @@ class RotaryEmbedding(torch.nn.Module):
         )
 
 
-class EvollaSaProtSelfAttention(EsmSelfAttention):
-    pass
+class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
+    def __init__(self, config, position_embedding_type=None):
+        nn.Module.__init__()
+        self.config = config
+
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        self.rotary_embeddings = None
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+        elif self.position_embedding_type == "rotary":
+            self.rotary_embeddings = EvollaSaProtRotaryEmbedding(dim=self.attention_head_size)
+
+        self.is_decoder = config.is_decoder
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
