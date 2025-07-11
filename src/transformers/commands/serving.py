@@ -534,6 +534,15 @@ class ServeCommand(BaseTransformersCLICommand):
         ]
 
     def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
+        """
+        Generates a chat completion using continuous batching.
+
+        Args:
+            req (`dict`): The request to generate a chat completion for.
+
+        Returns:
+            `Generator[str, None, None]`: A generator that yields the chat completion chunks.
+        """
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             self.load_model_and_tokenizer(req["model"], self.args)
@@ -601,6 +610,15 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_chat_completion(inputs[0])
 
     def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
+        """
+        Generates a chat completion using `generate`.
+
+        Args:
+            req (`dict`): The request to generate a chat completion for.
+
+        Returns:
+            `Generator[str, None, None]`: A generator that yields the chat completion chunks.
+        """
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             self.load_model_and_tokenizer(req["model"], self.args)
@@ -746,6 +764,15 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_chat_completion(generation_streamer, request_id)
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
+        """
+        Generates a response using `generate`.
+
+        Args:
+            req (`dict`): The request to generate a response for.
+
+        Returns:
+            `Generator[str, None, None]`: A generator that yields the response events.
+        """
         # TODO -- Implement non-streaming mode
 
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
