@@ -71,6 +71,28 @@ print(generated_text)
 
 ## Notes
 
+The example below demonstrates inference with an audio and text input.
+
+```py
+from transformers import AutoProcessor, AutoModelForCausalLM
+import torch
+import soundfile as sf
+
+processor = AutoProcessor.from_pretrained("microsoft/Phi-4-multimodal-instruct", trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-4-multimodal-instruct", torch_dtype=torch.bfloat16).to("cuda")
+
+speech, sr = sf.read("your_audio.wav", dtype="float32")
+assert sr == 16000  
+
+
+inputs = processor(text="Transcribe this audio:", audio=speech, sampling_rate=sr, return_tensors="pt").to("cuda")
+
+generated = model.generate(**inputs, max_length=200)
+text = processor.decode(generated[0], skip_special_tokens=True)
+print(text)
+
+```
+
 ## Phi4MultimodalFeatureExtractor
 
 [[autodoc]] Phi4MultimodalFeatureExtractor
