@@ -52,7 +52,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
-    apply_rotary_pos_emb_vision,
 )
 from ..qwen2_5_vl.processing_qwen2_5_vl import (
     Qwen2_5_VLProcessor,
