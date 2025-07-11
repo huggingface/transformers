@@ -1291,7 +1291,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
-                tp_size=self.model.tp_size,
+                tp_size=getattr(self.model, "tp_size"),
             )
 
             scheduler = None
