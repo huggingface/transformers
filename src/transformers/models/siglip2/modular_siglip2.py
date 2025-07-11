@@ -37,7 +37,6 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from .text_model import Siglip2TextTransformer
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -308,7 +307,9 @@ class Siglip2TextModel(SiglipTextModel):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         outputs: BaseModelOutput = self.text_model(
             input_ids=input_ids,
@@ -321,7 +322,7 @@ class Siglip2TextModel(SiglipTextModel):
         last_hidden_state = outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        #Always use last token for pooled output (EOS or PAD)
+        # Always use last token for pooled output (EOS or PAD)
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output) if self.use_head else None
 
@@ -331,7 +332,6 @@ class Siglip2TextModel(SiglipTextModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
 
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
