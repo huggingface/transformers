@@ -673,19 +673,20 @@ class Message:
                     }
                     blocks.append(block)
 
-        block = {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Test results diff*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
-            },
-            "accessory": {
-                "type": "button",
-                "text": {"type": "plain_text", "text": "Check test result diff file"},
-                "url": diff_file_url,
-            },
-        }
-        blocks.append(block)
+        if diff_file_url is not None:
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Test results diff*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check test result diff file"},
+                    "url": diff_file_url,
+                },
+            }
+            blocks.append(block)
 
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
@@ -1475,13 +1476,14 @@ if __name__ == "__main__":
     prev_ci_artifacts = (None, None)
     other_ci_artifacts = []
 
+    output_dir = os.path.join(os.getcwd(), "previous_reports")
+    os.makedirs(output_dir, exist_ok=True)
+
     for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
         if target_workflow_run_id is None or target_workflow_run_id == "":
             continue
         else:
             artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
             ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=artifact_names,
                 output_dir=output_dir,
@@ -1493,39 +1495,42 @@ if __name__ == "__main__":
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
 
-    ci_artifacts = get_last_daily_ci_reports(
-        artifact_names=None,
-        output_dir=output_dir,
-        token=os.environ["ACCESS_REPO_INFO_TOKEN"],
-        workflow_run_id=target_workflow_run_id,
-    )
+    # Only for AMD at this moment
+    diff_file_url = None
+    if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
 
-    current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
-    prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])
+        ci_artifacts = get_last_daily_ci_reports(
+            artifact_names=None,
+            output_dir=output_dir,
+            token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+            workflow_run_id=prev_workflow_run_id,
+        )
 
-    current_artifacts_set = {}
-    for d in current_artifacts:
-        current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
+        current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+        prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])
 
-    prev_artifacts_set = {}
-    for d in prev_artifacts:
-        prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
+        current_artifacts_set = {}
+        for d in current_artifacts:
+            current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
 
-    report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
-    print(report)
+        prev_artifacts_set = {}
+        for d in prev_artifacts:
+            prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
 
-    with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
-        fp.write(report)
+        report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-    # upload
-    commit_info = api.upload_file(
-        path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
-        path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
-        repo_id=report_repo_id,
-        repo_type="dataset",
-        token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-    )
-    diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
+        with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+            fp.write(report)
+
+        # upload
+        commit_info = api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
+        diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:
