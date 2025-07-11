@@ -15,7 +15,7 @@
 from typing import TYPE_CHECKING, Any
 
 from ..integrations import prepare_for_hqq_linear
-from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
