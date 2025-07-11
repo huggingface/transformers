@@ -307,15 +307,10 @@ class Exaone4Attention(nn.Module):
         self.sliding_window_pattern = config.sliding_window_pattern
         self.is_sliding = check_is_sliding(config, layer_idx)
 
-        if self.head_dim * self.num_attention_heads != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_attention_heads, but got {self.hidden_size} and {self.num_attention_heads} and {self.head_dim}"
-            )
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
