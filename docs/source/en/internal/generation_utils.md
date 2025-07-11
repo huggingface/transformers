@@ -366,30 +366,15 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] DynamicLayer
     - update
-    - get_seq_length
-    - get_mask_sizes
-    - get_max_cache_shape
-    - reset
-    - reorder_cache
     - crop
     - batch_repeat_interleave
     - batch_select_indices
 
 [[autodoc]] StaticLayer
     - update
-    - get_seq_length
-    - get_mask_sizes
-    - get_max_cache_shape
-    - reset
-    - reorder_cache
 
 [[autodoc]] SlidingWindowLayer
     - update
-    - get_seq_length
-    - get_mask_sizes
-    - get_max_cache_shape
-    - reset
-    - reorder_cache
 
 [[autodoc]] CacheProcessor
     - pre_update
@@ -419,51 +404,44 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - batch_select_indices
 
 [[autodoc]] DynamicCache
-    - update
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] QuantizedCache
-    - update
 
 [[autodoc]] QuantoQuantizedCache
-    - update
 
 [[autodoc]] QuantoQuantizedCacheProcessor
 
 [[autodoc]] HQQQuantizedCache
-    - update
+
 [[autodoc]] HQQQuantizedCacheProcessor
 
 [[autodoc]] OffloadedCache
-    - update
 
 [[autodoc]] StaticCache
-    - update
 
 [[autodoc]] OffloadedStaticCache
-    - update
 
 [[autodoc]] HybridCache
-    - update
 
 [[autodoc]] HybridChunkedCache
-    - update
 
 [[autodoc]] SlidingWindowCache
-    - update
 
 [[autodoc]] EncoderDecoderCache
-    - get_seq_length
     - to_legacy_cache
     - from_legacy_cache
-    - reset
-    - reorder_cache
 
 [[autodoc]] MambaCache
     - update_conv_state
     - update_ssm_state
     - reset
+
+[[autodoc]] CacheConfig
+
+[[autodoc]] QuantizedCacheConfig
+
 
 ## Watermark Utils
 

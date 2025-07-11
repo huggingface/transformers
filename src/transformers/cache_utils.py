@@ -39,7 +39,7 @@ class CacheLayerMixin:
         value_states: torch.Tensor,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Updates KV cache, returns updated keys/values for this layer."""
+        """Updates KV cache, returns updated keys/values of the layer."""
         raise NotImplementedError(f"Make sure to implement `update` in {self.__class__.__name__}.")
 
     def get_seq_length(self, cache_position=None) -> int:
@@ -51,7 +51,7 @@ class CacheLayerMixin:
         raise NotImplementedError(f"Make sure to implement `get_max_cache_shape` in {self.__class__.__name__}.")
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
-        """Returns mask sizes for this layer's cache."""
+        """Returns mask sizes for the layer."""
         raise NotImplementedError(f"Make sure to implement `get_mask_sizes` in {self.__class__.__name__}.")
 
     def reset(self) -> None:
@@ -73,6 +73,8 @@ class DynamicLayer(CacheLayerMixin):
     """
     A cache layer that grows dynamically as more tokens are generated. This is the default for generative models.
     It stores the Key and Value states as tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
+
+    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
     """
 
     @classmethod
@@ -176,6 +178,13 @@ class DynamicLayer(CacheLayerMixin):
 
 
 class StaticLayer(CacheLayerMixin):
+    """
+    A static cache layer that stores the Key and Value states as static tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
+    It allocates its full backing tensors up-front and mutates them in-place. Built for `torch.compile` support.
+
+    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    """
+
     is_compileable = True
     is_sliding = False
 
@@ -199,13 +208,10 @@ class StaticLayer(CacheLayerMixin):
                 Number of attention heads.
             head_dim (`int`):
                 Per-head hidden dimension.
-            dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+            dtype (`torch.dtype`, defaults to `torch.float32`):
                 Data type of the cache tensors.
-            device (`str` or `torch.device`, *optional*, defaults to `"cpu"`):
+            device (`str` or `torch.device`, defaults to `"cpu"`):
                 Device on which the cache tensors will be materialised.
-            sliding_window (`int`, *optional*):
-                When not ``None``, indicates that this layer will be used as a sliding-window
-                cache capped to ``sliding_window`` tokens (see `SlidingWindowLayer`).
 
         Notes:
             Static layers allocate their full backing tensors up-front and mutate them
@@ -302,7 +308,8 @@ class StaticLayer(CacheLayerMixin):
 class SlidingWindowLayer(StaticLayer):
     """
     A static cache layer that implements sliding window attention caching.
-    Inherits from StaticLayer but uses sliding window update logic.
+
+    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
     """
 
     def __init__(self, sliding_window, *args, **kwargs):
@@ -385,7 +392,11 @@ class SlidingWindowLayer(StaticLayer):
 
 
 class ChunkedSlidingLayer(SlidingWindowLayer):
-    """An extended SlidingWindowLayer that supports prefill chunking, originally implemented for Llama 4."""
+    """
+    An extended SlidingWindowLayer that supports prefill chunking, originally implemented for Llama 4.
+
+    See `SlidingWindowLayer` for details on common methods that are implemented by all cache layers.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -489,7 +500,7 @@ class CacheProcessor:
             cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The potentially modified key and value states.
+            The modified key and value states.
         """
         return key_states, value_states
 
@@ -512,7 +523,7 @@ class CacheProcessor:
             cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The final key and value states to return.
+            The final key and value states to return to the model.
         """
         return key_tensors, value_tensors
 
@@ -634,33 +645,33 @@ class QuantizedCacheProcessor(CacheProcessor):
         self,
         cache: "Cache",
         backend: str = "quanto",
-        nbits: Optional[int] = 4,
-        axis_key: Optional[int] = 0,
-        axis_value: Optional[int] = 0,
-        q_group_size: Optional[int] = 64,
-        residual_length: Optional[int] = 128,
-        compute_dtype: Optional[torch.dtype] = torch.float16,
-        device: Optional[str] = "cpu",
+        nbits: int = 4,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+        compute_dtype: torch.dtype = torch.float16,
+        device: str = "cpu",
     ):
         """
         Parameters:
-            backend (`str`, *optional*, defaults to `"quanto"`):
+            backend (`str`, defaults to `"quanto"`):
                 Backend to use when performing quantization, Can be one of [`quanto`, `HQQ`]
-            nbits (`Optional[int]`, *optional*, defaults to 4):
+            nbits (`int`, defaults to 4):
                 Number of bits, can be 2 or 4 for the `quanto` backend and one of [1, 2, 3, 4, 8] for the `HQQ` backend. Defaults to 2.
-            axis_key (`int`, *optional*, defaults to 0):
+            axis_key (`int`, defaults to 0):
                 Axis over which to perform grouping for the key tensors. Can be [0, -1] for `quanto` backend and [0, 1] for `HQQ` backend.
-            axis_value (`int`, *optional*, defaults to 0):
+            axis_value (`int`, defaults to 0):
                 Axis over which to perform grouping for the value tensors. Can be [0, -1] for `quanto` backend and [0, 1] for `HQQ` backend.
-            q_group_size (`Optional[int]`, *optional*, defaults to 64):
+            q_group_size (`int`, defaults to 64):
                 Size of the quantization group, should be a divisor of the model's hidden dimension.
                 Defaults to 64.
-            residual_length (`Optional[int]`, *optional*, defaults to 128):
+            residual_length (`int`, defaults to 128):
                 Length of the residual cache which will always be stored in original precision.
                 Defaults to 128.
-            compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
+            compute_dtype (`torch.dtype`, defaults to `torch.float16`):
                 The default dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
-            device (`str`, *optional*, defaults to `"cpu"`):
+            device (`str`, defaults to `"cpu"`):
                 Device on which to perform computations, should be same as the model's device.
         """
         self.backend = backend
@@ -817,13 +828,13 @@ class QuantoQuantizedCacheProcessor(QuantizedCacheProcessor):
         self,
         cache: "Cache",
         backend: str = "quanto",
-        nbits: Optional[int] = 4,
-        axis_key: Optional[int] = 0,
-        axis_value: Optional[int] = 0,
-        q_group_size: Optional[int] = 64,
-        residual_length: Optional[int] = 128,
-        compute_dtype: Optional[torch.dtype] = torch.float16,
-        device: Optional[str] = "cpu",
+        nbits: int = 4,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+        compute_dtype: torch.dtype = torch.float16,
+        device: str = "cpu",
     ) -> None:
         """Initialize the quanto quantization processor."""
         super().__init__(
@@ -879,13 +890,13 @@ class HQQQuantizedCacheProcessor(QuantizedCacheProcessor):
         self,
         cache: "Cache",
         backend: str = "quanto",
-        nbits: Optional[int] = 4,
-        axis_key: Optional[int] = 0,
-        axis_value: Optional[int] = 0,
-        q_group_size: Optional[int] = 64,
-        residual_length: Optional[int] = 128,
-        compute_dtype: Optional[torch.dtype] = torch.float16,
-        device: Optional[str] = "cpu",
+        nbits: int = 4,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+        compute_dtype: torch.dtype = torch.float16,
+        device: str = "cpu",
     ) -> None:
         """Initialize the HQQ quantization processor."""
         super().__init__(
@@ -994,18 +1005,16 @@ class Cache:
         layer_classes (`list[type[CacheLayerMixin]]`, *optional*):
             List of `CacheLayerMixin` classes to instantiate for the cache. When shorter than the
             required number of layers the list is cycled. Default is [DynamicLayer].
-    Additional arguments passed to the layers:
-        max_batch_size (`int`): Maximum batch size for static caches
-        max_cache_len (`int`): Maximum sequence length. For hybrid caches:
-            * SlidingWindowLayers: clamped to `min(sliding_window, max_cache_len)`
-            * StaticLayers: uses full `max_cache_len`
-        device (`torch.device`): Device for cache tensors
-        dtype (`torch.dtype`): Data type for cache tensors
-        layer_device_map (`dict[int, Union[str, torch.device]]`): Per-layer device mapping
-        tp_size (`int`): Tensor parallel size to adjust the number of key/value heads
+        max_batch_size (`int`, *optional*): Maximum batch size for static caches.
+        max_cache_len (`int`, *optional*): Maximum sequence length. For hybrid caches, SlidingWindowLayers are
+            clamped to `min(sliding_window, max_cache_len)`, StaticLayers use full `max_cache_len`.
+        device (`torch.device`, *optional*): Device for cache tensors.
+        dtype (`torch.dtype`, *optional*): Data type for cache tensors.
+        layer_device_map (`dict[int, Union[str, torch.device]]`, *optional*): Per-layer device mapping.
+        tp_size (`int`, *optional*): Tensor parallel size to adjust the number of key/value heads.
 
-    Additional keyword arguments are forwarded to the chosen layers constructor(s).  See the
-    documentation of the relevant `CacheLayerMixin` class for more details.
+    Additional keyword arguments are forwarded to the chosen layers constructor(s) and CacheProcessors. See the
+    documentation of the relevant `CacheLayerMixin` class and `CacheProcessor` class for more details.
     """
 
     def __init__(
@@ -1013,7 +1022,12 @@ class Cache:
         config: Optional[PretrainedConfig] = None,
         cache_processor: Optional[Union[str, type["CacheProcessor"]]] = None,
         layer_classes: Optional[list[type["CacheLayerMixin"]]] = None,
-        *args,
+        max_batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
+        device: Union[torch.device, str, None] = None,
+        dtype: Optional[torch.dtype] = None,
+        layer_device_map: Optional[dict[int, torch.device]] = None,
+        tp_size: Optional[int] = None,
         **kwargs,
     ):
         self.layers: list["CacheLayerMixin"] = []
@@ -1023,8 +1037,16 @@ class Cache:
             layer_classes = [DynamicLayer]
 
         self.layer_classes = layer_classes
+        kwargs.update(
+            max_batch_size=max_batch_size,
+            max_cache_len=max_cache_len,
+            device=device,
+            dtype=dtype,
+            layer_device_map=layer_device_map,
+            tp_size=tp_size,
+        )
         processor_kwargs, kwargs = parse_processor_args(processor_class, kwargs)
-        self.layer_init_args = parse_layer_args_from_model_config(config, *args, **kwargs)
+        self.layer_init_args = parse_layer_args_from_model_config(config, **kwargs)
         self.model_num_layers = getattr(config, "num_hidden_layers", 1)
 
         self.append_new_layers(self.model_num_layers - 1)
@@ -1216,6 +1238,8 @@ class DynamicCache(Cache):
     It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
     `[batch_size, num_heads, seq_len, head_dim]`.
 
+    See `Cache` for details on common methods that are implemented by all cache classes.
+
     Example:
 
         ```python
@@ -1258,18 +1282,15 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor, torch.FloatTensor]]] = None
-    ) -> "Cache":
+    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]) -> "Cache":
         """
         Converts a cache in the legacy cache format into an equivalent `Cache`. Used for
         backward compatibility.
         """
         cache = cls()
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx]
-                cache.update(key_states, value_states, layer_idx)
+        for layer_idx in range(len(past_key_values)):
+            key_states, value_states = past_key_values[layer_idx]
+            cache.update(key_states, value_states, layer_idx)
         return cache
 
 
@@ -1343,6 +1364,8 @@ class StaticCache(Cache):
     """
     Static Cache class to be used with `torch.compile(model)` and `torch.export()`.
 
+    See `Cache` for details on common methods that are implemented by all cache classes.
+
     Example:
 
         ```python
@@ -1372,7 +1395,9 @@ class HybridCache(Cache):
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
     attention and global attention in every other layer (originally implemented for Gemma2).
     Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
-    for global attention.For more information, see the documentation of each subcomponent cache class.
+    for global attention. For more information, see the documentation of those layer types.
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
 
@@ -1422,6 +1447,9 @@ class SlidingWindowCache(Cache):
         55, 56, 57, 58, 59, 60, 61, 62, 63,  0])
 
     We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window`)
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
+
     Example:
 
         ```python
@@ -1457,7 +1485,9 @@ class QuantizedCache(DynamicCache):
 
     It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
     Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
+    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`.
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
     def __init__(self, backend, **kwargs) -> None:
@@ -1485,6 +1515,8 @@ class QuantoQuantizedCache(QuantizedCache):
     is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
 
     Uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
 
@@ -1525,6 +1557,8 @@ class HQQQuantizedCache(QuantizedCache):
 
     Uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
 
+    See `Cache` for details on common methods that are implemented by all cache classes.
+
     Example:
 
         ```python
@@ -1557,6 +1591,8 @@ class OffloadedStaticCache(StaticCache):
 
     This cache maintains the compilation-friendly properties of StaticCache while enabling
     much longer sequences by offloading inactive layers to CPU memory.
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
         ```python
@@ -1594,6 +1630,8 @@ class HybridChunkedCache(HybridCache):
     Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
     for global attention. For more information, see the documentation of each subcomponent cache class.
 
+    See `Cache` for details on common methods that are implemented by all cache classes.
+
     Example:
 
         ```python
@@ -1626,6 +1664,8 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     This cache maintains the compilation-friendly properties of HybridChunkedCache while enabling
     much longer sequences by offloading inactive layers to CPU memory.
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
     def __init__(self, *args, **kwargs) -> None:
@@ -1636,6 +1676,8 @@ class EncoderDecoderCache(Cache):
     """
     Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
     cross-attention caches.
+
+    See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
 
@@ -1720,21 +1762,20 @@ class EncoderDecoderCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor, torch.FloatTensor]]] = None
+        cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         cache = cls(
             self_attention_cache=DynamicCache(),
             cross_attention_cache=DynamicCache(),
         )
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx][:2]
-                cache.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(past_key_values[layer_idx]) > 2:
-                    key_states, value_states = past_key_values[layer_idx][2:]
-                    cache.cross_attention_cache.update(key_states, value_states, layer_idx)
-                    cache.is_updated[layer_idx] = True
+        for layer_idx in range(len(past_key_values)):
+            key_states, value_states = past_key_values[layer_idx][:2]
+            cache.self_attention_cache.update(key_states, value_states, layer_idx)
+            if len(past_key_values[layer_idx]) > 2:
+                key_states, value_states = past_key_values[layer_idx][2:]
+                cache.cross_attention_cache.update(key_states, value_states, layer_idx)
+                cache.is_updated[layer_idx] = True
         return cache
 
     def get_seq_length(self, layer_idx: Optional[int] = 0, cache_position=None) -> int:
@@ -1981,7 +2022,7 @@ class SinkCache(Cache):
 @dataclass
 class CacheConfig:
     """
-    Base class for cache configs
+    Base class for cache configs. Deprecated in favor of a simpler dictionary.
     """
 
     cache_implementation: None
@@ -2090,7 +2131,7 @@ class CacheConfig:
 @dataclass
 class QuantizedCacheConfig(CacheConfig):
     """
-    Configuration class for quantized cache settings.
+    Configuration class for quantized cache settings. Deprecated in favor of a simpler dictionary.
 
     Attributes:
         backend (`str`, *optional*, defaults to `"quanto"`):
