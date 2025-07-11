@@ -456,6 +456,12 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     fx_compatible = False
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -485,6 +491,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_as_decoder(self):
@@ -537,6 +544,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         config_and_inputs[0].position_embedding_type = "relative_key"
+        config_and_inputs[0]._attn_implementation = "eager"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_multiple_choice(self):
@@ -589,3 +597,11 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 torch.jit.save(traced_model, os.path.join(tmp, "ernie.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "ernie.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+
+    @unittest.skip("Ernie token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Ernie token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
