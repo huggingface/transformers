@@ -131,11 +131,26 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2Processor
 
-
 ## Sam2ImageProcessor
 
 [[autodoc]] Sam2ImageProcessor
 
+## Sam2ImageProcessorFast
+
+[[autodoc]] Sam2ImageProcessorFast
+
+## Sam2VideoProcessor
+
+[[autodoc]] Sam2VideoProcessor
+
+## Sam2VideoSessionState
+
+[[autodoc]] Sam2VideoSessionState
+
+## Sam2VisionModel
+
+[[autodoc]] Sam2VisionModel
+    - forward
 
 ## Sam2Model
 

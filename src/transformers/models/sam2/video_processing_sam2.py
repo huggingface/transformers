@@ -22,12 +22,12 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
-    PILImageResampling,
     SizeDict,
 )
 from ...utils import (
     TensorType,
     is_torch_available,
+    is_vision_available,
 )
 from ...video_processing_utils import BaseVideoProcessor
 
@@ -35,6 +35,10 @@ from ...video_processing_utils import BaseVideoProcessor
 if is_torch_available():
     import torch
     from torch.nn import functional as F_t
+
+
+if is_vision_available():
+    from ...image_utils import PILImageResampling
 
 
 class Sam2VideoProcessor(BaseVideoProcessor):

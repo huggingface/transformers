@@ -28,7 +28,7 @@ from transformers.utils import is_tf_available, is_torch_available, is_vision_av
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, Sam2ImageProcessor, Sam2Processor
+    from transformers import AutoProcessor, Sam2ImageProcessor, Sam2Processor, Sam2VideoProcessor
 
 if is_torch_available():
     import torch
@@ -43,11 +43,15 @@ class Sam2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = Sam2ImageProcessor()
-        processor = Sam2Processor(image_processor)
+        video_processor = Sam2VideoProcessor()
+        processor = Sam2Processor(image_processor, video_processor)
         processor.save_pretrained(self.tmpdirname)
 
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -69,7 +73,10 @@ class Sam2ProcessorTest(unittest.TestCase):
         return mask_inputs
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Sam2Processor(image_processor=self.get_image_processor())
+        image_processor = self.get_image_processor()
+        video_processor = self.get_video_processor()
+
+        processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
         processor.save_pretrained(self.tmpdirname)
 
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
@@ -78,11 +85,13 @@ class Sam2ProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, Sam2ImageProcessor)
+        self.assertIsInstance(processor.video_processor, Sam2VideoProcessor)
 
     def test_image_processor_no_masks(self):
         image_processor = self.get_image_processor()
+        video_processor = self.get_video_processor()
 
-        processor = Sam2Processor(image_processor=image_processor)
+        processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -105,8 +114,9 @@ class Sam2ProcessorTest(unittest.TestCase):
 
     def test_image_processor_with_masks(self):
         image_processor = self.get_image_processor()
+        video_processor = self.get_video_processor()
 
-        processor = Sam2Processor(image_processor=image_processor)
+        processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
 
         image_input = self.prepare_image_inputs()
         mask_input = self.prepare_mask_inputs()
@@ -123,8 +133,9 @@ class Sam2ProcessorTest(unittest.TestCase):
     @require_torch
     def test_post_process_masks(self):
         image_processor = self.get_image_processor()
+        video_processor = self.get_video_processor()
 
-        processor = Sam2Processor(image_processor=image_processor)
+        processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
         dummy_masks = [torch.ones((1, 3, 5, 5))]
 
         original_sizes = [[1764, 2646]]

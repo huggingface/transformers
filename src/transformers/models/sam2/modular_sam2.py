@@ -63,7 +63,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
-    TransformersKwargs,
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
