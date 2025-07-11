@@ -291,10 +291,7 @@ class KeyeConfig(PretrainedConfig):
 
         self.layer_types = layer_types
         if self.layer_types is None:
-            self.layer_types = [
-                "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
+            self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
