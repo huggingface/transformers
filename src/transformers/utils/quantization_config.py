@@ -1342,7 +1342,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
-                    "run_compressed": run_compressed,
                     **kwargs,
                 }
             )
