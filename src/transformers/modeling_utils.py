@@ -52,6 +52,7 @@ if is_torchao_available():
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
+from .distributed import DistributedConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -774,7 +775,7 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:
+        if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
@@ -2150,6 +2151,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
 
+        if is_torch_greater_or_equal("2.5") and _torch_distributed_available and self.config.device_mesh is not None:
+            # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
+            device_mesh = self.config.device_mesh
+            for name, module in self.named_modules():
+                if not getattr(module, "_is_hooked", False):
+                    from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+
+                    add_tensor_parallel_hooks_to_module(
+                        model=self,
+                        module=module,
+                        tp_plan=self._tp_plan,
+                        layer_name="",  # TODO: make this optional?
+                        current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
+                        device_mesh=device_mesh,
+                        parameter_name=None,
+                    )
+                module._is_hooked = True
+
     def dequantize(self):
         """
         Potentially dequantize the model in case it has been quantized by a quantization method that support
@@ -2291,7 +2310,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 try:
                     kernel = get_kernel(repo_id)
                     ALL_ATTENTION_FUNCTIONS.register(
-                        f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
+                        f"kernel_{repo_id.replace('/', '_')}",
+                        ALL_ATTENTION_FUNCTIONS["flash_attention_2"],  # we need our extra layer to support kwargs
                     )
                     config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
                 except FileNotFoundError as e:
@@ -4443,6 +4463,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4485,7 +4506,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # `device_map` pointing to the correct device
         if tp_plan is not None:
             if device_mesh is None and tp_plan is not None:
-                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
                 # TODO: make device_mesh support multiple dimensions
                 if device_mesh.ndim > 1:
@@ -4808,6 +4829,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 torch_dtype=torch_dtype,
                 device_map=device_map,
             )
+        #
+        if distributed_config is not None and distributed_config.enable_expert_parallel:
+            # TODO: add proper support for ep_plan independently of tp_plan
+            if getattr(config, "base_model_ep_plan", None) is None:
+                raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
+            config.base_model_tp_plan = config.base_model_ep_plan  # TODO: hack for now
+
+        config.device_mesh = device_mesh  # Used in post_init
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
@@ -4915,8 +4944,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # check if using kernels
         if use_kernels:
             from kernels import Device, kernelize
+            from kernels.layer import Mode
 
-            kernelize(model, device=Device(type=model.device.type))
+            kernelize(model, mode=Mode.TRAINING, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)

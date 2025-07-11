@@ -46,7 +46,7 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
     def and_mask(batch_idx, head_idx, q_idx, kv_idx):
         result = q_idx.new_ones((), dtype=torch.bool)
         for mask in mask_functions:
-            result = result & mask(batch_idx, head_idx, q_idx, kv_idx)
+            result = result & mask(batch_idx, head_idx, q_idx, kv_idx).to(result.device)
         return result
 
     return and_mask
@@ -60,7 +60,7 @@ def or_masks(*mask_functions: list[Callable]) -> Callable:
     def or_mask(batch_idx, head_idx, q_idx, kv_idx):
         result = q_idx.new_zeros((), dtype=torch.bool)
         for mask in mask_functions:
-            result = result | mask(batch_idx, head_idx, q_idx, kv_idx)
+            result = result | mask(batch_idx, head_idx, q_idx, kv_idx).to(result.device)
         return result
 
     return or_mask
@@ -141,7 +141,6 @@ def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offs
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
     """
-
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return mask_function(batch_idx, head_idx, q_idx + q_offset, kv_idx + kv_offset)
 

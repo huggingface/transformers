@@ -26,30 +26,42 @@ class OpenAIMoeConfig(PretrainedConfig):
     """
 
     model_type = "openai_moe"
-    # Default tensor parallel plan for base model `OpenaiModel`
-    # a bit special, but this seems to work alright
     base_model_tp_plan = {
+        # "embed_tokens": "vocab_parallel_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "local_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
-        "layers.*.mlp.experts.gate_up_proj_bias": "local_rowwise",
+        "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
         "layers.*.mlp.experts.down_proj": "local_colwise",
-        "layers.*.mlp.experts.down_proj_bias": "local",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.down_proj_bias": "local",  # TODO: add smthg that says bias exists only once for all TPs
+        # "layers.*.mlp": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "local_rowwise",
+        "layers.*.mlp": "gather",
+        "layers.*.mlp.router": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
+    }
 
     def __init__(
         self,
         num_hidden_layers: int = 36,
-        num_local_experts: int = 128,
+        num_local_experts: int = 128,  # TODO: rename to num_experts otherwise confusing with EP
         vocab_size: int = 201088,
         hidden_size: int = 2880,
         intermediate_size: int = 2880,

@@ -26,8 +26,13 @@ from .utils import (
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
+    is_kernels_available,
     logging,
 )
+
+
+if is_kernels_available():
+    from kernels import get_kernel
 
 
 logger = logging.get_logger(__name__)
@@ -406,7 +411,7 @@ def fa_peft_integration_check(
 
 flash_241 = is_flash_attn_greater_or_equal("2.4.1")
 deterministic_g = None
-
+kernel = None
 
 def _flash_attention_forward(
     query_states: torch.Tensor,
@@ -475,6 +480,16 @@ def _flash_attention_forward(
         _pad_input = pad_input_fa2
         _unpad_input = unpad_input_fa2
         _is_fa3 = False
+    elif "kernel" in attn_implementation:
+        repo_id = attn_implementation.replace("kernel_", "").replace("_", "/")
+        global kernel
+        if kernel is None:
+            kernel = get_kernel(repo_id)
+        _flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func")
+        _flash_attn_func = getattr(kernel, "flash_attn_func")
+        _pad_input = pad_input_fa2
+        _unpad_input = unpad_input_fa2
+        _is_fa3 = True 
 
     if not use_top_left_mask:
         causal = is_causal
@@ -487,7 +502,7 @@ def _flash_attention_forward(
         _flash_supports_window_size and sliding_window is not None and key_states.shape[1] > sliding_window
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
-
+    flash_kwargs["s_aux"] = kwargs["s_aux"]
     if _is_fa3:
         if dropout > 0.0:
             logger.warning_once("Flash Attention 3 does not support dropout. Setting dropout to 0.0.")

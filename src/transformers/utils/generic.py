@@ -1029,7 +1029,10 @@ def check_model_inputs(func):
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
-                    collected_outputs[key] += (output[index],)
+                    if key not in collected_outputs:
+                        collected_outputs[key] =(output[index],) 
+                    else:
+                        collected_outputs[key] += (output[index],)
                 return output
 
             return wrapped_forward
