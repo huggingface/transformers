@@ -423,7 +423,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("autoformer", "Autoformer"),
         ("aya_vision", "AyaVision"),
-        ("bagel", "bagel"),
+        ("bagel", "Bagel"),
         ("bamba", "Bamba"),
         ("bark", "Bark"),
         ("bart", "BART"),

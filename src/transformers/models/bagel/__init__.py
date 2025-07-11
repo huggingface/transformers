@@ -18,8 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_janus import *
-    from .modeling_janus import *
+    from .configuration_bagel import *
+    from .image_processing_bagel import *
+    from .modeling_bagel import *
+    from .processing_bagel import *
 else:
     import sys
 
