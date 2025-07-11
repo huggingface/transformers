@@ -168,6 +168,7 @@ if TYPE_CHECKING:
     from .layoutxlm import *
     from .led import *
     from .levit import *
+    from .lfm2 import *
     from .lightglue import *
     from .lilt import *
     from .llama import *
