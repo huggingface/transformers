@@ -492,6 +492,7 @@ class DogePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DogeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = False
+    _supports_flash_attn_3 = False
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -503,7 +504,6 @@ class DogePreTrainedModel(PreTrainedModel):
         "hidden_states": DogeDecoderLayer,
         "attentions": DogeAttention,
     }
-    _supports_flash_attn_3 = False
 
     def _init_weights(self, module):
         """Initialize the weights"""

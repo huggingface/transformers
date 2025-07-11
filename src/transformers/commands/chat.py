@@ -14,6 +14,7 @@
 
 
 import asyncio
+import copy
 import json
 import os
 import platform
@@ -451,11 +452,13 @@ class ChatCommand(BaseTransformersCLICommand):
             )
         return processed_generate_flags
 
-    def get_generation_parameterization(self, args: ChatArguments) -> tuple[GenerationConfig, dict]:
+    def get_generation_parameterization(
+        self, args: ChatArguments, model_generation_config: GenerationConfig
+    ) -> tuple[GenerationConfig, dict]:
         """
         Returns a GenerationConfig object holding the generation parameters for the CLI command.
         """
-        # No generation config arg provided -> use base generation config, apply CLI defaults
+        # No generation config arg provided -> use model's default generation config, then apply CLI defaults
         if args.generation_config is not None:
             if ".json" in args.generation_config:  # is a local file
                 dirname = os.path.dirname(args.generation_config)
@@ -467,7 +470,8 @@ class ChatCommand(BaseTransformersCLICommand):
             # !!!!!!!!!
             # This is a chat session, so we have a few non-standard defaults
             # !!!!!!!!!
-            generation_config = GenerationConfig(do_sample=True, max_new_tokens=256)
+            generation_config = copy.deepcopy(model_generation_config)
+            generation_config.update({"do_sample": True, "max_new_tokens": 256})
 
         # Finally: parse and apply `generate_flags`
         parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
@@ -675,7 +679,8 @@ class ChatCommand(BaseTransformersCLICommand):
         else:
             user = args.user
 
-        generation_config, model_kwargs = self.get_generation_parameterization(args)
+        model_generation_config = GenerationConfig.from_pretrained(args.model_name_or_path)
+        generation_config, model_kwargs = self.get_generation_parameterization(args, model_generation_config)
 
         interface = RichInterface(model_name=args.model_name_or_path, user_name=user)
         interface.clear()
@@ -715,7 +720,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     stream=True,
                     extra_body={
                         "request_id": request_id,
-                        "generation_config": {**generation_config.to_dict()},
+                        "generation_config": generation_config.to_json_string(),
                         "model": model,
                     },
                 )
