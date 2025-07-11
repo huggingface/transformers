@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
 import warnings
+from copy import deepcopy
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -202,7 +202,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if kwargs.get(key) is not None:
                 setattr(self, key, kwargs[key])
             else:
-                setattr(self, key, getattr(self, key, None))
+                setattr(self, key, deepcopy(getattr(self, key, None)))
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
@@ -774,7 +774,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        output = deepcopy(self.__dict__)
         output.pop("model_valid_processing_keys", None)
         output.pop("_valid_kwargs_names", None)
         output["video_processor_type"] = self.__class__.__name__

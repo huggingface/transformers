@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Iterable
+from copy import deepcopy
 from functools import lru_cache, partial
 from typing import Any, Optional, TypedDict, Union
 
@@ -229,7 +230,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             if kwarg is not None:
                 setattr(self, key, kwarg)
             else:
-                setattr(self, key, getattr(self, key, None))
+                setattr(self, key, deepcopy(getattr(self, key, None)))
 
         # get valid kwargs names
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
