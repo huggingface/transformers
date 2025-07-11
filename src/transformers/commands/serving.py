@@ -67,6 +67,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         ResponseContentPartAddedEvent,
         ResponseContentPartDoneEvent,
         ResponseCreatedEvent,
+        ResponseErrorEvent,
         ResponseInProgressEvent,
         ResponseOutputItemAddedEvent,
         ResponseOutputItemDoneEvent,
@@ -117,7 +118,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         "user",
     }
 
-    UNUSED_COMPLETION_FIELDS = {
+    UNUSED_CHAT_COMPLETION_FIELDS = {
         "audio",
         "function_call",
         "functions",
@@ -290,8 +291,6 @@ class ServeArguments:
 
 
 class ServeCommand(BaseTransformersCLICommand):
-
-
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         """
@@ -323,7 +322,7 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
         # Internal state:
-        # 1. Tracks the last used model, to prevent reloading the model unnecessarily
+        # 1. Tracks the most recently used model, to prevent reloading the model unnecessarily
         self.loaded_model: Optional[str] = None
         self.running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
         self.model: PreTrainedModel
@@ -333,7 +332,6 @@ class ServeCommand(BaseTransformersCLICommand):
         # cache and avoid re-running prefil
         self.last_messages = None
         self.last_kv_cache = None
-
 
     def validate_request(
         self,
@@ -378,7 +376,7 @@ class ServeCommand(BaseTransformersCLICommand):
         if unused_fields_in_request:
             raise HTTPException(status_code=422, detail=f"Unused fields in the request: {unused_fields_in_request}")
 
-    def build_chat_completions_chunk(
+    def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
         content: Optional[str] = None,
@@ -387,7 +385,7 @@ class ServeCommand(BaseTransformersCLICommand):
         tool_calls: Optional[list[ChoiceDeltaToolCall]] = None,
     ) -> str:
         """
-        Builds a chunk of a streaming chat completion response.
+        Builds a chunk of a streaming "Completion" response.
 
         IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
         like Cursor, assume that when the field exists, it has data.
@@ -427,7 +425,20 @@ class ServeCommand(BaseTransformersCLICommand):
         )
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    def build_responses_event(self, response: BaseModel) -> str:
+    def build_response_event(self, response: BaseModel) -> str:
+        """
+        Builds a event of a streaming "Responses" response.
+
+        IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
+        like Cursor, assume that when the field exists, it has data.
+
+        Args:
+            response (`BaseModel`):
+                The response to build an event from. One of the multiple OpenAI Response output types
+
+        Returns:
+            `str`: The built chunk, a string containing a JSON string with the payload.
+        """
         return f"data: {response.model_dump_json(exclude_none=True)}\n\n"
 
     def run(self):
@@ -450,13 +461,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 request=request,
                 schema=TransformersCompletionCreateParamsStreaming,
                 validator=completion_validator,
-                unused_fields=UNUSED_COMPLETION_FIELDS,
+                unused_fields=UNUSED_CHAT_COMPLETION_FIELDS,
             )
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_completion(request)
+                output = self.continuous_batching_chat_completion(request)
             else:
-                output = self.generate_completion(request)
+                output = self.generate_chat_completion(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.post("/v1/responses")
@@ -511,7 +522,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model_info("meta-llama/Llama-3.3-70B-Instruct"),
         ]
 
-    def continuous_batching_completion(self, req: dict) -> Generator:
+    def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
 
         if update_model:
@@ -556,7 +567,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completions_chunk(request_id, role="assistant")
+                yield self.build_chat_completion_chunk(request_id, role="assistant")
 
                 for result in self.running_continuous_batching_manager:
                     if result.request_id != request_id:
@@ -569,10 +580,10 @@ class ServeCommand(BaseTransformersCLICommand):
 
                     finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
                     if result.status == RequestStatus.FINISHED:
-                        yield self.build_chat_completions_chunk(request_id, finish_reason=finish_reason)
+                        yield self.build_chat_completion_chunk(request_id, finish_reason=finish_reason)
                         break
                     else:
-                        yield self.build_chat_completions_chunk(request_id=request_id, content=result.next_token)
+                        yield self.build_chat_completion_chunk(request_id=request_id, content=result.next_token)
 
             except Exception as e:
                 logger.error(str(e))
@@ -580,7 +591,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_chat_completion(inputs[0])
 
-    def generate_completion(self, req: dict) -> Generator:
+    def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
@@ -646,7 +657,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completions_chunk(request_id, role="assistant")
+                yield self.build_chat_completion_chunk(request_id, role="assistant")
 
                 for result in streamer:
                     # ====== TOOL CALL LOGIC ======
@@ -659,7 +670,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
                         if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
                             tool_state.reset()
-                            yield self.build_chat_completions_chunk(
+                            yield self.build_chat_completion_chunk(
                                 request_id=_request_id, role=None, finish_reason="tool_calls"
                             )
                             continue
@@ -708,7 +719,7 @@ class ServeCommand(BaseTransformersCLICommand):
                                     type="function",
                                 )
 
-                            yield self.build_chat_completions_chunk(
+                            yield self.build_chat_completion_chunk(
                                 request_id=_request_id, role=None, tool_calls=[tool]
                             )
                             continue
@@ -716,13 +727,12 @@ class ServeCommand(BaseTransformersCLICommand):
 
                     # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
                     if result != "":
-                        yield self.build_chat_completions_chunk(_request_id, content=result)
-                yield self.build_chat_completions_chunk(_request_id, finish_reason="stop")
+                        yield self.build_chat_completion_chunk(_request_id, content=result)
+                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop")
 
                 thread.join()
             except Exception as e:
                 logger.error(str(e))
-                raise
                 yield f'data: {{"error": "{str(e)}"}}'
 
             finally:
@@ -730,7 +740,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return stream_chat_completion(generation_streamer, request_id)
 
-    def generate_response(self, req: dict) -> Generator:
+    def generate_response(self, req: dict) -> Generator[str, None, None]:
         # TODO
         # Check generation config parameters
         # Implement KV caching (with previous_request_id?)
@@ -791,7 +801,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_created)
+                yield self.build_response_event(response_created)
 
                 response_in_progress = ResponseInProgressEvent(
                     type="response.in_progress",
@@ -811,7 +821,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_in_progress)
+                yield self.build_response_event(response_in_progress)
 
                 # Start the output item. Emit the assistant role to start the stream. Other chunks won't have a role,
                 # as it is implicit
@@ -824,7 +834,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_output_item_added)
+                yield self.build_response_event(response_output_item_added)
 
                 # Start the content part of the event
                 response_content_part_added = ResponseContentPartAddedEvent(
@@ -836,7 +846,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_content_part_added)
+                yield self.build_response_event(response_content_part_added)
 
                 # Stream the actual generated text
                 results = ""
@@ -851,7 +861,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         delta=result,
                     )
                     sequence_number += 1
-                    yield self.build_responses_event(response_output_text_delta)
+                    yield self.build_response_event(response_output_text_delta)
 
                 # Signal the end of the text generation
                 response_output_text_done = ResponseTextDoneEvent(
@@ -863,7 +873,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     text=results,
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_output_text_done)
+                yield self.build_response_event(response_output_text_done)
 
                 # Complete the content part
                 response_content_part_done = ResponseContentPartDoneEvent(
@@ -875,7 +885,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_content_part_done)
+                yield self.build_response_event(response_content_part_done)
 
                 # Complete the output item
                 response_output_item_done = ResponseOutputItemDoneEvent(
@@ -892,7 +902,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_output_item_done)
+                yield self.build_response_event(response_output_item_done)
 
                 # Finally, Complete the event
                 response_completed = ResponseCompletedEvent(
@@ -913,12 +923,18 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
-                yield self.build_responses_event(response_completed)
+                yield self.build_response_event(response_completed)
 
                 thread.join()
             except Exception as e:
                 logger.error(str(e))
-                yield f'data: {{"error": "{str(e)}"}}'
+                error_event = ResponseErrorEvent(
+                    type="error",
+                    sequence_number=sequence_number,
+                    message=str(e),
+                )
+                sequence_number += 1
+                yield self.build_response_event(error_event)
 
             finally:
                 thread.join()

@@ -50,14 +50,14 @@ class ServeCLITest(unittest.TestCase):
         self.assertEqual(parsed_args.host, "0.0.0.0")
         self.assertEqual(parsed_args.port, 9000)
 
-    def test_completions_build_chunk(self):
+    def test_build_chat_completion_chunk(self):
         """Tests that the chunks are correctly built for the Completions API."""
         dummy = ServeCommand.__new__(ServeCommand)
         dummy.args = type("Args", (), {})()
         dummy.loaded_model = "dummy_model"
 
         # Case 1: most fields are provided
-        chunk = ServeCommand.build_chat_completions_chunk(
+        chunk = ServeCommand.build_chat_completion_chunk(
             dummy, request_id="req0", content="hello", finish_reason="stop", role="user"
         )
         self.assertIn("chat.completion.chunk", chunk)
@@ -67,13 +67,13 @@ class ServeCLITest(unittest.TestCase):
         )
 
         # Case 2: only the role is provided -- other fields in 'choices' are omitted
-        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", role="user")
+        chunk = ServeCommand.build_chat_completion_chunk(dummy, request_id="req0", role="user")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
 
         # Case 3: only the content is provided -- other fields in 'choices' are omitted
-        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", content="hello")
+        chunk = ServeCommand.build_chat_completion_chunk(dummy, request_id="req0", content="hello")
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
@@ -84,7 +84,7 @@ class ServeCLITest(unittest.TestCase):
             function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
             type="function",
         )
-        chunk = ServeCommand.build_chat_completions_chunk(dummy, request_id="req0", tool_calls=[tool_call])
+        chunk = ServeCommand.build_chat_completion_chunk(dummy, request_id="req0", tool_calls=[tool_call])
         self.assertIn("chat.completion.chunk", chunk)
         self.assertIn("data:", chunk)
         expected_choices_content = (
