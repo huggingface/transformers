@@ -102,7 +102,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
+        do_convert_rgb: Optional[bool] = True,
         do_pan_and_scan: Optional[bool] = None,
         pan_and_scan_min_crop_size: Optional[int] = None,
         pan_and_scan_max_num_crops: Optional[int] = None,
