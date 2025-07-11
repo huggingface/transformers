@@ -36,6 +36,8 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
+        ("aimv2", "Aimv2Config"),
+        ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -99,6 +101,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("deberta", "DebertaConfig"),
         ("deberta-v2", "DebertaV2Config"),
         ("decision_transformer", "DecisionTransformerConfig"),
+        ("deepseek_v2", "DeepseekV2Config"),
         ("deepseek_v3", "DeepseekV3Config"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
@@ -112,6 +115,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("dinov2", "Dinov2Config"),
         ("dinov2_with_registers", "Dinov2WithRegistersConfig"),
         ("distilbert", "DistilBertConfig"),
+        ("doge", "DogeConfig"),
         ("donut-swin", "DonutSwinConfig"),
         ("dots1", "Dots1Config"),
         ("dpr", "DPRConfig"),
@@ -197,6 +201,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("layoutlmv3", "LayoutLMv3Config"),
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
+        ("lfm2", "Lfm2Config"),
         ("lightglue", "LightGlueConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
@@ -267,6 +272,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
+        ("perception_encoder", "TimmWrapperConfig"),
+        ("perception_lm", "PerceptionLMConfig"),
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
         ("phi3", "Phi3Config"),
@@ -406,6 +413,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
+        ("aimv2", "AIMv2"),
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -476,6 +485,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("deberta", "DeBERTa"),
         ("deberta-v2", "DeBERTa-v2"),
         ("decision_transformer", "Decision Transformer"),
+        ("deepseek_v2", "DeepSeek-V2"),
         ("deepseek_v3", "DeepSeek-V3"),
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
@@ -493,6 +503,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("dinov2_with_registers", "DINOv2 with Registers"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
+        ("doge", "Doge"),
         ("donut-swin", "DonutSwin"),
         ("dots1", "dots1"),
         ("dpr", "DPR"),
@@ -583,6 +594,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("layoutxlm", "LayoutXLM"),
         ("led", "LED"),
         ("levit", "LeViT"),
+        ("lfm2", "Lfm2"),
         ("lightglue", "LightGlue"),
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
@@ -663,6 +675,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
+        ("perception_encoder", "PerceptionEncoder"),
+        ("perception_lm", "PerceptionLM"),
         ("persimmon", "Persimmon"),
         ("phi", "Phi"),
         ("phi3", "Phi3"),
@@ -857,6 +871,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_text", "glm4v"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
+        ("aimv2_vision_model", "aimv2"),
         ("smolvlm_vision", "smolvlm"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
@@ -869,6 +884,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
+        ("perception_encoder", "perception_lm"),
     ]
 )
 

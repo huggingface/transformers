@@ -14,9 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for MobileViT."""
 
-from typing import Optional
-
-import torch
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -27,23 +25,46 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
+    SizeDict,
     is_torch_tensor,
     make_list_of_images,
     pil_torch_interpolation_mapping,
     validate_kwargs,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 class MobileVitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
         Whether to flip the color channels from RGB to BGR or vice versa.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
     """
 
     do_flip_channel_order: Optional[bool]
+    do_reduce_labels: Optional[bool]
 
 
 @auto_docstring
@@ -58,27 +79,43 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_normalize = None
     do_convert_rgb = None
     do_flip_channel_order = True
+    do_reduce_labels = False
     valid_kwargs = MobileVitFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[MobileVitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
+    def reduce_label(self, labels: list["torch.Tensor"]):
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
+            labels[idx] = label
+
+        return label
+
     def _preprocess(
         self,
-        images,
+        images: list["torch.Tensor"],
+        do_reduce_labels: bool,
         do_resize: bool,
-        size: Optional[dict],
-        interpolation: Optional[str],
+        size: Optional[SizeDict],
+        interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_center_crop: bool,
-        crop_size: Optional[dict],
+        crop_size: Optional[SizeDict],
         do_flip_channel_order: bool,
         disable_grouping: bool,
-        return_tensors: Optional[str],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
-    ):
+    ) -> BatchFeature:
         processed_images = []
+
+        if do_reduce_labels:
+            images = self.reduce_label(images)
 
         # Group images by shape for more efficient batch processing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -119,6 +156,16 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
 
         return processed_images
 
+    def _preprocess_images(
+        self,
+        images,
+        **kwargs,
+    ):
+        """Preprocesses images."""
+        kwargs["do_reduce_labels"] = False
+        processed_images = self._preprocess(images=images, **kwargs)
+        return processed_images
+
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
@@ -149,8 +196,8 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     @auto_docstring
     def preprocess(
         self,
-        images,
-        segmentation_maps=None,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
         **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -192,7 +239,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        images = self._preprocess(
+        images = self._preprocess_images(
             images=images,
             **kwargs,
         )
@@ -207,6 +254,21 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data={"pixel_values": images})
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+        """
+        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`MobileNetV2ForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps
