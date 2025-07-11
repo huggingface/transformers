@@ -46,7 +46,6 @@ class KeyeVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         spatial_merge_size=2,
-        temporal_patch_size=2,
         tokens_per_second=2,
         **kwargs,
     ):
@@ -63,7 +62,6 @@ class KeyeVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
         self.tokens_per_second = tokens_per_second
 
 
@@ -97,8 +95,6 @@ class KeyeConfig(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -110,12 +106,8 @@ class KeyeConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         vision_config (`Dict`, *optional*):
@@ -205,15 +197,12 @@ class KeyeConfig(PretrainedConfig):
         num_attention_heads=64,
         num_key_value_heads=8,
         hidden_act="silu",
-        max_position_embeddings=32768,
         initializer_range=0.02,
         rms_norm_eps=1e-05,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=1000000.0,
-        use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=80,
         attention_dropout=0.0,
         vision_config=None,
         rope_scaling=None,
@@ -228,14 +217,11 @@ class KeyeConfig(PretrainedConfig):
             self.vision_config = self.sub_configs["vision_config"]()
 
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = max_window_layers
+        self.sliding_window = None
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -254,12 +240,7 @@ class KeyeConfig(PretrainedConfig):
 
         self.layer_types = layer_types
         if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
+            self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
