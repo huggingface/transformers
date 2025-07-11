@@ -640,7 +640,7 @@ def compute_optimal_blocks(
     memory_per_token = 2 * num_kv_heads * head_dim * dtype_size * num_hidden_layers  # For K and V caches
 
     # Estimate sequence length requirements
-    tokens_to_generate = getattr(generation_config, "max_new_tokens", 20)
+    tokens_to_generate = getattr(generation_config, "max_new_tokens") or 20
 
     if median_prefill_length is None and inputs:
         non_empty_inputs = [len(seq) for seq in inputs if seq]
