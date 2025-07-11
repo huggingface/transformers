@@ -26,7 +26,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...generation.utils import GenerationMixin
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
@@ -336,62 +336,32 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 
 @auto_docstring
 class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: PerceptionLMConfig, **super_kwargs):
-        super().__init__(config, **super_kwargs)
+    def __init__(self, config: PerceptionLMConfig):
+        super().__init__(config)
         self.model = PerceptionLMModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def set_input_embeddings(self, new_embeddings):
-        self.model.set_input_embeddings(new_embeddings)
-
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        attention_mask=None,
-        cache_position=None,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-        return model_inputs
+        return self.model.get_decoder
 
     @can_return_tuple
     @auto_docstring
@@ -488,6 +458,37 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_values_videos=None,
+        attention_mask=None,
+        cache_position=None,
+        logits_to_keep=None,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
+        if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+        return model_inputs
 
 
 __all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionLMModel"]

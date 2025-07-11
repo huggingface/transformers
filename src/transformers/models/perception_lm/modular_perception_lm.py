@@ -21,7 +21,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...generation.utils import GenerationMixin
 from ...utils import (
     auto_docstring,
     can_return_tuple,
@@ -30,6 +29,7 @@ from ...utils import (
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
@@ -255,32 +255,8 @@ class PerceptionLMModel(LlavaModel):
 
 
 @auto_docstring
-class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-
-    def __init__(self, config: PerceptionLMConfig, **super_kwargs):
-        super().__init__(config, **super_kwargs)
-        self.model = PerceptionLMModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    def set_input_embeddings(self, new_embeddings):
-        self.model.set_input_embeddings(new_embeddings)
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
+class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
 
     def prepare_inputs_for_generation(
         self,
@@ -408,6 +384,18 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
+
+    def get_image_features(self, **kwargs):
+        raise AttributeError("Not needed for PerceptionLM")
+
+    def language_model(self):
+        raise AttributeError("Not needed for PerceptionLM")
+
+    def vision_tower(self):
+        raise AttributeError("Not needed for PerceptionLM")
+
+    def multi_modal_projector(self):
+        raise AttributeError("Not needed for PerceptionLM")
 
 
 __all__ = [
