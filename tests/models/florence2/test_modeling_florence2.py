@@ -179,7 +179,7 @@ class Florence2VisionText2TextModelTester:
             "input_ids": input_ids,
             "pixel_values": pixel_values,
             "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask
+            "decoder_attention_mask": decoder_attention_mask,
         }
 
         config = self.get_config()
