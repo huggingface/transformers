@@ -595,3 +595,80 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_text = 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature'  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)
+
+    @slow
+    def test_export_smolvlm_vision_encoder(self):
+        from transformers import AutoConfig
+        from transformers.integrations.executorch import TorchExportableModuleForVLM
+
+        model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+
+        # NOTE: The attention_mask is prepared internally in the vision encoder, depending on whether flash attention is used or not
+        # For ExecuTorch, flash attention is not supported, so the way of exporting vison encoder should be compatible with text-decoder
+        config = AutoConfig.from_pretrained(model_id)
+        config.text_config._flash_attn_2_enabled = False
+
+        # Load model and extract vision encoder
+        model = SmolVLMForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.float32,
+            config=config,
+        )
+
+        exportable_module = TorchExportableModuleForVLM(model)
+        exported_program = exportable_module.export_vision_encoder()
+        self.assertIsInstance(exported_program, torch.export.ExportedProgram)
+
+    @slow
+    def test_export_smolvlm_connector(self):
+        from transformers import AutoConfig
+        from transformers.integrations.executorch import TorchExportableModuleForVLM
+
+        model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+
+        # NOTE: The attention_mask is prepared internally in the vision encoder, depending on whether flash attention is used or not
+        # For ExecuTorch, flash attention is not supported, so the way of exporting vison encoder should be compatible with text-decoder
+        config = AutoConfig.from_pretrained(model_id)
+        config.text_config._flash_attn_2_enabled = False
+
+        # Load the model and extract the connector (multi-modal projector)
+        model = SmolVLMForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.float32,
+            config=config,
+        )
+
+        connector = model.model.connector
+        connector.eval()
+
+        exportable_module = TorchExportableModuleForVLM(model)
+        exported_program = exportable_module.export_connector()
+        self.assertIsInstance(exported_program, torch.export.ExportedProgram)
+
+    @slow
+    def test_export_smolvlm_text_decoder(self):
+        from transformers import AutoConfig
+        from transformers.integrations.executorch import TorchExportableModuleForVLM
+
+        model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+
+        # NOTE: The attention_mask is prepared internally in the vision encoder, depending on whether flash attention is used or not
+        # For ExecuTorch, flash attention is not supported, so the way of exporting vison encoder should be compatible with text-decoder
+        config = AutoConfig.from_pretrained(model_id)
+        config.text_config._flash_attn_2_enabled = False
+        config.text_config.use_cache = True
+        config.text_config.attn_implementation = "sdpa"
+
+        # Load the model and extract the text decoder
+        model = SmolVLMForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.float32,
+            config=config,
+        )
+
+        text_decoder = model.model.text_model
+        text_decoder.eval()
+
+        exportable_module = TorchExportableModuleForVLM(model)
+        exported_program = exportable_module.export_text_decoder()
+        self.assertIsInstance(exported_program, torch.export.ExportedProgram)
