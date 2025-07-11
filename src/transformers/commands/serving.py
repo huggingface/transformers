@@ -199,7 +199,13 @@ def create_generation_config_from_req(
         if v is not None:
             setattr(generation_config, k, v)
 
+    # Response-specific parameters
+    if req.get("max_output_tokens") is not None:
+        generation_config.max_new_tokens = int(req["max_output_tokens"])
+
     # Completion-specific parameters
+    if req.get("max_tokens") is not None:
+        generation_config.max_new_tokens = int(req["max_tokens"])
     if req.get("frequency_penalty") is not None:
         generation_config.repetition_penalty = float(req["frequency_penalty"])
     if req.get("logit_bias") is not None:
@@ -214,6 +220,10 @@ def create_generation_config_from_req(
         generation_config.top_p = float(req["top_p"])
     if req.get("seed") is not None:
         torch.manual_seed(req["seed"])
+
+    # Sets server-specific defaults, if unset
+    if generation_config.max_new_tokens is None:
+        generation_config.max_new_tokens = 1024
 
     return generation_config
 
@@ -524,7 +534,6 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
-
         if update_model:
             self.load_model_and_tokenizer(req["model"], self.args)
 
@@ -558,9 +567,8 @@ class ServeCommand(BaseTransformersCLICommand):
 
         def stream_chat_completion(_inputs):
             try:
-                max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 1024
                 request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=req.get("request_id"), max_new_tokens=max_new_tokens
+                    _inputs, request_id=req.get("request_id"), max_new_tokens=generation_config.max_new_tokens
                 )
 
                 queue_is_flushed = False
@@ -618,17 +626,13 @@ class ServeCommand(BaseTransformersCLICommand):
             )
         else:
             text = self.tokenizer.apply_chat_template(req["messages"], add_generation_prompt=True, tokenize=False)
-
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
         request_id = req.get("request_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-
         generation_config = create_generation_config_from_req(
             req, model_generation_config=self.model.generation_config
         )
-        max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 1024
-        generation_config.max_new_tokens = max_new_tokens
 
         last_kv_cache = None
         if self.is_continuation(req) and not update_model:
@@ -742,8 +746,6 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         # TODO
-        # Check generation config parameters
-        # Implement KV caching (with previous_request_id?)
         # Implement metadata forwarding (both input and output have a metadata field)
         # Implement non-streaming mode
         # Implement different output_index and content_index than 0
@@ -753,17 +755,17 @@ class ServeCommand(BaseTransformersCLICommand):
             self.load_model_and_tokenizer(req["model"], self.args)
 
         text = self.tokenizer.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
-
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
         request_id = req.get("previous_response_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-
         generation_config = create_generation_config_from_req(
             req, model_generation_config=self.model.generation_config
         )
-        max_new_tokens = req.get("max_output_tokens", generation_config.max_new_tokens) or 1024
-        generation_config.max_new_tokens = max_new_tokens
+
+        last_kv_cache = None
+        if self.is_continuation(req) and not update_model:
+            last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             "inputs": inputs,
@@ -771,6 +773,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "streamer": generation_streamer,
             "generation_config": generation_config,
             "return_dict_in_generate": True,
+            "past_key_values": last_kv_cache,
         }
 
         def stream_response(streamer, _request_id):
