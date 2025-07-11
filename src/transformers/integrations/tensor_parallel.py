@@ -409,27 +409,6 @@ class TensorParallelLayer:
             )
 
 
-class AllReduce(Function):
-    @staticmethod
-    def forward(ctx, tensor: torch.Tensor) -> torch.Tensor:
-        # Make a copy so we don’t modify the original in-place
-        out = tensor.clone()
-        # Sum-reduce across all ranks
-        dist.all_reduce(out, op=dist.ReduceOp.SUM)
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
-        # The gradient itself needs to be summed across ranks, too
-        grad = grad_output.clone()
-        dist.all_reduce(grad, op=dist.ReduceOp.SUM)
-        return grad
-
-
-def all_reduce(tensor: torch.Tensor) -> torch.Tensor:
-    return AllReduce.apply(tensor)
-
-
 # use_dtensor needs to be set to false for nn.Parameter when you want to view, chunk, slice
 # you name it. Whatever you want to do that is a bit unconventional, you need local tensors
 class GatherParallel(TensorParallelLayer):
@@ -462,9 +441,9 @@ class GatherParallel(TensorParallelLayer):
         if hasattr(mod, "kernel_layer_name"):  # kernels usually handle this themselves
             return outputs
         if isinstance(outputs, torch.Tensor):
-            all_reduce(outputs)
+            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
         else:
-            all_reduce(outputs[0])
+            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
         return outputs
 
 

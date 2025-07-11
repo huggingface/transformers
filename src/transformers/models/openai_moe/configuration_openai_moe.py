@@ -36,7 +36,7 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
         "layers.*.mlp.experts.down_proj": "local_colwise",
         "layers.*.mlp.experts.down_proj_bias": "local",  # TODO: add smthg that says bias exists only once for all TPs
-        "layers.*.mlp": "gather",
+        # "layers.*.mlp": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
