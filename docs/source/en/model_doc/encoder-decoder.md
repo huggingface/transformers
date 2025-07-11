@@ -55,26 +55,18 @@ print(summarizer(text))
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoTokenizer, EncoderDecoderModel  
+import torch  
+from transformers import AutoModelForCausalLM, AutoTokenizer  
 
-# Load a pre-trained translation model  
-model_name = "google/bert2bert_L-24_wmt_en_de" 
-tokenizer = AutoTokenizer.from_pretrained(model_name, pad_token="<pad>", eos_token="</s>", bos_token="<s>")  
-model = EncoderDecoderModel.from_pretrained(model_name)  
+tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, device_map="auto",attn_implementation="sdpa")  
 
-# Input sentence to translate  
-input_text = "Plants create energy through a process known as"  
+text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
 
-# Encode the input text  
-inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).input_ids  
+inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(model.device)
 
-# Generate the translated output  
-outputs = model.generate(inputs)[0]  
-
-# Decode the output tokens to get the translated sentence  
-translated_text = tokenizer.decode(outputs, skip_special_tokens=True)  
-
-print("Translated text:", translated_text)  
+summary = model.generate(**inputs, max_length=60, num_beams=4, early_stopping=True)
+print(tokenizer.decode(summary[0], skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -143,26 +135,26 @@ model = EncoderDecoderModel.from_encoder_decoder_pretrained(
 - The Encoder Decoder Model can also be used for translation as shown below.
 
 ```python
-from transformers import AutoTokenizer, EncoderDecoderModel
+from transformers import AutoTokenizer, EncoderDecoderModel  
 
-# Load a pre-trained translation model
+# Load a pre-trained translation model  
 model_name = "google/bert2bert_L-24_wmt_en_de" 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = EncoderDecoderModel.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name, pad_token="<pad>", eos_token="</s>", bos_token="<s>")  
+model = EncoderDecoderModel.from_pretrained(model_name)  
 
-# Input sentence to translate
-input_text = "Plants create energy through a process known as"
+# Input sentence to translate  
+input_text = "Plants create energy through a process known as"  
 
-# Encode the input text
-inputs = tokenizer(input_text, return_tensors="pt")
+# Encode the input text  
+inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).input_ids  
 
-# Generate the translated output
-outputs = model.generate(**inputs)
+# Generate the translated output  
+outputs = model.generate(inputs)[0]  
 
-# Decode the output tokens to get the translated sentence
-translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+# Decode the output tokens to get the translated sentence  
+translated_text = tokenizer.decode(outputs, skip_special_tokens=True)  
 
-print("Translated text:", translated_text)
+print("Translated text:", translated_text)  
 ```
 
 ## EncoderDecoderConfig
