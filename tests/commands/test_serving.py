@@ -255,15 +255,13 @@ class ServeCompletionsMixin:
         # sets `do_sample=True`
         self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
 
-    # TODO: implement API-compliant error handling, and then test it
-    # See https://platform.openai.com/docs/guides/error-codes,
     # TODO: one test for each request flag, to confirm it is working as expected
     # TODO: speed-based test to confirm that KV cache is working across requests
 
 
 @slow  # server startup time is slow on our push CI
 @require_openai
-class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
+class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `generate` version of the Completions API."""
 
     @classmethod
@@ -355,7 +353,7 @@ class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
 
 @slow  # server startup time is slow on our push CI
 @require_openai
-class ServeCompletionsContinuousBatchingTest(ServeCompletionsMixin, unittest.TestCase):
+class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `continuous_batching` version of the Completions API."""
 
     @classmethod
@@ -367,3 +365,6 @@ class ServeCompletionsContinuousBatchingTest(ServeCompletionsMixin, unittest.Tes
         thread = Thread(target=serve_command.run)
         thread.daemon = True
         thread.start()
+
+
+# TODO: Response integration tests
