@@ -245,7 +245,7 @@ def eager_attention_forward(
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
     scores = nn.functional.softmax(combined_logits, dim=-1)[..., :-1]
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)  # ignore the sinks
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
