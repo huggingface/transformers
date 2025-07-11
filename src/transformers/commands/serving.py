@@ -439,7 +439,7 @@ class ServeCommand(BaseTransformersCLICommand):
         )
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    def build_response_event(self, response: BaseModel) -> str:
+    def build_response_event(self, response: "BaseModel") -> str:
         """
         Builds a event of a streaming OpenAI Response response.
 
