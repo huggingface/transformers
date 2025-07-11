@@ -343,6 +343,8 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
     list_of_state_dict = list_of_state_dict + language_model(hf_model.state_dict())
 
     for i in range(len(list_of_state_dict)):
+        if list_of_state_dict[i][0] == "image_projection":
+            original_weights[list_of_state_dict[i][0]].transpose_(1, 0)
         huggingface_weights[list_of_state_dict[i][1]] = original_weights[list_of_state_dict[i][0]]
 
     model = Florence2ForConditionalGeneration(config)
@@ -356,7 +358,7 @@ if __name__ == "__main__":
         "--hf_model_id",
         default="microsoft/Florence-2-base",
         type=str,
-        help="Name of the cvt model you'd like to convert.",
+        help="Name of the florence2 model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

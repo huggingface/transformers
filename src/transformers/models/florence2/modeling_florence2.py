@@ -20,7 +20,7 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -32,9 +32,13 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+)
 from ..auto import AutoModel
 from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
@@ -99,14 +103,7 @@ class Florence2VisionLearnedAbsolutePositionEmbedding2D(nn.Module):
 
 class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
     """
-    This class implements a very simple positional encoding. It follows closely
-    the encoder from the link below:
-    https://pytorch.org/tutorials/beginner/translation_transformer.html
-
-    Args:
-        embed_dim: The dimension of the embeddings.
-        dropout_prob: The dropout probability.
-        max_seq_len: The maximum length to precompute the positional encodings.
+    This module generates 1D cosine positional embeddings using precomputed sinusoidal functions.
     """
 
     def __init__(self, embed_dim: int = 512, max_seq_len: int = 1024) -> None:
@@ -132,17 +129,6 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         return torch.sin(emb), torch.cos(emb)
 
     def forward(self, seq_embeds: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            seq_embeds: The sequence embeddings in order. Allowed size:
-                1. [T, D], where T is the length of the sequence, and D is the
-                frame embedding dimension.
-                2. [B, T, D], where B is the batch size and T and D are the
-                same as above.
-
-        Returns a tensor of with the same dimensions as the input: i.e.,
-        [1, T, D] or [T, D].
-        """
         len_seq = seq_embeds.size(-2)
         if len_seq > self.max_seq_len:
             raise ValueError(f"Maximum sequence length {self.max_seq_len}, got {len_seq}")
@@ -212,10 +198,40 @@ class Florence2VisionConvEmbed(nn.Module):
         return hidden_states
 
 
-class Florence2VisionChannelAttention(nn.Module):
-    def __init__(self, dim: int, groups: int = 8, qkv_bias: bool = True):
-        super().__init__()
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Florence2VisionChannelAttention(nn.Module):
+    def __init__(self, config: Florence2VisionConfig, dim: int, groups: int = 8, qkv_bias: bool = True):
+        super().__init__()
+        self.config = config
         self.groups = groups
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(dim, dim)
@@ -225,17 +241,17 @@ class Florence2VisionChannelAttention(nn.Module):
 
         # Reshape for grouped channel attention
         qkv = self.qkv(hidden_states).reshape(B, N, 3, self.groups, C // self.groups)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
+        qkv = qkv.permute(2, 0, 3, 4, 1)
         query, key, value = qkv.unbind(0)
 
-        # Dynamic scaling for varying sequence lengths
-        query = query * N**-0.5
-
         # Channel-to-channel attention within groups:
-        attn_weights = query.transpose(-1, -2) @ key
-        attn_weights = attn_weights.softmax(dim=-1)
-        hidden_states = (attn_weights @ value.transpose(-1, -2)).transpose(-1, -2)
-        hidden_states = hidden_states.transpose(1, 2).reshape(B, N, C)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        hidden_states, _ = attention_interface(self, query, key, value, attention_mask=None, scaling=N**-0.5)
+        hidden_states = hidden_states.permute(0, 2, 1, 3)
+        hidden_states = hidden_states.reshape(B, C, N).transpose(1, 2)
 
         # Final projection
         hidden_states = self.proj(hidden_states)
@@ -264,7 +280,8 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.channel_attn = Florence2VisionChannelAttention(
-            config.embed_dim[stage_idx],
+            config=config,
+            dim=config.embed_dim[stage_idx],
             groups=config.num_groups[stage_idx],
             qkv_bias=config.qkv_bias,
         )
@@ -329,36 +346,6 @@ def window_reverse(windows: torch.Tensor, window_size: int, H: int, W: int):
     return hidden_states
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
-    dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
-
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class Florence2VisionWindowAttention(nn.Module):
     def __init__(
         self,
@@ -402,7 +389,11 @@ class Florence2VisionWindowAttention(nn.Module):
         query, key, value = qkv.unbind(0)
 
         # Apply attention within each window
-        window_contexts, _ = eager_attention_forward(self, query, key, value, attention_mask=None, scaling=self.scale)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        window_contexts, _ = attention_interface(self, query, key, value, attention_mask=None, scaling=self.scale)
         window_contexts = window_contexts.view(B_, N, C)
         # Apply output projection
         window_contexts = self.proj(window_contexts)
@@ -598,7 +589,7 @@ class Florence2VisionProjector(nn.Module):
         super().__init__()
         self.vision_embedding_dim = config.embed_dim[-1]
         self.vision_projection_dim = config.projection_dim
-        self.image_projection = nn.Linear(self.vision_projection_dim, self.vision_embedding_dim, bias=False)
+        self.image_projection = nn.Linear(self.vision_embedding_dim, self.vision_projection_dim, bias=False)
         self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
         self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
             embedding_dim=self.vision_embedding_dim, num_pos=config.max_position_embeddings
