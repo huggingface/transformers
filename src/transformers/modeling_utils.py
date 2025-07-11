@@ -1898,8 +1898,79 @@ class ModuleUtilsMixin:
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
+class EmbeddingAccessMixin:
+    """
+    Base utilities to regroup getters and setters for embeddings.
+    """
+    def get_input_embeddings(self) -> nn.Module:
+        """
+        Returns the model's input embeddings.
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
+        Returns:
+            `nn.Module`: A torch module mapping vocabulary to hidden states.
+        """
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            return self.model.embed_tokens
+
+        # 2) vanilla decoder‑only architectures
+        elif hasattr(self, "embed_tokens"):
+            return self.embed_tokens
+        elif getattr(self, self.base_model_prefix, self) is not self:
+            base_model = getattr(self, self.base_model_prefix, self)
+            return base_model.get_input_embeddings()
+        else:
+            raise NotImplementedError(
+                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
+                "please override in the subclass."
+            )
+
+    def set_input_embeddings(self, value: nn.Module):
+        """Fallback setter that handles **~70 %** of models in the code‑base.
+
+        Order of attempts:
+        1. `self.model.embed_tokens`
+        2. `self.embed_tokens`
+        3. delegate to the *base model* if one exists
+        4. otherwise raise `NotImplementedError` so subclasses still can (and
+            should) override for exotic layouts.
+        """
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            self.model.embed_tokens = value
+
+        # 2) vanilla decoder‑only architectures
+        elif hasattr(self, "embed_tokens"):
+            self.embed_tokens = value
+
+        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        elif getattr(self, self.base_model_prefix, self) is not self:
+            base_model = getattr(self, self.base_model_prefix, self)
+            base_model.set_input_embeddings(value)
+
+        else:
+            raise NotImplementedError(
+                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+            )
+
+    def get_output_embeddings(self) -> nn.Module:
+        """
+        Returns the model's output embedding, defaulting to lm_head.
+
+        Returns:
+            `nn.Module`: A torch module mapping hidden states to vocabulary.
+        """
+
+        return getattr(self, "lm_head", None)
+
+    def set_output_embeddings(self, new_embeddings):
+        """
+        Sets the model's output embedding, defaulting to setting new_embeddings to lm_head.
+        """
+        if getattr(self, "lm_head"):
+            self.lm_head = new_embeddings
+
+class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -2736,73 +2807,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         self._require_grads_hook.remove()
 
-    def get_input_embeddings(self) -> nn.Module:
-        """
-        Returns the model's input embeddings.
 
-        Returns:
-            `nn.Module`: A torch module mapping vocabulary to hidden states.
-        """
-        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
-        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
-            return self.model.embed_tokens
-
-        # 2) vanilla decoder‑only architectures
-        elif hasattr(self, "embed_tokens"):
-            return self.embed_tokens
-        elif getattr(self, self.base_model_prefix, self) is not self:
-            base_model = getattr(self, self.base_model_prefix, self)
-            return base_model.get_input_embeddings()
-        else:
-            raise NotImplementedError(
-                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
-                "please override in the subclass."
-            )
-
-    def set_input_embeddings(self, value: nn.Module):
-        """Fallback setter that handles **~70 %** of models in the code‑base.
-
-        Order of attempts:
-        1. `self.model.embed_tokens`
-        2. `self.embed_tokens`
-        3. delegate to the *base model* if one exists
-        4. otherwise raise `NotImplementedError` so subclasses still can (and
-            should) override for exotic layouts.
-        """
-        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
-        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
-            self.model.embed_tokens = value
-
-        # 2) vanilla decoder‑only architectures
-        elif hasattr(self, "embed_tokens"):
-            self.embed_tokens = value
-
-        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
-        elif getattr(self, self.base_model_prefix, self) is not self:
-            base_model = getattr(self, self.base_model_prefix, self)
-            base_model.set_input_embeddings(value)
-
-        else:
-            raise NotImplementedError(
-                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
-            )
-
-    def get_output_embeddings(self) -> nn.Module:
-        """
-        Returns the model's output embedding, defaulting to lm_head.
-
-        Returns:
-            `nn.Module`: A torch module mapping hidden states to vocabulary.
-        """
-
-        return getattr(self, "lm_head", None)
-
-    def set_output_embeddings(self, new_embeddings):
-        """
-        Sets the model's output embedding, defaulting to setting new_embeddings to lm_head.
-        """
-        if getattr(self, "lm_head"):
-            self.lm_head = new_embeddings
 
     def _init_weights(self, module):
         """
