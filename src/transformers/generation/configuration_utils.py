@@ -214,7 +214,8 @@ class GenerationConfig(PushToHubMixin):
         moment_p_exponent (`float`, *optional*, defaults to 2.0):
             The exponent to which probabilities are raised when calculating the moment. Higher values emphasize the
             tail of the distribution more and reduce the truncation threshold. Values closer to 1 increase the threshold
-            to approach 1 as this value approaches 1.
+            to approach 1 as this value approaches 1. The default value represents the "P-Less" method's second moment,
+            i.e. `moment_p_exponent=2.0`.
         moment_p_alpha (`float`, *optional*, defaults to 1.0):
             Scaling factor applied to the moment threshold. Values < 1 make filtering more selective, while values > 1
             make it less selective.

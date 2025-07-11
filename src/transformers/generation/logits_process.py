@@ -624,25 +624,33 @@ class MinPLogitsWarper(LogitsProcessor):
 
 class MomentPLogitsWarper(LogitsProcessor):
     """
-    [`LogitsProcessor`] that performs moment-p sampling, a technique that filters tokens based on the moment
-    (i.e., the sum of probabilities raised to a power) of the entire probability distribution.
+    [`LogitsProcessor`] that performs moment-p sampling (relaxation of the default second moment we term as P-Less), a
+    technique that filters tokens based on a flexible moment p (i.e., the sum of probabilities raised to a power p) of
+    the entire probability distribution.
 
-    Unlike min_p or top_p sampling, which focus on the most likely token(s) or a cumulative probability threshold,
-    moment-p sampling leverages the full log-probability distribution, providing a more holistic and theoretically
-    grounded approach to truncation.
+    We relaxed P-Less i.e. filtering tokens based on a principled second moment (moment-2), to higher moments (moment-p).
+    This technique is under active research, and a paper detailing its theoretical properties and empirical performance
+    is forthcoming.
 
-    The core idea is to compute the "moment" of the distribution by summing all probabilities raised to a chosen
-    exponent. This moment is then used to set a dynamic threshold for filtering, scaled by an `alpha` parameter.
+    Unlike min_p or top_p sampling, which focuses on the most likely token(s) or a cumulative probability threshold,
+    moment-p sampling leverages the full log-probability distribution, providing an information-maximization approach
+    to truncation of the token distribution.
 
-    The exponent controls the sensitivity of the filter: increasing the exponent (e.g., above 2) makes the truncation
-    less aggressive by lowering the threshold. Decreasing the exponent (toward 1) makes the truncation more aggressive,
-    and as the exponent approaches 1, the truncation threshold approaches 1.0, meaning fewer tokens are retained.
+    The core idea is to compute the p-th statistical moment of the distribution by summing all probabilities raised to a
+    chosen exponent i.e. `exponent`. This moment is then used to set a dynamic threshold for filtering, optionally scaled
+    by the `alpha` parameter.
 
-    The `alpha` parameter provides a scaling factor for fine-tuning selectivity.
+    `exponent` controls the sensitivity of the filter: increasing `exponent` (above the default 2) makes the truncation
+    less aggressive by lowering the threshold. Decreasing `exponent` (toward 1) makes the truncation more aggressive
+    preferring more confident tokens, and as `exponent` approaches 1, the truncation threshold approaches 1.0 meaning an
+    increasing preference for greedy decoding. The scaling parameter `alpha` allows for fine-tuning selectivity.
 
-    Theoretically, this method is justified by its ability to adaptively consider the "shape" of the entire distribution,
-    rather than relying on a single token or a fixed cumulative mass. This can lead to more stable and controllable
-    sampling, especially in cases where the distribution is flat or multi-modal.
+    Theoretically, this method is justified by its ability to adaptively consider the shape of the entire distribution,
+    rather than relying on a single token probability or a fixed cumulative probability mass. This can lead to more
+    stable and controllable sampling, especially in cases where the distribution is of high entropy or multi-modal.
+
+    Using the default parameters `exponent=2.0` and `alpha=1.0` yields the default "P-Less" sampling supported by a
+    principled approach that is theoretically grounded.
 
     In practice, we recommend setting `alpha=1.0` for most use cases, as this leverages the full moment of the
     distribution and provides a principled cutoff. Adjust the exponent and alpha to control the strictness of the
