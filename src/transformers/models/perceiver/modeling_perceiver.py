@@ -560,7 +560,7 @@ class PerceiverEncoder(nn.Module):
 
 @auto_docstring
 class PerceiverPreTrainedModel(PreTrainedModel):
-    config_class = PerceiverConfig
+    config: PerceiverConfig
     base_model_prefix = "perceiver"
     main_input_name = "inputs"
 

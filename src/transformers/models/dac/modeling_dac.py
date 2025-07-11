@@ -472,7 +472,7 @@ class DacEncoder(nn.Module):
 
 @auto_docstring
 class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
-    config_class = DacConfig
+    config: DacConfig
     base_model_prefix = "dac"
     main_input_name = "input_values"
 

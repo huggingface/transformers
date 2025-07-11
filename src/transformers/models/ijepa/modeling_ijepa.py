@@ -145,7 +145,7 @@ class IJepaEmbeddings(nn.Module):
 
 @auto_docstring
 class IJepaPreTrainedModel(PreTrainedModel):
-    config_class = IJepaConfig
+    config: IJepaConfig
     base_model_prefix = "ijepa"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -509,7 +509,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class XCLIPPreTrainedModel(PreTrainedModel):
-    config_class = XCLIPConfig
+    config: XCLIPConfig
     base_model_prefix = "x_clip"
     supports_gradient_checkpointing = True
 
@@ -720,7 +720,7 @@ class XCLIPTextTransformer(nn.Module):
 
 
 class XCLIPTextModel(XCLIPPreTrainedModel):
-    config_class = XCLIPTextConfig
+    config: XCLIPTextConfig
 
     def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
@@ -913,7 +913,7 @@ class XCLIPVisionTransformer(nn.Module):
 
 
 class XCLIPVisionModel(XCLIPPreTrainedModel):
-    config_class = XCLIPVisionConfig
+    config: XCLIPVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: XCLIPVisionConfig):
@@ -1154,7 +1154,7 @@ class XCLIPPromptGenerator(nn.Module):
 
 @auto_docstring
 class XCLIPModel(XCLIPPreTrainedModel):
-    config_class = XCLIPConfig
+    config: XCLIPConfig
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)

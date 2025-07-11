@@ -428,7 +428,7 @@ class BloomBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class BloomPreTrainedModel(PreTrainedModel):
-    config_class = BloomConfig
+    config: BloomConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BloomBlock"]

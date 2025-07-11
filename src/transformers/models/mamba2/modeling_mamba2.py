@@ -713,7 +713,7 @@ class Mamba2Block(GradientCheckpointingLayer):
 
 @auto_docstring
 class Mamba2PreTrainedModel(PreTrainedModel):
-    config_class = Mamba2Config
+    config: Mamba2Config
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True

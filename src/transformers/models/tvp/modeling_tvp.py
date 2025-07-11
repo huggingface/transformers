@@ -551,7 +551,7 @@ class TvpPooler(nn.Module):
 
 @auto_docstring
 class TvpPreTrainedModel(PreTrainedModel):
-    config_class = TvpConfig
+    config: TvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 

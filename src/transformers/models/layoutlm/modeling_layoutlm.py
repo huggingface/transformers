@@ -487,7 +487,7 @@ class LayoutLMOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class LayoutLMPreTrainedModel(PreTrainedModel):
-    config_class = LayoutLMConfig
+    config: LayoutLMConfig
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
 

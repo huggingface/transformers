@@ -583,7 +583,7 @@ class BrosRelationExtractor(nn.Module):
 
 @auto_docstring
 class BrosPreTrainedModel(PreTrainedModel):
-    config_class = BrosConfig
+    config: BrosConfig
     base_model_prefix = "bros"
 
     def _init_weights(self, module):

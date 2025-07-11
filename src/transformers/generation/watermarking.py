@@ -375,7 +375,7 @@ class BayesianDetectorModel(PreTrainedModel):
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    config_class = BayesianDetectorConfig
+    config: BayesianDetectorConfig
     base_model_prefix = "model"
 
     def __init__(self, config):

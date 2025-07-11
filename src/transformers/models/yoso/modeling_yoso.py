@@ -633,7 +633,7 @@ class YosoOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class YosoPreTrainedModel(PreTrainedModel):
-    config_class = YosoConfig
+    config: YosoConfig
     base_model_prefix = "yoso"
     supports_gradient_checkpointing = True
 

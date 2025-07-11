@@ -540,7 +540,7 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
 
 
 class XLMProphetNetPreTrainedModel(PreTrainedModel):
-    config_class = XLMProphetNetConfig
+    config: XLMProphetNetConfig
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 

@@ -470,7 +470,7 @@ class GPTNeoBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class GPTNeoPreTrainedModel(PreTrainedModel):
-    config_class = GPTNeoConfig
+    config: GPTNeoConfig
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True

@@ -165,7 +165,7 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
 
 @auto_docstring
 class HGNetV2PreTrainedModel(PreTrainedModel):
-    config_class = HGNetV2Config
+    config: HGNetV2Config
     base_model_prefix = "hgnetv2"
     main_input_name = "pixel_values"
     _no_split_modules = ["HGNetV2BasicLayer"]

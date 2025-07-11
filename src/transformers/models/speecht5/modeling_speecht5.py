@@ -1198,7 +1198,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class SpeechT5PreTrainedModel(PreTrainedModel):
-    config_class = SpeechT5Config
+    config: SpeechT5Config
     base_model_prefix = "speecht5"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
@@ -3106,7 +3106,7 @@ class HifiGanResidualBlock(nn.Module):
     """
 )
 class SpeechT5HifiGan(PreTrainedModel):
-    config_class = SpeechT5HifiGanConfig
+    config: SpeechT5HifiGanConfig
     main_input_name = "spectrogram"
 
     def __init__(self, config: SpeechT5HifiGanConfig):

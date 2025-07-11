@@ -539,7 +539,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = BlipTextConfig
+    config: BlipTextConfig
     base_model_prefix = "bert"
     _no_split_modules = []
 

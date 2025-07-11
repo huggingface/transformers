@@ -59,7 +59,7 @@ class TimmWrapperModelOutput(ModelOutput):
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = TimmWrapperConfig
+    config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]
 

@@ -218,7 +218,7 @@ class TextNetEncoder(nn.Module):
 
 @auto_docstring
 class TextNetPreTrainedModel(PreTrainedModel):
-    config_class = TextNetConfig
+    config: TextNetConfig
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
 

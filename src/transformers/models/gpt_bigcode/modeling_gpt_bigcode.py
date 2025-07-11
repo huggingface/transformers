@@ -650,7 +650,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class GPTBigCodePreTrainedModel(PreTrainedModel):
-    config_class = GPTBigCodeConfig
+    config: GPTBigCodeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTBigCodeBlock"]

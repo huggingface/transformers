@@ -978,7 +978,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class OmDetTurboPreTrainedModel(PreTrainedModel):
-    config_class = OmDetTurboConfig
+    config: OmDetTurboConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

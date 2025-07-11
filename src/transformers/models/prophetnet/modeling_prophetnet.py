@@ -332,7 +332,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
 
 @auto_docstring
 class ProphetNetPreTrainedModel(PreTrainedModel):
-    config_class = ProphetNetConfig
+    config: ProphetNetConfig
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 

@@ -610,7 +610,7 @@ class DebertaEncoder(nn.Module):
 
 @auto_docstring
 class DebertaPreTrainedModel(PreTrainedModel):
-    config_class = DebertaConfig
+    config: DebertaConfig
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True

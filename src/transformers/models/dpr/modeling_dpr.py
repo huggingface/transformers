@@ -246,7 +246,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
 
@@ -257,7 +257,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "question_encoder"
 
@@ -268,7 +268,7 @@ class DPRPretrainedReader(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "span_predictor"
 

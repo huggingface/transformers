@@ -940,7 +940,7 @@ class RealmPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = RealmConfig
+    config: RealmConfig
     load_tf_weights = load_tf_weights_in_realm
     base_model_prefix = "realm"
 

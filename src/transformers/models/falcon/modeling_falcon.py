@@ -636,7 +636,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class FalconPreTrainedModel(PreTrainedModel):
-    config_class = FalconConfig
+    config: FalconConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconDecoderLayer"]

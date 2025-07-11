@@ -489,7 +489,7 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class DeepseekV3PreTrainedModel(PreTrainedModel):
-    config_class = DeepseekV3Config
+    config: DeepseekV3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV3DecoderLayer"]

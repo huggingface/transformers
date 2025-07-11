@@ -92,7 +92,7 @@ class InformerValueEmbedding(TimeSeriesValueEmbedding):
 
 @auto_docstring
 class InformerPreTrainedModel(PreTrainedModel):
-    config_class = InformerConfig
+    config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True

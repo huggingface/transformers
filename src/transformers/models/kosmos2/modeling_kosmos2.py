@@ -1147,7 +1147,7 @@ class Kosmos2TextTransformer(nn.Module):
 
 @auto_docstring
 class Kosmos2PreTrainedModel(PreTrainedModel):
-    config_class = Kosmos2Config
+    config: Kosmos2Config
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
     _supports_attention_backend = True
@@ -1240,7 +1240,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
 
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
-    config_class = Kosmos2VisionConfig
+    config: Kosmos2VisionConfig
     main_input_name = "pixel_values"
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2,self.vision_model->self.model
@@ -1273,7 +1273,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
 
 
 class Kosmos2TextModel(Kosmos2PreTrainedModel):
-    config_class = Kosmos2TextConfig
+    config: Kosmos2TextConfig
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)
@@ -1348,7 +1348,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
     """
 )
 class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
-    config_class = Kosmos2TextConfig
+    config: Kosmos2TextConfig
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Kosmos2TextConfig):
@@ -1550,7 +1550,7 @@ class Kosmos2ImageToTextProjection(nn.Module):
     """
 )
 class Kosmos2Model(Kosmos2PreTrainedModel):
-    config_class = Kosmos2Config
+    config: Kosmos2Config
     main_input_name = "pixel_values"
 
     def __init__(self, config: Kosmos2Config):
@@ -1709,7 +1709,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     """
 )
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
-    config_class = Kosmos2Config
+    config: Kosmos2Config
     main_input_name = "pixel_values"
     _tied_weights_keys = ["text_model.lm_head.weight"]
 

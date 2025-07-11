@@ -995,7 +995,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = EomtConfig
+    config: EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False

@@ -322,7 +322,7 @@ class GlmDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GlmPreTrainedModel(PreTrainedModel):
-    config_class = GlmConfig
+    config: GlmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmDecoderLayer"]

@@ -232,7 +232,7 @@ class ConvBertEmbeddings(nn.Module):
 
 @auto_docstring
 class ConvBertPreTrainedModel(PreTrainedModel):
-    config_class = ConvBertConfig
+    config: ConvBertConfig
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True

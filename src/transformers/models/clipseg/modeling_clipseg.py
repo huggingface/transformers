@@ -428,7 +428,7 @@ class CLIPSegEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class CLIPSegPreTrainedModel(PreTrainedModel):
-    config_class = CLIPSegConfig
+    config: CLIPSegConfig
     base_model_prefix = "clip"
     supports_gradient_checkpointing = True
 
@@ -653,7 +653,7 @@ class CLIPSegTextTransformer(nn.Module):
 
 
 class CLIPSegTextModel(CLIPSegPreTrainedModel):
-    config_class = CLIPSegTextConfig
+    config: CLIPSegTextConfig
 
     _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer"]
 
@@ -757,7 +757,7 @@ class CLIPSegVisionTransformer(nn.Module):
 
 
 class CLIPSegVisionModel(CLIPSegPreTrainedModel):
-    config_class = CLIPSegVisionConfig
+    config: CLIPSegVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: CLIPSegVisionConfig):
@@ -809,7 +809,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
 
 @auto_docstring
 class CLIPSegModel(CLIPSegPreTrainedModel):
-    config_class = CLIPSegConfig
+    config: CLIPSegConfig
 
     def __init__(self, config: CLIPSegConfig):
         super().__init__(config)
@@ -1200,7 +1200,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
     """
 )
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
-    config_class = CLIPSegConfig
+    config: CLIPSegConfig
 
     def __init__(self, config: CLIPSegConfig):
         super().__init__(config)
