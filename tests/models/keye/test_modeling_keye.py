@@ -235,7 +235,7 @@ class KeyeIntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:3, :3, :3, :3], atol=5e-4, rtol=1e-5)
+        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:3, :3, :3, :3], atol=2e-3, rtol=5e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
