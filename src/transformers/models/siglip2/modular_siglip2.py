@@ -286,7 +286,24 @@ class Siglip2PreTrainedModel(SiglipPreTrainedModel):
 
 
 class Siglip2TextModel(SiglipTextModel):
-    pass
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        # Use the last token's hidden state as pooled output,
+        # regardless of whether it's an EOS or PAD token.
+        # The original model was trained this way, without attention masks.
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
 
 
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
