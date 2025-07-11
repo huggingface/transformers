@@ -117,8 +117,6 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             # stacking and skipping by 2
             audio = logmel.reshape(bsz, -1, 2 * logmel.shape[-1])
 
-        if audio.device != "cpu":
-            return audio.detach().cpu()
         return audio
 
     def _get_num_audio_features(self, audio_lengths: Sequence[int]) -> Sequence[int]:
@@ -178,11 +176,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             if not torch.is_floating_point(audios[0]):
                 raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
             lengths = [audio.shape[-1] for audio in audios]
-            padding = [max(lengths) - length for length in lengths]
-            # ensure all audios have a batch dimension:
-            audios = [audio.view(1, -1) for audio in audios]
-            padded = [torch.nn.functional.pad(audio, (0, pad)) for audio, pad in zip(audios, padding)]
-            audios = torch.cat(padded, dim=0)
+            audios = [audio.squeeze(0) for audio in audios]
+            audios = torch.nn.utils.rnn.pad_sequence(audios, batch_first=True, padding_value=0.0)
             return audios, lengths
 
         raise TypeError("Invalid audio provided. Audio should be a one or more torch tensors or numpy arrays")

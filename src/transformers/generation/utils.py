@@ -1963,6 +1963,9 @@ class GenerationMixin(ContinuousMixin):
                 "device": device,
                 "layer_device_map": layer_device_map,
             }
+            if cache_implementation in ["static", "hybrid", "offloaded_static"]:
+                cache_kwargs.update({"tp_size": self.tp_size})
+
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
@@ -1986,6 +1989,7 @@ class GenerationMixin(ContinuousMixin):
             and "zamba" not in self.__class__.__name__.lower()
             and "bamba" not in self.__class__.__name__.lower()
             and "minimax" not in self.__class__.__name__.lower()
+            and "lfm2" not in self.__class__.__name__.lower()
         )
 
     def _prepare_cache_for_generation(

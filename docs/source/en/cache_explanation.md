@@ -99,8 +99,6 @@ self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_stat
 
 2. The cache grows dynamically as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token.
 
-3. The cache maintains a count of seen tokens through `self._seen_tokens`. This is updated when the first layer processes a new token.
-
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
 
 ```py
