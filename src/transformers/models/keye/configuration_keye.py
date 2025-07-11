@@ -72,8 +72,9 @@ class KeyeConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`KeyeForConditionalGeneration`].
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
+    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    Kwai-Keye/Keye-VL-8B-Preview [Kwai-Keye/Keye-VL-8B-Preview](https://huggingface.co/Kwai-Keye/Keye-VL-8B-Preview).
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):
