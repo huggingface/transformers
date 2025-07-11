@@ -27,6 +27,7 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
+    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -382,6 +383,9 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 
 @require_torch
+@require_bitsandbytes
+@slow
+@require_read_token
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
@@ -420,8 +424,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = PerceptionLMForConditionalGeneration.from_pretrained(
             TEST_MODEL_PATH, load_in_4bit=True, cache_dir="./"
@@ -450,8 +452,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batched(self):
         model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
@@ -478,8 +478,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_generation_no_images(self):
         # model_id = "facebook/Perception-LM-1B"
         model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
