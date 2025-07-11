@@ -67,7 +67,9 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         ResponseContentPartAddedEvent,
         ResponseContentPartDoneEvent,
         ResponseCreatedEvent,
+        ResponseError,
         ResponseErrorEvent,
+        ResponseFailedEvent,
         ResponseInProgressEvent,
         ResponseOutputItemAddedEvent,
         ResponseOutputItemDoneEvent,
@@ -104,7 +106,6 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         "background",
         "include",
         "max_tool_calls",
-        "metadata",
         "parallel_tool_calls",
         "previous_response_id",
         "prompt",
@@ -347,7 +348,7 @@ class ServeCommand(BaseTransformersCLICommand):
         self,
         request: dict,
         schema: "_TypedDictMeta",  # noqa: F821
-        validator: TypeAdapter,
+        validator: "TypeAdapter",
         unused_fields: set,
     ):
         """
@@ -801,6 +802,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         output=[],
                         parallel_tool_calls=False,
                         tool_choice="auto",
+                        metadata=req.get("metadata"),
                     ),
                 )
                 sequence_number += 1
@@ -821,6 +823,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         output=[],
                         parallel_tool_calls=False,
                         tool_choice="auto",
+                        metadata=req.get("metadata"),
                     ),
                 )
                 sequence_number += 1
@@ -923,6 +926,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         tools=[],
                         parallel_tool_calls=False,
                         tool_choice="auto",
+                        metadata=req.get("metadata"),
                     ),
                 )
                 sequence_number += 1
@@ -930,7 +934,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 thread.join()
             except Exception as e:
-                logger.error(str(e))
+                logger.error(f"Exception in response generation: {str(e)}")
                 error_event = ResponseErrorEvent(
                     type="error",
                     sequence_number=sequence_number,
@@ -938,6 +942,31 @@ class ServeCommand(BaseTransformersCLICommand):
                 )
                 sequence_number += 1
                 yield self.build_response_event(error_event)
+
+                response_failed = ResponseFailedEvent(
+                    type="response.failed",
+                    sequence_number=sequence_number,
+                    response=Response(
+                        id=f"resp_{request_id}",
+                        created_at=created_at,
+                        status="failed",
+                        model=self.loaded_model,
+                        instructions=req.get("instructions"),
+                        text={"format": {"type": "text"}},
+                        output=[],
+                        object="response",
+                        tools=[],
+                        parallel_tool_calls=False,
+                        tool_choice="auto",
+                        metadata=req.get("metadata"),
+                        error=ResponseError(
+                            code="server_error",
+                            message=str(e),
+                        ),
+                    ),
+                )
+                sequence_number += 1
+                yield self.build_response_event(response_failed)
 
             finally:
                 thread.join()
@@ -955,22 +984,23 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `True` if the request is a continuation of the last request, `False` otherwise.
         """
+        messages = req.get("messages") or req.get("input")  # ChatCompletion and Response have different fields
         req_continues_last_messages = True
 
         # No cached messages: this is a new request
         if self.last_messages is None:
             req_continues_last_messages = False
         # The new request has no new rounds of conversation: this is a new request
-        elif len(self.last_messages) >= len(req["messages"]):
+        elif len(self.last_messages) >= len(messages):
             req_continues_last_messages = False
         # Otherwise, check that the last messages are a subset of the new request
         else:
             for i in range(len(self.last_messages)):
-                if self.last_messages[i] != req["messages"][i]:
+                if self.last_messages[i] != messages[i]:
                     req_continues_last_messages = False
                     break
 
-        self.last_messages = req["messages"]
+        self.last_messages = messages
         return req_continues_last_messages
 
     @staticmethod
