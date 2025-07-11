@@ -635,7 +635,7 @@ class InstructBlipVideoQFormerLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:-1]
+        outputs = self_attention_outputs[1:]
 
         if query_length > 0:
             query_attention_output = attention_output[:, :query_length, :]
@@ -653,7 +653,7 @@ class InstructBlipVideoQFormerLayer(GradientCheckpointingLayer):
                 )
                 query_attention_output = cross_attention_outputs[0]
                 # add cross attentions if we output attention weights
-                outputs = outputs + cross_attention_outputs[1:-1]
+                outputs = outputs + cross_attention_outputs[1:]
 
             layer_output = apply_chunking_to_forward(
                 self.feed_forward_chunk_query,
