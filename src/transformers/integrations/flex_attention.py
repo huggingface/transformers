@@ -198,6 +198,9 @@ def make_flex_block_causal_mask(
         mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
 
     if offsets is not None:
+        q_offset = offsets[0].to(device)
+        kv_offset = offsets[1].to(device)
+
         def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
             offset_q = q_idx + q_offset
             offset_kv = kv_idx + kv_offset
@@ -258,7 +261,7 @@ def flex_attention_forward(
         block_mask = attention_mask
     else:
         score_mask = attention_mask
-    
+
     if score_mask is not None:
         score_mask = score_mask[:, :, :, : key.shape[-2]]
 
@@ -274,7 +277,7 @@ def flex_attention_forward(
             sinks = torch.exp(s_aux - logits_max)
             unnormalized_scores = torch.exp(score - logits_max)
             normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
-            scores = unnormalized_scores / normalizer
+            score = unnormalized_scores / normalizer
         return score
 
     enable_gqa = True

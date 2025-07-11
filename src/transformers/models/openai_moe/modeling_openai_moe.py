@@ -242,16 +242,18 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    # # scale the logits to prevent overflows
-    logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
-    sinks = torch.exp(sinks - logits_max)
-    unnormalized_scores = torch.exp(attn_weights - logits_max)
-    normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
-    scores = unnormalized_scores / normalizer
+    # TODO: check wether both produce the same results or not!
+    # scale the logits to prevent overflows
+    # logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
+    # sinks = torch.exp(sinks - logits_max)
+    # unnormalized_scores = torch.exp(attn_weights - logits_max)
+    # normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
+    # scores = unnormalized_scores / normalizer
 
-    # sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    # combined_logits = torch.cat([attn_weights, sinks], dim=-1)
-    # scores = nn.functional.softmax(combined_logits, dim=-1)[..., :-1]
+    # TODO we are going with this one to fix gradients becoming nans
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+    scores = nn.functional.softmax(combined_logits, dim=-1)[..., :-1]
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)  # ignore the sinks
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -585,6 +587,7 @@ def load_balancing_loss_func(
         )
 
     rank = routing_weights.shape[1] * int(routing_weights.device.index)
+    # TODO not 100% this one is correct, will fix in another PR
     overall_loss = torch.sum(
         tokens_per_expert[:, rank : rank + routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0)
     )

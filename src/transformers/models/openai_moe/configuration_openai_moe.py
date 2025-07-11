@@ -26,8 +26,6 @@ class OpenAIMoeConfig(PretrainedConfig):
     """
 
     model_type = "openai_moe"
-    # Default tensor parallel plan for base model `OpenaiModel`
-    # a bit special, but this seems to work alright
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -38,7 +36,7 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
         "layers.*.mlp.experts.down_proj": "local_colwise",
         "layers.*.mlp.experts.down_proj_bias": "local",  # TODO: add smthg that says bias exists only once for all TPs
-        # "layers.*.mlp.experts": "gather",  # TODO: same, this should mean i want to allreduce output
+        "layers.*.mlp": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

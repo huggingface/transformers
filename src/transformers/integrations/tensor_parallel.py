@@ -418,13 +418,12 @@ class AllReduce(Function):
         dist.all_reduce(out, op=dist.ReduceOp.SUM)
         return out
 
-    #
-    # @staticmethod
-    # def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
-    #     # The gradient itself needs to be summed across ranks, too
-    #     grad = grad_output.clone()
-    #     dist.all_reduce(grad, op=dist.ReduceOp.SUM)
-    #     return grad
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
+        # The gradient itself needs to be summed across ranks, too
+        grad = grad_output.clone()
+        dist.all_reduce(grad, op=dist.ReduceOp.SUM)
+        return grad
 
 
 def all_reduce(tensor: torch.Tensor) -> torch.Tensor:
@@ -462,11 +461,10 @@ class GatherParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         if hasattr(mod, "kernel_layer_name"):  # kernels usually handle this themselves
             return outputs
-        # this op cannot be async, otherwise it completely breaks the outputs of models
         if isinstance(outputs, torch.Tensor):
-            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
+            all_reduce(outputs)
         else:
-            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
+            all_reduce(outputs[0])
         return outputs
 
 
@@ -897,8 +895,7 @@ class RouterParallel(TensorParallelLayer):
         router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
-        router_indices = (router_indices) % (num_local_experts)
-        # router_indices = (router_indices + 1) % (num_local_experts + 1)
+        router_indices = router_indices % num_local_experts
         return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
