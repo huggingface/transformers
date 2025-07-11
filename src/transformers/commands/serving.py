@@ -48,7 +48,10 @@ if is_torch_available():
         PreTrainedModel,
     )
 
-if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available():
+serve_dependencies_available = (
+    is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
+)
+if serve_dependencies_available:
     import uvicorn
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
@@ -315,7 +318,7 @@ class ServeCommand(BaseTransformersCLICommand):
         serve_parser.set_defaults(func=serve_command_factory)
 
     def __init__(self, args: ServeArguments):
-        if not is_pydantic_available() or not is_fastapi_available() or not is_uvicorn_available():
+        if not serve_dependencies_available:
             raise ImportError(
                 "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
             )
@@ -396,7 +399,7 @@ class ServeCommand(BaseTransformersCLICommand):
         tool_calls: Optional[list[ChoiceDeltaToolCall]] = None,
     ) -> str:
         """
-        Builds a chunk of a streaming "Completion" response.
+        Builds a chunk of a streaming OpenAI Chat Completion response.
 
         IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
         like Cursor, assume that when the field exists, it has data.
@@ -438,7 +441,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def build_response_event(self, response: BaseModel) -> str:
         """
-        Builds a event of a streaming "Responses" response.
+        Builds a event of a streaming OpenAI Response response.
 
         IMPORTANT: The serialized chunk won't contain empty fields (fields with `None`). Some downstream apps,
         like Cursor, assume that when the field exists, it has data.
@@ -535,13 +538,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
         """
-        Generates a chat completion using continuous batching.
+        Generates an OpenAI Chat Completion using continuous batching.
 
         Args:
-            req (`dict`): The request to generate a chat completion for.
+            req (`dict`): The request to generate an OpenAI Chat Completion for.
 
         Returns:
-            `Generator[str, None, None]`: A generator that yields the chat completion chunks.
+            `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
@@ -611,13 +614,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
         """
-        Generates a chat completion using `generate`.
+        Generates an OpenAI Chat Completion using `generate`.
 
         Args:
-            req (`dict`): The request to generate a chat completion for.
+            req (`dict`): The request to generate an OpenAI Chat Completion for.
 
         Returns:
-            `Generator[str, None, None]`: A generator that yields the chat completion chunks.
+            `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
@@ -765,13 +768,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """
-        Generates a response using `generate`.
+        Generates an OpenAI Response using `generate`.
 
         Args:
-            req (`dict`): The request to generate a response for.
+            req (`dict`): The request to generate an OpenAI Response for.
 
         Returns:
-            `Generator[str, None, None]`: A generator that yields the response events.
+            `Generator[str, None, None]`: A generator that yields the OpenAI Response events.
         """
         # TODO -- Implement non-streaming mode
 

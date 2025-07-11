@@ -20,6 +20,7 @@ from unittest.mock import patch
 import aiohttp.client_exceptions
 from huggingface_hub import AsyncInferenceClient
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
+from openai.types.responses import Response, ResponseCreatedEvent
 from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
@@ -51,31 +52,37 @@ class ServeCLITest(unittest.TestCase):
         self.assertEqual(parsed_args.port, 9000)
 
     def test_build_chat_completion_chunk(self):
-        """Tests that the chunks are correctly built for the Completions API."""
+        """
+        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implictly
+        confirm that empty fields are not emitted.
+        """
         dummy = ServeCommand.__new__(ServeCommand)
         dummy.args = type("Args", (), {})()
-        dummy.loaded_model = "dummy_model"
+        dummy.loaded_model = "dummy_model@main"
+
+        # The keys for these fields must be present in every chunk
+        MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
 
         # Case 1: most fields are provided
         chunk = ServeCommand.build_chat_completion_chunk(
             dummy, request_id="req0", content="hello", finish_reason="stop", role="user"
         )
-        self.assertIn("chat.completion.chunk", chunk)
-        self.assertIn("data:", chunk)
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
         self.assertIn(
             '"choices":[{"delta":{"content":"hello","role":"user"},"finish_reason":"stop","index":0}]', chunk
         )
 
         # Case 2: only the role is provided -- other fields in 'choices' are omitted
-        chunk = ServeCommand.build_chat_completion_chunk(dummy, request_id="req0", role="user")
-        self.assertIn("chat.completion.chunk", chunk)
-        self.assertIn("data:", chunk)
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user")
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
         self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
 
         # Case 3: only the content is provided -- other fields in 'choices' are omitted
-        chunk = ServeCommand.build_chat_completion_chunk(dummy, request_id="req0", content="hello")
-        self.assertIn("chat.completion.chunk", chunk)
-        self.assertIn("data:", chunk)
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello")
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
         self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
 
         # Case 4: tool calls support a list of ChoiceDeltaToolCall objects
@@ -84,14 +91,54 @@ class ServeCLITest(unittest.TestCase):
             function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
             type="function",
         )
-        chunk = ServeCommand.build_chat_completion_chunk(dummy, request_id="req0", tool_calls=[tool_call])
-        self.assertIn("chat.completion.chunk", chunk)
-        self.assertIn("data:", chunk)
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call])
+        for field in MANDATORY_FIELDS:
+            self.assertIn(field, chunk)
         expected_choices_content = (
             'choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"foo1\\": \\"bar1\\", '
             '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
         )
         self.assertIn(expected_choices_content, chunk)
+
+    def test_build_response_event(self):
+        """
+        Tests that the events are correctly built for the Response API.
+
+        Contrarily to the Chat Completion API, the Response API has a wide set of possible output objects. This test
+        only checks a few basic assumptions -- we rely on OpenAI's pydantic models to enforce the correct schema.
+        """
+        dummy = ServeCommand.__new__(ServeCommand)
+        dummy.args = type("Args", (), {})()
+
+        response_created = ResponseCreatedEvent(
+            type="response.created",
+            sequence_number=0,
+            response=Response(
+                id="resp_0",
+                created_at=time.time(),
+                status="queued",
+                model="dummy_model@main",
+                instructions=None,  # <--- is set to None = should NOT be in the output.
+                text={"format": {"type": "text"}},
+                object="response",
+                tools=[],  # <--- empty lists should be in the output (there are often mandatory fields)
+                output=[],
+                parallel_tool_calls=False,
+                tool_choice="auto",
+                metadata=None,
+            ),
+        )
+
+        event = dummy.build_response_event(response_created)
+        self.assertTrue(event.startswith("data: "))  # Sanity check: event formatting
+        self.assertIn('"model":"dummy_model@main"', event)  # Sanity check: set field
+        self.assertIn('"status":"queued"', event)
+        self.assertIn("tools", event)  # empty lists should be in the output
+        self.assertIn("output", event)
+        self.assertNotIn("instructions", event)  # None fields should NOT be in the output
+        self.assertNotIn("metadata", event)
+        self.assertNotIn("error", event)  # Unset optional fields should NOT be in the output
+        self.assertNotIn("top_p", event)
 
 
 def async_retry(fn, max_attempts=5, delay=2):
