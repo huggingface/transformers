@@ -52,7 +52,7 @@ To create the package for pypi.
    twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
 
    Check that you can install it in a virtualenv by running:
-   pip install -i https://testpypi.python.org/pypi transformers
+   pip install -i https://test.pypi.org/simple/ transformers
 
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
@@ -313,7 +313,7 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
-extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
+extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
