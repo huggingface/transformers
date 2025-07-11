@@ -1590,9 +1590,7 @@ class GenerationTesterMixin:
             # 3. Check cache shapes
             # 3.1. Encoder-Decoder checks
             if config.is_encoder_decoder:
-                num_cache_decoder_layers = (
-                    len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache.key_cache)
-                )
+                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):
@@ -1623,7 +1621,7 @@ class GenerationTesterMixin:
 
             # 3.2. Decoder-only checks
             else:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.key_cache)
+                num_cache_decoder_layers = len(past_kv)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):
@@ -1817,7 +1815,7 @@ class GenerationTesterMixin:
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
             self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values.key_cache), num_hidden_layers)
+            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
             self.assertListEqual(list(outputs.past_key_values.key_cache[0].shape), cache_shape)
 
     @pytest.mark.generate
@@ -2040,7 +2038,7 @@ class GenerationTesterMixin:
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(len(static_cache_generation.past_key_values.key_cache) == num_hidden_layers)
+                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
                 self.assertTrue(static_cache_generation.past_key_values.key_cache[0].shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache

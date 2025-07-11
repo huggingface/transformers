@@ -271,7 +271,7 @@ class T5GemmaModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertIsNotNone(decoder_past)
         self.parent.assertEqual(len(decoder_past.self_attention_cache), config.decoder.num_hidden_layers)
-        self.parent.assertEqual(len(decoder_past.cross_attention_cache.key_cache), config.decoder.num_hidden_layers)
+        self.parent.assertEqual(len(decoder_past.cross_attention_cache), config.decoder.num_hidden_layers)
 
     def check_prepare_lm_labels_via_shift_left(
         self,
@@ -1060,9 +1060,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # 3. Check cache shapes
             # 3.1. Encoder-Decoder checks
             if config.is_encoder_decoder:
-                num_cache_decoder_layers = (
-                    len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache.key_cache)
-                )
+                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):
@@ -1093,7 +1091,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # 3.2. Decoder-only checks
             else:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.key_cache)
+                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):

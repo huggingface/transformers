@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
+    from transformers import AutoTokenizer, Cache, FalconH1ForCausalLM, FalconH1Model
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
         FalconHybridMambaAttentionDynamicCache,
     )
@@ -271,6 +271,43 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     pipeline_model_mapping = (
         {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
+
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+
+        # (batch, head, seq_length, head_features)
+        expected_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.hidden_size // config.num_attention_heads,
+        )
+
+        if isinstance(decoder_past_key_values, Cache):
+            self.assertListEqual(
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_shape] * len(decoder_past_key_values.key_cache),
+            )
+            self.assertListEqual(
+                [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
+                [expected_shape] * len(decoder_past_key_values.value_cache),
+            )
+
+        # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
+        else:
+            self.assertListEqual(
+                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
+                [True] * len(decoder_past_key_values),
+            )
+            # check shape key, value
+            self.assertListEqual(
+                [layer_past_key_values[0].shape for layer_past_key_values in decoder_past_key_values],
+                [expected_shape] * len(decoder_past_key_values),
+            )
+            self.assertListEqual(
+                [layer_past_key_values[1].shape for layer_past_key_values in decoder_past_key_values],
+                [expected_shape] * len(decoder_past_key_values),
+            )
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)

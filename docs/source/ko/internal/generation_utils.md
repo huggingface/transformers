@@ -345,12 +345,6 @@ generation_output[:2]
 [[autodoc]] Cache
     - update
 
-[[autodoc]] CacheConfig
-    - update
-
-[[autodoc]] QuantizedCacheConfig
-    - validate
-
 [[autodoc]] DynamicCache
     - update
     - get_seq_length
