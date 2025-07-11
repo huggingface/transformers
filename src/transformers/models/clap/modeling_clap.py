@@ -1404,7 +1404,7 @@ class ClapPreTrainedModel(PreTrainedModel):
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
@@ -1412,12 +1412,11 @@ class ClapPreTrainedModel(PreTrainedModel):
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, ClapModel):
-            nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
-            nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
+            module.logit_scale_a.data.fill_(math.log(self.config.logit_scale_init_value))
+            module.logit_scale_t.data.fill_(math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=factor * 0.02)
-
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
@@ -1425,6 +1424,8 @@ class ClapPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, ClapAudioSelfAttention):
+            module.relative_position_bias_table.data.zero_()
 
 
 class ClapAudioModel(ClapPreTrainedModel):
