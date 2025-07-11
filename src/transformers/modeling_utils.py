@@ -26,6 +26,7 @@ import re
 import shutil
 import tempfile
 import warnings
+from abc import abstractmethod
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -105,6 +106,7 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_kernels_available,
     is_offline_mode,
     is_optimum_available,
@@ -121,7 +123,7 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.generic import GeneralInterface
+from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -172,7 +174,8 @@ _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
-if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
+if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
 
 
@@ -1922,7 +1925,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         - **is_parallelizable** (`bool`) -- A flag indicating whether this model supports model parallelization.
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
-    """
+        - **can_record_outputs** (dict):"""
 
     config_class = None
     base_model_prefix = ""
@@ -1934,7 +1937,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     _auto_class = None
     _no_split_modules = None
     _skip_keys_device_placement = None
+
     _keep_in_fp32_modules = None
+    # the _keep_in_fp32_modules will avoid casting to anything other than float32, except bfloat16
+    # to also prevent bfloat16 casting, use the _keep_in_fp32_modules_strict flag
+    _keep_in_fp32_modules_strict = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1955,6 +1962,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
     # Flash Attention 2 support
     _supports_flash_attn_2 = False
+
+    # Flash Attention 3 support
+    _supports_flash_attn_3 = False
 
     # SDPA support
     _supports_sdpa = False
@@ -1996,6 +2006,50 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
+    _can_record_outputs = None
+
+    @property
+    @torch._dynamo.allow_in_graph
+    def can_record_outputs(self) -> dict[str, OutputRecorder]:
+        """
+         Maps output names (e.g., "attentions", "hidden_states")
+         to either:
+             - A module class (e.g., `LlamaDecoderLayer`), using default index conventions:
+                 * index=0 for "hidden_states"
+                 * index=1 for "attentions"
+             - Or an `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+
+         Examples:
+             These two are equivalent:
+
+         ```python
+             _can_record_outputs = {
+                 "attentions": LlamaAttention,
+                 "hidden_states": LlamaDecoderLayer
+             }
+
+             _can_record_outputs = {
+                 "attentions": OutputRecorder(LlamaAttention, index=1),
+                 "hidden_states": OutputRecorder(LlamaDecoderLayer, index=0)
+             }
+        ```
+
+         This means you can record outputs from the same class, by specifying a layer name. Before
+         collecting outputs, we check that they come from this layer.
+
+         If you have cross attention that come from `LlamaAttention` and self attention that also
+         come from `LlamaAttention` but from `self_attn` you can do this:
+
+         ```python
+         class LlamaModel(PreTrainedModel):
+             _can_record_outputs = {
+                 "attentions": OutputRecorder(LlamaAttention, index=1, layer-name="self_attn"),
+                 "cross_attentions": OutputRecorder(LlamaAttention, index=1, layer_name="cross_attn")
+             }
+
+        ```
+        """
+        return self._can_record_outputs or {}
 
     @property
     def dummy_inputs(self) -> dict[str, torch.Tensor]:
@@ -2043,8 +2097,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # `InstructBlipForConditionalGeneration` can dynamically update it without modifying the class attribute
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
+        self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
 
         self._no_split_modules = self._no_split_modules or []
+        _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
 
     def post_init(self):
         """
@@ -2055,7 +2111,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._backward_compatibility_gradient_checkpointing()
 
         # Make sure the modules correctly exist if the flag is active
-        if self._keep_in_fp32_modules is not None:
+        if self._keep_in_fp32_modules is not None or self._keep_in_fp32_modules_strict is not None:
             all_parameters = {name for name, _ in self.named_parameters() if len(name) > 0}
             unique_module_names = set()
             # Get all unique module names in the module graph, without the prefixes
@@ -2064,12 +2120,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
                 )
             # Check that every module in the keep_in_fp32 list is part of the module graph
-            for module in self._keep_in_fp32_modules:
-                if module not in unique_module_names:
-                    raise ValueError(
-                        f"{module} was specified in the `_keep_in_fp32_modules` list, but is not part of the modules in"
-                        f" {self.__class__.__name__}"
-                    )
+            if self._keep_in_fp32_modules is not None:
+                for module in self._keep_in_fp32_modules:
+                    if module not in unique_module_names:
+                        raise ValueError(
+                            f"{module} was specified in the `_keep_in_fp32_modules` list, but is not part of the modules in"
+                            f" {self.__class__.__name__}"
+                        )
+
+            if self._keep_in_fp32_modules_strict is not None:
+                for module in self._keep_in_fp32_modules_strict:
+                    if module not in unique_module_names:
+                        raise ValueError(
+                            f"{module} was specified in the `_keep_in_fp32_modules_strict` list, but is not part of the modules in"
+                            f" {self.__class__.__name__}"
+                        )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
@@ -2246,6 +2311,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 and config._attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
             ):
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+                if cls._supports_flash_attn_3:
+                    message += ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
                 if cls._supports_sdpa:
@@ -2281,7 +2348,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             ):
                 sub_config._attn_implementation_internal = curr_attn_implementation
 
-        if config._attn_implementation == "flash_attention_2":
+        if config._attn_implementation == "flash_attention_3":
+            cls._check_and_enable_flash_attn_3(
+                config,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
+                hard_check_only=False,
+                check_device_map=check_device_map,
+            )
+        elif config._attn_implementation == "flash_attention_2":
             cls._check_and_enable_flash_attn_2(
                 config,
                 torch_dtype=torch_dtype,
@@ -2498,7 +2573,95 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return config
 
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+    def _check_and_enable_flash_attn_3(
+        cls,
+        config,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, dict[str, int]]] = None,
+        check_device_map: bool = True,
+        hard_check_only: bool = False,
+    ) -> PretrainedConfig:
+        """
+        Checks the availability of Flash Attention 3 and compatibility with the current model.
+
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_3" so that the model can initialize the correct attention module.
+        """
+        if not cls._supports_flash_attn_3:
+            raise ValueError(
+                f"{cls.__name__} does not support Flash Attention 3.0 yet. Please request to add support where"
+                f" the model is hosted, on its model hub page: https://huggingface.co/{config._name_or_path}/discussions/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+            )
+
+        if not is_flash_attn_3_available():
+            preface = "FlashAttention3 has been toggled on, but it cannot be used due to the following error:"
+
+            if importlib.util.find_spec("flash_attn_3") is None:
+                raise ImportError(f"{preface} the package flash_attn_3 seems to be not installed.")
+
+            if torch.cuda.is_available():
+                major, _ = torch.cuda.get_device_capability()
+                if major < 9:
+                    raise ValueError(
+                        f"{preface} Flash Attention 3 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
+                    )
+                else:
+                    raise ImportError(f"{preface} Flash Attention 3 is not available.")
+            else:
+                raise ValueError(
+                    f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
+                )
+
+        if torch_dtype is None:
+            logger.warning_once(
+                "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
+            )
+        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+            logger.warning_once(
+                "Flash Attention 3 only supports torch.float16 and torch.bfloat16 dtypes, but"
+                f" the current dype in {cls.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", torch_dtype=torch.float16)`'
+            )
+
+        if getattr(config, "alibi", False) or getattr(config, "use_alibi", False):
+            raise ValueError("Model is configured to use ALiBi, which is not supported by Flash Attention 3.")
+
+        # Check for attention dropout, which is incompatible with FA3
+        if hasattr(config, "attention_dropout") and config.attention_dropout > 0:
+            raise ValueError(
+                f"Model has attention_dropout={config.attention_dropout}, which is not supported by Flash Attention 3."
+            )
+
+        # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
+        # or the model may be initialized under the context manager `with torch.device("cuda"):`.
+        if check_device_map and device_map is None and torch.empty(0).device.type not in ["cuda", "mlu"]:
+            if torch.cuda.is_available():
+                logger.warning_once(
+                    "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
+                    " after initializing it on CPU with `model.to('cuda')`."
+                )
+            else:
+                raise ValueError(
+                    "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
+                    "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                    "or initialising the model on CPU and then moving it to GPU."
+                )
+        elif (
+            check_device_map
+            and device_map is not None
+            and isinstance(device_map, dict)
+            and ("cpu" in device_map.values() or "disk" in device_map.values())
+        ):
+            raise ValueError(
+                "You are attempting to use Flash Attention 3 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
+                "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
+            )
+        if not hard_check_only:
+            config._attn_implementation = "flash_attention_3"
+        return config
+
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         """
         Checks the availability of SDPA for a given model.
 
@@ -3628,7 +3791,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
-        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+        if any(
+            allowed_name in class_name.__name__.lower()
+            for class_name in self.__class__.__mro__[:-1]
+            for allowed_name in VLMS
+        ):
             reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
 
             original_state_dict = {}
@@ -3668,27 +3835,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                # Sometimes in the state_dict we have non-tensor objects.
-                # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor):
-                    ptrs[id_tensor_storage(tensor)].append(name)
-                else:
+                if not isinstance(tensor, torch.Tensor):
+                    # Sometimes in the state_dict we have non-tensor objects.
+                    # e.g. in bitsandbytes we have some `str` objects in the state_dict
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors
-            if hasattr(self, "hf_device_map"):
-                # if the model has offloaded parameters, we must check using find_tied_parameters()
-                tied_params = find_tied_parameters(self)
-                if tied_params:
-                    tied_names = tied_params[0]
-                    shared_ptrs = {
-                        ptr: names for ptr, names in ptrs.items() if any(name in tied_names for name in names)
-                    }
+                elif tensor.device.type == "meta":
+                    # In offloaded cases, there may be meta tensors in the state_dict.
+                    # For these cases, key by the pointer of the original tensor object
+                    # (state_dict tensors are detached and therefore no longer shared)
+                    tensor = self.get_parameter(name)
+                    ptrs[id(tensor)].append(name)
+
                 else:
-                    shared_ptrs = {}
-            else:
-                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+                    ptrs[id_tensor_storage(tensor)].append(name)
+
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
@@ -3732,7 +3895,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             if len(error_names) > 0:
                 raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching the transformers base configuration. Try saving using `safe_serialization=False` or remove this tensor sharing.",
+                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching "
+                    "the transformers base configuration. Try saving using `safe_serialization=False`, setting the "
+                    "`_dynamic_tied_weights_keys` attribute for affected modules, or remove this tensor sharing.",
                 )
 
         # Shard the model if it is too big.
@@ -3780,7 +3945,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if isinstance(state_dict[tensor], DTensor):
+                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
@@ -4133,7 +4298,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 </Tip>
             attn_implementation (`str`, *optional*):
-                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
+                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
             > Parameters for big model inference
 
@@ -4280,10 +4445,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         tp_size = kwargs.pop("tp_size", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        use_kernels = kwargs.pop("use_kernels", False)
 
         key_mapping = kwargs.pop("key_mapping", None)
         # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
-        if key_mapping is None and any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+        if key_mapping is None and any(
+            allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
+        ):
             key_mapping = cls._checkpoint_conversion_mapping
 
         # Not used anymore -- remove them from the kwargs
@@ -4306,10 +4474,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
-        # If torchrun was used, make sure to TP by default. This way people don't need to change tp or device map
-        if device_map == "auto" and tp_plan is None and int(os.environ.get("WORLD_SIZE", 0)):
-            tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
-            device_map = None
+        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", 0)):
+            logger.info(
+                "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
+                "If your plan is to load the model on each device, you should set device_map={"
+                ": PartialState().process_index} where PartialState comes from accelerate library"
+            )
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
@@ -4321,6 +4491,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if device_mesh.ndim == 1:
                     raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
                 device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+
+            if tp_size is None:
+                tp_size = torch.distributed.get_world_size()
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4652,17 +4825,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         config = model.config
 
         # Find fp32 modules if needed
-        keep_in_fp32_regex = None
+        keep_in_fp32_modules = []
         # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
         # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
         # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
         if model._keep_in_fp32_modules is not None and (
             torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
         ):
+            keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
+
+        if model._keep_in_fp32_modules_strict is not None and (
+            torch_dtype == torch.float16 or torch_dtype == torch.bfloat16
+        ):
+            keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
+
+        keep_in_fp32_regex = None
+        if keep_in_fp32_modules:
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
-            keep_in_fp32_regex = re.compile(
-                "|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules])
-            )
+            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
@@ -4731,6 +4911,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
+
+        # check if using kernels
+        if use_kernels:
+            from kernels import Device, kernelize
+
+            kernelize(model, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -5705,7 +5891,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         else None
     )
     total_byte_count = defaultdict(lambda: 0)
+    tied_param_names = _get_tied_weight_keys(model)
     for param_name, device in accelerator_device_map.items():
+        # Skip if the parameter has already been accounted for (tied weights)
+        if param_name in tied_param_names:
+            continue
+
         param = model.get_parameter_or_buffer(param_name)
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()
@@ -5759,6 +5950,7 @@ class AttentionInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
+        "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "paged_attention": paged_attention_forward,
@@ -5770,3 +5962,26 @@ class AttentionInterface(GeneralInterface):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
+
+
+class PreTrainedAudioTokenizerBase(PreTrainedModel):
+    """
+    Class that additionally defines the behavior of any `audio_tokenizer` to be added.
+    Characteristic for any of them:
+        1. Encode raw audio into discrete audio codebooks (with x channels)
+        2. Decode from discrete audio codebooks back to raw audio
+    It is possible that they can decode in different ways given a different representation
+    but they are forced to support 2. nonetheless, e.g. see `DAC`.
+    """
+
+    @abstractmethod
+    def encode(self, input_values: torch.Tensor, *args, **kwargs):
+        """
+        Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
+        """
+        pass
+
+    @abstractmethod
+    def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
+        """Decode from discrete audio codebooks back to raw audio"""
+        pass

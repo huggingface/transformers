@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -205,7 +206,7 @@ class WavLMFeedForward(Wav2Vec2FeedForward):
     pass
 
 
-class WavLMEncoderLayer(nn.Module):
+class WavLMEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -246,7 +247,7 @@ class WavLMEncoderLayer(nn.Module):
         return outputs
 
 
-class WavLMEncoderLayerStableLayerNorm(nn.Module):
+class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -329,22 +330,13 @@ class WavLMEncoder(nn.Module):
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        position_bias=position_bias,
-                        output_attentions=output_attentions,
-                        index=i,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_bias=position_bias,
+                    output_attentions=output_attentions,
+                    index=i,
+                )
 
                 hidden_states, position_bias = layer_outputs[:2]
 
@@ -415,21 +407,12 @@ class WavLMEncoderStableLayerNorm(nn.Module):
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        output_attentions=output_attentions,
-                        position_bias=position_bias,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    position_bias=position_bias,
+                )
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:

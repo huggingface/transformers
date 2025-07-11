@@ -41,14 +41,10 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.import_utils import is_cv2_available, is_vision_available
+from ...utils.import_utils import is_vision_available
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_cv2_available():
-    pass
 
 
 if is_vision_available():
@@ -173,6 +169,7 @@ class NougatImageProcessor(BaseImageProcessor):
         min_val = data.min()
         if max_val == min_val:
             image = np.array(image)
+            image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
             image = (
                 to_channel_dimension_format(image, data_format, input_data_format)
                 if data_format is not None

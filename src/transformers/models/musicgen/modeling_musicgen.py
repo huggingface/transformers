@@ -43,6 +43,7 @@ from ...modeling_attn_mask_utils import (
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -69,17 +70,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class MusicgenUnconditionalInput(ModelOutput):
-    """
-    Args:
-        encoder_outputs  (`tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the text encoder model.
-        attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
-            Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
-            1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
-        guidance_scale (`float`, *optional*):
-            Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
-            from the prompts) and the unconditional logits (predicted without prompts).
+    r"""
+    encoder_outputs (`tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the text encoder model.
+    attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
+        Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
+        1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
+    guidance_scale (`float`, *optional*):
+        Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
+        from the prompts) and the unconditional logits (predicted without prompts).
     """
 
     encoder_outputs: tuple[torch.FloatTensor] = None
@@ -146,7 +147,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         position_ids = (torch.arange(seq_len) + past_key_values_length).to(input_ids.device)
         # expand embeddings if needed
         if seq_len > self.weights.size(0):
-            self.make_weights(seq_len + self.offset, self.embedding_dim)
+            self.make_weights(seq_len, self.embedding_dim)
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
@@ -181,7 +182,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Attention with Wav2Vec2->Musicgen
 class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -304,7 +304,7 @@ class MusicgenAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class MusicgenDecoderLayer(nn.Module):
+class MusicgenDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -435,15 +435,19 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.initializer_factor
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -619,33 +623,17 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.forward,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1359,6 +1347,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -1719,6 +1708,13 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
 
@@ -1744,13 +1740,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
 
         Examples:
         ```python

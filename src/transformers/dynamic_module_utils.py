@@ -402,10 +402,11 @@ def get_cached_module_file(
         if not (submodule_path / module_file).exists() or not filecmp.cmp(
             resolved_module_file, str(submodule_path / module_file)
         ):
+            (submodule_path / module_file).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         for module_needed in modules_needed:
-            module_needed = f"{module_needed}.py"
+            module_needed = Path(module_file).parent / f"{module_needed}.py"
             module_needed_file = os.path.join(pretrained_model_name_or_path, module_needed)
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)

@@ -82,7 +82,9 @@ class AwqQuantizer(HfQuantizer):
                     "your model on a GPU device in order to run your model."
                 )
             elif device_map is not None:
-                if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+                if isinstance(device_map, dict) and any(
+                    forbidden in device_map.values() for forbidden in ("cpu", torch.device("cpu"), "disk")
+                ):
                     raise ValueError(
                         "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
                         " This is not supported. Please remove the CPU or disk device from the device_map."

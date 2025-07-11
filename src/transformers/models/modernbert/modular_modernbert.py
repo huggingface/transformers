@@ -26,6 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -155,6 +156,7 @@ class ModernBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernbert"
+    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -503,9 +505,7 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
-    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
-        super().__init__(self, config=config, device=device)
-        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
+    pass
 
 
 def eager_attention_forward(
@@ -662,11 +662,9 @@ class ModernBertAttention(nn.Module):
         else:
             self.local_attention = (-1, -1)
 
-        rope_theta = config.global_rope_theta
         max_position_embeddings = config.max_position_embeddings
         if self.local_attention != (-1, -1):
-            if config.local_rope_theta is not None:
-                rope_theta = config.local_rope_theta
+            rope_theta = config.global_rope_theta if config.local_rope_theta is None else config.local_rope_theta
             max_position_embeddings = config.local_attention
 
         if config._attn_implementation == "flash_attention_2":
@@ -674,7 +672,7 @@ class ModernBertAttention(nn.Module):
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -710,7 +708,7 @@ class ModernBertAttention(nn.Module):
         return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
 
 
-class ModernBertEncoderLayer(nn.Module):
+class ModernBertEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ModernBertConfig, layer_id: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -763,6 +761,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = False
 
@@ -994,27 +993,15 @@ class ModernBertModel(ModernBertPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    sliding_window_mask,
-                    position_ids,
-                    cu_seqlens,
-                    max_seqlen,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    sliding_window_mask=sliding_window_mask,
-                    position_ids=position_ids,
-                    cu_seqlens=cu_seqlens,
-                    max_seqlen=max_seqlen,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                sliding_window_mask=sliding_window_mask,
+                position_ids=position_ids,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
             if output_attentions and len(layer_outputs) > 1:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -1212,7 +1199,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if self.config._attn_implementation == "flash_attention_2":
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
