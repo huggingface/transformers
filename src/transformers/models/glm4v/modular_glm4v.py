@@ -549,7 +549,7 @@ class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
