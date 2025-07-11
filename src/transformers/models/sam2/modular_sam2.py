@@ -1128,7 +1128,7 @@ class Sam2PromptEncoder(SamPromptEncoder):
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
-            torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
+            torch.zeros_like(point_embedding),
         )
 
         point_embedding = torch.where(
@@ -1340,7 +1340,7 @@ class Sam2MaskDecoder(nn.Module):
         )
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        if sparse_prompt_embeddings.sum() != 0:
+        if sparse_prompt_embeddings.shape[0] != 0:
             tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
         else:
             tokens = output_tokens
@@ -2913,11 +2913,13 @@ class Sam2Model(Sam2PreTrainedModel):
             vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
             vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_position_embeddings]
             # Cache features
-            inference_state.cached_features[frame_idx] = {
-                "vision_feats": [
-                    vision_feat.to(inference_state.inference_state_device) for vision_feat in vision_feats
-                ],
-                "vision_pos_embeds": [pe.to(inference_state.inference_state_device) for pe in vision_pos_embeds],
+            inference_state.cached_features = {
+                frame_idx: {
+                    "vision_feats": [
+                        vision_feat.to(inference_state.inference_state_device) for vision_feat in vision_feats
+                    ],
+                    "vision_pos_embeds": [pe.to(inference_state.inference_state_device) for pe in vision_pos_embeds],
+                }
             }
 
         # Expand to batch size if needed
@@ -3079,28 +3081,6 @@ class Sam2Model(Sam2PreTrainedModel):
             return maskmem_features, maskmem_pos_enc
         else:
             return None, None
-
-    def _resize_mask_to_original_size(
-        self,
-        mask: torch.Tensor,
-        original_height: int,
-        original_width: int,
-    ) -> torch.Tensor:
-        """Resize mask from model output size to original video size."""
-        # Add batch and channel dimensions for interpolation
-        mask = mask.unsqueeze(0).float()
-
-        # Resize to original dimensions
-        mask = torch.nn.functional.interpolate(
-            mask,
-            size=(original_height, original_width),
-            mode="bilinear",
-            align_corners=False,
-        )
-
-        # Remove batch and channel dimensions and convert to bool
-        mask = mask.squeeze(0) > 0.5
-        return mask
 
     def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
         """

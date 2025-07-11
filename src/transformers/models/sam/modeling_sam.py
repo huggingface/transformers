@@ -497,7 +497,7 @@ class SamMaskDecoder(nn.Module):
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        if sparse_prompt_embeddings.sum().item() != 0:
+        if sparse_prompt_embeddings.shape[0] != 0:
             tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
         else:
             tokens = output_tokens
@@ -709,7 +709,7 @@ class SamPromptEncoder(nn.Module):
             )
 
         if sparse_embeddings is None:
-            sparse_embeddings = torch.zeros((batch_size, 1, 1, self.hidden_size), device=target_device)
+            sparse_embeddings = torch.zeros((0, 1, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
