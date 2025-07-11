@@ -239,7 +239,7 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     # TODO: check wether both produce the same results or not!
     # scale the logits to prevent overflows
     logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
