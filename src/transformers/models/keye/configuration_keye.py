@@ -25,8 +25,8 @@
 # limitations under the License.
 
 
-from transformers.configuration_utils import PretrainedConfig, layer_type_validation
-from transformers.modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import rope_config_validation
 
 
 class KeyeVisionConfig(PretrainedConfig):
