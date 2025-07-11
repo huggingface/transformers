@@ -526,7 +526,7 @@ class ServeCommand(BaseTransformersCLICommand):
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
 
         if update_model:
-            self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
+            self.load_model_and_tokenizer(req["model"], self.args)
 
         generation_config = create_generation_config_from_req(
             req,
@@ -594,7 +594,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
-            self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
+            self.load_model_and_tokenizer(req["model"], self.args)
 
         # HACK for tiny-agents: it sends a request after the assistant message (???). Let's assume we can't have a
         # request whose last message is from the assistant.
@@ -627,7 +627,7 @@ class ServeCommand(BaseTransformersCLICommand):
         generation_config = create_generation_config_from_req(
             req, model_generation_config=self.model.generation_config
         )
-        max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 256
+        max_new_tokens = req.get("max_tokens", generation_config.max_new_tokens) or 1024
         generation_config.max_new_tokens = max_new_tokens
 
         last_kv_cache = None
@@ -750,7 +750,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
-            self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
+            self.load_model_and_tokenizer(req["model"], self.args)
 
         text = self.tokenizer.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
 
@@ -762,7 +762,7 @@ class ServeCommand(BaseTransformersCLICommand):
         generation_config = create_generation_config_from_req(
             req, model_generation_config=self.model.generation_config
         )
-        max_new_tokens = req.get("max_output_tokens", generation_config.max_new_tokens) or 256
+        max_new_tokens = req.get("max_output_tokens", generation_config.max_new_tokens) or 1024
         generation_config.max_new_tokens = max_new_tokens
 
         generation_kwargs = {
@@ -971,17 +971,26 @@ class ServeCommand(BaseTransformersCLICommand):
         return req_continues_last_messages
 
     @staticmethod
-    def get_quantization_config(model_args: ServeArguments) -> Optional["BitsAndBytesConfig"]:
-        if model_args.load_in_4bit:
+    def get_quantization_config(args: ServeArguments) -> Optional["BitsAndBytesConfig"]:
+        """
+        Returns the quantization config for the given CLI arguments.
+
+        Args:
+            args (`ServeArguments`): The serve arguments. May contain quantization settings, device, etc.
+
+        Returns:
+            `Optional[BitsAndBytesConfig]`: The quantization config.
+        """
+        if args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 # For consistency with model weights, we use the same value as `torch_dtype`
-                bnb_4bit_compute_dtype=model_args.torch_dtype,
-                bnb_4bit_quant_type=model_args.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=model_args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=model_args.torch_dtype,
+                bnb_4bit_compute_dtype=args.torch_dtype,
+                bnb_4bit_quant_type=args.bnb_4bit_quant_type,
+                bnb_4bit_use_double_quant=args.use_bnb_nested_quant,
+                bnb_4bit_quant_storage=args.torch_dtype,
             )
-        elif model_args.load_in_8bit:
+        elif args.load_in_8bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_8bit=True,
             )
@@ -991,13 +1000,30 @@ class ServeCommand(BaseTransformersCLICommand):
         return quantization_config
 
     def canonicalized_model_name(self, model_id: str) -> str:
+        """
+        Canonicalizes the model name to the format "model_id@revision". If the model_id DOESN'T contain an @, it
+        defaults to "model_id@main".
+
+        Args:
+            model_id (`str`): The model ID.
+
+        Returns:
+            `str`: The canonicalized model name.
+        """
         if "@" in model_id:
             return model_id
         return f"{model_id}@main"
 
-    def load_model_and_tokenizer(
-        self, model_id_and_revision: str, args: ServeArguments
-    ) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_tokenizer(self, model_id_and_revision: str, args: ServeArguments):
+        """
+        Loads the model and tokenizer from the given model ID and revision into the ServeCommand instance.
+
+        Args:
+            model_id_and_revision (`str`):
+                The model ID and revision to load.
+            args (`ServeArguments`):
+                The serve arguments. May contain quantization settings, device, etc.
+        """
         logger.warning(f"Loading {model_id_and_revision}")
 
         if "@" in model_id_and_revision:
@@ -1034,7 +1060,8 @@ class ServeCommand(BaseTransformersCLICommand):
         self.loaded_model = f"{model_id}@{revision}"
 
         logger.warning(f"Loaded model {self.loaded_model}")
-        return model, tokenizer
+        self.model = model
+        self.tokenizer = tokenizer
 
 
 if __name__ == "__main__":
