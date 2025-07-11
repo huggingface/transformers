@@ -363,9 +363,9 @@ class Florence2VisionWindowAttention(nn.Module):
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
+
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(dim, dim)
-        self.softmax = nn.Softmax(dim=-1)
         self.is_causal = False
 
     def forward(self, hidden_states: torch.Tensor):
