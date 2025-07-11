@@ -173,11 +173,13 @@ class Florence2VisionText2TextModelTester:
         )
         input_ids[:, -1] = self.eos_token_id
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_attention_mask = decoder_input_ids.ne(self.pad_token_id)
 
         inputs_dict = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
             "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask
         }
 
         config = self.get_config()
