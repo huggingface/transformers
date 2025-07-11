@@ -50,7 +50,6 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from accelerate.utils import AORecipeKwargs, TERecipeKwargs, MSAMPRecipeKwargs
-
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
@@ -5225,7 +5224,6 @@ class Trainer:
                             **kwargs
                         )
                 fp8_config.pop("backend")
-                print(fp8_config)
                 kwargs_handlers = [recipe_kwargs(**fp8_config)]
                 args["kwargs_handlers"] = kwargs_handlers
 
