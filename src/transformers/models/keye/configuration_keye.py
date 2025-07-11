@@ -25,8 +25,8 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from transformers.configuration_utils import PretrainedConfig, layer_type_validation
+from transformers.modeling_rope_utils import rope_config_validation
 
 
 class KeyeVisionConfig(PretrainedConfig):
@@ -156,7 +156,12 @@ class KeyeConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-
+        head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension.
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import KeyeForConditionalGeneration, KeyeConfig
 
