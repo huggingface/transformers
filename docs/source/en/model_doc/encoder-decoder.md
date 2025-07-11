@@ -55,17 +55,26 @@ print(summarizer(text))
 <hfoption id="AutoModel">
 
 ```python
-import torch  
-from transformers import AutoModelForCausalLM, AutoTokenizer  
+from transformers import AutoTokenizer, EncoderDecoderModel  
 
-tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")  
-text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
+# Load a pre-trained translation model  
+model_name = "google/bert2bert_L-24_wmt_en_de" 
+tokenizer = AutoTokenizer.from_pretrained(model_name, pad_token="<pad>", eos_token="</s>", bos_token="<s>")  
+model = EncoderDecoderModel.from_pretrained(model_name)  
 
-inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(model.device)
+# Input sentence to translate  
+input_text = "Plants create energy through a process known as"  
 
-summary = model.generate(**inputs, max_length=60, num_beams=4, early_stopping=True)
-print(tokenizer.decode(summary[0], skip_special_tokens=True))
+# Encode the input text  
+inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).input_ids  
+
+# Generate the translated output  
+outputs = model.generate(inputs)[0]  
+
+# Decode the output tokens to get the translated sentence  
+translated_text = tokenizer.decode(outputs, skip_special_tokens=True)  
+
+print("Translated text:", translated_text)  
 ```
 
 </hfoption>
