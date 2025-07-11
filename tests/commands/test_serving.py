@@ -121,7 +121,7 @@ class ServeCLITest(unittest.TestCase):
                 instructions=None,  # <--- is set to None = should NOT be in the output.
                 text={"format": {"type": "text"}},
                 object="response",
-                tools=[],  # <--- empty lists should be in the output (there are often mandatory fields)
+                tools=[],  # <--- empty lists should be in the output (they are often mandatory fields)
                 output=[],
                 parallel_tool_calls=False,
                 tool_choice="auto",
@@ -256,7 +256,7 @@ class ServeCompletionsMixin:
     # TODO: speed-based test to confirm that KV cache is working across requests
 
 
-@slow  # TODO (joao): this shouldn't be needed
+@slow  # server startup time is slow on our push CI
 class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `generate` version of the Completions API."""
 
@@ -346,7 +346,7 @@ class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
-@slow  # TODO (joao): this shouldn't be needed
+@slow  # server startup time is slow on our push CI
 class ServeCompletionsContinuousBatchingTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `continuous_batching` version of the Completions API."""
 
