@@ -1157,7 +1157,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
             frame = waveform[i : i + fft_window_size]
             frame_width = frame.shape[0]
             if frame_width < waveform.shape[0]:
-                frame = np.lib.pad(
+                frame = np.pad(
                     frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0
                 )
         frames.append(frame)
