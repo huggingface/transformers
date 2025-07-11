@@ -746,10 +746,7 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_chat_completion(generation_streamer, request_id)
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
-        # TODO
-        # Implement metadata forwarding (both input and output have a metadata field)
-        # Implement non-streaming mode
-        # Implement different output_index and content_index than 0
+        # TODO -- Implement non-streaming mode
 
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
@@ -780,6 +777,8 @@ class ServeCommand(BaseTransformersCLICommand):
         def stream_response(streamer, _request_id):
             thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
             sequence_number = 0
+            output_index = 0
+            content_index = 0
 
             try:
                 thread.start()
@@ -834,7 +833,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 response_output_item_added = ResponseOutputItemAddedEvent(
                     type="response.output_item.added",
                     sequence_number=sequence_number,
-                    output_index=0,
+                    output_index=output_index,
                     item=ResponseOutputMessage(
                         id=f"msg_{request_id}", type="message", status="in_progress", role="assistant", content=[]
                     ),
@@ -847,8 +846,8 @@ class ServeCommand(BaseTransformersCLICommand):
                     type="response.content_part.added",
                     item_id=f"msg_{request_id}",
                     sequence_number=sequence_number,
-                    output_index=0,
-                    content_index=0,
+                    output_index=output_index,
+                    content_index=content_index,
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
                 sequence_number += 1
@@ -862,8 +861,8 @@ class ServeCommand(BaseTransformersCLICommand):
                         type="response.output_text.delta",
                         item_id=f"msg_{request_id}",
                         sequence_number=sequence_number,
-                        output_index=0,
-                        content_index=0,
+                        output_index=output_index,
+                        content_index=content_index,
                         delta=result,
                     )
                     sequence_number += 1
@@ -874,7 +873,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     type="response.output_text.done",
                     item_id=f"msg_{request_id}",
                     sequence_number=sequence_number,
-                    output_index=0,
+                    output_index=output_index,
                     content_index=0,
                     text=results,
                 )
@@ -886,18 +885,19 @@ class ServeCommand(BaseTransformersCLICommand):
                     type="response.content_part.done",
                     item_id=f"msg_{request_id}",
                     sequence_number=sequence_number,
-                    output_index=0,
-                    content_index=0,
+                    output_index=output_index,
+                    content_index=content_index,
                     part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
                 )
                 sequence_number += 1
+                content_index += 1
                 yield self.build_response_event(response_content_part_done)
 
                 # Complete the output item
                 response_output_item_done = ResponseOutputItemDoneEvent(
                     type="response.output_item.done",
                     sequence_number=sequence_number,
-                    output_index=0,
+                    output_index=output_index,
                     item=ResponseOutputMessage(
                         id=f"msg_{request_id}",
                         type="message",
@@ -908,6 +908,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     ),
                 )
                 sequence_number += 1
+                output_index += 1
                 yield self.build_response_event(response_output_item_done)
 
                 # Finally, Complete the event
