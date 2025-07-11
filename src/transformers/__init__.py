@@ -127,6 +127,7 @@ _import_structure = {
         "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
+        "is_trackio_available",
         "is_wandb_available",
     ],
     "loss": [],
@@ -630,6 +631,7 @@ if TYPE_CHECKING:
         is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
+        is_trackio_available,
         is_wandb_available,
     )
 
