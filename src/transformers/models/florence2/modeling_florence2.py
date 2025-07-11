@@ -250,8 +250,8 @@ class Florence2VisionChannelAttention(nn.Module):
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         hidden_states, _ = attention_interface(self, query, key, value, attention_mask=None, scaling=N**-0.5)
-        hidden_states = hidden_states.permute(0, 2, 1, 3)
-        hidden_states = hidden_states.reshape(B, C, N).transpose(1, 2)
+        hidden_states = hidden_states.permute(0, 3, 2, 1)
+        hidden_states = hidden_states.reshape(B, N, C)
 
         # Final projection
         hidden_states = self.proj(hidden_states)
