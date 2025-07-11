@@ -5208,6 +5208,7 @@ class Trainer:
             if "backend" in accelerator_config["fp8_config"]:
                 recipe_kwargs = MP_BACKEND_TO_KWARGS[accelerator_config["fp8_config"]["backend"]]
                 fp8_config = accelerator_config["fp8_config"].copy()
+
                 if fp8_config["backend"] == "AO":
                     from torchao.float8 import Float8LinearConfig
 
@@ -5223,6 +5224,7 @@ class Trainer:
                         fp8_config["config"] = Float8LinearConfig(
                             **kwargs
                         )
+
                 fp8_config.pop("backend")
                 kwargs_handlers = [recipe_kwargs(**fp8_config)]
                 args["kwargs_handlers"] = kwargs_handlers
