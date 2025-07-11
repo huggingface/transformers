@@ -97,6 +97,13 @@ class ColPaliForRetrievalOutput(ModelOutput):
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
+
+    _checkpoint_conversion_mapping = {
+        "^vlm.language_model.model": "vlm.model.language_model",
+        "^vlm.vision_tower": "vlm.model.vision_tower",
+        "^vlm.multi_modal_projector": "vlm.model.multi_modal_projector",
+        "^language_model.lm_head": "lm_head",
+    }
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
