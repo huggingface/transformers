@@ -773,9 +773,19 @@ class Siglip2PreTrainedModel(PreTrainedModel):
 class Siglip2TextModel(Siglip2PreTrainedModel):
     config_class = Siglip2TextConfig
 
-    def __init__(self, config: Siglip2TextConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.text_model = Siglip2TextTransformer(config)
+        # ✅ Define text_config early
+        text_config = config.text_config if hasattr(config, "text_config") else config
+
+        self.text_model = Siglip2TextTransformer(text_config)
+
+        hidden_size = text_config.hidden_size
+        projection_dim = getattr(config, "projection_dim", hidden_size)
+
+        self.use_head = getattr(config, "use_head", True)
+        self.head = nn.Linear(hidden_size, projection_dim)
+        self.post_layernorm = nn.LayerNorm(hidden_size)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -789,9 +799,9 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
@@ -811,13 +821,31 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
-        return self.text_model(
+        outputs: BaseModelOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+        )
+
+        last_hidden_state = outputs.last_hidden_state
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        # Always use last token for pooled output (EOS or PAD)
+        pooled_output = last_hidden_state[:, -1, :]
+        pooled_output = self.head(pooled_output) if self.use_head else None
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
