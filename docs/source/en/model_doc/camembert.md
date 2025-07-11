@@ -74,13 +74,10 @@ print(f"The predicted token is: {predicted_token}")
 ```
 </hfoption> 
 
-<hfoption id="Command line">
+<hfoption id="transformers CLI">
 
 ```bash
-transformers-cli env
-python -m transformers.cli run camembert-base \
-    --task fill-mask \
-    --inputs "Le camembert est un délicieux fromage <mask>."
+echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --task fill-mask --model camembert-base --device 0
 ```
 
 </hfoption> 
