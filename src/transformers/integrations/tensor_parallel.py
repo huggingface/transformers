@@ -520,6 +520,8 @@ class VocabParallel(TensorParallelLayer):
     """
     VocabParallel is a tensor parallel layer that shards the embedding table along the last dimension.
     No need to do input masking as embedding would be stored in `_MaskPartial` which handles it (https://github.com/pytorch/pytorch/blob/main/torch/distributed/tensor/_ops/_embedding_ops.py#L70)
+    
+    This is useful if you want to train with long sequence length!
     """
 
     def __init__(
