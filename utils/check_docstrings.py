@@ -948,6 +948,10 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     if "".join(source[start_idx:idx])[:-1] != old_doc_args:
         # Args are not fully defined in the docstring of this object
+        # This can happen due to a mismatch in indentation calculation where the docstring parsing
+        # in match_docstring_with_signature uses obj.__doc__.split("\n") while here we use
+        # inspect.getsourcelines(obj) which can have different line endings or indentation.
+        # See #38915 for more details.
         obj_file = find_source_file(obj)
         actual_args_section = "".join(source[start_idx:idx])[:-1]
         raise ValueError(
