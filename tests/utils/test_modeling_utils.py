@@ -158,6 +158,38 @@ if is_torch_available():
         def forward(self, x):
             return self.linear2(self.linear(self.base(x)))
 
+    class ModelWithDirectParam(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            # direct params and submodules is helpful for testing offloading logic
+            self.weight = nn.Parameter(torch.rand((5, 5)))
+            self.base = BaseModel(config)
+
+        def forward(self, x):
+            return self.base(x @ self.weight.T)
+
+    class ModelWithDirectParamSubmodule(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.submodule = ModelWithDirectParam(config)
+            # needed so model can have at least one module on accelerator
+            self.linear = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.linear(self.submodule(x))
+
     class ModelWithHeadAndTiedWeights(PreTrainedModel):
         base_model_prefix = "base"
         config_class = PretrainedConfig
@@ -1190,6 +1222,16 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
+    def test_save_offloaded_model_with_direct_params(self):
+        from accelerate import dispatch_model
+
+        device_map = {"submodule": "cpu", "linear": f"{torch_device}:0"}
+        model = ModelWithDirectParamSubmodule(PretrainedConfig())
+        dispatch_model(model, device_map)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
     def test_save_offloaded_model_dynamic_tied_weights_keys(self):
         from accelerate import dispatch_model
 
