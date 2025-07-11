@@ -28,7 +28,7 @@ from transformers.utils import is_tf_available, is_torch_available, is_vision_av
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, Sam2ImageProcessor, Sam2Processor, Sam2VideoProcessor
+    from transformers import AutoProcessor, Sam2ImageProcessorFast, Sam2Processor, Sam2VideoProcessor
 
 if is_torch_available():
     import torch
@@ -42,7 +42,7 @@ if is_tf_available():
 class Sam2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        image_processor = Sam2ImageProcessor()
+        image_processor = Sam2ImageProcessorFast()
         video_processor = Sam2VideoProcessor()
         processor = Sam2Processor(image_processor, video_processor)
         processor.save_pretrained(self.tmpdirname)
@@ -84,7 +84,7 @@ class Sam2ProcessorTest(unittest.TestCase):
         processor = Sam2Processor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, Sam2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, Sam2ImageProcessorFast)
         self.assertIsInstance(processor.video_processor, Sam2VideoProcessor)
 
     def test_image_processor_no_masks(self):
