@@ -681,8 +681,8 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
 
 def eval_node(node):
-    if isinstance(node, ast.Num):  # <number>
-        return node.n
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float, complex):
+        return node.value
     elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
@@ -821,6 +821,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     except OSError:
         source = []
 
+    # Find the line where the docstring starts
     idx = 0
     while idx < len(source) and '"""' not in source[idx]:
         idx += 1
@@ -828,9 +829,11 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     ignore_order = False
     if idx < len(source):
         line_before_docstring = source[idx - 1]
+        # Match '# no-format' (allowing surrounding whitespaces)
         if re.search(r"^\s*#\s*no-format\s*$", line_before_docstring):
-            # This object is ignored
+            # This object is ignored by the auto-docstring tool
             return
+        # Match '# ignore-order' (allowing surrounding whitespaces)
         elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
             ignore_order = True
 
@@ -942,7 +945,12 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     if idx == len(source):
         # Args are not defined in the docstring of this object
-        return
+        obj_file = find_source_file(obj)
+        raise ValueError(
+            f"Cannot fix docstring of {obj.__name__} in {obj_file} because no argument section was found in the docstring. "
+            f"The docstring should contain a section starting with 'Args:', 'Arguments:', 'Parameters:', or similar. "
+            f"Current docstring:\n{obj.__doc__[:200]}{'...' if len(obj.__doc__) > 200 else ''}"
+        )
 
     # Get to the line where we stop documenting arguments
     indent = find_indent(source[idx])
@@ -956,9 +964,24 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         idx -= 1
     idx += 1
 
-    if "".join(source[start_idx:idx])[:-1] != old_doc_args:
+    # `old_doc_args` is built from `obj.__doc__`, which may have
+    # different indentation than the raw source from `inspect.getsourcelines`.
+    # We use `inspect.cleandoc` to remove indentation uniformly from both
+    # strings before comparing them.
+    source_args_as_str = "".join(source[start_idx:idx])
+    if inspect.cleandoc(source_args_as_str) != inspect.cleandoc(old_doc_args):
         # Args are not fully defined in the docstring of this object
-        return
+        obj_file = find_source_file(obj)
+        actual_args_section = source_args_as_str.rstrip()
+        raise ValueError(
+            f"Cannot fix docstring of {obj.__name__} in {obj_file} because the argument section in the source code "
+            f"does not match the expected format. This usually happens when:\n"
+            f"1. The argument section is not properly indented\n"
+            f"2. The argument section contains unexpected formatting\n"
+            f"3. The docstring parsing failed to correctly identify the argument boundaries\n\n"
+            f"Expected argument section:\n{repr(old_doc_args)}\n\n"
+            f"Actual argument section found:\n{repr(actual_args_section)}\n\n"
+        )
 
     obj_file = find_source_file(obj)
     with open(obj_file, "r", encoding="utf-8") as f:
