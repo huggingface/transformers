@@ -673,6 +673,20 @@ class Message:
                     }
                     blocks.append(block)
 
+        block = {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Test results diff*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check test result diff file"},
+                "url": diff_file_url,
+            },
+        }
+        blocks.append(block)
+
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
 
@@ -1504,13 +1518,14 @@ if __name__ == "__main__":
         fp.write(report)
 
     # upload
-    api.upload_file(
+    commit_info = api.upload_file(
         path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
         path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
         repo_id=report_repo_id,
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
+    diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:
