@@ -141,6 +141,8 @@ class Glm4MoeConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         moe_intermediate_size (`int`, *optional*, defaults to 1408):
             Intermediate size of the routed expert.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            number of experts per token.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 128):
@@ -156,7 +158,6 @@ class Glm4MoeConfig(PretrainedConfig):
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details.
