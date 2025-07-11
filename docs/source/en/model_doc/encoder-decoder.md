@@ -59,7 +59,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, device_map="auto")  
+model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")  
 text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
 
 inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(model.device)
@@ -72,11 +72,7 @@ print(tokenizer.decode(summary[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen." | \
-transformers-cli run \
-  --task summarization \
-  --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" \
-  --device 0
+echo -e "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen." | transformers-cli run --task summarization --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" --device 0
 ```
 
 </hfoption>
@@ -84,9 +80,9 @@ transformers-cli run \
 
 ## Notes
 
-- [`EncoderDecoderModel`] can be initialized using any pretrained encoder (e.g. BERT) and decoder (e.g. BERT, GPT2, or the decoder of BART). Note that cross-attention layers may be randomly initialized depending on the decoder type.
+- [`EncoderDecoderModel`] can be initialized using any pretrained encoder and decoder. But depending on the decoder architecture, the cross-attention layers may be randomly initialized.
 
-Such models require downstream fine-tuning, as discussed in [this blog post](https://huggingface.co/blog/warm-starting-encoder-decoder). Use `from_encoder_decoder_pretrained` to combine encoder and decoder checkpoints:
+These models require downstream fine-tuning, as discussed in this [blog post](https://huggingface.co/blog/warm-starting-encoder-decoder). Use [`~EncoderDecoderModel.from_encoder_decoder_pretrained`] to combine encoder and decoder checkpoints.
 
 ```python
 from transformers import EncoderDecoderModel, BertTokenizer
@@ -135,8 +131,7 @@ model = EncoderDecoderModel.from_encoder_decoder_pretrained(
 >>> model = EncoderDecoderModel(config=config)
 ```
 
-- The Encoder Decoder Model can also be used for translation of different languages. The example below demonstrates a 
-English to French model using transformers
+- The Encoder Decoder Model can also be used for translation as shown below.
 
 ```python
 from transformers import AutoTokenizer, EncoderDecoderModel
