@@ -1,7 +1,7 @@
 import enum
 import itertools
 import types
-from typing import Dict
+from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
@@ -19,6 +19,8 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
+ChatType = list[dict[str, str]]
+
 
 class ReturnType(enum.Enum):
     TENSORS = 0
@@ -31,7 +33,7 @@ class Chat:
     to this format because the rest of the pipeline code tends to assume that lists of messages are
     actually a batch of samples rather than messages in the same conversation."""
 
-    def __init__(self, messages: Dict):
+    def __init__(self, messages: dict):
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
@@ -231,12 +233,24 @@ class TextGenerationPipeline(Pipeline):
 
         return super()._parse_and_tokenize(*args, **kwargs)
 
+    @overload
+    def __call__(self, text_inputs: str, **kwargs: Any) -> list[dict[str, str]]: ...
+
+    @overload
+    def __call__(self, text_inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
+
+    @overload
+    def __call__(self, text_inputs: ChatType, **kwargs: Any) -> list[dict[str, ChatType]]: ...
+
+    @overload
+    def __call__(self, text_inputs: list[ChatType], **kwargs: Any) -> list[list[dict[str, ChatType]]]: ...
+
     def __call__(self, text_inputs, **kwargs):
         """
         Complete the prompt(s) given as inputs.
 
         Args:
-            text_inputs (`str`, `List[str]`, List[Dict[str, str]], or `List[List[Dict[str, str]]]`):
+            text_inputs (`str`, `list[str]`, list[dict[str, str]], or `list[list[dict[str, str]]]`):
                 One or several prompts (or one list of prompts) to complete. If strings or a list of string are
                 passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,

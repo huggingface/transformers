@@ -373,10 +373,12 @@ class ClvpModelForConditionalGenerationTester:
 
         ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        audio = ds.sort("id")[0]["audio"]
+        audio_sample = audio["array"]
+        sr = audio["sampling_rate"]
 
         feature_extractor = ClvpFeatureExtractor()
-        input_features = feature_extractor(raw_speech=audio, sampling_rate=sr, return_tensors="pt")[
+        input_features = feature_extractor(raw_speech=audio_sample, sampling_rate=sr, return_tensors="pt")[
             "input_features"
         ].to(torch_device)
 
@@ -562,7 +564,8 @@ class ClvpIntegrationTest(unittest.TestCase):
         self.text = "This is an example text."
         ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        _, self.speech_samples, self.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        audio = ds.sort("id")["audio"][0]
+        self.speech_samples, self.sr = audio["array"], audio["sampling_rate"]
 
         self.model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev").to(torch_device)
         self.model.eval()

@@ -103,40 +103,19 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 - The example below demonstrates how to fine-tune Mamba 2 with [PEFT](https://huggingface.co/docs/peft).
 
 ```python 
-from trl import SFTTrainer
+from datasets import load_dataset
 from peft import LoraConfig
-from transformers import AutoTokenizer, Mamba2ForCausalLM, TrainingArguments
-model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
-tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "left" #enforce padding side left
+from trl import SFTConfig, SFTTrainer
 
-model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
+model_id = "mistralai/Mamba-Codestral-7B-v0.1"
 dataset = load_dataset("Abirate/english_quotes", split="train")
-# Without CUDA kernels, batch size of 2 occupies one 80GB device
-# but precision can be reduced.
-# Experiments and trials welcome!
-training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=3,
-    per_device_train_batch_size=2,
-    logging_dir='./logs',
-    logging_steps=10,
-    learning_rate=2e-3
-)
-lora_config =  LoraConfig(
-        r=8,
-        target_modules=["embeddings", "in_proj", "out_proj"],
-        task_type="CAUSAL_LM",
-        bias="none"
-)
+training_args = SFTConfig(dataset_text_field="quote", gradient_checkpointing=True, per_device_train_batch_size=4)
+lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
 trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
+    model=model_id,
     args=training_args,
-    peft_config=lora_config,
     train_dataset=dataset,
-    dataset_text_field="quote",
+    peft_config=lora_config,
 )
 trainer.train()
 ```

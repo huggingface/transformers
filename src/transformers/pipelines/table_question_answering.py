@@ -38,9 +38,9 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     def __call__(self, table=None, query=None, **kwargs):
         # Returns tqa_pipeline_inputs of shape:
         # [
-        #   {"table": pd.DataFrame, "query": List[str]},
+        #   {"table": pd.DataFrame, "query": list[str]},
         #   ...,
-        #   {"table": pd.DataFrame, "query" : List[str]}
+        #   {"table": pd.DataFrame, "query" : list[str]}
         # ]
         requires_backends(self, "pandas")
         import pandas as pd
@@ -316,7 +316,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             table (`pd.DataFrame` or `Dict`):
                 Pandas DataFrame or dictionary that will be converted to a DataFrame containing all the table values.
                 See above for an example of dictionary.
-            query (`str` or `List[str]`):
+            query (`str` or `list[str]`):
                 Query or list of queries that will be sent to the model alongside the table.
             sequential (`bool`, *optional*, defaults to `False`):
                 Whether to do inference sequentially or as a batch. Batching is faster, but models like SQA require the
@@ -348,8 +348,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
             - **answer** (`str`) -- The answer of the query given the table. If there is an aggregator, the answer will
               be preceded by `AGGREGATOR >`.
-            - **coordinates** (`List[Tuple[int, int]]`) -- Coordinates of the cells of the answers.
-            - **cells** (`List[str]`) -- List of strings made up of the answer cell values.
+            - **coordinates** (`list[tuple[int, int]]`) -- Coordinates of the cells of the answers.
+            - **cells** (`list[str]`) -- List of strings made up of the answer cell values.
             - **aggregator** (`str`) -- If the model has an aggregator, this returns the aggregator.
         """
         pipeline_inputs = self._args_parser(*args, **kwargs)

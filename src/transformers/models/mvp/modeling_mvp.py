@@ -16,7 +16,7 @@
 
 import copy
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -29,6 +29,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -126,12 +127,12 @@ class MvpAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         attn_prompt: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -244,7 +245,7 @@ class MvpAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class MvpEncoderLayer(nn.Module):
+class MvpEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MvpConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -268,7 +269,7 @@ class MvpEncoderLayer(nn.Module):
         layer_head_mask: torch.FloatTensor,
         self_attn_prompt: torch.FloatTensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -316,7 +317,7 @@ class MvpEncoderLayer(nn.Module):
         return outputs
 
 
-class MvpDecoderLayer(nn.Module):
+class MvpDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MvpConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -353,10 +354,10 @@ class MvpDecoderLayer(nn.Module):
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
         self_attn_prompt: Optional[torch.Tensor] = None,
         cross_attn_prompt: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -483,7 +484,7 @@ class MvpPrompt(nn.Module):
             nn.Linear(config.prompt_mid_dim, num_layers * 2 * config.d_model),
         )
 
-    def forward(self, prompt_ids: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, prompt_ids: torch.Tensor) -> tuple[torch.Tensor]:
         prompt = self.prompt_trans(self.prompt_embedding(prompt_ids))
         prompt = prompt.view(self.prompt_length, self.num_layers * 2, self.num_heads, self.head_dim)
         prompt = self.dropout(prompt)
@@ -583,7 +584,7 @@ class MvpEncoder(MvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -672,7 +673,7 @@ class MvpEncoder(MvpPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -682,23 +683,13 @@ class MvpEncoder(MvpPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        (self_attn_prompt[idx] if self.use_prompt else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -779,13 +770,13 @@ class MvpDecoder(MvpPreTrainedModel):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -925,7 +916,7 @@ class MvpDecoder(MvpPreTrainedModel):
                     )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -935,37 +926,19 @@ class MvpDecoder(MvpPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    self_attn_prompt[idx] if self.use_prompt else None,
-                    cross_attn_prompt[idx] if self.use_prompt else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
-                    cross_attn_prompt=(cross_attn_prompt[idx] if self.use_prompt else None),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                self_attn_prompt=(self_attn_prompt[idx] if self.use_prompt else None),
+                cross_attn_prompt=(cross_attn_prompt[idx] if self.use_prompt else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1047,15 +1020,15 @@ class MvpModel(MvpPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Seq2SeqModelOutput]:
+    ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1076,7 +1049,7 @@ class MvpModel(MvpPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -1214,8 +1187,8 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1223,7 +1196,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1244,7 +1217,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -1387,7 +1360,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1395,7 +1368,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Seq2SeqSequenceClassifierOutput]:
+    ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1416,7 +1389,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -1559,7 +1532,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1568,7 +1541,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Seq2SeqQuestionAnsweringModelOutput]:
+    ) -> Union[tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1589,7 +1562,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
             be used by default.
 
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
@@ -1759,14 +1732,14 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:

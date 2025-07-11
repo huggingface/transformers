@@ -15,8 +15,7 @@
 """PyTorch BioGPT model."""
 
 import math
-from functools import partial
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -29,7 +28,6 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -39,7 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
+    TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
     logger,
@@ -109,8 +107,8 @@ class BioGptDecoderLayer(BartDecoderLayer):
         use_cache: Optional[bool] = True,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -142,7 +140,7 @@ class BioGptDecoderLayer(BartDecoderLayer):
             output_attentions=output_attentions,
             position_ids=position_ids,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -174,6 +172,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
     base_model_prefix = "biogpt"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -365,15 +364,15 @@ class BioGptModel(BioGptPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -465,7 +464,7 @@ class BioGptModel(BioGptPreTrainedModel):
         next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -473,30 +472,17 @@ class BioGptModel(BioGptPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    causal_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    position_ids,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    position_ids=position_ids,
-                    cache_position=cache_position,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                position_ids=position_ids,
+                cache_position=cache_position,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -531,9 +517,6 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring(
     custom_intro="""
     BioGPT Model with a `language modeling` head on top for CLM fine-tuning.
@@ -564,7 +547,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -572,8 +555,8 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -655,7 +638,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -664,7 +647,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -747,7 +730,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -756,7 +739,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,

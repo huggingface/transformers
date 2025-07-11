@@ -19,7 +19,7 @@ import inspect
 import os
 import tempfile
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -79,6 +79,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def __init__(
@@ -452,8 +453,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -462,7 +463,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

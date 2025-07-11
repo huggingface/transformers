@@ -34,6 +34,7 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import (
+    backend_torch_accelerator_module,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -1306,7 +1307,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             # standard generation
             output_with_no_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
-            torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+            torch_accelerator_module = backend_torch_accelerator_module(torch_device)
 
             torch_accelerator_module.empty_cache()
 
