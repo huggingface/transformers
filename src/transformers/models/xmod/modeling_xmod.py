@@ -201,7 +201,8 @@ def eager_attention_forward(
     # Scaling is shifted in case of embeddings being relative
     attn_weights = attn_weights * scaling
 
-    if attention_mask is not None:
+    if attention_mask is not None and attention_mask.ndim == 4:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
