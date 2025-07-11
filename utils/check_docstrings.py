@@ -962,7 +962,7 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         # This can happen due to a mismatch in indentation calculation where the docstring parsing
         # in match_docstring_with_signature uses obj.__doc__.split("\n") while here we use
         # inspect.getsourcelines(obj) which can have different line endings or indentation.
-        # See #38915 for more details.
+        # See https://github.com/huggingface/transformers/pull/38915/files#r2200675302 for more details.
         obj_file = find_source_file(obj)
         actual_args_section = "".join(source[start_idx:idx])[:-1]
         raise ValueError(
