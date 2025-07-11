@@ -37,6 +37,7 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from .text_model import Siglip2TextTransformer
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -287,11 +288,8 @@ class Siglip2PreTrainedModel(SiglipPreTrainedModel):
 
 class Siglip2TextModel(SiglipTextModel):
     def __init__(self, config):
-       
         text_config = config.text_config if hasattr(config, "text_config") else config
-
         super().__init__(config)
-
         self.text_model = Siglip2TextTransformer(text_config)
 
         hidden_size = text_config.hidden_size

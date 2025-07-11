@@ -775,9 +775,7 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
         text_config = config.text_config if hasattr(config, "text_config") else config
-
         self.text_model = Siglip2TextTransformer(text_config)
 
         hidden_size = text_config.hidden_size
