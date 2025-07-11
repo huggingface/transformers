@@ -548,6 +548,10 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
+            # When switching models, terminate a continuous batching manager if it is running.
+            if self.running_continuous_batching_manager is not None:
+                self.running_continuous_batching_manager.stop(block=True, timeout=2)
+                self.running_continuous_batching_manager = None
             self.load_model_and_tokenizer(req["model"], self.args)
 
         generation_config = create_generation_config_from_req(
@@ -563,7 +567,7 @@ class ServeCommand(BaseTransformersCLICommand):
             scheduler="fifo",
         )
 
-        if self.running_continuous_batching_manager is None or update_model:
+        if self.running_continuous_batching_manager is None:
             self.running_continuous_batching_manager = self.model.init_continuous_batching(
                 generation_config=generation_config, streaming=True
             )

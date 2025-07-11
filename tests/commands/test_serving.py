@@ -19,16 +19,21 @@ from unittest.mock import patch
 
 import aiohttp.client_exceptions
 from huggingface_hub import AsyncInferenceClient
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
-from openai.types.responses import Response, ResponseCreatedEvent
 from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
 from transformers import GenerationConfig
 from transformers.commands.serving import ServeArguments, ServeCommand
-from transformers.testing_utils import CaptureStd, slow
+from transformers.testing_utils import CaptureStd, require_openai, slow
+from transformers.utils.import_utils import is_openai_available
 
 
+if is_openai_available():
+    from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
+    from openai.types.responses import Response, ResponseCreatedEvent
+
+
+@require_openai
 class ServeCLITest(unittest.TestCase):
     def test_help(self):
         """Minimal test: we can invoke the help command."""
@@ -165,7 +170,7 @@ class ServeCompletionsMixin:
 
     @async_retry
     async def run_server(self, request):
-        client = AsyncInferenceClient("http://localhost:8000")
+        client = AsyncInferenceClient(f"http://localhost:{self.port}")
         stream = client.chat_completion(**request)
 
         all_payloads = []
@@ -257,13 +262,15 @@ class ServeCompletionsMixin:
 
 
 @slow  # server startup time is slow on our push CI
+@require_openai
 class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `generate` version of the Completions API."""
 
     @classmethod
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
-        args = ServeArguments()
+        cls.port = 8001
+        args = ServeArguments(port=cls.port)
         serve_command = ServeCommand(args)
         thread = Thread(target=serve_command.run)
         thread.daemon = True
@@ -347,13 +354,15 @@ class ServeCompletionsGenerateTest(ServeCompletionsMixin, unittest.TestCase):
 
 
 @slow  # server startup time is slow on our push CI
+@require_openai
 class ServeCompletionsContinuousBatchingTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `continuous_batching` version of the Completions API."""
 
     @classmethod
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
-        args = ServeArguments(attn_implementation="sdpa_paged")  # important: toggle continuous batching
+        cls.port = 8002
+        args = ServeArguments(port=cls.port, attn_implementation="sdpa_paged")  # important: toggle continuous batching
         serve_command = ServeCommand(args)
         thread = Thread(target=serve_command.run)
         thread.daemon = True
