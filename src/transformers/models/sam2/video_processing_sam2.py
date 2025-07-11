@@ -29,6 +29,7 @@ from ...utils import (
     is_torch_available,
     is_vision_available,
 )
+from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 
 
@@ -41,6 +42,7 @@ if is_vision_available():
     from ...image_utils import PILImageResampling
 
 
+@requires(backends=("torchvision",))
 class Sam2VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
