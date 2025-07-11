@@ -159,7 +159,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)`):
+        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,)`):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model.
 
@@ -293,11 +293,14 @@ class Gemma3nTextConfig(PretrainedConfig):
 
         # Default value for activation sparsity pattern
         if activation_sparsity_pattern == (0.95,):
-            activation_sparsity_pattern += (0.0,) * (num_hidden_layers - 1)
+            num_sparse_layers = 10 if num_hidden_layers > 10 else num_hidden_layers
+            activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
+                num_hidden_layers - num_sparse_layers
+            )
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
-                "activation_sparsity_pattern must have an explicit activation sparsity value for every layer. "
+                "activation_sparsity_pattern must have an explicit activation sparsity value for every layer."
                 f"Expected {num_hidden_layers} values but got {len_asp}."
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern

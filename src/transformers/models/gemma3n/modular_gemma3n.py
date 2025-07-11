@@ -186,7 +186,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
             value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)`):
+        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,) * 10 + (0.0,) * 25`):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model.
 
@@ -239,7 +239,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,) * 10 + (0.0,) * 25,
+        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,),
         **kwargs,
     ):
         PretrainedConfig.__init__(
@@ -302,6 +302,13 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
 
         if activation_sparsity_pattern is None:
             activation_sparsity_pattern = [0.0] * num_hidden_layers
+
+        # Default value for activation sparsity pattern
+        if activation_sparsity_pattern == (0.95,):
+            num_sparse_layers = 10 if num_hidden_layers > 10 else num_hidden_layers
+            activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
+                num_hidden_layers - num_sparse_layers
+            )
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
@@ -1768,12 +1775,13 @@ class Gemma3nTextAttention(Gemma3Attention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
+        # For layers with shared KV (from kv sharing point onwards), we reuse the cached keys/values from the previous layer.
+        # During prefill, cache_position is a full range [0, 1, ..., max_cache_len-1], but in autoregressive mode it's a single position [last_token_idx].
+        # For sliding window layers, we must clamp or slice indices to the cache's max length to avoid out-of-bounds access.
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
             layer = past_key_value.layers[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
             indices = cache_position.to(layer.keys.device)
-            # Sliding window cache layers might have smaller size (for full layers, we never go beyond)
             if isinstance(layer, SlidingWindowLayer):
                 if cache_position.shape[0] > layer.get_max_cache_shape():
                     indices = slice(0, layer.get_max_cache_shape())
