@@ -1530,7 +1530,7 @@ if __name__ == "__main__":
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
-        diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
+        diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/resolve/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:
