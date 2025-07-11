@@ -248,6 +248,12 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         else {}
     )
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)
         self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=37)
