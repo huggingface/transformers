@@ -24,8 +24,8 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_tf_available, is_torch_available, logging
+from ...utils.import_utils import requires
 from ...video_utils import VideoInput
-from .modeling_sam2 import Sam2VideoSessionState
 
 
 logger = logging.get_logger(__name__)
@@ -33,10 +33,13 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
+    from .modeling_sam2 import Sam2VideoSessionState
+
 if is_tf_available():
     pass
 
 
+@requires(backends=("torch",))
 class Sam2Processor(ProcessorMixin):
     r"""
     Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
