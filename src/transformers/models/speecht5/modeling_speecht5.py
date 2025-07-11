@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqSpectrogramOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, EmbeddingAccessMixin
 from ...utils import auto_docstring, logging
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
@@ -761,7 +761,7 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         return hidden_states + layer_output.transpose(1, 2)
 
 
-class SpeechT5TextEncoderPrenet(nn.Module):
+class SpeechT5TextEncoderPrenet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -772,19 +772,13 @@ class SpeechT5TextEncoderPrenet(nn.Module):
             config.max_text_positions,
         )
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(self, input_ids: torch.Tensor):
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = self.encode_positions(inputs_embeds)
         return inputs_embeds
 
 
-class SpeechT5TextDecoderPrenet(nn.Module):
+class SpeechT5TextDecoderPrenet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -798,12 +792,6 @@ class SpeechT5TextDecoderPrenet(nn.Module):
             config.hidden_size,
             config.pad_token_id,
         )
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -827,7 +815,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         return inputs_embeds, attention_mask
 
 
-class SpeechT5TextDecoderPostnet(nn.Module):
+class SpeechT5TextDecoderPostnet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -835,12 +823,6 @@ class SpeechT5TextDecoderPostnet(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor):
         return self.lm_head(hidden_states)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
 
 class SpeechT5Attention(nn.Module):

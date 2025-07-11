@@ -887,9 +887,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
@@ -1477,12 +1474,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def get_encoder(self):
         return self.encoder
