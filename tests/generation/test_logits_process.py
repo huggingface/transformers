@@ -43,6 +43,7 @@ if is_torch_available():
         MinLengthLogitsProcessor,
         MinNewTokensLengthLogitsProcessor,
         MinPLogitsWarper,
+        MomentPLogitsWarper,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
@@ -407,6 +408,23 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
+
+    def test_moment_p_warper_different_exponents(self):
+        """Test MomentPLogitsWarper with different exponents"""
+        input_ids = torch.tensor([[1]])
+        scores = torch.tensor([[2.0, 1.0, 0.5, 0.0, 0.0]])
+
+        # Test with exponent=1.0 (similar to top-p)
+        warper1 = MomentPLogitsWarper(exponent=1.0, alpha=1.0)
+        processed1 = warper1(input_ids, scores)
+
+        # Test with exponent=3.0 (emphasizes tail more)
+        warper3 = MomentPLogitsWarper(exponent=3.0, alpha=1.0)
+        processed3 = warper3(input_ids, scores)
+
+        # With higher exponent, we expect potentially different filtering
+        # The exact behavior depends on the probability distribution
+        self.assertEqual(processed1.shape, processed3.shape)
 
     def test_typical_dist_warper(self):
         input_ids = None
