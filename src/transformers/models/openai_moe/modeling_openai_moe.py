@@ -233,14 +233,12 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(
-        query.shape[0], -1, query.shape[-2], -1
-    )  # TODO make sure the sink is like a new token
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
+
 
     # TODO: check wether both produce the same results or not!
     # scale the logits to prevent overflows
@@ -255,7 +253,7 @@ def eager_attention_forward(
     # combined_logits = torch.cat([attn_weights, sinks], dim=-1)
     # scores = nn.functional.softmax(combined_logits, dim=-1)[..., :-1]
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)  # ignore the sinks
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 

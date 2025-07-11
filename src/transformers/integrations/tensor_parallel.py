@@ -517,6 +517,62 @@ class ReplicateParallel(TensorParallelLayer):
         param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
         return param
 
+class VocabParallel(TensorParallelLayer):
+
+    """
+    VocabParallel is a tensor parallel layer that shards the embedding table along the last dimension.
+    No need to do input masking as embedding would be stored in `_MaskPartial` which handles it (https://github.com/pytorch/pytorch/blob/main/torch/distributed/tensor/_ops/_embedding_ops.py#L70)
+    
+    This is useful if you want to train with long sequence length!
+    """
+
+    def __init__(
+        self,
+        *,
+        input_layouts: Optional[Placement] = None,
+        output_layouts: Optional[Placement] = None,
+        weight_dim_sharding: int = 0,
+        use_local_output: bool = True,
+        use_dtensor=True,
+    ):
+        super().__init__()
+        self.input_layouts = (input_layouts or Replicate(),)
+        self.desired_input_layouts = (Replicate(),)
+        self.output_layouts = (output_layouts or Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
+        self.weight_dim_sharding = weight_dim_sharding
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
+        return input_tensor
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # Shard the embedding table along dim 0 (vocab dimension)
+        if param_type == "bias":
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            placements = [Shard(-1)]
+        else:
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, self.weight_dim_sharding)
+            placements = [Shard(self.weight_dim_sharding)]
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, placements, run_check=False)
+        return nn.Parameter(parameter)
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
+        return outputs.to_local() if use_local_output else outputs
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -899,6 +955,8 @@ class ParallelInterface(GeneralInterface):
     # a new instance is created (in order to locally override a given entry)
     _global_mapping = (
         {
+            "vocab_parallel_rowwise": VocabParallel(weight_dim_sharding=0),
+            "vocab_parallel_colwise": VocabParallel(weight_dim_sharding=-2, output_layouts=Replicate()),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
             "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
