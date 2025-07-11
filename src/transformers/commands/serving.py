@@ -109,7 +109,6 @@ if serve_dependencies_available:
         "background",
         "include",
         "max_tool_calls",
-        "parallel_tool_calls",
         "previous_response_id",
         "prompt",
         "reasoning",
@@ -303,6 +302,25 @@ class ServeArguments:
         },
     )
 
+    # Testing
+    # As of 2025-07-11, testing on https://github.com/openai/openai-responses-starter-app/, validation on the
+    # Response input is failing. The app works well without validation. Enable at some point in the future.
+    input_validation: bool = field(
+        default=False,
+        metadata={
+            "help": ("Whether to turn on strict input validation."),
+        },
+    )
+    force_model: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Name of the model to be forced on all requests. This is useful for testing Apps that don't allow "
+                "changing models in the request."
+            ),
+        },
+    )
+
 
 class ServeCommand(BaseTransformersCLICommand):
     @staticmethod
@@ -372,23 +390,29 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         logger.debug(f"Validating request: {request}")
 
-        # Validate expected keys
-        try:
-            validator.validate_python(request)
-        except ValidationError as e:
-            raise HTTPException(status_code=422, detail=e.errors())
-
         # Validate unexpected keys -- Pydantic doesn't validate extra keys in the request.
         input_keys = set(request.keys())
         possible_keys = schema.__mutable_keys__
         unexpected_keys = input_keys - possible_keys
         if unexpected_keys:
+            logger.error(f"Unexpected keys in the request: {unexpected_keys}")
             raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected_keys}")
 
-        # Validate unused fields
-        unused_fields_in_request = input_keys & unused_fields
-        if unused_fields_in_request:
-            raise HTTPException(status_code=422, detail=f"Unused fields in the request: {unused_fields_in_request}")
+        if self.args.input_validation:
+            # Validate expected keys
+            try:
+                validator.validate_python(request)
+            except ValidationError as e:
+                logger.error(f"Validation error: {e.errors()}")
+                raise HTTPException(status_code=422, detail=e.errors())
+
+            # Validate unused fields
+            unused_fields_in_request = input_keys & unused_fields
+            if unused_fields_in_request:
+                logger.error(f"Unused fields in the request: {unused_fields_in_request}")
+                raise HTTPException(
+                    status_code=422, detail=f"Unused fields in the request: {unused_fields_in_request}"
+                )
 
     def build_chat_completion_chunk(
         self,
@@ -546,6 +570,9 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
+        if self.args.force_model is not None:
+            req["model"] = self.args.force_model
+
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             # When switching models, terminate a continuous batching manager if it is running.
@@ -626,6 +653,9 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
+        if self.args.force_model is not None:
+            req["model"] = self.args.force_model
+
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             self.load_model_and_tokenizer(req["model"], self.args)
@@ -781,6 +811,8 @@ class ServeCommand(BaseTransformersCLICommand):
             `Generator[str, None, None]`: A generator that yields the OpenAI Response events.
         """
         # TODO -- Implement non-streaming mode
+        if self.args.force_model is not None:
+            req["model"] = self.args.force_model
 
         update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
@@ -833,7 +865,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         object="response",
                         tools=[],
                         output=[],
-                        parallel_tool_calls=False,
+                        parallel_tool_calls=req.get("parallel_tool_calls", False),
                         tool_choice="auto",
                         metadata=req.get("metadata"),
                     ),
@@ -854,7 +886,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         object="response",
                         tools=[],
                         output=[],
-                        parallel_tool_calls=False,
+                        parallel_tool_calls=req.get("parallel_tool_calls", False),
                         tool_choice="auto",
                         metadata=req.get("metadata"),
                     ),
@@ -959,7 +991,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         output=[response_output_item_done.item],
                         object="response",
                         tools=[],
-                        parallel_tool_calls=False,
+                        parallel_tool_calls=req.get("parallel_tool_calls", False),
                         tool_choice="auto",
                         metadata=req.get("metadata"),
                     ),
