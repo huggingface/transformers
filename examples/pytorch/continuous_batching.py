@@ -9,25 +9,33 @@ from transformers.generation import GenerationConfig
 
 torch.set_float32_matmul_precision("high")
 
-model_id = "meta-llama/Llama-3.2-3b-Instruct"
+model_id = "meta-llama/Llama-3.2-1b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
     model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
-    max_new_tokens=512,
+    max_new_tokens=2048,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=2048,
-    block_size=128,
+    num_blocks=128,
+    block_size=32,
     do_sample=True,
-    max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
+    max_batch_tokens=64,  # Maximum number of tokens to process in a single batch
     scheduler="prefill_first",
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
+train_dataset = train_dataset.select(range(10))
+
+# Create a dataset from a list with one element
+# from datasets import Dataset
+
+# single_element_list = [{"question": "give me a very long story"}]
+# train_dataset = Dataset.from_list(single_element_list)
+
 
 # --- Example 1: Simple Version using generate_batch ---
 print("--- Running CB Generation Example ---")
@@ -66,7 +74,6 @@ print("--- Finished CB Generation Example ---\n\n")
 
 
 print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
-
 
 # train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 
