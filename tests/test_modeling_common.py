@@ -258,10 +258,10 @@ def _test_eager_matches_sdpa_inference(
                 model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="sdpa")
             except ValueError:
                 model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
-            model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
+            model_sdpa = model_sdpa.eval().to(torch_device)
 
             model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
-            model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
+            model_eager = model_eager.eval().to(torch_device)
 
         set_model_for_less_flaky_test(model_eager)
         set_model_for_less_flaky_test(model_sdpa)

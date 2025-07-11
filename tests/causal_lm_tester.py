@@ -104,9 +104,11 @@ class CausalLMModelTester:
         is_decoder=False,
         scope=None,
         expert_interval=1,
+        moe_layer_start_index=0,
         moe_intermediate_size=12,
         shared_expert_intermediate_size=36,
         shared_expert_gate=True,
+        moe_num_shared_experts=2,
         num_experts_per_tok=2,
         num_experts=8,
         mamba_n_groups=1,
@@ -146,9 +148,11 @@ class CausalLMModelTester:
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
         self.expert_interval = expert_interval
+        self.moe_layer_start_index = moe_layer_start_index
         self.moe_intermediate_size = moe_intermediate_size
         self.shared_expert_intermediate_size = shared_expert_intermediate_size
         self.shared_expert_gate = shared_expert_gate
+        self.moe_num_shared_experts = moe_num_shared_experts
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.mamba_n_groups = mamba_n_groups
