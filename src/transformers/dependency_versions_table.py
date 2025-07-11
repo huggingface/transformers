@@ -43,6 +43,7 @@ deps = {
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
+    "openai": "openai",
     "opencv-python": "opencv-python",
     "optimum-benchmark": "optimum-benchmark>=0.3.0",
     "optuna": "optuna",
