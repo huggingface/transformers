@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
 from transformers import XLMRobertaXLConfig, is_torch_available
@@ -36,10 +37,7 @@ if is_torch_available():
         XLMRobertaXLForTokenClassification,
         XLMRobertaXLModel,
     )
-    from transformers.models.xlm_roberta_xl.modeling_xlm_roberta_xl import (
-        XLMRobertaXLEmbeddings,
-        create_position_ids_from_input_ids,
-    )
+    from transformers.models.xlm_roberta_xl.modeling_xlm_roberta_xl import XLMRobertaXLEmbeddings
 
 
 class XLMRobertaXLModelTester:
@@ -403,6 +401,12 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
         return False
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     def setUp(self):
         self.model_tester = XLMRobertaXLModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLMRobertaXLConfig, hidden_size=37)
@@ -418,6 +422,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_as_decoder(self):
@@ -462,6 +467,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         config_and_inputs[0].position_embedding_type = "relative_key"
+        config_and_inputs[0]._attn_implementation = "eager"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_masked_lm(self):
@@ -494,7 +500,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
         )
 
-        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
+        position_ids = XLMRobertaXLEmbeddings.create_position_ids_from_input_ids(input_ids, model.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
@@ -515,9 +521,127 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             3 + embeddings.padding_idx + 1,
         ]
         expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
-        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
+        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds, embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    @unittest.skip("XLM Roberta XL token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("XLM Roberta XL token type ids does not work with the flash attention position ids")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+        r"""
+        Overwritten to enforce proper decoder behavior as the model is very easily influenced
+        by slight changes in the mask.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
+                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
+            ):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.is_decoder = True
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, :1] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1:] = 0
+
+                # no attention mask
+                processed_inputs = {
+                    model.main_input_name: dummy_input,
+                    "output_hidden_states": True,
+                }
+                if model.config.is_encoder_decoder:
+                    processed_inputs["decoder_input_ids"] = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                prepared_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+                }
+
+                outputs = model(**prepared_inputs)
+                outputs_fa = model_fa(**prepared_inputs)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                # with attention mask
+                if dummy_attention_mask is not None:
+                    processed_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        processed_inputs["decoder_attention_mask"] = dummy_attention_mask
+
+                prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                prepared_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+                }
+
+                outputs = model(**prepared_inputs)
+                outputs_fa = model_fa(**prepared_inputs)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                if padding_side == "left":
+                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+
+                    # check with inference + dropout
+                    model.train()
+                    _ = model_fa(**prepared_inputs)
+                else:
+                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
+    @unittest.skip("XLM Roberta XL doesn't work with right padding")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
 
 
 @require_torch
