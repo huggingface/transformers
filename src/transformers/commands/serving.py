@@ -396,7 +396,7 @@ class ServeCommand(BaseTransformersCLICommand):
         content: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
-        tool_calls: Optional[list[ChoiceDeltaToolCall]] = None,
+        tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
     ) -> str:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
