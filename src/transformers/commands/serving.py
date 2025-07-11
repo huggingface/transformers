@@ -77,7 +77,6 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
     )
     from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
     from pydantic import BaseModel, TypeAdapter, ValidationError
-    from typing_extensions import _TypedDictMeta
 
     # Expand OpenAI's request input types with an optional `generation_config` field
     class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
@@ -117,6 +116,7 @@ if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available()
         "truncation",
         "user",
     }
+
     UNUSED_COMPLETION_FIELDS = {
         "audio",
         "function_call",
@@ -290,11 +290,7 @@ class ServeArguments:
 
 
 class ServeCommand(BaseTransformersCLICommand):
-    loaded_model: Optional[str] = None
-    running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
 
-    model: PreTrainedModel
-    tokenizer: PreTrainedTokenizerFast
 
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
@@ -314,22 +310,38 @@ class ServeCommand(BaseTransformersCLICommand):
                 "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
             )
 
+        # Store and process input arguments
         self.args = args
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
         self.enable_cors = self.args.enable_cors
 
-        # State: preserves information about the last call and last KV cache, to determine whether we can reuse the KV
-        # cache and avoid re-running prefil
-        self.last_messages = None
-        self.last_kv_cache = None
-
+        # Set up logging
         transformers_logger = logging.get_logger("transformers")
         transformers_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
-    def validate_request(self, request: dict, schema: "_TypedDictMeta", validator: TypeAdapter, unused_fields: set):
+        # Internal state:
+        # 1. Tracks the last used model, to prevent reloading the model unnecessarily
+        self.loaded_model: Optional[str] = None
+        self.running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
+        self.model: PreTrainedModel
+        self.tokenizer: PreTrainedTokenizerFast
+
+        # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
+        # cache and avoid re-running prefil
+        self.last_messages = None
+        self.last_kv_cache = None
+
+
+    def validate_request(
+        self,
+        request: dict,
+        schema: "_TypedDictMeta",  # noqa: F821
+        validator: TypeAdapter,
+        unused_fields: set,
+    ):
         """
         Validates the request against the schema, and checks for unexpected keys.
 
@@ -569,7 +581,7 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_chat_completion(inputs[0])
 
     def generate_completion(self, req: dict) -> Generator:
-        update_model = req["model"] != self.loaded_model
+        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
 
@@ -726,7 +738,7 @@ class ServeCommand(BaseTransformersCLICommand):
         # Implement non-streaming mode
         # Implement different output_index and content_index than 0
 
-        update_model = req["model"] != self.loaded_model
+        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
         if update_model:
             self.model, self.tokenizer = self.load_model_and_tokenizer(req["model"], self.args)
 

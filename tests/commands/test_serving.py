@@ -132,8 +132,7 @@ class ServeCompletionsMixin:
         [
             ("default_request", {}),
             ("one_token", {"max_tokens": 1}),
-            #  TODO: CB fails next case, seems like it is unable to switch models. fix me
-            # ("different_model", {"model": "HuggingFaceTB/SmolLM2-135M-Instruct"}),
+            ("different_model", {"model": "HuggingFaceTB/SmolLM2-135M-Instruct"}),
             (
                 "tool_call",
                 {
