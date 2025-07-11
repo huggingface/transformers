@@ -365,21 +365,6 @@ class SuperTransformer(cst.CSTTransformer):
             return updated_node.with_changes(body=new_body, params=updated_node.params)
         return updated_node
 
-    def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.Return:
-        """ "When a return statement is reached, it is replaced with the unrolled super code"""
-        if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
-            func_def = self.get_metadata(ParentNodeProvider, original_node)
-            if m.matched(func_def, m.FunctionDef()) and func_def.name.value in self.original_modeling_methods:
-                updated_return_value = updated_node.value.with_changes(
-                    args=[
-                        cst.Arg(
-                            value=cst.Call(func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))])
-                        )
-                    ]
-                )
-                return updated_node.with_changes(value=updated_return_value)
-        return updated_node
-
 
 def find_all_dependencies(
     dependency_mapping: dict[str, set],
@@ -987,12 +972,37 @@ def replace_class_node(
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 
-    original_modeling_methods = {
-        node.name.value: node for node in original_modeling_node.body.body if m.matches(node, m.FunctionDef())
-    }
-    modular_methods = {
-        node.name.value: node for node in modular_class_node.body.body if m.matches(node, m.FunctionDef())
-    }
+    # Check class methods defined in the modular and associated modeling
+    original_modeling_methods = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in original_modeling_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    original_modeling_methods[f"{node.name.value}_setter"] = original_modeling_methods[node.name.value]
+                    original_modeling_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    original_modeling_methods[f"{node.name.value}_setter"] = node
+            else:
+                original_modeling_methods[node.name.value] = node
+    modular_methods = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in modular_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    modular_methods[f"{node.name.value}_setter"] = modular_methods[node.name.value]
+                    modular_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    modular_methods[f"{node.name.value}_setter"] = node
+            else:
+                modular_methods[node.name.value] = node
 
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
@@ -1765,6 +1775,7 @@ if __name__ == "__main__":
                 files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(files_to_parse)
+    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
     assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:

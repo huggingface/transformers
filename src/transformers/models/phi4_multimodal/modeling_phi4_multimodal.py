@@ -371,6 +371,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -996,6 +997,7 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -1590,6 +1592,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Phi4MultimodalDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -1648,7 +1651,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
@@ -1765,7 +1768,7 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,

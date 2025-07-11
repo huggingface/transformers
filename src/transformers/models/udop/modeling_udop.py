@@ -75,7 +75,7 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
         Mask values selected in `[0, 1]`:
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
         `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
@@ -98,7 +98,7 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     attention_mask: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -588,13 +588,16 @@ class UdopAttention(nn.Module):
         query_states = self.q(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        if past_key_value is not None:
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
                 curr_past_key_value = past_key_value.cross_attention_cache
             else:
                 curr_past_key_value = past_key_value.self_attention_cache
+        else:
+            curr_past_key_value = past_key_value
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
@@ -663,7 +666,7 @@ class UdopAttention(nn.Module):
         attn_output = attn_output.view(batch_size, -1, self.inner_dim)
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output, past_key_value, position_bias)
+        outputs = (attn_output, position_bias)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -788,8 +791,8 @@ class UdopBlock(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states, past_key_value = self_attention_outputs[:2]
-        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
+        hidden_states = self_attention_outputs[0]
+        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
@@ -813,7 +816,7 @@ class UdopBlock(GradientCheckpointingLayer):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
-            hidden_states, past_key_value = cross_attention_outputs[:2]
+            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
@@ -825,7 +828,7 @@ class UdopBlock(GradientCheckpointingLayer):
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[2:]
+            attention_outputs = attention_outputs + cross_attention_outputs[1:]
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
@@ -841,12 +844,9 @@ class UdopBlock(GradientCheckpointingLayer):
 
         outputs = (hidden_states,)
 
-        if use_cache:
-            outputs = outputs + (past_key_value,) + attention_outputs
-        else:
-            outputs = outputs + attention_outputs
-
-        return outputs  # hidden-states, past_key_value, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+        return (
+            outputs + attention_outputs
+        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
 class UdopCellEmbeddings(nn.Module):
@@ -1222,23 +1222,12 @@ class UdopStack(UdopPreTrainedModel):
         if use_cache is True:
             assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
-        # initialize past_key_values
-        return_legacy_cache = False
-        return_self_attention_cache = False
-        if self.is_decoder and (use_cache or past_key_values is not None):
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                return_legacy_cache = True
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-            elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        if self.is_decoder:
+            if use_cache and past_key_values is None:
+                if self.config.is_encoder_decoder:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
@@ -1260,7 +1249,9 @@ class UdopStack(UdopPreTrainedModel):
                 attention_mask,
                 inputs_embeds,
                 cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values,
                 output_attentions,
             )
         else:
@@ -1307,24 +1298,21 @@ class UdopStack(UdopPreTrainedModel):
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-            # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            if use_cache is False:  # MP fixes
-                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
-            hidden_states, next_decoder_cache = layer_outputs[:2]
+
+            hidden_states = layer_outputs[0]
 
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention weights),
             # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
-            position_bias = layer_outputs[2]
+            position_bias = layer_outputs[1]
             if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1333,19 +1321,13 @@ class UdopStack(UdopPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
                     attention_mask,
-                    next_cache,
+                    past_key_values,
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
@@ -1356,7 +1338,7 @@ class UdopStack(UdopPreTrainedModel):
         return BaseModelOutputWithAttentionMask(
             last_hidden_state=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
@@ -1509,12 +1491,12 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config, self.shared)
 
@@ -1547,7 +1529,7 @@ class UdopModel(UdopPreTrainedModel):
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
-        past_key_values: Optional[Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1705,12 +1687,12 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config, self.shared)
 
@@ -1746,7 +1728,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
-        past_key_values: Optional[Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,

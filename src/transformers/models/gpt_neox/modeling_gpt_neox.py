@@ -361,6 +361,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTNeoXLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -438,6 +439,10 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
