@@ -397,6 +397,16 @@ class GenerationConfig(PushToHubMixin):
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
+        if self.cache_config is not None and not isinstance(self.cache_config, dict):
+            warnings.warn(
+                (
+                    "Passing a CacheConfig object is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
+                ),
+                FutureWarning,
+                stacklevel=2,
+            )
+            self.cache_config = self.cache_config.to_dict()
+
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 

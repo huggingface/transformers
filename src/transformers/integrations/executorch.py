@@ -275,7 +275,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
         self.model = model
         self.static_cache = StaticCache(
-            model_config=self.model.config,
+            config=self.model.config,
             max_batch_size=self.model.generation_config.cache_config.get("batch_size"),
             max_cache_len=self.model.generation_config.cache_config.get("max_cache_len"),
             device=self.model.generation_config.cache_config.get("device"),
@@ -404,7 +404,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
         # Initialize the HybridCache
         self.cache = HybridCache(
-            model_config=self.model.config,
+            config=self.model.config,
             max_batch_size=max_batch_size,
             max_cache_len=max_cache_len,
             device=self.model.device,
@@ -550,7 +550,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         # Initialize static cache for decoder and DynamicCache for encoder
         self.static_cache = StaticCache(
-            model_config=self.config,
+            config=self.config,
             max_batch_size=batch_size,
             max_cache_len=max_static_cache_length,
             device="cpu",
