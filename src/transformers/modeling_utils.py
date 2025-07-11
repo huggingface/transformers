@@ -2253,7 +2253,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     @classmethod
     def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
         """
-        Check that the requested attention implementation exists and tried to get the kernel from hub
+        Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
         """
         if isinstance(attn_implementation, str) and re.match(r"^[^/:]+/[^/:]+:[^/:]+$", attn_implementation):
@@ -2273,7 +2273,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 logger.warning(
                     f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
                 )
-                attn_implementation = "eager"
+                attn_implementation = None  # try to dispatch SDPA and fallback eager if not available
             except AttributeError:
                 raise ValueError(
                     "the kernel function name or class specified in the attn_implementation argument is not valid. \
@@ -2416,11 +2416,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Otherwise, can't generate
         return False
 
-    def _flash_attn_2_can_dispatch(
-        self,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-    ) -> bool:
+    def _flash_attn_2_can_dispatch(self) -> bool:
         """
         Checks the availability of Flash Attention 2 and compatibility with the current model.
 
@@ -2515,11 +2511,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # If no error raise by this point, we can return `True`
         return True
 
-    def _flash_attn_3_can_dispatch(
-        self,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-    ) -> bool:
+    def _flash_attn_3_can_dispatch(self) -> bool:
         """
         Checks the availability of Flash Attention 3 and compatibility with the current model.
 
