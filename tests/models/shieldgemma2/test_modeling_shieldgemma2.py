@@ -30,8 +30,6 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
-    import torch
-
     from transformers import ShieldGemma2ForImageClassification, ShieldGemma2Processor
 
 
@@ -50,11 +48,9 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         response = requests.get(url)
         image = Image.open(BytesIO(response.content))
 
-        model = ShieldGemma2ForImageClassification.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = ShieldGemma2ForImageClassification.from_pretrained(model_id, load_in_4bit=True)
 
-        inputs = processor(images=[image]).to(torch_device)
+        inputs = processor(images=[image], return_tensors="pt").to(torch_device)
         output = model(**inputs)
         self.assertEqual(len(output.probabilities), 3)
         for element in output.probabilities:
