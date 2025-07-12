@@ -56,6 +56,8 @@ if TYPE_CHECKING:
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("aimv2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("aimv2_vision_model", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
@@ -63,7 +65,7 @@ else:
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("bridgetower", ("BridgeTowerImageProcessor", "BridgeTowerImageProcessorFast")),
-            ("chameleon", ("ChameleonImageProcessor",)),
+            ("chameleon", ("ChameleonImageProcessor", "ChameleonImageProcessorFast")),
             ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("clipseg", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -84,6 +86,7 @@ else:
             ("dpt", ("DPTImageProcessor", "DPTImageProcessorFast")),
             ("efficientformer", ("EfficientFormerImageProcessor",)),
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
+            ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
             ("fuyu", ("FuyuImageProcessor",)),
@@ -122,15 +125,16 @@ else:
             ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
-            ("mobilevit", ("MobileViTImageProcessor",)),
-            ("mobilevitv2", ("MobileViTImageProcessor",)),
+            ("mobilevit", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
+            ("mobilevitv2", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
             ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("nougat", ("NougatImageProcessor",)),
+            ("nougat", ("NougatImageProcessor", "NougatImageProcessorFast")),
             ("oneformer", ("OneFormerImageProcessor",)),
             ("owlv2", ("Owlv2ImageProcessor",)),
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
+            ("perception_lm", ("PerceptionLMImageProcessorFast",)),
             ("phi4_multimodal", ("Phi4MultimodalImageProcessorFast",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
@@ -596,7 +600,6 @@ class AutoImageProcessor:
                     raise ValueError(
                         "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
                     )
-
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "

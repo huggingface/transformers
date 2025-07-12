@@ -54,7 +54,7 @@ deps = {
     "protobuf": "protobuf",
     "psutil": "psutil",
     "pyyaml": "pyyaml>=5.1",
-    "pydantic": "pydantic",
+    "pydantic": "pydantic>=2",
     "pytest": "pytest>=7.2.0",
     "pytest-asyncio": "pytest-asyncio",
     "pytest-rerunfailures": "pytest-rerunfailures",
@@ -106,4 +106,5 @@ deps = {
     "opentelemetry-api": "opentelemetry-api",
     "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
     "opentelemetry-sdk": "opentelemetry-sdk",
+    "mistral-common[opencv]": "mistral-common[opencv]>=1.6.3",
 }
