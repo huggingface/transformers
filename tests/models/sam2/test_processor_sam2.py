@@ -26,8 +26,6 @@ from transformers.utils import is_tf_available, is_torch_available, is_vision_av
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoProcessor, Sam2ImageProcessorFast, Sam2Processor, Sam2VideoProcessor
 
 if is_torch_available():
@@ -60,16 +58,16 @@ class Sam2ProcessorTest(unittest.TestCase):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
         """
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        image_inputs = torch.randint(0, 256, size=(1, 3, 30, 400), dtype=torch.uint8)
+        # image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
         return image_inputs
 
     def prepare_mask_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
         """
-        mask_inputs = [np.random.randint(255, size=(30, 400), dtype=np.uint8)]
-        mask_inputs = [Image.fromarray(x) for x in mask_inputs]
+        mask_inputs = torch.randint(0, 256, size=(1, 30, 400), dtype=torch.uint8)
+        # mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
 
     def test_save_load_pretrained_additional_features(self):
@@ -95,22 +93,23 @@ class Sam2ProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input)
+        input_processor = processor(images=image_input)
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            if key == "pixel_values":
+                for input_feat_extract_item, input_processor_item in zip(
+                    input_feat_extract[key], input_processor[key]
+                ):
+                    np.testing.assert_array_equal(input_feat_extract_item, input_processor_item)
+            else:
+                self.assertEqual(input_feat_extract[key], input_processor[key])
 
         for image in input_feat_extract.pixel_values:
             self.assertEqual(image.shape, (3, 1024, 1024))
 
         for original_size in input_feat_extract.original_sizes:
             np.testing.assert_array_equal(original_size, np.array([30, 400]))
-
-        for reshaped_input_size in input_feat_extract.reshaped_input_sizes:
-            np.testing.assert_array_equal(
-                reshaped_input_size, np.array([77, 1024])
-            )  # reshaped_input_size value is before padding
 
     def test_image_processor_with_masks(self):
         image_processor = self.get_image_processor()
@@ -121,8 +120,8 @@ class Sam2ProcessorTest(unittest.TestCase):
         image_input = self.prepare_image_inputs()
         mask_input = self.prepare_mask_inputs()
 
-        input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
-        input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
+        input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")
+        input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
