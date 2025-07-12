@@ -26,7 +26,6 @@ from transformers.utils import is_tf_available, is_torch_available, is_vision_av
 
 
 if is_vision_available():
-
     from transformers import AutoProcessor, Sam2ImageProcessorFast, Sam2Processor, Sam2VideoProcessor
 
 if is_torch_available():
@@ -99,7 +98,9 @@ class Sam2ProcessorTest(unittest.TestCase):
 
         for key in input_feat_extract.keys():
             if key == "pixel_values":
-                for input_feat_extract_item, input_processor_item in zip(input_feat_extract[key], input_processor[key]):
+                for input_feat_extract_item, input_processor_item in zip(
+                    input_feat_extract[key], input_processor[key]
+                ):
                     np.testing.assert_array_equal(input_feat_extract_item, input_processor_item)
             else:
                 self.assertEqual(input_feat_extract[key], input_processor[key])
