@@ -794,6 +794,7 @@ def _load_state_dict_into_meta_model(
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
+            # TODO: Fix this properly
             shard_and_distribute_module(
                 model,
                 param,
@@ -4487,10 +4488,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if device_mesh is None and tp_plan is not None:
                 tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
-                # TODO: make device_mesh support multiple dimensions
-                if device_mesh.ndim == 1:
-                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
-                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+                assert device_mesh is not None and "tp" in device_mesh.mesh_dim_names, (
+                    "device_mesh must contain a 'tp' dimension"
+                )
+                device_mesh = device_mesh["tp"]
+                tp_size = device_mesh["tp"].size()
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
@@ -5378,7 +5380,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Post-processing for tensor parallelism
         if device_mesh is not None:
             # When using TP, the device map is a single device for all parameters
-            tp_device = list(device_map.values())[0]
+            if device_map:
+                tp_device = list(device_map.values())[0]
+            else:
+                tp_device = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
