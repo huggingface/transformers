@@ -789,28 +789,16 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Siglip2TextModel
-
-        >>> model = Siglip2TextModel.from_pretrained("google/siglip2-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip2-base-patch16-224")
-
-        >>> # important: make sure to set padding="max_length" as that's how the model was trained
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
+        """
+        SigLIP2 uses the last token's hidden state for pooling — regardless of whether it's <eos> or <pad>.
+        This matches the original implementation and handles padded inputs gracefully.
+        """
 
         return self.text_model(
             input_ids=input_ids,
