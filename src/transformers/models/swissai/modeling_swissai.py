@@ -26,22 +26,6 @@ from .configuration_swissai import SwissAIConfig
 logger = logging.get_logger(__name__)
 
 
-class XIELU(nn.Module):
-    def __init__(self, alpha_p_init=0.8, alpha_n_init=0.8, beta=0.5, eps=-1e-6):
-        super(XIELU, self).__init__()
-        self.beta = beta
-        self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init)) - 1).unsqueeze(0))
-        self.alpha_n = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_n_init - self.beta)) - 1).unsqueeze(0))
-        self.eps = torch.tensor(eps)
-
-    def forward(self, x):
-        alpha_p = F.softplus(self.alpha_p)
-        alpha_n = self.beta + F.softplus(self.alpha_n)
-        return torch.where(x > 0,
-                           alpha_p * x * x + self.beta * x,
-                           alpha_n * torch.expm1(torch.min(x, self.eps)) - alpha_n * x + self.beta * x)
-
-
 @use_kernel_forward_from_hub("RMSNorm")
 class SwissAIRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -139,10 +123,8 @@ class SwissAIMLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        if config.hidden_act == "xielu":
-            self.act_fn = XIELU()
-        else:
-            self.act_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
+        if config.hidden_act != "xielu":
             self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
 
     def forward(self, x):
@@ -150,7 +132,7 @@ class SwissAIMLP(nn.Module):
             # in case of xielu, no gated MLP
             down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
         else:
-           down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
 
