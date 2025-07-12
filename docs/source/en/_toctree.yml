@@ -517,6 +517,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/lfm2
+        title: LFM2
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -709,6 +711,8 @@
         title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -1037,6 +1041,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
       - local: model_doc/pix2struct
