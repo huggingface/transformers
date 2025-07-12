@@ -350,7 +350,7 @@ class SamHQMaskDecoder(nn.Module):
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        if torch.any(sparse_prompt_embeddings != 0):
+        if sparse_prompt_embeddings.shape[0] != 0:
             tokens = torch.cat([output_tokens, sparse_prompt_embeddings], dim=2)
         else:
             tokens = output_tokens

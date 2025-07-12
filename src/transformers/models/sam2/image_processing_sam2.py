@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for SAM."""
+"""Image processor class for SAM2."""
 
 import math
 from copy import deepcopy
@@ -35,11 +35,11 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
-    filter_out_non_signature_kwargs,
     is_tf_available,
     is_torch_available,
     is_torchvision_available,
@@ -64,9 +64,9 @@ if is_tf_available():
 logger = logging.get_logger(__name__)
 
 
-class SamImageProcessor(BaseImageProcessor):
+class Sam2ImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a SAM image processor.
+    Constructs a SAM2 image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -92,15 +92,15 @@ class SamImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*, defaults to `False`):
             Whether to pad the image to the specified `pad_size`. Can be overridden by the `do_pad` parameter in the
             `preprocess` method.
         pad_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
@@ -126,7 +126,7 @@ class SamImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: bool = True,
+        do_pad: bool = False,
         pad_size: Optional[int] = None,
         mask_pad_size: Optional[int] = None,
         do_convert_rgb: bool = True,
@@ -162,6 +162,26 @@ class SamImageProcessor(BaseImageProcessor):
         self.pad_size = pad_size
         self.mask_pad_size = mask_pad_size
         self.do_convert_rgb = do_convert_rgb
+        self._valid_processor_keys = [
+            "images",
+            "segmentation_maps",
+            "do_resize",
+            "size",
+            "mask_size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "pad_size",
+            "mask_pad_size",
+            "do_convert_rgb",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def pad_image(
         self,
@@ -177,7 +197,7 @@ class SamImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            pad_size (`dict[str, int]`):
+            pad_size (`Dict[str, int]`):
                 Size of the output image after padding.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The data format of the image. Can be either "channels_first" or "channels_last". If `None`, the
@@ -200,22 +220,11 @@ class SamImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
-        """
-        Compute the output size given input size and target long side length.
-        """
-        oldh, oldw = old_shape
-        scale = longest_edge * 1.0 / max(oldh, oldw)
-        newh, neww = oldh * scale, oldw * scale
-        newh = int(newh + 0.5)
-        neww = int(neww + 0.5)
-        return (newh, neww)
-
     def resize(
         self,
         image: np.ndarray,
         size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -226,10 +235,10 @@ class SamImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`dict[str, int]`):
+            size (`Dict[str, int]`):
                 Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
                 edge of the image will be resized to the specified size, while the other edge will be resized to
-                maintain the aspect ratio.
+                the squared size.
             resample:
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -249,11 +258,9 @@ class SamImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "longest_edge" not in size:
             raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
-        input_size = get_image_size(image, channel_dim=input_data_format)
-        output_height, output_width = self._get_preprocess_shape(input_size, size["longest_edge"])
         return resize(
             image,
-            size=(output_height, output_width),
+            size=(size["longest_edge"], size["longest_edge"]),
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
@@ -307,6 +314,8 @@ class SamImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
+        image = to_numpy_array(image)
+
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:
             image = convert_to_rgb(image)
@@ -314,7 +323,7 @@ class SamImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if do_rescale and is_scaled_image(image):
+        if is_scaled_image(image) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -372,7 +381,7 @@ class SamImageProcessor(BaseImageProcessor):
             image=segmentation_map,
             do_resize=do_resize,
             size=mask_size,
-            resample=PILImageResampling.NEAREST,
+            resample=PILImageResampling.BILINEAR,
             do_rescale=False,
             do_normalize=False,
             do_pad=do_pad,
@@ -387,12 +396,6 @@ class SamImageProcessor(BaseImageProcessor):
 
         return segmentation_map, original_size
 
-    def __call__(self, images, segmentation_maps=None, **kwargs):
-        # Overrides the `__call__` method of the `BaseImageProcessor` class such that the images and segmentation maps can both
-        # be passed in as positional arguments.
-        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
-
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -413,6 +416,7 @@ class SamImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -425,10 +429,10 @@ class SamImageProcessor(BaseImageProcessor):
                 Segmentation map to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Controls the size of the image after `resize`. The longest edge of the image is resized to
                 `size["longest_edge"]` whilst preserving the aspect ratio.
-            mask_size (`dict[str, int]`, *optional*, defaults to `self.mask_size`):
+            mask_size (`Dict[str, int]`, *optional*, defaults to `self.mask_size`):
                 Controls the size of the segmentation map after `resize`. The longest edge of the image is resized to
                 `size["longest_edge"]` whilst preserving the aspect ratio.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
@@ -439,16 +443,16 @@ class SamImageProcessor(BaseImageProcessor):
                 Rescale factor to apply to the image pixel values.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image.
-            pad_size (`dict[str, int]`, *optional*, defaults to `self.pad_size`):
+            pad_size (`Dict[str, int]`, *optional*, defaults to `self.pad_size`):
                 Controls the size of the padding applied to the image. The image is padded to `pad_size["height"]` and
                 `pad_size["width"]` if `do_pad` is set to `True`.
-            mask_pad_size (`dict[str, int]`, *optional*, defaults to `self.mask_pad_size`):
+            mask_pad_size (`Dict[str, int]`, *optional*, defaults to `self.mask_pad_size`):
                 Controls the size of the padding applied to the segmentation map. The image is padded to
                 `mask_pad_size["height"]` and `mask_pad_size["width"]` if `do_pad` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
@@ -495,6 +499,8 @@ class SamImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -590,12 +596,12 @@ class SamImageProcessor(BaseImageProcessor):
         Remove padding and upscale masks to the original image size.
 
         Args:
-            masks (`Union[list[torch.Tensor], list[np.ndarray], list[tf.Tensor]]`):
+            masks (`Union[List[torch.Tensor], List[np.ndarray], List[tf.Tensor]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union[torch.Tensor, tf.Tensor, list[tuple[int,int]]]`):
+            original_sizes (`Union[torch.Tensor, tf.Tensor, List[Tuple[int,int]]]`):
                 The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
-            reshaped_input_sizes (`Union[torch.Tensor, tf.Tensor, list[tuple[int,int]]]`):
+            reshaped_input_sizes (`Union[torch.Tensor, tf.Tensor, List[Tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 The threshold to use for binarizing the masks.
@@ -619,15 +625,6 @@ class SamImageProcessor(BaseImageProcessor):
                 binarize=binarize,
                 pad_size=pad_size,
             )
-        elif return_tensors == "tf":
-            return self._post_process_masks_tf(
-                masks=masks,
-                original_sizes=original_sizes,
-                reshaped_input_sizes=reshaped_input_sizes,
-                mask_threshold=mask_threshold,
-                binarize=binarize,
-                pad_size=pad_size,
-            )
         else:
             raise ValueError("return_tensors must be either 'pt' or 'tf'")
 
@@ -638,12 +635,12 @@ class SamImageProcessor(BaseImageProcessor):
         Remove padding and upscale masks to the original image size.
 
         Args:
-            masks (`Union[list[torch.Tensor], list[np.ndarray]]`):
+            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union[torch.Tensor, list[tuple[int,int]]]`):
+            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
-            reshaped_input_sizes (`Union[torch.Tensor, list[tuple[int,int]]]`):
+            reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 The threshold to use for binarizing the masks.
@@ -678,48 +675,6 @@ class SamImageProcessor(BaseImageProcessor):
 
         return output_masks
 
-    def _post_process_masks_tf(
-        self, masks, original_sizes, reshaped_input_sizes, mask_threshold=0.0, binarize=True, pad_size=None
-    ):
-        """
-        Remove padding and upscale masks to the original image size.
-
-        Args:
-            masks (`tf.Tensor`):
-                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`tf.Tensor`):
-                The original size of the images before resizing for input to the model, in (height, width) format.
-            reshaped_input_sizes (`tf.Tensor`):
-                The size of the image input to the model, in (height, width) format. Used to remove padding.
-            mask_threshold (`float`, *optional*, defaults to 0.0):
-                The threshold to use for binarizing the masks.
-            binarize (`bool`, *optional*, defaults to `True`):
-                Whether to binarize the masks.
-            pad_size (`int`, *optional*, defaults to `self.pad_size`):
-                The target size the images were padded to before being passed to the model. If None, the target size is
-                assumed to be the processor's `pad_size`.
-        Returns:
-            (`tf.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width) is
-            given by original_size.
-        """
-        requires_backends(self, ["tf"])
-        pad_size = self.pad_size if pad_size is None else pad_size
-        target_image_size = (pad_size["height"], pad_size["width"])
-
-        output_masks = []
-        for i, original_size in enumerate(original_sizes):
-            # tf.image expects NHWC, we transpose the NCHW inputs for it
-            mask = tf.transpose(masks[i], perm=[0, 2, 3, 1])
-            interpolated_mask = tf.image.resize(mask, target_image_size, method="bilinear")
-            interpolated_mask = interpolated_mask[:, : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1], :]
-            interpolated_mask = tf.image.resize(interpolated_mask, original_size, method="bilinear")
-            if binarize:
-                interpolated_mask = interpolated_mask > mask_threshold
-            # And then we transpose them back at the end
-            output_masks.append(tf.transpose(interpolated_mask, perm=[0, 3, 1, 2]))
-
-        return output_masks
-
     def post_process_for_mask_generation(
         self, all_masks, all_scores, all_boxes, crops_nms_thresh, return_tensors="pt"
     ):
@@ -727,11 +682,11 @@ class SamImageProcessor(BaseImageProcessor):
         Post processes mask that are generated by calling the Non Maximum Suppression algorithm on the predicted masks.
 
         Args:
-            all_masks (`Union[list[torch.Tensor], list[tf.Tensor]]`):
+            all_masks (`Union[List[torch.Tensor], List[tf.Tensor]]`):
                 List of all predicted segmentation masks
-            all_scores (`Union[list[torch.Tensor], list[tf.Tensor]]`):
+            all_scores (`Union[List[torch.Tensor], List[tf.Tensor]]`):
                 List of all predicted iou scores
-            all_boxes (`Union[list[torch.Tensor], list[tf.Tensor]]`):
+            all_boxes (`Union[List[torch.Tensor], List[tf.Tensor]]`):
                 List of all bounding boxes of the predicted masks
             crops_nms_thresh (`float`):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
@@ -740,8 +695,6 @@ class SamImageProcessor(BaseImageProcessor):
         """
         if return_tensors == "pt":
             return _postprocess_for_mg(all_masks, all_scores, all_boxes, crops_nms_thresh)
-        elif return_tensors == "tf":
-            return _postprocess_for_mg_tf(all_masks, all_scores, all_boxes, crops_nms_thresh)
 
     def generate_crop_boxes(
         self,
@@ -771,7 +724,7 @@ class SamImageProcessor(BaseImageProcessor):
                 the image length. Later layers with more crops scale down this overlap.
             points_per_crop (`int`, *optional*, defaults to 32):
                 Number of points to sample from each crop.
-            crop_n_points_downscale_factor (`list[int]`, *optional*, defaults to 1):
+            crop_n_points_downscale_factor (`List[int]`, *optional*, defaults to 1):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
@@ -831,8 +784,8 @@ class SamImageProcessor(BaseImageProcessor):
                 Input masks.
             iou_scores (`Union[torch.Tensor, tf.Tensor]`):
                 List of IoU scores.
-            original_size (`tuple[int,int]`):
-                Size of the original image.
+            original_size (`Tuple[int,int]`):
+                Size of the orginal image.
             cropped_box_image (`np.array`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
@@ -848,17 +801,6 @@ class SamImageProcessor(BaseImageProcessor):
         """
         if return_tensors == "pt":
             return self._filter_masks_pt(
-                masks=masks,
-                iou_scores=iou_scores,
-                original_size=original_size,
-                cropped_box_image=cropped_box_image,
-                pred_iou_thresh=pred_iou_thresh,
-                stability_score_thresh=stability_score_thresh,
-                mask_threshold=mask_threshold,
-                stability_score_offset=stability_score_offset,
-            )
-        elif return_tensors == "tf":
-            return self._filter_masks_tf(
                 masks=masks,
                 iou_scores=iou_scores,
                 original_size=original_size,
@@ -891,8 +833,8 @@ class SamImageProcessor(BaseImageProcessor):
                 Input masks.
             iou_scores (`torch.Tensor`):
                 List of IoU scores.
-            original_size (`tuple[int,int]`):
-                Size of the original image.
+            original_size (`Tuple[int,int]`):
+                Size of the orginal image.
             cropped_box_image (`np.array`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
@@ -944,92 +886,15 @@ class SamImageProcessor(BaseImageProcessor):
         converted_boxes = converted_boxes[keep_mask]
 
         masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
-        # conversion to rle is necessary to run non-maximum suppression
+        # conversion to rle is necessary to run non-maximum suppresion
         masks = _mask_to_rle_pytorch(masks)
-
-        return masks, scores, converted_boxes
-
-    def _filter_masks_tf(
-        self,
-        masks,
-        iou_scores,
-        original_size,
-        cropped_box_image,
-        pred_iou_thresh=0.88,
-        stability_score_thresh=0.95,
-        mask_threshold=0,
-        stability_score_offset=1,
-    ):
-        """
-        Filters the predicted masks by selecting only the ones that meets several criteria. The first criterion being
-        that the iou scores needs to be greater than `pred_iou_thresh`. The second criterion is that the stability
-        score needs to be greater than `stability_score_thresh`. The method also converts the predicted masks to
-        bounding boxes and pad the predicted masks if necessary.
-
-        Args:
-            masks (`tf.Tensor`):
-                Input masks.
-            iou_scores (`tf.Tensor`):
-                List of IoU scores.
-            original_size (`tuple[int,int]`):
-                Size of the original image.
-            cropped_box_image (`np.array`):
-                The cropped image.
-            pred_iou_thresh (`float`, *optional*, defaults to 0.88):
-                The threshold for the iou scores.
-            stability_score_thresh (`float`, *optional*, defaults to 0.95):
-                The threshold for the stability score.
-            mask_threshold (`float`, *optional*, defaults to 0):
-                The threshold for the predicted masks.
-            stability_score_offset (`float`, *optional*, defaults to 1):
-                The offset for the stability score used in the `_compute_stability_score` method.
-
-        """
-        requires_backends(self, ["tf"])
-        original_height, original_width = original_size
-        iou_scores = tf.reshape(iou_scores, [iou_scores.shape[0] * iou_scores.shape[1], iou_scores.shape[2:]])
-        masks = tf.reshape(masks, [masks.shape[0] * masks.shape[1], masks.shape[2:]])
-
-        if masks.shape[0] != iou_scores.shape[0]:
-            raise ValueError("masks and iou_scores must have the same batch size.")
-
-        batch_size = masks.shape[0]
-
-        keep_mask = tf.ones(batch_size, dtype=tf.bool)
-
-        if pred_iou_thresh > 0.0:
-            keep_mask = keep_mask & (iou_scores > pred_iou_thresh)
-
-        # compute stability score
-        if stability_score_thresh > 0.0:
-            stability_scores = _compute_stability_score_tf(masks, mask_threshold, stability_score_offset)
-            keep_mask = keep_mask & (stability_scores > stability_score_thresh)
-
-        scores = iou_scores[keep_mask]
-        masks = masks[keep_mask]
-
-        # binarize masks
-        masks = masks > mask_threshold
-        converted_boxes = _batched_mask_to_box_tf(masks)
-
-        keep_mask = ~_is_box_near_crop_edge_tf(
-            converted_boxes, cropped_box_image, [0, 0, original_width, original_height]
-        )
-
-        scores = scores[keep_mask]
-        masks = masks[keep_mask]
-        converted_boxes = converted_boxes[keep_mask]
-
-        masks = _pad_masks_tf(masks, cropped_box_image, original_height, original_width)
-        # conversion to rle is necessary to run non-maximum suppression
-        masks = _mask_to_rle_tf(masks)
 
         return masks, scores, converted_boxes
 
 
 def _compute_stability_score_pt(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):
     # One mask is always contained inside the other.
-    # Save memory by preventing unnecessary cast to torch.int64
+    # Save memory by preventing unnecesary cast to torch.int64
     intersections = (
         (masks > (mask_threshold + stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
     )
@@ -1217,16 +1082,6 @@ def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
     return torch.nn.functional.pad(masks, pad, value=0)
 
 
-def _pad_masks_tf(masks, crop_box: list[int], orig_height: int, orig_width: int):
-    left, top, right, bottom = crop_box
-    if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
-        return masks
-    # Coordinate transform masks
-    pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
-    pad = (left, pad_x - left, top, pad_y - top)
-    return tf.pad(masks, pad, constant_values=0)
-
-
 def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     """Filter masks at the edge of a crop, but not at the edge of the original image."""
     crop_box_torch = torch.as_tensor(crop_box, dtype=torch.float, device=boxes.device)
@@ -1376,17 +1231,9 @@ def _mask_to_rle_pytorch(input_mask: "torch.Tensor"):
     out = []
     for i in range(batch_size):
         cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
-        if len(cur_idxs) == 0:
-            # No changes => either all 0 or all 1
-            # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
-            if input_mask[i, 0] == 0:
-                out.append({"size": [height, width], "counts": [height * width]})
-            else:
-                out.append({"size": [height, width], "counts": [0, height * width]})
-            continue
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
-        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1].item()]
+        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
         out.append({"size": [height, width], "counts": counts})
     return out
 
@@ -1406,20 +1253,10 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
     # Encode run length
     out = []
     for i in range(batch_size):
-        cur_idxs = change_indices[change_indices[:, 0] == i][:, 1] + 1
-        if len(cur_idxs) == 0:
-            # No changes => either all 0 or all 1
-            # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
-            if input_mask[i, 0] == 0:
-                out.append({"size": [height, width], "counts": [height * width]})
-            else:
-                out.append({"size": [height, width], "counts": [0, height * width]})
-            continue
+        cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
-        counts += (
-            [cur_idxs[0].numpy().item()] + btw_idxs.numpy().tolist() + [height * width - cur_idxs[-1].numpy().item()]
-        )
+        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
         out.append({"size": [height, width], "counts": counts})
     return out
 
@@ -1467,33 +1304,4 @@ def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=
     return masks, iou_scores, rle_masks, mask_boxes
 
 
-def _postprocess_for_mg_tf(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
-    """
-    Perform NMS (Non Maximum Suppression) on the outputs.
-
-    Args:
-            rle_masks (`tf.Tensor`):
-                binary masks in the RLE format
-            iou_scores (`tf.Tensor` of shape (nb_masks, 1)):
-                iou_scores predicted by the model
-            mask_boxes (`tf.Tensor`):
-                The bounding boxes corresponding to segmentation masks
-            amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
-                NMS threshold.
-    """
-    keep_by_nms = tf.image.combined_non_max_suppression(
-        boxes=mask_boxes.float(),
-        scores=iou_scores,
-        idxs=torch.zeros(mask_boxes.shape[0]),
-        iou_threshold=amg_crops_nms_thresh,
-    )
-
-    iou_scores = iou_scores[keep_by_nms]
-    rle_masks = [rle_masks[i] for i in keep_by_nms]
-    mask_boxes = mask_boxes[keep_by_nms]
-    masks = [_rle_to_mask(rle) for rle in rle_masks]
-
-    return masks, iou_scores, rle_masks, mask_boxes
-
-
-__all__ = ["SamImageProcessor"]
+__all__ = ["Sam2ImageProcessor"]

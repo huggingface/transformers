@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,16 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SAM
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
+# SAM2
 
 ## Overview
 
-SAM (Segment Anything Model) was proposed in [Segment Anything](https://huggingface.co/papers/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
+SAM2 (Segment Anything Model 2) was proposed in [Segment Anything in Images and Videos](https://scontent-ssn1-1.xx.fbcdn.net/v/t39.2365-6/453323338_287900751050452_6064535069828837026_n.pdf?_nc_cat=107&ccb=1-7&_nc_sid=3c67a6&_nc_ohc=TnvI-AaGawoQ7kNvgEl0dlN&_nc_ht=scontent-ssn1-1.xx&gid=AX-dMq559vcArFkUSUxhQLn&oh=00_AYD10LO4L0BLTWS7vaKw_fnxjCb8G4q2cGjlCf1EDcfShQ&oe=66ADE939) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
 
 The model can be used to predict segmentation masks of any object of interest given an input image.
 
@@ -39,11 +34,11 @@ Tips:
 - The model predicts much better results if input 2D points and/or input bounding boxes are provided
 - You can prompt multiple points for the same image, and predict a single mask.
 - Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems not to be supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844).
+- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844).
 
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/facebookresearch/segment-anything).
+This model was contributed by [sangbumchoi](https://github.com/SangbumChoi).
+The original code can be found [here](https://github.com/facebookresearch/sam2/tree/main).
 
 Below is an example on how to run mask generation given an image and a 2D point:
 
@@ -51,11 +46,11 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import Sam2Model, Sam2Processor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+model = SamModel.from_pretrained("danelcsb/sam2.1_heira_tiny").to(device)
+processor = SamProcessor.from_pretrained("danelcsb/sam2.1_heira_tiny")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -77,11 +72,11 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import Sam2Model, Sam2Processor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+model = Sam2odel.from_pretrained("danelcsb/sam2.1_heira_tiny").to(device)
+processor = Sam2Processor.from_pretrained("fdanelcsb/sam2.1_heira_tiny")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -98,6 +93,7 @@ masks = processor.image_processor.post_process_masks(
 )
 scores = outputs.iou_scores
 ```
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
@@ -107,72 +103,56 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Run_inference_with_MedSAM_using_HuggingFace_Transformers.ipynb) for inference with MedSAM, a fine-tuned version of SAM on the medical domain. 🌎
 - [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Fine_tune_SAM_(segment_anything)_on_a_custom_dataset.ipynb) for fine-tuning the model on custom data. 🌎
 
-## SlimSAM
+## Sam2Config
 
-SlimSAM, a pruned version of SAM, was proposed in [0.1% Data Makes Segment Anything Slim](https://huggingface.co/papers/2312.05284) by Zigeng Chen et al. SlimSAM reduces the size of the SAM models considerably while maintaining the same performance.
+[[autodoc]] Sam2Config
 
-Checkpoints can be found on the [hub](https://huggingface.co/models?other=slimsam), and they can be used as a drop-in replacement of SAM.
+## Sam2VisionConfig
 
-## Grounded SAM
+[[autodoc]] Sam2VisionConfig
 
-One can combine [Grounding DINO](grounding-dino) with SAM for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://huggingface.co/papers/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
+## Sam2MaskDecoderConfig
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grounded_sam.png"
-alt="drawing" width="900"/>
+[[autodoc]] Sam2MaskDecoderConfig
 
-<small> Grounded SAM overview. Taken from the <a href="https://github.com/IDEA-Research/Grounded-Segment-Anything">original repository</a>. </small>
+## Sam2PromptEncoderConfig
 
-## SamConfig
+[[autodoc]] Sam2PromptEncoderConfig
 
-[[autodoc]] SamConfig
+## Sam2MemoryAttentionConfig
 
-## SamVisionConfig
+[[autodoc]] Sam2MemoryAttentionConfig
 
-[[autodoc]] SamVisionConfig
+## Sam2MemoryEncoderConfig
 
-## SamMaskDecoderConfig
+[[autodoc]] Sam2MemoryEncoderConfig
 
-[[autodoc]] SamMaskDecoderConfig
+## Sam2Processor
 
-## SamPromptEncoderConfig
+[[autodoc]] Sam2Processor
 
-[[autodoc]] SamPromptEncoderConfig
+## Sam2ImageProcessor
 
+[[autodoc]] Sam2ImageProcessor
 
-## SamProcessor
+## Sam2ImageProcessorFast
 
-[[autodoc]] SamProcessor
+[[autodoc]] Sam2ImageProcessorFast
 
+## Sam2VideoProcessor
 
-## SamImageProcessor
+[[autodoc]] Sam2VideoProcessor
 
-[[autodoc]] SamImageProcessor
+## Sam2VideoSessionState
 
+[[autodoc]] Sam2VideoSessionState
 
-## SamImageProcessorFast
+## Sam2VisionModel
 
-[[autodoc]] SamImageProcessorFast
-
-
-## SamVisionModel
-
-[[autodoc]] SamVisionModel
+[[autodoc]] Sam2VisionModel
     - forward
 
+## Sam2Model
 
-## SamModel
-
-[[autodoc]] SamModel
+[[autodoc]] Sam2Model
     - forward
-
-
-## TFSamVisionModel
-
-[[autodoc]] TFSamVisionModel
-    - call
-
-
-## TFSamModel
-
-[[autodoc]] TFSamModel
-    - call
