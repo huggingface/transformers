@@ -100,19 +100,18 @@ class Ovis2VisionTransformer(nn.Module):
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values)
 
@@ -121,7 +120,7 @@ class Ovis2VisionTransformer(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -160,18 +159,18 @@ class Ovis2VisionModel(nn.Module):
         last_hidden_state = outputs.last_hidden_state
 
         if self.config.hidden_stride > 1:
-            n, seq_len, d = last_hidden_state.shape
-            hs = self.config.hidden_stride
+            num_images, seq_len, hidden_dim = last_hidden_state.shape
+            hidden_stride = self.config.hidden_stride
 
             sqrt_l = int(math.sqrt(seq_len))
             assert sqrt_l * sqrt_l == seq_len, "Token sequence length must be a perfect square"
-            pad_size = (hs - (sqrt_l % hs)) % hs
+            pad_size = (hidden_stride - (sqrt_l % hidden_stride)) % hidden_stride
             last_hidden_state = nn.functional.pad(last_hidden_state, (0, 0, 0, pad_size, 0, pad_size), "constant", 0)
             sqrt_l += pad_size
 
-            last_hidden_state = last_hidden_state.reshape(n, sqrt_l // hs, hs, sqrt_l // hs, hs, d)
+            last_hidden_state = last_hidden_state.reshape(num_images, sqrt_l // hidden_stride, hidden_stride, sqrt_l // hidden_stride, hidden_stride, hidden_dim)
             last_hidden_state = last_hidden_state.permute(0, 1, 3, 2, 4, 5)
-            last_hidden_state = last_hidden_state.reshape(n, -1, hs * hs * d)  # (n, (sqrt_l//hs)^2, hs^2*d)
+            last_hidden_state = last_hidden_state.reshape(num_images, -1, hidden_stride * hidden_stride * hidden_dim)  # (n, (sqrt_l//hs)^2, hs^2*d)
 
         logits = self.head_linear(last_hidden_state)
         logits = self.head_norm(logits)
