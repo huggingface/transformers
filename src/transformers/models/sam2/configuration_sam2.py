@@ -18,17 +18,19 @@ import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class Sam2VisionConfig(PretrainedConfig):
+class Sam2HieraDetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam2VisionEncoder`]. It is used to instantiate a SAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of the SAM 2 Hiera-B+
-    [facebook/sam2-hiera-base-plus](https://huggingface.co/facebook/sam2-hiera-base-plus) architecture.
+    This is the configuration class to store the configuration of a [`Sam2HieraDetModel`]. It is used to instantiate
+    a HieraDet model as defined in the original sam2 repo according to the specified arguments, defining the model architecture.
+    Instantiating a configuration defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
+    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -66,6 +68,79 @@ class Sam2VisionConfig(PretrainedConfig):
             The window specifications for each stage.
         global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `[5, 7, 9]`):
             The blocks where global attention is used.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the neck.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon for the layer normalization.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    """
+
+    base_config_key = "vision_config"
+    model_type = "sam2_hiera_det_model"
+
+    def __init__(
+        self,
+        hidden_size=96,
+        num_attention_heads=1,
+        num_channels=3,
+        image_size=1024,
+        patch_kernel_size=7,
+        patch_stride=4,
+        patch_padding=3,
+        drop_path_rate=0.0,
+        q_pool=3,
+        q_stride=[2, 2],
+        stages=[1, 2, 7, 2],
+        dim_mul=2.0,
+        head_mul=2.0,
+        window_positional_embedding_background_size=[7, 7],
+        window_spec=[8, 4, 14, 7],
+        global_attention_blocks=[5, 7, 9],
+        hidden_act="gelu",
+        layer_norm_eps=1e-6,
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_kernel_size = patch_kernel_size
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
+        self.drop_path_rate = drop_path_rate
+        self.q_pool = q_pool
+        self.q_stride = q_stride
+        self.stages = stages
+        self.dim_mul = dim_mul
+        self.head_mul = head_mul
+        self.window_positional_embedding_background_size = window_positional_embedding_background_size
+        self.window_spec = window_spec
+        self.global_attention_blocks = global_attention_blocks
+
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.initializer_range = initializer_range
+
+
+class Sam2VisionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Sam2VisionModel`]. It is used to instantiate a SAM
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
+    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        backbone_config (`Union[dict, "PretrainedConfig"]`, *optional*):
+            Configuration for the vision backbone. This is used to instantiate the backbone using
+            `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
             The list of channel dimensions for the backbone.
         backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
@@ -97,25 +172,13 @@ class Sam2VisionConfig(PretrainedConfig):
 
     base_config_key = "vision_config"
     model_type = "sam2_vision_model"
+    sub_configs = {
+        "backbone_config": AutoConfig,
+    }
 
     def __init__(
         self,
-        hidden_size=96,
-        num_attention_heads=1,
-        num_channels=3,
-        image_size=1024,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        drop_path_rate=0.0,
-        q_pool=3,
-        q_stride=[2, 2],
-        stages=[1, 2, 7, 2],
-        dim_mul=2.0,
-        head_mul=2.0,
-        window_positional_embedding_background_size=[7, 7],
-        window_spec=[8, 4, 14, 7],
-        global_attention_blocks=[5, 7, 9],
+        backbone_config=None,
         backbone_channel_list=[768, 384, 192, 96],
         backbone_feature_sizes=[[256, 256], [128, 128], [64, 64]],
         fpn_hidden_size=256,
@@ -133,26 +196,19 @@ class Sam2VisionConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        assert len(stages) == len(window_spec) == len(backbone_channel_list)
+        if isinstance(backbone_config, dict):
+            backbone_config["model_type"] = (
+                backbone_config["model_type"] if "model_type" in backbone_config else "hiera"
+            )
+            backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
+        elif isinstance(backbone_config, (Sam2HieraDetConfig, TimmWrapperConfig)):
+            backbone_config = backbone_config
+        elif backbone_config is None:
+            backbone_config = Sam2HieraDetConfig()
+
+        self.backbone_config = backbone_config
+
         assert fuse_type in ["sum", "average"]
-
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.drop_path_rate = drop_path_rate
-        self.q_pool = q_pool
-        self.q_stride = q_stride
-        self.stages = stages
-        self.dim_mul = dim_mul
-        self.head_mul = head_mul
-        self.window_positional_embedding_background_size = window_positional_embedding_background_size
-        self.window_spec = window_spec
-        self.global_attention_blocks = global_attention_blocks
-
         # Neck
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
@@ -484,8 +540,8 @@ class Sam2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Sam2MemoryAttentionConfig`].
         memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MemoryEncoderConfig`].
-
-        initializer_range (`float`, *optional*, defaults to 0.02): std for parameter initialization
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation for parameter initialization.
         num_maskmem (`int`, *optional*, defaults to 7):
             The number of memory slots for the mask memory.
         image_size (`int`, *optional*, defaults to 1024):
@@ -621,46 +677,26 @@ class Sam2Config(PretrainedConfig):
         self.image_size = image_size
         self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc  # scale factor for mask sigmoid prob
         self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc  # bias factor for mask sigmoid prob
-        # During evaluation whether to binarize the sigmoid mask logits on interacted frames with clicks
         self.binarize_mask_from_pts_for_mem_enc = binarize_mask_from_pts_for_mem_enc
-        # The maximum number of conditioning frames to participate in the memory attention (-1 means no limit; if there are more conditioning frames than this limit
-        # we only cross-attend to the temporally closest `max_cond_frames_in_attn` conditioning frames in the encoder when tracking each frame). This gives the model
-        # a temporal locality when handling a large number of annotated frames (since closer frames should be more important) and also avoids GPU OOM.
         self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
-        # whether to output multiple (3) masks for the first click on initial conditioning frames
         self.multimask_output_in_sam = multimask_output_in_sam
-        # the minimum and maximum number of clicks to use multimask_output_in_sam (only relevant when `multimask_output_in_sam=True`;
         self.multimask_min_pt_num = multimask_min_pt_num
         self.multimask_max_pt_num = multimask_max_pt_num
-        # whether to also use multimask output for tracking (not just for the first click on initial conditioning frames; only relevant when `multimask_output_in_sam=True`)
         self.multimask_output_for_tracking = multimask_output_for_tracking
-        # Whether to use multimask tokens for obj ptr; Only relevant when both
-        # use_object_pointers_in_encoder=True and multimask_output_for_tracking=True
-        # whether to use sigmoid to restrict ious prediction to [0-1]
-        # The memory bank's temporal stride during evaluation (i.e. the `r` parameter in XMem and Cutie; XMem and Cutie use r=5).
-        # For r>1 the (self.num_maskmem - 1) non-conditioning memory frames consist of
-        # (self.num_maskmem - 2) nearest frames from every r-th frames plus the last frame.
-        # if `add_all_frames_to_correct_as_cond` is True we also append to the conditioning frame list any frame that receives a later correction click
-        # if `add_all_frames_to_correct_as_cond` is False we conditioning frame list to only use those initial conditioning frames
-        # whether to apply non-overlapping constraints on the object masks in the memory encoder during evaluation (to avoid/alleviate superposing masks)
         self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
-        # whether to cross-attend to object pointers from other frames (based on SAM output tokens) in the encoder
-        # the maximum number of object pointers from other frames in encoder cross attention (only relevant when `use_object_pointers_in_encoder=True`)
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        # whether to add temporal positional encoding to the object pointers in the encoder (only relevant when `use_object_pointers_in_encoder=True`)
         self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
-        # whether to add an extra linear projection layer for the temporal positional encoding in the object pointers to avoid potential interference
-        # with spatial positional encoding (only relevant when both `use_object_pointers_in_encoder=True` and `enable_temporal_pos_encoding_for_object_pointers=True`)
         self.project_temporal_pos_encoding_in_object_pointers = project_temporal_pos_encoding_in_object_pointers
         self.preserve_temporal_direction_in_object_pointers = preserve_temporal_direction_in_object_pointers
 
-        # Video inference specific parameters
+        # post-processing parameters
         self.fill_hole_area = fill_hole_area  # area threshold for filling holes in masks
         self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 
 __all__ = [
     "Sam2Config",
+    "Sam2HieraDetConfig",
     "Sam2VisionConfig",
     "Sam2PromptEncoderConfig",
     "Sam2MaskDecoderConfig",

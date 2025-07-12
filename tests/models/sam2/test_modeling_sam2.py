@@ -22,6 +22,7 @@ import requests
 
 from transformers import (
     Sam2Config,
+    Sam2HieraDetConfig,
     Sam2MaskDecoderConfig,
     Sam2MemoryAttentionConfig,
     Sam2MemoryEncoderConfig,
@@ -90,14 +91,17 @@ class Sam2VisionModelTester:
         self.fpn_hidden_size = fpn_hidden_size
 
     def get_config(self):
-        return Sam2VisionConfig(
+        backbone_config = Sam2HieraDetConfig(
             hidden_size=self.hidden_size,
-            image_size=self.image_size,
-            patch_kernel_size=self.patch_kernel_size,
-            patch_stride=self.patch_stride,
-            patch_padding=self.patch_padding,
             num_channels=self.num_channels,
+            image_size=self.image_size,
+            patch_stride=self.patch_stride,
+            patch_kernel_size=self.patch_kernel_size,
+            patch_padding=self.patch_padding,
             stages=self.stages,
+        )
+        return Sam2VisionConfig(
+            backbone_config=backbone_config,
             backbone_channel_list=self.backbone_channel_list,
             backbone_feature_sizes=self.backbone_feature_sizes,
             fpn_hidden_size=self.fpn_hidden_size,
@@ -194,10 +198,12 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size = config.window_spec[0]
-            out_dim = config.hidden_size
-            patch_stride = config.patch_stride
-            num_windows = self.model_tester.batch_size * (config.image_size // (window_size * patch_stride)) ** 2
+            window_size = config.backbone_config.window_spec[0]
+            out_dim = config.backbone_config.hidden_size
+            patch_stride = config.backbone_config.patch_stride
+            num_windows = (
+                self.model_tester.batch_size * (config.backbone_config.image_size // (window_size * patch_stride)) ** 2
+            )
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -442,15 +448,18 @@ class Sam2ModelTester:
         return config, pixel_values
 
     def get_config(self):
-        vision_config = Sam2VisionConfig(
+        backbone_config = Sam2HieraDetConfig(
             hidden_size=self.hidden_size,
             num_channels=self.num_channels,
             image_size=self.image_size,
-            patch_kernel_size=self.patch_kernel_size,
             patch_stride=self.patch_stride,
+            patch_kernel_size=self.patch_kernel_size,
             patch_padding=self.patch_padding,
             dim_mul=self.dim_mul,
             stages=self.stages,
+        )
+        vision_config = Sam2VisionConfig(
+            backbone_config=backbone_config,
             backbone_channel_list=self.backbone_channel_list,
             backbone_feature_sizes=self.backbone_feature_sizes,
             fpn_hidden_size=self.fpn_hidden_size,
@@ -563,7 +572,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.vision_config.output_attentions = True
             config.output_attentions = True
             model = model_class._from_config(config, attn_implementation="eager")
-            window_size = config.vision_config.window_spec[0]
+            window_size = config.vision_config.backbone_config.window_spec[0]
             out_dim = self.model_tester.hidden_size
             patch_stride = self.model_tester.patch_stride
             num_windows = (
@@ -749,7 +758,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "../sam2_hf_implem/sam2_tiny_hf"
+        model_name = "../sam2_hf_implem/sam2.1_tiny_hf"
         model = Sam2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -786,8 +795,8 @@ def prepare_video():
 class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2_tiny_hf").to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("../sam2_hf_implem/sam2_tiny_hf")
+        self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf").to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()
 
@@ -1407,7 +1416,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="../sam2_hf_implem/sam2_tiny_hf", device=torch_device)
+        generator = pipeline("mask-generation", model="../sam2_hf_implem/sam2.1_tiny_hf", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

@@ -46,7 +46,14 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from .configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig, Sam2VisionConfig
+from ..auto import AutoModel
+from .configuration_sam2 import (
+    Sam2Config,
+    Sam2HieraDetConfig,
+    Sam2MaskDecoderConfig,
+    Sam2PromptEncoderConfig,
+    Sam2VisionConfig,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -554,10 +561,10 @@ class Sam2MultiScaleBlock(nn.Module):
         hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
         pad_height, pad_width = height + pad_h, width + pad_w
 
-        hidden_states = hidden_states.reshape(
+        hidden_states = hidden_states.view(
             batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
         )
-        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
+        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, channel)
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
@@ -583,11 +590,11 @@ class Sam2MultiScaleBlock(nn.Module):
         pad_height, pad_width = padding_shape
         height, width = original_shape
         batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
-        hidden_states = windows.reshape(
+        hidden_states = windows.view(
             batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
         )
         hidden_states = (
-            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
+            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, pad_height, pad_width, -1)
         )
 
         hidden_states = hidden_states[:, :height, :width, :].contiguous()
@@ -638,6 +645,24 @@ class Sam2MultiScaleBlock(nn.Module):
         return hidden_states
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Hiera model's outputs that also contains a pooling of the last hidden states.
+    """
+)
+class Sam2HieraDetModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
+        hidden-states at the output of the last layer of the model.
+    intermediate_hidden_states (`tuple[torch.FloatTensor]` of shape `(batch_size, height, width, hidden_size)`):
+        Sequence of hidden-states at the output of the intermediate layers of the model.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+
+
 @auto_docstring
 class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
@@ -661,7 +686,7 @@ class Sam2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, Sam2LayerNorm)):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
-        if isinstance(module, Sam2VisionEncoder):
+        if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
                 module.pos_embed.data.zero_()
             if module.pos_embed_window is not None:
@@ -682,15 +707,16 @@ class Sam2PreTrainedModel(PreTrainedModel):
                 module.scale.data.zero_()
 
 
-class Sam2VisionEncoder(Sam2PreTrainedModel):
+class Sam2HieraDetModel(Sam2PreTrainedModel):
+    config_class = Sam2HieraDetConfig
+    main_input_name = "pixel_values"
     _can_record_outputs = {
         "hidden_states": Sam2MultiScaleBlock,
         "attentions": Sam2MultiScaleAttention,
     }
 
-    def __init__(self, config: Sam2VisionConfig):
+    def __init__(self, config: Sam2HieraDetConfig):
         super().__init__(config)
-        self.config = config
 
         # Patch embdding
         self.patch_embed = Sam2PatchEmbeddings(config)
@@ -742,9 +768,6 @@ class Sam2VisionEncoder(Sam2PreTrainedModel):
             embed_dim = dim_out
             self.blocks.append(block)
 
-        self.neck = Sam2VisionNeck(config)
-        self.num_feature_levels = config.num_feature_levels
-
     def get_input_embeddings(self):
         return self.patch_embed
 
@@ -761,7 +784,7 @@ class Sam2VisionEncoder(Sam2PreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam2VisionEncoderOutput]:
+    ) -> Union[tuple, Sam2HieraDetModelOutput]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -775,7 +798,57 @@ class Sam2VisionEncoder(Sam2PreTrainedModel):
             if (i == self.stage_ends[-1]) or (i in self.stage_ends):
                 intermediate_hidden_states = intermediate_hidden_states + (hidden_states,)
 
+        return Sam2HieraDetModelOutput(
+            last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate_hidden_states,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The vision model from Sam without any head or projection on top.
+    """
+)
+class Sam2VisionModel(Sam2PreTrainedModel):
+    config_class = Sam2VisionConfig
+    main_input_name = "pixel_values"
+    _can_record_outputs = {
+        "hidden_states": Sam2MultiScaleBlock,
+        "attentions": Sam2MultiScaleAttention,
+    }
+
+    def __init__(self, config: Sam2VisionConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.backbone = AutoModel.from_config(config.backbone_config)
+
+        self.neck = Sam2VisionNeck(config)
+        self.num_feature_levels = config.num_feature_levels
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.backbone.get_input_embeddings()
+
+    @check_model_inputs
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, Sam2VisionEncoderOutput]:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
         # Forward through backbone
+        backbone_output = self.backbone(pixel_values, **kwargs)
+        hidden_states = backbone_output.last_hidden_state
+        intermediate_hidden_states = backbone_output.intermediate_hidden_states
+        print("intermediate_hidden_states", len(intermediate_hidden_states))
+        for i, hidden_state in enumerate(intermediate_hidden_states):
+            print(hidden_state.shape)
+        print("hidden_states", hidden_states.shape)
+
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
         # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
         fpn_hidden_states, fpn_position_encoding = (
@@ -2041,39 +2114,6 @@ class Sam2MemoryEncoder(nn.Module):
         return {"vision_features": vision_features, "vision_pos_enc": [vision_pos_enc]}
 
 
-@auto_docstring(
-    custom_intro="""
-    The vision model from Sam without any head or projection on top.
-    """
-)
-class Sam2VisionModel(Sam2PreTrainedModel):
-    config_class = Sam2VisionConfig
-    main_input_name = "pixel_values"
-    _can_record_outputs = {
-        "hidden_states": Sam2MultiScaleBlock,
-        "attentions": Sam2MultiScaleAttention,
-    }
-
-    def __init__(self, config: Sam2VisionConfig):
-        super().__init__(config)
-        self.vision_encoder = Sam2VisionEncoder(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_encoder.patch_embed
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam2VisionEncoderOutput]:
-        return self.vision_encoder(pixel_values, **kwargs)
-
-
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
 CUDA_KERNELS = None
@@ -2168,7 +2208,7 @@ class Sam2Model(Sam2PreTrainedModel):
         super().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         # For single image inference
-        self.vision_encoder = Sam2VisionEncoder(config.vision_config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
         self.mask_decoder = Sam2MaskDecoder(config.mask_decoder_config)
         # For video sequence inference
@@ -3591,4 +3631,4 @@ class Sam2Model(Sam2PreTrainedModel):
         return pred_masks
 
 
-__all__ = ["Sam2Model", "Sam2VisionModel", "Sam2VideoSessionState", "Sam2PreTrainedModel"]
+__all__ = ["Sam2Model", "Sam2VisionModel", "Sam2VideoSessionState", "Sam2PreTrainedModel", "Sam2HieraDetModel"]

@@ -38,23 +38,16 @@ from transformers import (
     Sam2PromptEncoderConfig,
     Sam2VideoProcessor,
     Sam2VisionConfig,
+    TimmWrapperConfig,
 )
 
 
 def get_config(model_name):
-    if "sam2.1_hiera_tiny" in model_name:
+    if "hiera_tiny" in model_name:
         vision_config = Sam2VisionConfig()
-        prompt_encoder_config = Sam2PromptEncoderConfig()
-        mask_decoder_config = Sam2MaskDecoderConfig()
-        memory_attention_config = Sam2MemoryAttentionConfig()
-        memory_encoder_config = Sam2MemoryEncoderConfig()
-    elif "sam2.1_hiera_small" in model_name:
+    elif "hiera_small" in model_name:
         vision_config = Sam2VisionConfig(stages=(1, 2, 11, 2), global_attention_blocks=(7, 10, 13))
-        prompt_encoder_config = Sam2PromptEncoderConfig()
-        mask_decoder_config = Sam2MaskDecoderConfig()
-        memory_attention_config = Sam2MemoryAttentionConfig()
-        memory_encoder_config = Sam2MemoryEncoderConfig()
-    elif "sam2.1_hiera_base_plus" in model_name:
+    elif "hiera_base_plus" in model_name:
         vision_config = Sam2VisionConfig(
             hidden_size=112,
             num_attention_heads=2,
@@ -63,11 +56,7 @@ def get_config(model_name):
             window_positional_embedding_background_size=(14, 14),
             backbone_channel_list=[896, 448, 224, 112],
         )
-        prompt_encoder_config = Sam2PromptEncoderConfig()
-        mask_decoder_config = Sam2MaskDecoderConfig()
-        memory_attention_config = Sam2MemoryAttentionConfig()
-        memory_encoder_config = Sam2MemoryEncoderConfig()
-    elif "sam2.1_hiera_large" in model_name:
+    elif "hiera_large" in model_name:
         vision_config = Sam2VisionConfig(
             hidden_size=144,
             num_attention_heads=2,
@@ -77,10 +66,21 @@ def get_config(model_name):
             window_spec=(8, 4, 16, 8),
             backbone_channel_list=[1152, 576, 288, 144],
         )
-        prompt_encoder_config = Sam2PromptEncoderConfig()
-        mask_decoder_config = Sam2MaskDecoderConfig()
-        memory_attention_config = Sam2MemoryAttentionConfig()
-        memory_encoder_config = Sam2MemoryEncoderConfig()
+    elif "EdgeTAM" in model_name:
+        vision_config = Sam2VisionConfig()
+        vision_config.backbone_config = TimmWrapperConfig.from_pretrained("timm/repvit_m1.dist_in1k")
+
+    prompt_encoder_config = Sam2PromptEncoderConfig()
+    mask_decoder_config = Sam2MaskDecoderConfig()
+    memory_attention_config = Sam2MemoryAttentionConfig()
+    memory_encoder_config = Sam2MemoryEncoderConfig()
+
+    if "sam2.1" in model_name:
+        project_temporal_pos_encoding_in_object_pointers = True
+        enable_occlusion_spatial_embedding = True
+    else:
+        project_temporal_pos_encoding_in_object_pointers = False
+        enable_occlusion_spatial_embedding = False
 
     config = Sam2Config(
         vision_config=vision_config,
@@ -88,6 +88,8 @@ def get_config(model_name):
         mask_decoder_config=mask_decoder_config,
         memory_attention_config=memory_attention_config,
         memory_encoder_config=memory_encoder_config,
+        project_temporal_pos_encoding_in_object_pointers=project_temporal_pos_encoding_in_object_pointers,
+        enable_occlusion_spatial_embedding=enable_occlusion_spatial_embedding,
     )
 
     return config
@@ -116,7 +118,8 @@ KEYS_TO_MODIFY_MAPPING = {
     "sam_mask_decoder": "mask_decoder",
     "maskmem_tpos_enc": "memory_temporal_positional_encoding",
     "gamma": "scale",
-    "image_encoder": "vision_encoder",
+    "image_encoder.neck": "vision_encoder.neck",
+    "image_encoder": "vision_encoder.backbone",
     "neck.0": "neck.conv1",
     "neck.1": "neck.layer_norm1",
     "neck.2": "neck.conv2",
@@ -136,7 +139,7 @@ def replace_keys(state_dict):
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
     output_mask_decoder_mlps_pattern = r"mask_decoder.transformer.layers.(\d+).mlp.layers.(\d+).*"
     output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
-    output_vision_encoder_mlps_pattern = r"vision_encoder.blocks.(\d+).mlp.layers.(\d+).*"
+    output_vision_encoder_mlps_pattern = r"vision_encoder.backbone.blocks.(\d+).mlp.layers.(\d+).*"
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
@@ -253,6 +256,17 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     elif model_name == "sam2.1_hiera_large":
         # [0.96484375 0.03613281 0.19042969]
         assert torch.allclose(scores, torch.tensor([0.9660, 0.0362, 0.1927]).cuda(), atol=1e-3)
+    elif model_name == "sam2_hiera_tiny":
+        assert torch.allclose(scores, torch.tensor([0.0439, 0.9567, 0.1415]).cuda(), atol=1e-3)
+    elif model_name == "sam2_hiera_small":
+        # placeholder to be filled
+        assert torch.allclose(scores, torch.tensor([0.9648, 0.1507, 0.0466]).cuda(), atol=1e-3)
+    elif model_name == "sam2_hiera_base_plus":
+        # placeholder to be filled
+        assert torch.allclose(scores, torch.tensor([0.0364, 0.9773, 0.1285]).cuda(), atol=1e-3)
+    elif model_name == "sam2_hiera_large":
+        # to be filled
+        assert torch.allclose(scores, torch.tensor([0.9660, 0.0362, 0.1927]).cuda(), atol=1e-3)
     else:
         raise ValueError(f"Model {model_name} not supported")
 
@@ -268,7 +282,16 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = ["sam2.1_hiera_tiny", "sam2.1_hiera_small", "sam2.1_hiera_base_plus", "sam2.1_hiera_large"]
+    choices = [
+        "sam2.1_hiera_tiny",
+        "sam2.1_hiera_small",
+        "sam2.1_hiera_base_plus",
+        "sam2.1_hiera_large",
+        "sam2_hiera_tiny",
+        "sam2_hiera_small",
+        "sam2_hiera_base_plus",
+        "sam2_hiera_large",
+    ]
     parser.add_argument(
         "--model_name",
         default="sam2.1_hiera_tiny",
