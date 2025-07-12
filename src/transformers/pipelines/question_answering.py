@@ -537,7 +537,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         align_to_words=True,
     ):
         min_null_score = 1000000  # large and positive
-        answers = []
+
+        n_best_per_chunk = top_k + 20
+
+        all_candidates = []
         for output in model_outputs:
             if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
                 start_ = output["start"].to(torch.float32)
@@ -545,90 +548,91 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             else:
                 start_ = output["start"]
                 end_ = output["end"]
-            example = output["example"]
+
             p_mask = output["p_mask"]
             attention_mask = (
                 output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None
             )
 
             starts, ends, scores, min_null_score = select_starts_ends(
-                start_, end_, p_mask, attention_mask, min_null_score, top_k, handle_impossible_answer, max_answer_len
+                start_,
+                end_,
+                p_mask,
+                attention_mask,
+                min_null_score,
+                n_best_per_chunk,
+                handle_impossible_answer,
+                max_answer_len,
             )
+
+            for s, e, score in zip(starts, ends, scores):
+                all_candidates.append(
+                    {
+                        "score": score.item(),
+                        "start_token": s,
+                        "end_token": e,
+                        "metadata": output,
+                    }
+                )
+
+        all_candidates = sorted(all_candidates, key=lambda x: x["score"], reverse=True)
+
+        answers = {}
+        for cand in all_candidates:
+            if len(answers) >= top_k:
+                break
+
+            metadata = cand["metadata"]
+            example = metadata["example"]
 
             if not self.tokenizer.is_fast:
                 char_to_word = np.array(example.char_to_word_offset)
-
-                # Convert the answer (tokens) back to the original text
-                # Score: score from the model
-                # Start: Index of the first character of the answer in the context string
-                # End: Index of the character following the last character of the answer in the context string
-                # Answer: Plain text of the answer
-                for s, e, score in zip(starts, ends, scores):
-                    token_to_orig_map = output["token_to_orig_map"]
-                    answers.append(
-                        {
-                            "score": score.item(),
-                            "start": np.where(char_to_word == token_to_orig_map[s])[0][0].item(),
-                            "end": np.where(char_to_word == token_to_orig_map[e])[0][-1].item(),
-                            "answer": " ".join(example.doc_tokens[token_to_orig_map[s] : token_to_orig_map[e] + 1]),
-                        }
-                    )
+                token_to_orig_map = metadata["token_to_orig_map"]
+                start_char_idx = np.where(char_to_word == token_to_orig_map[cand["start_token"]])[0][0].item()
+                end_char_idx = np.where(char_to_word == token_to_orig_map[cand["end_token"]])[0][-1].item()
+                answer_text = " ".join(
+                    example.doc_tokens[
+                        token_to_orig_map[cand["start_token"]] : token_to_orig_map[cand["end_token"]] + 1
+                    ]
+                )
             else:
-                # Convert the answer (tokens) back to the original text
-                # Score: score from the model
-                # Start: Index of the first character of the answer in the context string
-                # End: Index of the character following the last character of the answer in the context string
-                # Answer: Plain text of the answer
+                enc = metadata["encoding"]
                 question_first = bool(self.tokenizer.padding_side == "right")
-                enc = output["encoding"]
+                sequence_index = 1 if question_first else 0
 
-                # Encoding was *not* padded, input_ids *might*.
-                # It doesn't make a difference unless we're padding on
-                # the left hand side, since now we have different offsets
-                # everywhere.
                 if self.tokenizer.padding_side == "left":
-                    offset = (output["input_ids"] == self.tokenizer.pad_token_id).numpy().sum()
+                    offset = (metadata["input_ids"] == self.tokenizer.pad_token_id).numpy().sum()
                 else:
                     offset = 0
 
-                # Sometimes the max probability token is in the middle of a word so:
-                # - we start by finding the right word containing the token with `token_to_word`
-                # - then we convert this word in a character span with `word_to_chars`
-                sequence_index = 1 if question_first else 0
+                start_token = cand["start_token"] - offset
+                end_token = cand["end_token"] - offset
 
-                for s, e, score in zip(starts, ends, scores):
-                    s = s - offset
-                    e = e - offset
+                start_char_idx, end_char_idx = self.get_indices(
+                    enc, start_token, end_token, sequence_index, align_to_words
+                )
+                answer_text = example.context_text[start_char_idx:end_char_idx]
 
-                    start_index, end_index = self.get_indices(enc, s, e, sequence_index, align_to_words)
+            key = answer_text.lower()
+            if key in answers:
+                answers[key]["score"] += cand["score"]
+            else:
+                answers[key] = {
+                    "score": cand["score"],
+                    "start": start_char_idx,
+                    "end": end_char_idx,
+                    "answer": answer_text,
+                }
 
-                    target_answer = example.context_text[start_index:end_index]
-                    answer = self.get_answer(answers, target_answer)
-
-                    if answer:
-                        answer["score"] += score.item()
-                    else:
-                        answers.append(
-                            {
-                                "score": score.item(),
-                                "start": start_index,
-                                "end": end_index,
-                                "answer": example.context_text[start_index:end_index],
-                            }
-                        )
-
+        final_answers = list(answers.values())
         if handle_impossible_answer:
-            answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
-        answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
-        if len(answers) == 1:
-            return answers[0]
-        return answers
+            final_answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
 
-    def get_answer(self, answers: list[dict], target: str) -> Optional[dict]:
-        for answer in answers:
-            if answer["answer"].lower() == target.lower():
-                return answer
-        return None
+        final_answers = sorted(final_answers, key=lambda x: x["score"], reverse=True)[:top_k]
+
+        if len(final_answers) == 1:
+            return final_answers[0]
+        return final_answers
 
     def get_indices(
         self, enc: "tokenizers.Encoding", s: int, e: int, sequence_index: int, align_to_words: bool
