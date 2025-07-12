@@ -20,17 +20,17 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
-from .configuration_swissai import SwissAIConfig
+from .configuration_apertus import ApertusConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class SwissAIRMSNorm(nn.Module):
+class ApertusRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        SwissAIRMSNorm is equivalent to T5LayerNorm
+        ApertusRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -47,8 +47,8 @@ class SwissAIRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class SwissAIRotaryEmbedding(nn.Module):
-    def __init__(self, config: SwissAIConfig, device=None):
+class ApertusRotaryEmbedding(nn.Module):
+    def __init__(self, config: ApertusConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
@@ -115,7 +115,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class SwissAIMLP(nn.Module):
+class ApertusMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -174,10 +174,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class SwissAIAttention(nn.Module):
+class ApertusAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: SwissAIConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: ApertusConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -200,8 +200,8 @@ class SwissAIAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.qk_norm:
-            self.q_norm = SwissAIRMSNorm(self.head_dim, config.rms_norm_eps)
-            self.k_norm = SwissAIRMSNorm(self.head_dim, config.rms_norm_eps)
+            self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
+            self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
         else:
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
@@ -252,16 +252,16 @@ class SwissAIAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SwissAIDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: SwissAIConfig, layer_idx: int):
+class ApertusDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: ApertusConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = SwissAIAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = ApertusAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = SwissAIMLP(config)
-        self.attention_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.feedforward_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = ApertusMLP(config)
+        self.attention_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.feedforward_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.post_norm = config.post_norm
 
@@ -306,11 +306,11 @@ class SwissAIDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class SwissAIPreTrainedModel(PreTrainedModel):
-    config_class = SwissAIConfig
+class ApertusPreTrainedModel(PreTrainedModel):
+    config_class = ApertusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["SwissAIDecoderLayer"]
+    _no_split_modules = ["ApertusDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_flash_attn_3 = True
@@ -321,8 +321,8 @@ class SwissAIPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": SwissAIDecoderLayer,
-        "attentions": SwissAIAttention,
+        "hidden_states": ApertusDecoderLayer,
+        "attentions": ApertusAttention,
     }
 
     def _init_weights(self, module):
@@ -335,23 +335,23 @@ class SwissAIPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, SwissAIRMSNorm):
+        elif isinstance(module, ApertusRMSNorm):
             module.weight.data.fill_(1.0)
 
 
 @auto_docstring
-class SwissAIModel(SwissAIPreTrainedModel):
-    def __init__(self, config: SwissAIConfig):
+class ApertusModel(ApertusPreTrainedModel):
+    def __init__(self, config: ApertusConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [SwissAIDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [ApertusDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = SwissAIRotaryEmbedding(config=config)
+        self.norm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = ApertusRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -427,14 +427,14 @@ class SwissAIModel(SwissAIPreTrainedModel):
 
 
 @auto_docstring
-class SwissAIForCausalLM(SwissAIPreTrainedModel, GenerationMixin):
+class ApertusForCausalLM(ApertusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = SwissAIModel(config)
+        self.model = ApertusModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -484,10 +484,10 @@ class SwissAIForCausalLM(SwissAIPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, SwissAIForCausalLM
+        >>> from transformers import AutoTokenizer, ApertusForCausalLM
 
-        >>> model = SwissAIForCausalLM.from_pretrained("SwissAI-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("SwissAI-2-7b-hf")
+        >>> model = ApertusForCausalLM.from_pretrained("swiss-ai/Apertus-8B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("swiss-ai/Apertus-8B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -533,11 +533,11 @@ class SwissAIForCausalLM(SwissAIPreTrainedModel, GenerationMixin):
 
 
 @auto_docstring
-class SwissAIForTokenClassification(SwissAIPreTrainedModel):
+class ApertusForTokenClassification(ApertusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = SwissAIModel(config)
+        self.model = ApertusModel(config)
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
@@ -602,8 +602,8 @@ class SwissAIForTokenClassification(SwissAIPreTrainedModel):
 
 
 __all__ = [
-    "SwissAIForCausalLM",
-    "SwissAIModel",
-    "SwissAIPreTrainedModel",
-    "SwissAIForTokenClassification",
+    "ApertusForCausalLM",
+    "ApertusModel",
+    "ApertusPreTrainedModel",
+    "ApertusForTokenClassification",
 ]

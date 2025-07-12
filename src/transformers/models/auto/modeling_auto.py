@@ -37,6 +37,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
+        ("apertus", "ApertusModel"),
         ("arcee", "ArceeModel"),
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
@@ -323,7 +324,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
         ("swinv2", "Swinv2Model"),
-        ("swissai", "SwissAIModel"),
         ("switch_transformers", "SwitchTransformersModel"),
         ("t5", "T5Model"),
         ("t5gemma", "T5GemmaModel"),
@@ -560,6 +560,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("apertus", "ApertusForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
         ("bamba", "BambaForCausalLM"),
@@ -669,7 +670,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
         ("stablelm", "StableLmForCausalLM"),
         ("starcoder2", "Starcoder2ForCausalLM"),
-        ("swissai", "SwissAIForCausalLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("whisper", "WhisperForCausalLM"),
@@ -1316,6 +1316,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
         ("albert", "AlbertForTokenClassification"),
+        ("apertus", "ApertusForTokenClassification"),
         ("arcee", "ArceeForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
@@ -1388,7 +1389,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForTokenClassification"),
         ("stablelm", "StableLmForTokenClassification"),
         ("starcoder2", "Starcoder2ForTokenClassification"),
-        ("swissai", "SwissAIForTokenClassification"),
         ("t5", "T5ForTokenClassification"),
         ("t5gemma", "T5GemmaForTokenClassification"),
         ("umt5", "UMT5ForTokenClassification"),

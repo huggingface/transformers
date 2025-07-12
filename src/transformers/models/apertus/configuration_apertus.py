@@ -1,9 +1,9 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
-class SwissAIConfig(PretrainedConfig):
+class ApertusConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SwissAIModel`]. It is used to instantiate a SwissAI
+    This is the configuration class to store the configuration of a [`ApertusModel`]. It is used to instantiate a Apertus
     model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -12,8 +12,8 @@ class SwissAIConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50304):
-            Vocabulary size of the SwissAI model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`SwissAIModel`]
+            Vocabulary size of the Apertus model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`ApertusModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -69,20 +69,20 @@ class SwissAIConfig(PretrainedConfig):
             Whether to use a normalization after the self-attention and MLP layers, i.e. x = norm(f(x)) + x.
             If `False`, the model will use a pre-normalization, i.e. x = f(norm(x)) + x.
     ```python
-    >>> from transformers import SwissAIModel, SwissAIConfig
+    >>> from transformers import ApertusModel, ApertusConfig
 
-    >>> # Initializing a SwissAI 8B style configuration
-    >>> configuration = SwissAIConfig()
+    >>> # Initializing a Apertus 8B style configuration
+    >>> configuration = ApertusConfig()
 
-    >>> # Initializing a model from the SwissAI 8B style configuration
-    >>> model = SwissAIModel(configuration)
+    >>> # Initializing a model from the Apertus 8B style configuration
+    >>> model = ApertusModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "swissai"
+    model_type = "apertus"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
@@ -159,4 +159,4 @@ class SwissAIConfig(PretrainedConfig):
         self.post_norm = post_norm
 
 
-__all__ = ["SwissAIConfig"]
+__all__ = ["ApertusConfig"]
