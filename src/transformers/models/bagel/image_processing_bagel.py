@@ -54,6 +54,11 @@ class BagelImageProcessor(BaseImageProcessor):
     Constructs a Bagel image processor.
 
     Args:
+        max_size (int): Maximum size for the longest edge of the image.
+        min_size (int): Minimum size for the shortest edge of the image.
+        stride (int): Value by which the height and width of the image must be divisible.
+        max_pixels (int): Maximum pixels for the full image.
+        image_number (int): Nnumber of size. 
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
@@ -86,6 +91,11 @@ class BagelImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
+        max_size: int = 1024,
+        min_size: int = 512,
+        stride: int = 16,
+        max_pixels: int = 14 * 14 * 9 * 1024,
+        image_number: int = 1,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
@@ -101,6 +111,11 @@ class BagelImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size, default_to_square=True)
 
+        self.max_size = max_size
+        self.min_size = min_size
+        self.stride = stride
+        self.max_pixels = max_pixels
+        self.image_number = image_number
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -117,7 +132,6 @@ class BagelImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -149,34 +163,37 @@ class BagelImageProcessor(BaseImageProcessor):
         """
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
+        
+        width, height = get_image_size(image, input_data_format)
 
-        height, width = get_image_size(image, input_data_format)
-        max_size = max(height, width)
+        #  Calculate initial scale
+        scale = min(self.max_size / max(width, height), 1.0)
+        scale = max(scale, self.min_size / min(width, height))
 
-        size = get_size_dict(size, default_to_square=True)
-        if size["height"] != size["width"]:
-            raise ValueError(
-                f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
-            )
-        size = size["height"]
+        # Apply initial scaling and make divisible
+        new_width = max(self.stride, int(round(width * scale / self.stride) * self.stride))
+        new_height = max(self.stride, int(round(height * scale / self.stride) * self.stride))
 
-        delta = size / max_size
-        # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
-        output_size_nonpadded = [int(height * delta), int(width * delta)]
+        # Apply pixel limit constraint
+        if new_width * new_height > self.max_pixels / self.image_number:
+            scale = (self.max_pixels / self.image_number) / (new_width * new_height)
+            new_width = max(self.stride, int(round(new_width * scale / self.stride) * self.stride))
+            new_height = max(self.stride, int(round(new_height * scale / self.stride) * self.stride))
+
+        # Apply max size constraint
+        if max(new_width, new_height) > self.max_size:
+            scale = self.max_size / max(new_width, new_height)
+            new_width = max(self.stride, int(round(new_width * scale / self.stride) * self.stride))
+            new_height = max(self.stride, int(round(new_height * scale / self.stride) * self.stride))
 
         image = resize(
             image,
-            size=output_size_nonpadded,
+            (new_height, new_width),
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
             return_numpy=True,
             **kwargs,
-        )
-        # Expand and pad the images to obtain a square image of dimensions `size x size`
-        image = self.pad_to_square(
-            image=image,
-            input_data_format=input_data_format,
         )
         return image
 
@@ -293,7 +310,7 @@ class BagelImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(image=image, resample=resample, input_data_format=input_data_format)
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
             if do_normalize:
@@ -307,66 +324,6 @@ class BagelImageProcessor(BaseImageProcessor):
         data = {"pixel_values": all_images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def pad_to_square(
-        self,
-        image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
-        """
-        Pads an image to a square based on the longest edge.
-
-        Args:
-            image (`np.ndarray`):
-                The image to pad.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                If unset, will use same as the input image.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The padded image.
-        """
-        height, width = get_image_size(image, input_data_format)
-        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
-
-        if height == width:
-            image = (
-                to_channel_dimension_format(image, data_format, input_data_format)
-                if data_format is not None
-                else image
-            )
-            return image
-
-        max_dim = max(height, width)
-
-        if input_data_format == ChannelDimension.FIRST:
-            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(self.background_color):
-                result[i, :, :] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[:, start : start + height, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, :, start : start + width] = image
-        else:
-            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(self.background_color):
-                result[:, :, i] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[start : start + height, :, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, start : start + width, :] = image
-
-        return result
 
 
 __all__ = ["BagelImageProcessor"]
