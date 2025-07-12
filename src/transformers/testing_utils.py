@@ -108,6 +108,7 @@ from .utils import (
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_mistral_common_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
@@ -1524,6 +1525,13 @@ def require_speech(test_case):
     Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
     """
     return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
+
+
+def require_mistral_common(test_case):
+    """
+    Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
+    """
+    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
 
 
 def get_gpu_count():
