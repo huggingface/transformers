@@ -20,7 +20,7 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -28,7 +28,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -237,6 +236,7 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VoxtralAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -252,6 +252,9 @@ class VoxtralPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -483,33 +486,18 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def _merge_input_ids_with_input_features(
-        self,
-        input_ids: torch.LongTensor,
-        input_features: torch.FloatTensor,
-        attention_mask: torch.Tensor,
-        feature_attention_mask: torch.Tensor,
-    ):
-        # input_ids will be (batch_size, seq_len)
-        # input_features will be (batch_size2, 128, 3000)
-        # TODO: @eustlb, how to correctly handle multiple audio per batch?
-
-        # embed text tokens
-        inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # embed audio features
+    def get_audio_embeds(self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor):
+        """
+        TODO: @eustlb, add docstring
+        Takes (bs, num_mel_bins, num_frames)
+        and returns (stacked dim, config.text_config.hidden_size)
+        """
+        # TODO: @eustlb, is this memory efficient? we only need the last hidden state
         audio_outputs = self.audio_tower(input_features=input_features, attention_mask=feature_attention_mask)
-
-        # TODO: @eustlb, find better naming?
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
-
-        # replace text-audio token placeholders with audio embeddings
-        audio_token_mask = input_ids == self.config.audio_token_id
-        inputs_embeds[audio_token_mask] = audio_embeds
-
-        return inputs_embeds
+        return audio_embeds
 
     @can_return_tuple
     @auto_docstring
@@ -524,80 +512,41 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        # cache_position: Optional[torch.LongTensor] = None,
-        # logits_to_keep: Union[int, torch.Tensor] = 0,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, VoxtralForConditionalGeneration
-
-        >>> model = VoxtralForConditionalGeneration.from_pretrained("meta-voxtral/Voxtral-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-voxtral/Voxtral-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        TODO: @eustlb, add docstring
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # TODO: @eustlb, handle better input_features given and inputs_embeds too?
-        if inputs_embeds is None and input_ids.shape[1] != 1:
-            inputs_embeds = self._merge_input_ids_with_input_features(
-                input_ids=input_ids,
-                input_features=input_features,
-                attention_mask=attention_mask,
-                feature_attention_mask=feature_attention_mask,
+        if input_features is not None and input_ids.shape[1] != 1:
+            # TODO: @eustlb, handle better input_features given and inputs_embeds too?
+            audio_embeds = self.get_audio_embeds(
+                input_features=input_features, feature_attention_mask=feature_attention_mask
             )
-            input_ids = None
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+            # replace text-audio token placeholders with audio embeddings
+            audio_token_mask = input_ids == self.config.audio_token_id
+            inputs_embeds[audio_token_mask] = audio_embeds
+
         outputs: BaseModelOutputWithPast = self.language_model(
-            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            # cache_position=cache_position,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
             return_dict=True,
             **kwargs,
         )
 
-        # hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        # slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        # logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        # if labels is not None:
-        #     loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=outputs.logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        # TODO: @eustlb, do we wan't to return audio embeds?
+        return outputs
 
 
 __all__ = ["VoxtralEncoder", "VoxtralForConditionalGeneration"]

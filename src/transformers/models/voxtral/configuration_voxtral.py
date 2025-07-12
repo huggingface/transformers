@@ -153,20 +153,17 @@ class VoxtralConfig(PretrainedConfig):
     ```"""
 
     model_type = "voxtral"
-    attribute_map = {
-        "audio_token_id": "audio_token_index",
-    }
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
     def __init__(
         self,
         audio_config=None,
         text_config=None,
-        audio_token_index=151646,
+        audio_token_id=24,
         projector_hidden_act="gelu",
         **kwargs,
     ):
-        self.audio_token_index = audio_token_index
+        self.audio_token_id = audio_token_id
         self.projector_hidden_act = projector_hidden_act
 
         if isinstance(audio_config, dict):
@@ -196,6 +193,8 @@ class VoxtralConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.vocab_size = text_config.vocab_size
+        self.hidden_size = text_config.hidden_size
 
         super().__init__(**kwargs)
 
