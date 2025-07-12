@@ -89,7 +89,7 @@ class Ovis2VisionText2TextModelTester:
             "attention_dropout": 0.1,
             "hidden_act": "silu",
             "qkv_bias": False,
-            "hidden_stride": 1,
+            "hidden_stride": 2,
             "vision_feature_select_strategy": "full",
             "num_visual_indicator_tokens": 5,
             "tokenize_function": "softmax",
@@ -111,9 +111,9 @@ class Ovis2VisionText2TextModelTester:
         self.vocab_size = vocab_size
         self.sliding_window = sliding_window
         self.hidden_size = hidden_size
-        self.image_seq_length = vision_config["image_size"] // (
-            vision_config["patch_size"] * vision_config["hidden_stride"] ** 2
-        )
+        self.image_seq_length = (vision_config["image_size"] // (
+            vision_config["patch_size"] * vision_config["hidden_stride"]
+        )) ** 2
         self.seq_length = seq_length + self.image_seq_length
         self.is_training = is_training
         self.num_attention_heads = text_config["num_attention_heads"]
@@ -157,6 +157,9 @@ class Ovis2VisionText2TextModelTester:
 
         input_ids[input_ids == config.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = config.image_token_id
+
+        for visual_indicator_token_id in config.visual_indicator_token_ids:
+            input_ids[input_ids == visual_indicator_token_id] = self.pad_token_id
 
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
         labels[:, : self.image_seq_length] == self.ignore_id
@@ -212,15 +215,15 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
+    _is_composite = True
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
 
     def setUp(self):
         self.model_tester = Ovis2VisionText2TextModelTester(self)
-        common_properties = ["image_token_id"]
         self.config_tester = ConfigTester(
-            self, config_class=Ovis2Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=Ovis2Config, has_text_modality=False
         )
 
     def test_config(self):
