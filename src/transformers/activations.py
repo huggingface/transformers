@@ -193,36 +193,45 @@ class xIELUActivation(nn.Module):
     Otherwise, we emit a single warning and use xIELU Python
     """
 
-    def __init__(self, alpha_p_init=0.8, alpha_n_init=0.8, beta=0.5, eps=-1e-6, dtype=torch.bfloat16, with_vector_loads=True):
+    def __init__(
+        self,
+        alpha_p_init=0.8,
+        alpha_n_init=0.8,
+        beta=0.5,
+        eps=-1e-6,
+        dtype=torch.bfloat16,
+        with_vector_loads=True,
+    ):
         super().__init__()
         self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(0))
-        self.alpha_n = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1).unsqueeze(0))
+        self.alpha_n = nn.Parameter(
+            torch.log(torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1).unsqueeze(0)
+        )
         self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
         self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
         self.with_vector_loads = with_vector_loads
 
         self._xielu_cuda_obj = None
         try:
-            import xielu.ops
+            import xielu.ops  # noqa: F401
+
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
-            logger.warning_once(
-                "CUDA-fused xIELU currently in development. Please use the Python version for now.",
-                str(err)
-            )
+            logger.warning_once("CUDA-fused xIELU currently in development. Please use the Python version for now.")
             try:
                 from torch._dynamo import allow_in_graph
+
                 self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
             except Exception as err:
                 logger.warning_once(
                     "Could not enable torch._dynamo for xIELU (%s) - this may result in slower performance.",
-                    str(err)
+                    str(err),
                 )
                 self._xielu_cuda_fn = self._xielu_cuda
         except Exception as err:
             logger.warning_once(
                 "CUDA-fused xIELU not available (%s) – falling back to a Python version.\n"
                 "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`",
-                str(err)
+                str(err),
             )
 
     def _xielu_python(self, x: Tensor) -> Tensor:
@@ -231,7 +240,7 @@ class xIELUActivation(nn.Module):
         return torch.where(
             x > 0,
             alpha_p * x * x + self.beta * x,
-            alpha_n * torch.expm1(torch.min(x, self.eps)) - alpha_n * x + self.beta * x
+            alpha_n * torch.expm1(torch.min(x, self.eps)) - alpha_n * x + self.beta * x,
         )
 
     def _xielu_cuda(self, x: Tensor) -> Tensor:
@@ -243,8 +252,19 @@ class xIELUActivation(nn.Module):
         if x.dim() > 3:
             x = x.view(-1, 1, x.size(-1))
         if original_shape != x.shape:
-            logger.warning_once("Warning: xIELU input tensor expects 3 dimensions but got (shape: %s). Reshaping to (shape: %s).", original_shape, x.shape)
-        result = self._xielu_cuda_obj.forward(x, self.alpha_p, self.alpha_n, self.beta.item(), self.eps.item(), self.with_vector_loads)
+            logger.warning_once(
+                "Warning: xIELU input tensor expects 3 dimensions but got (shape: %s). Reshaping to (shape: %s).",
+                original_shape,
+                x.shape,
+            )
+        result = self._xielu_cuda_obj.forward(
+            x,
+            self.alpha_p,
+            self.alpha_n,
+            self.beta.item(),
+            self.eps.item(),
+            self.with_vector_loads,
+        )
         return result.view(original_shape)
 
     def forward(self, input: Tensor) -> Tensor:

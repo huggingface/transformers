@@ -1,6 +1,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
+
 class ApertusConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ApertusModel`]. It is used to instantiate a Apertus
@@ -113,7 +114,7 @@ class ApertusConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=1,
         bos_token_id=None,
-        eos_token_id=131071, # TODO: what's our eos token id?
+        eos_token_id=131071,  # TODO: what's our eos token id?
         tie_word_embeddings=False,
         rope_theta=500000.0,
         rope_scaling=None,
@@ -121,7 +122,7 @@ class ApertusConfig(PretrainedConfig):
         attention_dropout=0.0,
         rms_norm_eps=1e-5,
         qk_norm=True,
-        post_norm=False,        
+        post_norm=False,
         **kwargs,
     ):
         super().__init__(
