@@ -377,7 +377,8 @@ else:
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
-        "SinkCache",
+        "SepCache",
+        "SinkCache",    
         "SlidingWindowCache",
         "StaticCache",
     ]
@@ -858,6 +859,7 @@ if TYPE_CHECKING:
             QuantizedCache,
             QuantizedCacheConfig,
             QuantoQuantizedCache,
+            SepCache,
             SinkCache,
             SlidingWindowCache,
             StaticCache,
