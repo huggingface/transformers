@@ -209,10 +209,12 @@ def write_model(
 
     # we need to add embed positions as they are not in the state dict
     with (
-        torch.no_grad(),
+        torch.no_grad(), torch.device("cuda")
     ):
+        # TODO: @eustlb, we are here creating on GPU 
+        # vllm initalizes on device, while we save in state dict
         embed_positions_weight = sinusoids(config.audio_config.max_source_positions, config.audio_config.hidden_size)
-    converted_state_dict["audio_tower.embed_positions.weight"] = embed_positions_weight
+    converted_state_dict["audio_tower.embed_positions.weight"] = embed_positions_weight.cpu()
     
     # -------------------------
     # load the weights and save
@@ -279,5 +281,5 @@ if __name__ == "__main__":
         "mistralai/voxtral-mini",
         "consolidated.safetensors",
         "params.json",
-        "/Users/eustachelebihan/dev/add-voxtral-mini/voxtral-mini-converted",
+        "/scratch/voxtral-mini-converted",
     )
