@@ -480,8 +480,8 @@ class VideoProcessingTestMixin:
         self.assertEqual(video_processor_2.image_mean, original_image_mean_2)
 
         for key in video_processor_2.size:
-            video_processor_2.size[key] = -1
-        video_processor_2.image_mean[0] = -1
+            video_processor_2.size[key] = -2
+        video_processor_2.image_mean[0] = -2
 
         # check that the modified attributes of the first instance are not affected by the second instance
         self.assertEqual(video_processor_1.size, modified_copied_size_1)
