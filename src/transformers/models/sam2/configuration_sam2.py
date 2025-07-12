@@ -19,7 +19,6 @@ import math
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 logger = logging.get_logger(__name__)
@@ -201,7 +200,7 @@ class Sam2VisionConfig(PretrainedConfig):
                 backbone_config["model_type"] if "model_type" in backbone_config else "hiera"
             )
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif isinstance(backbone_config, (Sam2HieraDetConfig, TimmWrapperConfig)):
+        elif isinstance(backbone_config, Sam2HieraDetConfig):
             backbone_config = backbone_config
         elif backbone_config is None:
             backbone_config = Sam2HieraDetConfig()

@@ -107,6 +107,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2Config
 
+## Sam2HieraDetConfig
+
+[[autodoc]] Sam2HieraDetConfig
+
 ## Sam2VisionConfig
 
 [[autodoc]] Sam2VisionConfig
@@ -146,6 +150,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## Sam2VideoSessionState
 
 [[autodoc]] Sam2VideoSessionState
+
+## Sam2HieraDetModel
+
+[[autodoc]] Sam2HieraDetModel
+    - forward
 
 ## Sam2VisionModel
 

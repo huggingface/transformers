@@ -42,6 +42,7 @@ from transformers.models.sam.modeling_sam import (
     SamTwoWayTransformer,
     eager_attention_forward,
 )
+from transformers.models.vitdet.modeling_vitdet import window_partition, window_unpartition
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
@@ -811,66 +812,6 @@ class Sam2MultiScaleBlock(nn.Module):
         if dim != dim_out:
             self.proj = nn.Linear(dim, dim_out)
 
-    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
-        """
-        Partitions the input tensor into non-overlapping windows.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                The input tensor of shape (batch_size, height, width, channel).
-            window_size (`int`):
-                The size of the window.
-
-        Returns:
-            `tuple[torch.Tensor, tuple[int, int]]`:
-                A tuple containing the partitioned windows and the padded height and width.
-        """
-        batch_size, height, width, channel = hidden_states.shape
-
-        pad_h = (window_size - height % window_size) % window_size
-        pad_w = (window_size - width % window_size) % window_size
-        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
-        pad_height, pad_width = height + pad_h, width + pad_w
-
-        hidden_states = hidden_states.view(
-            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
-        )
-        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, channel)
-        return windows, (pad_height, pad_width)
-
-    def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
-    ) -> torch.Tensor:
-        """
-        Unpartitions the windows back to the original tensor shape.
-
-        Args:
-            windows (`torch.Tensor`):
-                The partitioned windows.
-            window_size (`int`):
-                The size of the window.
-            padding_shape (`tuple[int, int]`):
-                The padded height and width.
-            original_shape (`tuple[int, int]`):
-                The original height and width.
-
-        Returns:
-            `torch.Tensor`:
-                The unpartitioned tensor.
-        """
-        pad_height, pad_width = padding_shape
-        height, width = original_shape
-        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
-        hidden_states = windows.view(
-            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
-        )
-        hidden_states = (
-            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, pad_height, pad_width, -1)
-        )
-
-        hidden_states = hidden_states[:, :height, :width, :].contiguous()
-        return hidden_states
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -888,7 +829,7 @@ class Sam2MultiScaleBlock(nn.Module):
         window_size = self.window_size
         if self.window_size > 0:
             H, W = hidden_states.shape[1], hidden_states.shape[2]
-            hidden_states, pad_hw = self.window_partition(hidden_states, window_size)
+            hidden_states, pad_hw = window_partition(hidden_states, window_size)
 
         # Window Attention + Q Pooling (if stage change)
         attn_output = self.attn(
@@ -907,7 +848,7 @@ class Sam2MultiScaleBlock(nn.Module):
 
         # Reverse window partition
         if self.window_size > 0:
-            hidden_states = self.window_unpartition(hidden_states, window_size, pad_hw, (H, W))
+            hidden_states = window_unpartition(hidden_states, window_size, pad_hw, (H, W))
 
         hidden_states = residual + self.drop_path(hidden_states)
         layernorm_output = self.layer_norm2(hidden_states)
@@ -1115,10 +1056,6 @@ class Sam2VisionModel(Sam2PreTrainedModel):
         backbone_output = self.backbone(pixel_values, **kwargs)
         hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = backbone_output.intermediate_hidden_states
-        print("intermediate_hidden_states", len(intermediate_hidden_states))
-        for i, hidden_state in enumerate(intermediate_hidden_states):
-            print(hidden_state.shape)
-        print("hidden_states", hidden_states.shape)
 
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
         # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
@@ -1435,7 +1372,7 @@ class Sam2MaskDecoder(nn.Module):
         mask_tokens_out = point_embeddings[:, :, 2 : (2 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
-        image_embeddings = image_embeddings.transpose(2, 3).reshape(
+        image_embeddings = image_embeddings.transpose(2, 3).view(
             batch_size * point_batch_size, num_channels, height, width
         )
 
@@ -1453,8 +1390,8 @@ class Sam2MaskDecoder(nn.Module):
         hyper_in = torch.stack(hyper_in_list, dim=2)
 
         _, num_channels, height, width = upscaled_embedding.shape
-        upscaled_embedding = upscaled_embedding.reshape(batch_size, point_batch_size, num_channels, height * width)
-        masks = (hyper_in @ upscaled_embedding).reshape(batch_size, point_batch_size, -1, height, width)
+        upscaled_embedding = upscaled_embedding.view(batch_size, point_batch_size, num_channels, height * width)
+        masks = (hyper_in @ upscaled_embedding).view(batch_size, point_batch_size, -1, height, width)
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)

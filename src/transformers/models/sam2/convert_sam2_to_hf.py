@@ -29,6 +29,7 @@ from PIL import Image
 
 from transformers import (
     Sam2Config,
+    Sam2HieraDetConfig,
     Sam2ImageProcessorFast,
     Sam2MaskDecoderConfig,
     Sam2MemoryAttentionConfig,
@@ -38,38 +39,40 @@ from transformers import (
     Sam2PromptEncoderConfig,
     Sam2VideoProcessor,
     Sam2VisionConfig,
-    TimmWrapperConfig,
 )
 
 
 def get_config(model_name):
     if "hiera_tiny" in model_name:
-        vision_config = Sam2VisionConfig()
+        hiera_det_config = Sam2HieraDetConfig()
+        vision_config = Sam2VisionConfig(backbone_config=hiera_det_config)
     elif "hiera_small" in model_name:
-        vision_config = Sam2VisionConfig(stages=(1, 2, 11, 2), global_attention_blocks=(7, 10, 13))
+        hiera_det_config = Sam2HieraDetConfig(stages=(1, 2, 11, 2), global_attention_blocks=(7, 10, 13))
+        vision_config = Sam2VisionConfig(backbone_config=hiera_det_config)
     elif "hiera_base_plus" in model_name:
-        vision_config = Sam2VisionConfig(
+        hiera_det_config = Sam2HieraDetConfig(
             hidden_size=112,
             num_attention_heads=2,
             stages=(2, 3, 16, 3),
             global_attention_blocks=(12, 16, 20),
             window_positional_embedding_background_size=(14, 14),
+        )
+        vision_config = Sam2VisionConfig(
+            backbone_config=hiera_det_config,
             backbone_channel_list=[896, 448, 224, 112],
         )
     elif "hiera_large" in model_name:
-        vision_config = Sam2VisionConfig(
+        hiera_det_config = Sam2HieraDetConfig(
             hidden_size=144,
             num_attention_heads=2,
             stages=(2, 6, 36, 4),
             global_attention_blocks=(23, 33, 43),
             window_positional_embedding_background_size=(7, 7),
             window_spec=(8, 4, 16, 8),
+        )
+        vision_config = Sam2VisionConfig(
             backbone_channel_list=[1152, 576, 288, 144],
         )
-    elif "EdgeTAM" in model_name:
-        vision_config = Sam2VisionConfig()
-        vision_config.backbone_config = TimmWrapperConfig.from_pretrained("timm/repvit_m1.dist_in1k")
-
     prompt_encoder_config = Sam2PromptEncoderConfig()
     mask_decoder_config = Sam2MaskDecoderConfig()
     memory_attention_config = Sam2MemoryAttentionConfig()
@@ -316,7 +319,7 @@ if __name__ == "__main__":
 
     hf_model_name = args.model_name.replace("_", "-")
     checkpoint_path = (
-        hf_hub_download(f"facebook/{hf_model_name}", f"{args.model_name}.pt")
+        hf_hub_download(f"facebook/{hf_model_name}", f"{args.model_name.lower()}.pt")
         if args.checkpoint_path is None
         else args.checkpoint_path
     )
