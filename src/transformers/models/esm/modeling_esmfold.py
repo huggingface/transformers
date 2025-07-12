@@ -1990,7 +1990,7 @@ class EsmFoldingTrunk(nn.Module):
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
 
     def __init__(self, config):
         super().__init__(config)
