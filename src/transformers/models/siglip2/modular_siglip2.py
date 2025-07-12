@@ -286,7 +286,25 @@ class Siglip2PreTrainedModel(SiglipPreTrainedModel):
 
 
 class Siglip2TextModel(SiglipTextModel):
-    pass
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        """
+        SigLIP2 uses the last token's hidden state for pooling — regardless of whether it's <eos> or <pad>.
+        This matches the original implementation and handles padded inputs gracefully.
+        """
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
 
 
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
