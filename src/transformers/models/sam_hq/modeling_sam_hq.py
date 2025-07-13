@@ -1223,9 +1223,8 @@ class SamHQPromptEncoder(nn.Module):
         """
         sparse_embeddings = None
         batch_size = 1
-        target_device = self.shared_embedding.positional_embedding.device
         if input_points is not None:
-            batch_size, point_batch_size = input_points.shape[:2]
+            batch_size, _ = input_points.shape[:2]
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
