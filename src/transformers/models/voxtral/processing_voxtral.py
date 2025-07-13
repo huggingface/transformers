@@ -1,0 +1,344 @@
+# coding=utf-8
+# Copyright 2025 Sesame and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+import re
+from pathlib import Path
+from typing import Any, Optional, Union
+
+import numpy as np
+
+from ...utils import is_soundfile_available, is_torch_available
+
+
+if is_torch_available():
+    import torch
+
+if is_soundfile_available():
+    import soundfile as sf
+
+from ...audio_utils import AudioInput, make_list_of_audio
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+class VoxtralAudioKwargs(AudioKwargs, total=False):
+    encoded_length_kwargs: Optional[dict[str, Any]]
+
+
+class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: VoxtralAudioKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "left",
+            "add_special_tokens": False,
+        },
+        "audio_kwargs": {
+            "audio_length_per_tok": 8,
+            "sampling_rate": 16000,
+            "padding": True,
+            "truncation": False,
+            "pad_to_multiple_of": 480000,
+            "max_source_positions": 3000,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
+
+
+class VoxtralProcessor(ProcessorMixin):
+    r"""
+    Constructs a Csm processor which wraps [`EncodecFeatureExtractor`] and
+    [`PretrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
+    tokenizer functionalities. See the [`~CsmProcessor.__call__`] for more
+    information.
+    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
+        ```python
+        from transformers import CsmProcessor
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
+        audio = ds[0]["audio"]["array"]
+
+        processor = CsmProcessor.from_pretrained("sesame/csm-1b")
+
+        processor(
+            text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
+            audio=audio,
+            text_kwargs = {"padding": False},
+            audio_kwargs = {"sampling_rate": 16000},
+            common_kwargs = {"return_tensors": "pt"},
+        )
+        # this should error out because EncodecFeatureExtractor expects a 24kHz audio :)
+        ```
+
+    Args:
+        feature_extractor ([`EncodecFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+
+    """
+
+    attributes = ["feature_extractor", "tokenizer"]
+    feature_extractor_class = "WhisperFeatureExtractor"
+    tokenizer_class = "MistralCommonTokenizer"
+
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+    ):
+        self.audio_token = "[AUDIO]"
+        self.audio_token_id = 24
+
+        self.audio_bos_token = "[BEGIN_AUDIO]"
+        self.audio_bos_token_id = 25
+
+        self.inst_bos_token = "[INST]"
+        self.inst_bos_token_id = 3
+
+        self.inst_eos_token = "[/INST]"
+        self.inst_eos_token_id = 4
+
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    # @staticmethod
+    # def _get_encoded_length(audio_length, kernel_sizes=None, strides=None, dilations=None, use_causal_conv=None):
+    #     """
+    #     Compute the length of the encoded audio sequence.
+
+    #     Args:
+    #         audio_length (int): The length of the audio sequence.
+    #         kernel_sizes (list[int]): The kernel sizes for the convolutional layers.
+    #         strides (list[int]): The strides for the convolutional layers.
+    #         use_causal_conv (bool): Whether to use causal convolutions.
+    #     """
+    #     cur_length = audio_length
+
+    #     if kernel_sizes is None or strides is None or dilations is None or use_causal_conv is None:
+    #         return cur_length
+
+    #     for kernel_size, stride, dilation in zip(kernel_sizes, strides, dilations):
+    #         effective_kernel_size = (kernel_size - 1) * dilation + 1
+    #         padding_total = kernel_size - stride
+    #         padding_right = padding_total // 2
+    #         padding_left = padding_total - padding_right
+
+    #         n_frames = (cur_length - effective_kernel_size + padding_total) / stride + 1
+    #         n_frames = math.ceil(n_frames) - 1
+    #         ideal_length = n_frames * stride + kernel_size - padding_total
+    #         extra_padding = ideal_length - cur_length
+
+    #         if use_causal_conv:
+    #             padding_left = padding_total
+    #             padding_right = extra_padding
+    #         else:
+    #             padding_left = padding_left
+    #             padding_right = padding_right + extra_padding
+
+    #         cur_length = cur_length + padding_left + padding_right
+    #         cur_length = (cur_length - dilation * (kernel_size - 1) - 1) // stride + 1
+
+    #     return cur_length
+
+    # def save_audio(
+    #     self,
+    #     audio: AudioInput,
+    #     saving_path: Union[str, Path, list[Union[str, Path]]],
+    #     **kwargs: Unpack[VoxtralProcessorKwargs],
+    # ):
+    #     # TODO: @eustlb, this should be in AudioProcessor
+    #     if not is_soundfile_available():
+    #         raise ImportError("Please install `soundfile` to save audio files.")
+
+    #     # ensure correct audio input
+    #     audio = make_list_of_audio(audio)
+
+    #     # ensure correct saving path
+    #     if isinstance(saving_path, (str, Path)):
+    #         saving_path = [saving_path]
+    #     elif not (isinstance(saving_path, (list, tuple)) and all(isinstance(p, (str, Path)) for p in saving_path)):
+    #         raise ValueError("Invalid input path. Please provide a string, or a list of strings")
+
+    #     if len(audio) != len(saving_path):
+    #         raise ValueError("The number of audio and saving paths must be the same")
+
+    #     output_kwargs = self._merge_kwargs(
+    #         VoxtralProcessorKwargs,
+    #         **kwargs,
+    #     )
+    #     audio_kwargs = output_kwargs["audio_kwargs"]
+    #     sampling_rate = audio_kwargs["sampling_rate"]
+
+    #     for audio_value, p in zip(audio, saving_path):
+    #         if isinstance(audio_value, torch.Tensor):
+    #             audio_value = audio_value.cpu().float().numpy()
+    #         sf.write(p, audio_value, sampling_rate)
+
+    def __call__(
+        self,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
+        audio: Optional[AudioInput] = None,
+        output_labels: Optional[bool] = False,
+        depth_decoder_labels_ratio: Optional[float] = 1.0,
+        **kwargs: Unpack[VoxtralProcessorKwargs],
+    ):
+        r"""
+        Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
+        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
+        the text. To prepare the audio, this method forwards the `audio` arguments to
+        EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`]. Please refer
+        to the docstring of the above two methods for more information.
+
+        Args:
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
+                tensor.
+            text (`str`, `list[str]`, `list[list[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            output_labels (bool, *optional*, default=False):
+                Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
+                - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
+                - `-100` will be ignored in the loss computation
+                - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
+            depth_decoder_labels_ratio (float, *optional*, default=1.0):
+                The ratio of audio frames to keep for the depth decoder labels.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **input_values** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **labels** -- List of labels for the audio frames. Returned when `output_labels=True`.
+        """
+
+        output_kwargs = self._merge_kwargs(
+            VoxtralProcessorKwargs,
+            **kwargs,
+        )
+
+        text_kwargs = output_kwargs["text_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        common_kwargs = output_kwargs["common_kwargs"]
+
+        return_tensors = common_kwargs.pop("return_tensors", None)
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        if isinstance(text, str):
+            text = [text]
+        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        n_audio_in_text = [t.count(self.audio_token) for t in text]
+
+        n_audio = 0
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+            n_audio = len(audio)
+
+        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
+            if audio is None:
+                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
+            else:
+                raise ValueError(
+                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
+                    f"number of provided audios ({n_audio})."
+                )
+
+        audio_length_per_tok = audio_kwargs.pop("audio_length_per_tok")
+        max_source_positions = audio_kwargs.pop("max_source_positions")
+        pad_to_multiple_of = audio_kwargs.get("pad_to_multiple_of")
+
+        # TODO: @eustlb, no one-one using the tokenizer for special tokens, let's handle it manually
+        # TODO: @eustlb, we have a clear issue of mapping with batch!?
+        batch_audio_prefix = []
+        for audio_array in audio:
+            audio_length = audio_array.shape[-1]
+            next_multiple_of = math.ceil(audio_length / pad_to_multiple_of)
+            num_audio_tokens = next_multiple_of * math.ceil(max_source_positions / audio_length_per_tok)
+            batch_audio_prefix.append([self.audio_bos_token_id] + [self.audio_token_id] * num_audio_tokens)
+
+        pattern = r'\[INST\](?:\[BEGIN_AUDIO\]\[AUDIO\])*?(.*?)\[/INST\]' 
+        input_ids = []
+        for text_el, audio_prefix in zip(text, batch_audio_prefix):
+            text_el_no_special_tokens = re.search(pattern, text_el).group(1) if re.search(pattern, text_el) else text_el
+            ids = self.tokenizer.encode(text_el_no_special_tokens, add_special_tokens=False)
+            input_ids.append(audio_prefix + ids)
+
+        padding_strategy, truncation_strategy, max_length, kwargs = self.tokenizer._get_padding_truncation_strategies(
+            padding=text_kwargs.pop("padding", False),
+            truncation=text_kwargs.pop("truncation", False),
+            max_length=text_kwargs.pop("max_length", None),
+            pad_to_multiple_of=pad_to_multiple_of,
+            **text_kwargs,
+        )
+        text_kwargs["padding_strategy"] = padding_strategy
+        text_kwargs["truncation_strategy"] = truncation_strategy
+        text_kwargs["max_length"] = max_length
+        batch_outputs = self.tokenizer._batch_prepare_for_model(input_ids, **text_kwargs)
+
+        data = {}
+        data.update(batch_outputs)
+
+        if audio is not None:
+            # TODO: @eustlb, audio_kwargs cannot be everything here... we should warn the user
+            audio_inputs = self.feature_extractor(audio, **audio_kwargs)
+
+            # TODO: @eustlb, not really sure how to correctly handle when batched
+            # TODO: @eustlb, written with bs 1
+            # let's split into chunks of max_source_positions, and then stack them along batch dimension
+            input_features = audio_inputs["input_features"].reshape(self.feature_extractor.feature_size, -1, max_source_positions)
+            input_features = input_features.transpose(0, 1)
+            data["input_features"] = input_features
+
+        # if output_labels:
+        #     audio_frame_idxs = (data["input_ids"] == self.audio_token_id).nonzero()
+        #     n_audio_frames = audio_frame_idxs.shape[0]
+
+        #     if depth_decoder_labels_ratio <= 1.0:
+        #         rand_idxs = torch.randperm(n_audio_frames)[: int(n_audio_frames * (1 - depth_decoder_labels_ratio))]
+        #         skip_frames_idxs = audio_frame_idxs[rand_idxs]
+        #     else:
+        #         skip_frames_idxs = audio_frame_idxs
+
+        #     labels = torch.where(
+        #         (data["input_ids"] == self.audio_token_id) | (data["input_ids"] == self.audio_eos_token_id),
+        #         data["input_ids"],
+        #         -100,
+        #     )
+        #     labels[skip_frames_idxs[:, 0], skip_frames_idxs[:, 1]] = -101
+
+        #     data["labels"] = labels
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["VoxtralProcessor"]
+
