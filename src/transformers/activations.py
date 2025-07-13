@@ -200,7 +200,7 @@ class XIELUActivation(nn.Module):
         beta=0.5,
         eps=-1e-6,
         dtype=torch.bfloat16,
-        with_vector_loads=True,
+        with_vector_loads=False,
     ):
         super().__init__()
         self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(0))
@@ -216,7 +216,6 @@ class XIELUActivation(nn.Module):
             import xielu.ops  # noqa: F401
 
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
-            logger.warning_once("CUDA-fused xIELU currently in development. Please use the Python version for now.")
             try:
                 from torch._dynamo import allow_in_graph
 
@@ -239,8 +238,8 @@ class XIELUActivation(nn.Module):
         alpha_n = self.beta + nn.functional.softplus(self.alpha_n)
         return torch.where(
             x > 0,
-            (alpha_p * x + self.beta) * x,
-            alpha_n * torch.expm1(torch.min(x, self.eps)) - (alpha_n + self.beta) * x,
+            alpha_p * x * x + self.beta * x,
+            (torch.expm1(torch.min(x, self.eps)) - x) * alpha_n + self.beta * x,
         )
 
     def _xielu_cuda(self, x: Tensor) -> Tensor:
