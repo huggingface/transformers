@@ -399,27 +399,27 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return images
 
     def center_crop(
-        self,
-        image: "torch.Tensor",
-        size: dict[str, int],
-        **kwargs,
+    self,
+    image: "torch.Tensor",
+    size: dict[str, int],  # Revert to dict[str, int]
+    **kwargs,
     ) -> "torch.Tensor":
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
         any edge, the image is padded with 0's and then center cropped.
-
+        
         Args:
-            image (`"torch.Tensor"`):
+            image (`torch.Tensor`):
                 Image to center crop.
             size (`dict[str, int]`):
-                Size of the output image.
-
+                Size of the output image, specified as a dictionary with keys `"height"` and `"width"`.
+        
         Returns:
             `torch.Tensor`: The center cropped image.
         """
-        if size.get("height") is None or size.get("width") is None:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        return F.center_crop(image, (size["height"], size["width"]))
+    if size.get("height") is None or size.get("width") is None:
+        raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+    return F.center_crop(image, (size["height"], size["width"]))
 
     def convert_to_rgb(
         self,
