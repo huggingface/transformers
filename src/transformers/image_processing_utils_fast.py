@@ -417,7 +417,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `torch.Tensor`: The center cropped image.
         """
-        if size.height is None or size.width is None:
+        if size.get("height") is None or size.get("width") is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return F.center_crop(image, (size["height"], size["width"]))
 
