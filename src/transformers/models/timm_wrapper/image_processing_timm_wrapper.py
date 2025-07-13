@@ -17,7 +17,6 @@ import os
 from typing import Any, Optional, Union
 
 import torch
-from packaging import version
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
@@ -61,12 +60,6 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         super().__init__(architecture=architecture)
 
         # mobilenetv5 models require timm >= 0.9.10
-        if architecture is not None and architecture.startswith("mobilenetv5"):
-            if version.parse(timm.__version__) < version.parse("0.9.10"):
-                raise ImportError(
-                    f"`mobilenetv5` models require `timm >= 0.9.10`, but found {timm.__version__}. "
-                    "Please upgrade `timm` to the latest version."
-                )
 
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
