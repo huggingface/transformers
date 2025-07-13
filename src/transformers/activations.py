@@ -239,8 +239,8 @@ class XIELUActivation(nn.Module):
         alpha_n = self.beta + nn.functional.softplus(self.alpha_n)
         return torch.where(
             x > 0,
-            alpha_p * x * x + self.beta * x,
-            alpha_n * torch.expm1(torch.min(x, self.eps)) - alpha_n * x + self.beta * x,
+            (alpha_p * x + self.beta) * x,
+            alpha_n * torch.expm1(torch.min(x, self.eps)) - (alpha_n + self.beta) * x,
         )
 
     def _xielu_cuda(self, x: Tensor) -> Tensor:
