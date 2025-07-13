@@ -14,14 +14,11 @@
 # limitations under the License.
 import math
 import re
-from typing import Union
-
-import numpy as np
+from typing import Any, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
-    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -29,7 +26,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import (
     PreTokenizedInput,
-    TextInput,
 )
 from ...utils import is_torch_available, logging
 
@@ -66,13 +62,13 @@ class Florence2Processor(ProcessorMixin):
     r"""
     Constructs a Florence2 processor which wraps a Florence2 image processor and a Florence2 tokenizer into a single processor.
 
-    [`Florence2Processor`] offers all the functionalities of [`CLIPImageProcessor`] and [`BartTokenizerFast`]. See the
+    [`Florence2Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`BartTokenizerFast`]. See the
     [`~Florence2Processor.__call__`] and [`~Florence2Processor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor (`AutoImageProcessor`, *optional*):
             The image processor is a required input.
-        tokenizer ([`BartTokenizer`, `BartTokenizerFast`], *optional*):
+        tokenizer (`Union[BartTokenizer, BartTokenizerFast]`, *optional*):
             The tokenizer is a required input.
     """
 
@@ -80,42 +76,7 @@ class Florence2Processor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
 
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-    ):
-        self.image_seq_length = image_processor.image_seq_length
-
-        tokens_to_add = {
-            "additional_special_tokens": tokenizer.additional_special_tokens
-            + ["<od>", "</od>", "<ocr>", "</ocr>"]
-            + [f"<loc_{x}>" for x in range(1000)]
-            + [
-                "<cap>",
-                "</cap>",
-                "<ncap>",
-                "</ncap>",
-                "<dcap>",
-                "</dcap>",
-                "<grounding>",
-                "</grounding>",
-                "<seg>",
-                "</seg>",
-                "<sep>",
-                "<region_cap>",
-                "</region_cap>",
-                "<region_to_desciption>",
-                "</region_to_desciption>",
-                "<proposal>",
-                "</proposal>",
-                "<poly>",
-                "</poly>",
-                "<and>",
-            ]
-        }
-        tokenizer.add_special_tokens(tokens_to_add)
-
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
             "<OCR_WITH_REGION>": "ocr",
@@ -157,69 +118,53 @@ class Florence2Processor(ProcessorMixin):
 
         self.post_processor = Florence2PostProcessor(tokenizer=tokenizer)
 
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, **kwargs)
 
-    def _construct_prompts(self, text):
-        # replace the task tokens with the task prompts if task token is in the text
+    def _construct_prompts(self, text: Union[str, list[str]]) -> list[str]:
+        """
+        Construct prompts by replacing task tokens with corresponding prompt strings.
+        """
+        if isinstance(text, str):
+            text = [text]
+
         prompts = []
-        for _text in text:
-            # 1. fixed task prompts without additional inputs
+        for prompt in text:
+            # Check for tasks without inputs
             for task_token, task_prompt in self.task_prompts_without_inputs.items():
-                if task_token in _text:
-                    assert _text == task_token, f"Task token {task_token} should be the only token in the text."
-                    _text = task_prompt
+                if task_token in prompt:
+                    if prompt != task_token:
+                        raise ValueError(f"Task token {task_token} should be the only content in the prompt.")
+                    prompt = task_prompt
                     break
-            # 2. task prompts with additional inputs
+            # Check for tasks with inputs
             for task_token, task_prompt in self.task_prompts_with_input.items():
-                if task_token in _text:
-                    _text = task_prompt.format(input=_text.replace(task_token, ""))
+                if task_token in prompt:
+                    input_text = prompt.replace(task_token, "").strip()
+                    prompt = task_prompt.format(input=input_text)
                     break
-            prompts.append(_text)
+            prompts.append(prompt)
         return prompts
 
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[str, list[str], PreTokenizedInput, list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
+        Prepare inputs for the model.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+            images (`ImageInput`, *optional*):
+                The image or batch of images to process.
+            text (`str` or `List[str]`, *optional*):
+                The text prompts to process.
+            return_tensors (`str`, *optional*):
+                The tensor type to return ("pt", "np", etc.).
 
         Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            `BatchFeature`: Encoded inputs.
         """
-
-        if images is None and text is None:
-            raise ValueError("You have to specify at least one of `images` or `text`.")
-
         # check if images and text inputs are reversed for BC
         images, text = _validate_images_text_input_order(images, text)
 
@@ -228,144 +173,130 @@ class Florence2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if images is not None:
-            pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
-        else:
-            raise ValueError("`images` are expected as arguments to a `Florence2Processor` instance.")
+
+        if images is None:
+            raise ValueError("`images` must be provided.")
 
         if text is None:
             logger.warning_once("You are using Florence-2 without a text prefix.")
-            text = ""
-
-        if isinstance(text, str):
+            text = [""] * (1 if not isinstance(images, list) else len(images))
+        elif isinstance(text, str):
             text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if isinstance(text, list) and isinstance(images, list):
-            if len(images) < len(text):
-                raise ValueError(
-                    f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
-                )
+        if not isinstance(text, list) or not all(isinstance(t, str) for t in text):
+            raise ValueError("`text` must be a string or list of strings.")
 
+        if isinstance(images, list) and len(images) != len(text):
+            raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
+
+        # Process images
+        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+        pixel_values = image_inputs["pixel_values"]
+
+        # Construct and tokenize prompts
         prompt_strings = self._construct_prompts(text)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=return_tensors)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
 
-        return_data = {**text_inputs, "pixel_values": pixel_values}
+        return BatchFeature(data={"pixel_values": pixel_values, **text_inputs}, tensor_type=return_tensors)
 
-        return BatchFeature(data=return_data)
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            image_sizes (List[List[str]], *optional*):
-                The input sizes formatted as (height, width) per each image.
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-
-        vision_data = {}
-        if image_sizes is not None:
-            num_image_tokens = [self.image_seq_length] * len(image_sizes)
-            num_image_patches = [1] * len(image_sizes)
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**vision_data)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Bart
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Bart
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
     def post_process_generation(
-        self, text=None, sequence=None, transition_beam_score=None, task=None, image_size=None
-    ):
+        self,
+        text: Optional[str] = None,
+        sequence: Optional[Union[list[int], torch.Tensor]] = None,
+        transition_scores: Optional[Union[list[float], torch.Tensor]] = None,
+        task: Optional[str] = None,
+        image_size: Optional[tuple[int, int]] = None,
+    ) -> dict[str, Any]:
         """
-        Post-process the output of the model to each of the task outputs.
+        Post-process generation outputs based on the task.
 
         Args:
-            text (`str`): The text to post-process.
-            task (`str`): The task to post-process the text for.
-            image_size (`Tuple[int, int]`): The size of the image. height x width.
-        """
+            text (`str`, *optional*):
+                Generated text.
+            sequence (`Union[List[int], torch.Tensor]`, *optional*):
+                Generated token sequence.
+            transition_scores (`Union[List[float], torch.Tensor]`, *optional*):
+                Transition scores.
+            task (`str`, *optional*):
+                The task for post-processing.
+            image_size (`Tuple[int, int]`, *optional*):
+                Image size for dequantization.
 
-        task_answer_post_processing_type = self.tasks_answer_post_processing_type.get(task, "pure_text")
-        task_answer = self.post_processor(
+        Returns:
+            `Dict[str, Any]`: Post-processed results keyed by task.
+        """
+        if task is None:
+            raise ValueError("`task` must be provided for post-processing.")
+
+        post_proc_type = self.tasks_answer_post_processing_type.get(task, "pure_text")
+        parsed = self.post_processor(
             text=text,
             sequence=sequence,
-            transition_beam_score=transition_beam_score,
+            transition_scores=transition_scores,
             image_size=image_size,
-            parse_tasks=task_answer_post_processing_type,
-        )[task_answer_post_processing_type]
+            parse_tasks=[post_proc_type],
+        )[post_proc_type]
 
-        if task_answer_post_processing_type == "pure_text":
-            final_answer = task_answer
-            # remove the special tokens
-            final_answer = final_answer.replace("<s>", "").replace("</s>", "")
-        elif task_answer_post_processing_type in ["od", "description_with_bboxes", "bboxes"]:
-            od_instances = task_answer
-            bboxes_od = [_od_instance["bbox"] for _od_instance in od_instances]
-            labels_od = [str(_od_instance["cat_name"]) for _od_instance in od_instances]
-            final_answer = {"bboxes": bboxes_od, "labels": labels_od}
-            if len(od_instances) and "score" in od_instances[0]:
-                scores_od = [_od_instance["score"] for _od_instance in od_instances]
-                final_answer["scores"] = scores_od
-        elif task_answer_post_processing_type in ["ocr"]:
-            bboxes = [_od_instance["quad_box"] for _od_instance in task_answer]
-            labels = [str(_od_instance["text"]) for _od_instance in task_answer]
-            final_answer = {"quad_boxes": bboxes, "labels": labels}
-        elif task_answer_post_processing_type in ["phrase_grounding"]:
+        if post_proc_type == "pure_text":
+            final_answer = parsed.replace("<s>", "").replace("</s>", "").strip()
+        elif post_proc_type in ["description_with_bboxes", "bboxes"]:
+            bboxes = [inst["bbox"] for inst in parsed]
+            labels = [inst["cat_name"] for inst in parsed]
+            final_answer = {"bboxes": bboxes, "labels": labels}
+            if parsed and "score" in parsed[0]:
+                final_answer["scores"] = [inst["score"] for inst in parsed]
+        elif post_proc_type == "ocr":
+            quad_boxes = [inst["quad_box"] for inst in parsed]
+            labels = [inst["text"] for inst in parsed]
+            final_answer = {"quad_boxes": quad_boxes, "labels": labels}
+        elif post_proc_type == "phrase_grounding":
             bboxes = []
             labels = []
-            for _grounded_phrase in task_answer:
-                for _bbox in _grounded_phrase["bbox"]:
-                    bboxes.append(_bbox)
-                    labels.append(_grounded_phrase["cat_name"])
+            for inst in parsed:
+                for bbox in inst["bbox"]:
+                    bboxes.append(bbox)
+                    labels.append(inst["cat_name"])
             final_answer = {"bboxes": bboxes, "labels": labels}
-        elif task_answer_post_processing_type in ["description_with_polygons", "polygons"]:
-            labels = []
-            polygons = []
-            for result in task_answer:
-                label = result["cat_name"]
-                _polygons = result["polygons"]
-                labels.append(label)
-                polygons.append(_polygons)
+        elif post_proc_type in ["description_with_polygons", "polygons"]:
+            polygons = [inst["polygons"] for inst in parsed]
+            labels = [inst["cat_name"] for inst in parsed]
             final_answer = {"polygons": polygons, "labels": labels}
-        elif task_answer_post_processing_type in ["description_with_bboxes_or_polygons"]:
+        elif post_proc_type == "description_with_bboxes_or_polygons":
             bboxes = []
             bboxes_labels = []
             polygons = []
             polygons_labels = []
-            for result in task_answer:
-                label = result["cat_name"]
-                if "polygons" in result:
-                    _polygons = result["polygons"]
-                    polygons.append(_polygons)
+            for inst in parsed:
+                label = inst["cat_name"]
+                if "polygons" in inst:
+                    polygons.append(inst["polygons"])
                     polygons_labels.append(label)
                 else:
-                    _bbox = result["bbox"]
-                    bboxes.append(_bbox)
+                    bboxes.append(inst["bbox"])
                     bboxes_labels.append(label)
             final_answer = {
                 "bboxes": bboxes,
@@ -374,212 +305,145 @@ class Florence2Processor(ProcessorMixin):
                 "polygons_labels": polygons_labels,
             }
         else:
-            raise ValueError("Unknown task answer post processing type: {}".format(task_answer_post_processing_type))
+            raise ValueError(f"Unknown post-processing type: {post_proc_type}")
 
-        final_answer = {task: final_answer}
-        return final_answer
+        return {task: final_answer}
 
 
-class BoxQuantizer(object):
-    def __init__(self, mode, bins):
+class Quantizer:
+    """
+    A general quantizer for locations (bounding boxes or coordinates/points).
+    Supports quantization modes like 'floor'. Can handle bounding boxes (xmin, ymin, xmax, ymax)
+    or arbitrary points/coordinates (Nx2).
+    """
+
+    def __init__(self, mode: str = "floor", bins: tuple[int, int] = (1000, 1000)):
+        if mode not in ["floor"]:
+            raise ValueError(f"Unsupported quantization mode: {mode}. Currently only 'floor' is implemented.")
         self.mode = mode
-        self.bins = bins
+        self.bins = bins  # (width_bins, height_bins)
 
-    def quantize(self, boxes, size):
-        bins_w, bins_h = self.bins  # Quantization bins.
-        size_w, size_h = size  # Original image size.
-        size_per_bin_w = size_w / bins_w
-        size_per_bin_h = size_h / bins_h
-        xmin, ymin, xmax, ymax = boxes.split(1, dim=-1)  # Shape: 4 * [N, 1].
+    def quantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+        """
+        Quantize locations.
 
-        if self.mode == "floor":
-            quantized_xmin = (xmin / size_per_bin_w).floor().clamp(0, bins_w - 1)
-            quantized_ymin = (ymin / size_per_bin_h).floor().clamp(0, bins_h - 1)
-            quantized_xmax = (xmax / size_per_bin_w).floor().clamp(0, bins_w - 1)
-            quantized_ymax = (ymax / size_per_bin_h).floor().clamp(0, bins_h - 1)
+        Args:
+            locations (`torch.Tensor`):
+                Tensor of shape (N, 4) for boxes or (N, 2) for points/coordinates.
+            size (`tuple[int, int]`):
+                Original image size (width, height).
 
-        elif self.mode == "round":
-            raise NotImplementedError()
+        Returns:
+            `torch.Tensor`: Quantized locations as integers.
+        """
+        bins_w, bins_h = self.bins
+        size_w, size_h = size
+        per_bin_w = size_w / bins_w
+        per_bin_h = size_h / bins_h
 
-        else:
-            raise ValueError("Incorrect quantization type.")
+        if locations.shape[-1] == 4:  # Bounding boxes: [xmin, ymin, xmax, ymax]
+            xmin, ymin, xmax, ymax = locations.split(1, dim=-1)
+            q_xmin = (xmin / per_bin_w).floor().clamp(0, bins_w - 1)
+            q_ymin = (ymin / per_bin_h).floor().clamp(0, bins_h - 1)
+            q_xmax = (xmax / per_bin_w).floor().clamp(0, bins_w - 1)
+            q_ymax = (ymax / per_bin_h).floor().clamp(0, bins_h - 1)
+            return torch.cat([q_xmin, q_ymin, q_xmax, q_ymax], dim=-1).int()
 
-        quantized_boxes = torch.cat((quantized_xmin, quantized_ymin, quantized_xmax, quantized_ymax), dim=-1).int()
-
-        return quantized_boxes
-
-    def dequantize(self, boxes, size):
-        bins_w, bins_h = self.bins  # Quantization bins.
-        size_w, size_h = size  # Original image size.
-        size_per_bin_w = size_w / bins_w
-        size_per_bin_h = size_h / bins_h
-        xmin, ymin, xmax, ymax = boxes.split(1, dim=-1)  # Shape: 4 * [N, 1].
-
-        if self.mode == "floor":
-            # Add 0.5 to use the center position of the bin as the coordinate.
-            dequantized_xmin = (xmin + 0.5) * size_per_bin_w
-            dequantized_ymin = (ymin + 0.5) * size_per_bin_h
-            dequantized_xmax = (xmax + 0.5) * size_per_bin_w
-            dequantized_ymax = (ymax + 0.5) * size_per_bin_h
-
-        elif self.mode == "round":
-            raise NotImplementedError()
+        elif locations.shape[-1] == 2:  # Points/coordinates: [x, y]
+            x, y = locations.split(1, dim=-1)
+            q_x = (x / per_bin_w).floor().clamp(0, bins_w - 1)
+            q_y = (y / per_bin_h).floor().clamp(0, bins_h - 1)
+            return torch.cat([q_x, q_y], dim=-1).int()
 
         else:
-            raise ValueError("Incorrect quantization type.")
+            raise ValueError(f"Unsupported location shape: last dim must be 2 or 4, got {locations.shape[-1]}.")
 
-        dequantized_boxes = torch.cat((dequantized_xmin, dequantized_ymin, dequantized_xmax, dequantized_ymax), dim=-1)
+    def dequantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+        """
+        Dequantize locations back to original scale.
 
-        return dequantized_boxes
+        Args:
+            locations (`torch.Tensor`):
+                Quantized tensor of shape (N, 4) for boxes or (N, 2) for points/coordinates.
+            size (`tuple[int, int]`):
+                Original image size (width, height).
+
+        Returns:
+            `torch.Tensor`: Dequantized locations as floats.
+        """
+        bins_w, bins_h = self.bins
+        size_w, size_h = size
+        per_bin_w = size_w / bins_w
+        per_bin_h = size_h / bins_h
+
+        if locations.shape[-1] == 4:  # Bounding boxes
+            xmin, ymin, xmax, ymax = locations.split(1, dim=-1)
+            dq_xmin = (xmin + 0.5) * per_bin_w
+            dq_ymin = (ymin + 0.5) * per_bin_h
+            dq_xmax = (xmax + 0.5) * per_bin_w
+            dq_ymax = (ymax + 0.5) * per_bin_h
+            return torch.cat([dq_xmin, dq_ymin, dq_xmax, dq_ymax], dim=-1)
+
+        elif locations.shape[-1] == 2:  # Points/coordinates
+            x, y = locations.split(1, dim=-1)
+            dq_x = (x + 0.5) * per_bin_w
+            dq_y = (y + 0.5) * per_bin_h
+            return torch.cat([dq_x, dq_y], dim=-1)
+
+        else:
+            raise ValueError(f"Unsupported location shape: last dim must be 2 or 4, got {locations.shape[-1]}.")
 
 
-class CoordinatesQuantizer(object):
+class Florence2PostProcessor:
     """
-    Quantize coornidates (Nx2)
-    """
-
-    def __init__(self, mode, bins):
-        self.mode = mode
-        self.bins = bins
-
-    def quantize(self, coordinates, size):
-        bins_w, bins_h = self.bins  # Quantization bins.
-        size_w, size_h = size  # Original image size.
-        size_per_bin_w = size_w / bins_w
-        size_per_bin_h = size_h / bins_h
-        assert coordinates.shape[-1] == 2, "coordinates should be shape (N, 2)"
-        x, y = coordinates.split(1, dim=-1)  # Shape: 4 * [N, 1].
-
-        if self.mode == "floor":
-            quantized_x = (x / size_per_bin_w).floor().clamp(0, bins_w - 1)
-            quantized_y = (y / size_per_bin_h).floor().clamp(0, bins_h - 1)
-
-        elif self.mode == "round":
-            raise NotImplementedError()
-
-        else:
-            raise ValueError("Incorrect quantization type.")
-
-        quantized_coordinates = torch.cat((quantized_x, quantized_y), dim=-1).int()
-
-        return quantized_coordinates
-
-    def dequantize(self, coordinates, size):
-        bins_w, bins_h = self.bins  # Quantization bins.
-        size_w, size_h = size  # Original image size.
-        size_per_bin_w = size_w / bins_w
-        size_per_bin_h = size_h / bins_h
-        assert coordinates.shape[-1] == 2, "coordinates should be shape (N, 2)"
-        x, y = coordinates.split(1, dim=-1)  # Shape: 4 * [N, 1].
-
-        if self.mode == "floor":
-            # Add 0.5 to use the center position of the bin as the coordinate.
-            dequantized_x = (x + 0.5) * size_per_bin_w
-            dequantized_y = (y + 0.5) * size_per_bin_h
-
-        elif self.mode == "round":
-            raise NotImplementedError()
-
-        else:
-            raise ValueError("Incorrect quantization type.")
-
-        dequantized_coordinates = torch.cat((dequantized_x, dequantized_y), dim=-1)
-
-        return dequantized_coordinates
-
-
-class PointsQuantizer(object):
-    """
-    Quantize points (Nx2)
-    """
-
-    def __init__(self, mode, bins):
-        self.mode = mode
-        self.bins = bins
-
-    def quantize(self, coordinates, size):
-        bins_w, bins_h = self.bins  # Quantization bins.
-        size_w, size_h = size  # Original image size.
-        size_per_bin_w = size_w / bins_w
-        size_per_bin_h = size_h / bins_h
-        assert coordinates.shape[-1] == 2, "coordinates should be shape (N, 2)"
-        x, y = coordinates.split(1, dim=-1)  # Shape: 4 * [N, 1].
-
-        if self.mode == "floor":
-            quantized_x = (x / size_per_bin_w).floor().clamp(0, bins_w - 1)
-            quantized_y = (y / size_per_bin_h).floor().clamp(0, bins_h - 1)
-
-        elif self.mode == "round":
-            raise NotImplementedError()
-
-        else:
-            raise ValueError("Incorrect quantization type.")
-
-        quantized_coordinates = torch.cat((quantized_x, quantized_y), dim=-1).int()
-
-        return quantized_coordinates
-
-    def dequantize(self, coordinates, size):
-        bins_w, bins_h = self.bins  # Quantization bins.
-        size_w, size_h = size  # Original image size.
-        size_per_bin_w = size_w / bins_w
-        size_per_bin_h = size_h / bins_h
-        assert coordinates.shape[-1] == 2, "coordinates should be shape (N, 2)"
-        x, y = coordinates.split(1, dim=-1)  # Shape: 4 * [N, 1].
-
-        if self.mode == "floor":
-            # Add 0.5 to use the center position of the bin as the coordinate.
-            dequantized_x = (x + 0.5) * size_per_bin_w
-            dequantized_y = (y + 0.5) * size_per_bin_h
-
-        elif self.mode == "round":
-            raise NotImplementedError()
-
-        else:
-            raise ValueError("Incorrect quantization type.")
-
-        dequantized_coordinates = torch.cat((dequantized_x, dequantized_y), dim=-1)
-
-        return dequantized_coordinates
-
-
-class Florence2PostProcessor(object):
-    r"""
-    Florence-2 post process for converting text prediction to various tasks results.
+    Post-processor for Florence-2 model outputs. Parses generated text into structured results for various tasks
+    like object detection, OCR, phrase grounding, etc.
 
     Args:
-        config: A dict of configs.
-        tokenizer: A tokenizer for decoding text to spans.
-
-    Returns:
-        parsed_dict (dict): A dict of parsed results.
+        tokenizer (`PreTrainedTokenizer`):
+            The tokenizer used for decoding model outputs.
     """
 
-    def __init__(self, tokenizer=None):
-        parse_tasks = []
-        parse_task_configs = {}
-        config = self._create_default_config()
-        for task in config["PARSE_TASKS"]:
-            parse_tasks.append(task["TASK_NAME"])
-            parse_task_configs[task["TASK_NAME"]] = task
-
-        self.config = config
-        self.parse_tasks = parse_tasks
-        self.parse_tasks_configs = parse_task_configs
-
+    def __init__(self, tokenizer):
         self.tokenizer = tokenizer
-        if self.tokenizer is not None:
-            self.all_special_tokens = set(self.tokenizer.all_special_tokens)
+        self.all_special_tokens = set(self.tokenizer.all_special_tokens)
 
-        self.init_quantizers()
+        self.config = self._create_default_config()
+        self.parse_tasks = [task["TASK_NAME"] for task in self.config["PARSE_TASKS"]]
+        self.parse_task_configs = {task["TASK_NAME"]: task for task in self.config["PARSE_TASKS"]}
+
         self.black_list_of_phrase_grounding = self._create_black_list_of_phrase_grounding()
+        self.init_quantizers()
 
-    def _create_black_list_of_phrase_grounding(self):
-        black_list = {}
+    def _create_default_config(self) -> dict[str, Any]:
+        return {
+            "NUM_BBOX_HEIGHT_BINS": 1000,
+            "NUM_BBOX_WIDTH_BINS": 1000,
+            "BOX_QUANTIZATION_MODE": "floor",
+            "COORDINATES_HEIGHT_BINS": 1000,
+            "COORDINATES_WIDTH_BINS": 1000,
+            "COORDINATES_QUANTIZATION_MODE": "floor",
+            "PARSE_TASKS": [
+                {"TASK_NAME": "od", "PATTERN": r"([a-zA-Z0-9 ]+)<loc_(\\d+)><loc_(\\d+)><loc_(\\d+)><loc_(\\d+)>"},
+                {
+                    "TASK_NAME": "ocr",
+                    "PATTERN": r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>",
+                    "AREA_THRESHOLD": 0.00,
+                },
+                {"TASK_NAME": "phrase_grounding", "FILTER_BY_BLACK_LIST": True},
+                {"TASK_NAME": "pure_text"},
+                {"TASK_NAME": "description_with_bboxes"},
+                {"TASK_NAME": "description_with_polygons"},
+                {"TASK_NAME": "polygons"},
+                {"TASK_NAME": "bboxes"},
+                {"TASK_NAME": "description_with_bboxes_or_polygons"},
+            ],
+        }
 
-        if (
-            "phrase_grounding" in self.parse_tasks
-            and self.parse_tasks_configs["phrase_grounding"]["FILTER_BY_BLACK_LIST"]
+    def _create_black_list_of_phrase_grounding(self) -> set:
+        black_list = set()
+        if "phrase_grounding" in self.parse_tasks and self.parse_task_configs["phrase_grounding"].get(
+            "FILTER_BY_BLACK_LIST", False
         ):
             black_list = {
                 "it",
@@ -683,539 +547,426 @@ class Florence2PostProcessor(object):
                 "lots",
                 "a set",
             }
-
         return black_list
 
-    def _create_default_config(self):
-        config = {
-            "NUM_BBOX_HEIGHT_BINS": 1000,
-            "NUM_BBOX_WIDTH_BINS": 1000,
-            "BOX_QUANTIZATION_MODE": "floor",
-            "COORDINATES_HEIGHT_BINS": 1000,
-            "COORDINATES_WIDTH_BINS": 1000,
-            "COORDINATES_QUANTIZATION_MODE": "floor",
-            "PARSE_TASKS": [
-                {"TASK_NAME": "od", "PATTERN": r"([a-zA-Z0-9 ]+)<loc_(\\d+)><loc_(\\d+)><loc_(\\d+)><loc_(\\d+)>"},
-                {
-                    "TASK_NAME": "ocr",
-                    "PATTERN": r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>",
-                    "AREA_THRESHOLD": 0.00,
-                },
-                {"TASK_NAME": "phrase_grounding", "FILTER_BY_BLACK_LIST": True},
-                {
-                    "TASK_NAME": "pure_text",
-                },
-                {
-                    "TASK_NAME": "description_with_bboxes",
-                },
-                {
-                    "TASK_NAME": "description_with_polygons",
-                },
-                {
-                    "TASK_NAME": "polygons",
-                },
-                {
-                    "TASK_NAME": "bboxes",
-                },
-                {
-                    "TASK_NAME": "description_with_bboxes_or_polygons",
-                },
-            ],
-        }
-
-        return config
-
     def init_quantizers(self):
-        # we have box_quantizer (od, grounding) and coordinates_quantizer (ocr, referring_segmentation)
         num_bbox_height_bins = self.config.get("NUM_BBOX_HEIGHT_BINS", 1000)
         num_bbox_width_bins = self.config.get("NUM_BBOX_WIDTH_BINS", 1000)
         box_quantization_mode = self.config.get("BOX_QUANTIZATION_MODE", "floor")
-        self.box_quantizer = BoxQuantizer(
-            box_quantization_mode,
-            (num_bbox_width_bins, num_bbox_height_bins),
+        self.box_quantizer = Quantizer(mode=box_quantization_mode, bins=(num_bbox_width_bins, num_bbox_height_bins))
+
+        coordinates_height_bins = self.config.get("COORDINATES_HEIGHT_BINS", num_bbox_height_bins)
+        coordinates_width_bins = self.config.get("COORDINATES_WIDTH_BINS", num_bbox_width_bins)
+        coordinates_quantization_mode = self.config.get("COORDINATES_QUANTIZATION_MODE", box_quantization_mode)
+        self.coordinates_quantizer = Quantizer(
+            mode=coordinates_quantization_mode, bins=(coordinates_width_bins, coordinates_height_bins)
         )
 
-        num_bbox_height_bins = (
-            self.config["COORDINATES_HEIGHT_BINS"]
-            if "COORDINATES_HEIGHT_BINS" in self.config
-            else self.config.get("NUM_BBOX_HEIGHT_BINS", 1000)
-        )
-        num_bbox_width_bins = (
-            self.config["COORDINATES_WIDTH_BINS"]
-            if "COORDINATES_WIDTH_BINS" in self.config
-            else self.config.get("NUM_BBOX_WIDTH_BINS", 1000)
-        )
-        box_quantization_mode = (
-            self.config.get("COORDINATES_QUANTIZATION_MODE")
-            if "COORDINATES_QUANTIZATION_MODE" in self.config
-            else self.config.get("BOX_QUANTIZATION_MODE", "floor")
-        )
-        self.coordinates_quantizer = CoordinatesQuantizer(
-            box_quantization_mode,
-            (num_bbox_width_bins, num_bbox_height_bins),
-        )
+    def decode_with_spans(self, token_ids: list[int]) -> tuple[str, list[tuple[int, int]]]:
+        """
+        Decode token IDs to text and compute character spans.
 
-    def decode_with_spans(self, tokenizer, token_ids):
-        filtered_tokens = tokenizer.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
-        assert len(filtered_tokens) == len(token_ids)
+        Args:
+            token_ids (`list[int]`):
+                list of token IDs to decode.
+
+        Returns:
+            `tuple[str, list[tuple[int, int]]]`: Decoded text and list of spans (start, end) for each token.
+        """
+        filtered_tokens = self.tokenizer.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
         text = ""
         spans = []
         for token in filtered_tokens:
             if token in self.all_special_tokens:
                 sub_text = token
             else:
-                sub_text = tokenizer.convert_tokens_to_string([token])
+                sub_text = self.tokenizer.convert_tokens_to_string([token])
             span = (len(text), len(text) + len(sub_text))
             text += sub_text
             spans.append(span)
-
         return text, spans
 
-    def parse_od_from_text_and_spans(self, text, pattern, image_size, phrase_centric=False):
-        parsed = list(re.finditer(pattern, text))
+    def parse_od_from_text_and_spans(
+        self, text: str, pattern: str, image_size: tuple[int, int], phrase_centric: bool = False
+    ) -> list[dict[str, Any]]:
+        """
+        Parse object detection results from text.
 
+        Args:
+            text (`str`):
+                The generated text.
+            pattern (`str`):
+                Regex pattern for matching.
+            image_size (`tuple[int, int]`):
+                Image size (width, height).
+            phrase_centric (`bool`, *optional*, defaults to `False`):
+                Whether parsing is phrase-centric.
+
+        Returns:
+            `list[dict[str, Any]]`: list of instances with 'bbox' and 'cat_name'.
+        """
+        matches = list(re.finditer(pattern, text))
         instances = []
-        for i in range(len(parsed)):
-            # Prepare instance.
-            instance = {}
-
+        for match in matches:
             if phrase_centric:
-                bbox_bins = [int(parsed[i].group(j)) for j in range(2, 6)]
+                bbox_bins = [int(match.group(j)) for j in range(2, 6)]
+                cat_name = match.group(1).lower().strip()
             else:
-                bbox_bins = [int(parsed[i].group(j)) for j in range(1, 5)]
-            instance["bbox"] = self.box_quantizer.dequantize(boxes=torch.tensor(bbox_bins), size=image_size).tolist()
-
-            if phrase_centric:
-                instance["cat_name"] = parsed[i].group(1).lower().strip()
-            else:
-                instance["cat_name"] = parsed[i].group(5).lower().strip()
-            instances.append(instance)
-
+                bbox_bins = [int(match.group(j)) for j in range(1, 5)]
+                cat_name = match.group(5).lower().strip()
+            bbox = self.box_quantizer.dequantize(torch.tensor([bbox_bins]), size=image_size)[0].tolist()
+            instances.append({"bbox": bbox, "cat_name": cat_name})
         return instances
 
     def parse_ocr_from_text_and_spans(
-        self,
-        text,
-        pattern,
-        image_size,
-        area_threshold=-1.0,
-    ):
-        bboxes = []
-        labels = []
-        text = text.replace("<s>", "")
-        # ocr with regions
-        parsed = re.findall(pattern, text)
-        instances = []
-        image_width, image_height = image_size
+        self, text: str, pattern: str, image_size: tuple[int, int], area_threshold: float = 0.0
+    ) -> list[dict[str, Any]]:
+        """
+        Parse OCR results with quadrilateral boxes.
 
-        for ocr_line in parsed:
-            ocr_content = ocr_line[0]
-            quad_box = ocr_line[1:]
-            quad_box = [int(i) for i in quad_box]
+        Args:
+            text (`str`):
+                The generated text.
+            pattern (`str`):
+                Regex pattern for matching.
+            image_size (`tuple[int, int]`):
+                Image size (width, height).
+            area_threshold (`float`, *optional*, defaults to 0.0):
+                Minimum area threshold for filtering boxes.
+
+        Returns:
+            `list[dict[str, Any]]`: list of instances with 'quad_box' and 'text'.
+        """
+        text = text.replace("<s>", "")
+        matches = re.findall(pattern, text)
+        instances = []
+        width, height = image_size
+        for content, *quad_str in matches:
+            quad_bins = [int(i) for i in quad_str]
             quad_box = (
-                self.coordinates_quantizer.dequantize(torch.tensor(quad_box).reshape(-1, 2), size=image_size)
-                .reshape(-1)
+                self.coordinates_quantizer.dequantize(torch.tensor(quad_bins).reshape(-1, 2), size=image_size)
+                .flatten()
                 .tolist()
             )
 
             if area_threshold > 0:
-                x_coords = list(quad_box[0::2])
-                y_coords = list(quad_box[1::2])
-
-                # apply the Shoelace formula
+                x_coords = quad_box[0::2]
+                y_coords = quad_box[1::2]
                 area = 0.5 * abs(
-                    sum(x_coords[i] * y_coords[i + 1] - x_coords[i + 1] * y_coords[i] for i in range(4 - 1))
+                    sum(x_coords[i] * y_coords[(i + 1) % 4] - x_coords[(i + 1) % 4] * y_coords[i] for i in range(4))
                 )
-
-                if area < (image_width * image_height) * area_threshold:
+                if area < (width * height) * area_threshold:
                     continue
 
-            bboxes.append(quad_box)
-            labels.append(ocr_content)
-            instances.append(
-                {
-                    "quad_box": quad_box,
-                    "text": ocr_content,
-                }
-            )
+            instances.append({"quad_box": quad_box, "text": content})
         return instances
 
-    def parse_phrase_grounding_from_text_and_spans(self, text, pattern, image_size):
-        # ignore <s> </s> and <pad>
-        cur_span = 0
-        if text.startswith("<s>"):
-            cur_span += 3
+    def parse_phrase_grounding_from_text_and_spans(
+        self, text: str, image_size: tuple[int, int]
+    ) -> list[dict[str, Any]]:
+        """
+        Parse phrase grounding results.
 
-        text = text.replace("<s>", "")
-        text = text.replace("</s>", "")
-        text = text.replace("<pad>", "")
+        Args:
+            text (`str`):
+                The generated text.
+            image_size (`tuple[int, int]`):
+                Image size (width, height).
 
-        pattern = r"([^<]+(?:<loc_\d+>){4,})"
-        phrases = re.findall(pattern, text)
-
-        # pattern should be text pattern and od pattern
-        pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_)"
+        Returns:
+            `list[dict[str, Any]]`: list of instances with 'bbox' and 'cat_name'.
+        """
+        text = text.replace("<s>", "").replace("</s>", "").replace("<pad>", "")
+        phrase_pattern = r"([^<]+(?:<loc_\d+>){4,})"
+        phrases = re.findall(phrase_pattern, text)
+        text_pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_)"
         box_pattern = r"<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>"
 
         instances = []
-        for pharse_text in phrases:
-            phrase_text_strip = pharse_text.replace("<ground>", "", 1)
-            phrase_text_strip = pharse_text.replace("<obj>", "", 1)
-
-            if phrase_text_strip == "":
-                cur_span += len(pharse_text)
+        for phrase_text in phrases:
+            phrase_text = phrase_text.replace("<ground>", "", 1).replace("<obj>", "", 1)
+            if not phrase_text:
                 continue
-
-            # parse phrase, get string
-            phrase = re.search(pattern, phrase_text_strip)
-            if phrase is None:
-                cur_span += len(pharse_text)
+            match = re.search(text_pattern, phrase_text)
+            if not match:
                 continue
-
-            phrase = phrase.group().strip()
+            phrase = match.group().strip()
             if phrase in self.black_list_of_phrase_grounding:
-                cur_span += len(pharse_text)
                 continue
-
-            # parse bboxes by box_pattern
-            bboxes_parsed = list(re.finditer(box_pattern, pharse_text))
-            if len(bboxes_parsed) == 0:
-                cur_span += len(pharse_text)
+            boxes_matches = list(re.finditer(box_pattern, phrase_text))
+            if not boxes_matches:
                 continue
-
-            # Prepare instance.
-            instance = {}
-            bbox_bins = [[int(_bboxes_parsed.group(j)) for j in range(1, 5)] for _bboxes_parsed in bboxes_parsed]
-            instance["bbox"] = self.box_quantizer.dequantize(boxes=torch.tensor(bbox_bins), size=image_size).tolist()
-
-            # exclude non-ascii characters
-            phrase = phrase.encode("ascii", errors="ignore").decode("ascii")
-            instance["cat_name"] = phrase
-
-            instances.append(instance)
-
+            bbox_bins = [[int(m.group(j)) for j in range(1, 5)] for m in boxes_matches]
+            bboxes = self.box_quantizer.dequantize(torch.tensor(bbox_bins), size=image_size).tolist()
+            phrase = phrase.encode("ascii", "ignore").decode("ascii")
+            instances.append({"bbox": bboxes, "cat_name": phrase})
         return instances
+
+    def _find_matched_token_indices(self, cur_span: tuple[int, int], token_spans: list[tuple[int, int]]) -> list[int]:
+        return [i for i, span in enumerate(token_spans) if not (span[1] <= cur_span[0] or span[0] >= cur_span[1])]
 
     def parse_description_with_bboxes_from_text_and_spans(
-        self, text, spans=None, scores=None, score_mode=None, pattern=None, image_size=None, allow_empty_phrase=False
-    ):
-        def find_matched_token_indices(cur_span, token_spans):
-            inds = []
-            for i, token_span in enumerate(token_spans):
-                if not (token_span[1] <= cur_span[0] or token_span[0] >= cur_span[1]):
-                    inds.append(i)
-            return inds
+        self,
+        text: str,
+        image_size: tuple[int, int],
+        spans: Optional[list[tuple[int, int]]] = None,
+        scores: Optional[list[float]] = None,
+        score_mode: Optional[str] = None,
+        allow_empty_phrase: bool = False,
+    ) -> list[dict[str, Any]]:
+        """
+        Parse descriptions with bounding boxes.
 
-        cur_span = 0
-        if text.startswith("<s>"):
-            cur_span += 3
+        Args:
+            text (`str`):
+                The generated text.
+            image_size (`tuple[int, int]`):
+                Image size (width, height).
+            spans (`Optional[list[tuple[int, int]]]`, *optional*):
+                Token spans for scoring.
+            scores (`Optional[list[float]]`, *optional*):
+                Transition scores for scoring.
+            score_mode (`Optional[str]`, *optional*):
+                Scoring mode ('avg_loc_scores' or 'avg_cat_name_scores').
+            allow_empty_phrase (`bool`, *optional*, defaults to `False`):
+                Allow phrases without text.
 
-        text = text.replace("<s>", "")
-        text = text.replace("</s>", "")
-        text = text.replace("<pad>", "")
+        Returns:
+            `list[dict[str, Any]]`: list of instances with 'bbox', 'cat_name', and optional 'score'.
+        """
+        cur_span = 3 if text.startswith("<s>") else 0
+        text = text.replace("<s>", "").replace("</s>", "").replace("<pad>", "")
 
-        if allow_empty_phrase:
-            pattern = r"(?:(?:<loc_\d+>){4,})"
-        else:
-            pattern = r"([^<]+(?:<loc_\d+>){4,})"
+        pattern = r"(?:(?:<loc_\d+>){4,})" if allow_empty_phrase else r"([^<]+(?:<loc_\d+>){4,})"
         phrases = re.findall(pattern, text)
-
-        # pattern should be text pattern and od pattern
-        pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_)"
+        text_pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_)"
         box_pattern = r"<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>"
 
         instances = []
-        for pharse_text in phrases:
-            phrase_text_strip = pharse_text.replace("<ground>", "", 1)
-            phrase_text_strip = pharse_text.replace("<obj>", "", 1)
-
-            if phrase_text_strip == "" and not allow_empty_phrase:
-                cur_span += len(pharse_text)
+        for phrase_text in phrases:
+            phrase_text = phrase_text.replace("<ground>", "", 1).replace("<obj>", "", 1)
+            if not phrase_text and not allow_empty_phrase:
+                cur_span += len(phrase_text)
                 continue
-
-            # parse phrase, get string
-            phrase = re.search(pattern, phrase_text_strip)
-            if phrase is None:
-                cur_span += len(pharse_text)
+            match = re.search(text_pattern, phrase_text)
+            if not match:
+                cur_span += len(phrase_text)
                 continue
-
-            phrase_span = phrase.span()
-            phrase = phrase.group()
-            # remove leading and trailing spaces
-            phrase = phrase.strip()
-
-            # parse bboxes by box_pattern
-            bboxes_parsed = list(re.finditer(box_pattern, pharse_text))
-            if len(bboxes_parsed) == 0:
-                cur_span += len(pharse_text)
+            phrase_span = match.span()
+            phrase = match.group().strip()
+            boxes_matches = list(re.finditer(box_pattern, phrase_text))
+            if not boxes_matches:
+                cur_span += len(phrase_text)
                 continue
+            bbox_bins = [[int(m.group(j)) for j in range(1, 5)] for m in boxes_matches]
+            bboxes = self.box_quantizer.dequantize(torch.tensor(bbox_bins), size=image_size).tolist()
 
-            # a list of list
-            bbox_bins = [[int(_bboxes_parsed.group(j)) for j in range(1, 5)] for _bboxes_parsed in bboxes_parsed]
+            all_scores = None
+            if score_mode == "avg_loc_scores" and spans and scores:
+                bbox_spans = [m.span(0) for m in boxes_matches]
+                all_scores = []
+                for b_span in bbox_spans:
+                    token_inds = self._find_matched_token_indices((b_span[0] + cur_span, b_span[1] + cur_span), spans)
+                    loc_scores = [scores[i] for i in token_inds]
+                    all_scores.append(sum(loc_scores) / len(loc_scores) if loc_scores else 0)
+            elif score_mode == "avg_cat_name_scores" and spans and scores:
+                token_inds = self._find_matched_token_indices(
+                    (phrase_span[0] + cur_span, phrase_span[1] + cur_span), spans
+                )
+                cat_scores = [scores[i] for i in token_inds]
+                score = sum(cat_scores) / len(cat_scores) if cat_scores else 0
+                all_scores = [score] * len(bboxes)
 
-            bboxes = self.box_quantizer.dequantize(boxes=torch.tensor(bbox_bins), size=image_size).tolist()
-
-            if score_mode == "avg_loc_scores":
-                if spans is None or scores is None:
-                    all_scores = None
-                else:
-                    bbox_end_spans = [_bboxes_parsed.span(0) for _bboxes_parsed in bboxes_parsed]
-                    all_scores = []
-                    for _spans in bbox_end_spans:
-                        token_inds = find_matched_token_indices((_spans[0] + cur_span, _spans[1] + cur_span), spans)
-                        loc_scores = [scores[token_i] for token_i in token_inds]
-                        score = sum(loc_scores) / len(loc_scores)
-                        all_scores.append(score)
-            elif score_mode == "avg_cat_name_scores":
-                if spans is None or scores is None:
-                    all_scores = None
-                else:
-                    cat_name_token_inds = find_matched_token_indices(
-                        (phrase_span[0] + cur_span, phrase_span[1] + cur_span), spans
-                    )
-                    cat_name_scores = [scores[token_i] for token_i in cat_name_token_inds]
-                    score = sum(cat_name_scores) / len(cat_name_scores)
-                    all_scores = [score] * len(bboxes)
-            elif score_mode is None:
-                all_scores = None
-            else:
-                raise ValueError("Unknown score mode: {}".format(score_mode))
-
-            phrase = phrase.encode("ascii", errors="ignore").decode("ascii")
-            for _idx, _bboxes in enumerate(bboxes):
-                # Prepare instance.
-                instance = {}
-                instance["bbox"] = _bboxes
-                # exclude non-ascii characters
-                instance["cat_name"] = phrase
+            phrase = phrase.encode("ascii", "ignore").decode("ascii")
+            for idx, bbox in enumerate(bboxes):
+                instance = {"bbox": bbox, "cat_name": phrase}
                 if all_scores is not None:
-                    instance["score"] = math.exp(all_scores[_idx])
+                    instance["score"] = math.exp(all_scores[idx])
                 instances.append(instance)
 
-            cur_span += len(pharse_text)
-
+            cur_span += len(phrase_text)
         return instances
 
     def parse_description_with_polygons_from_text_and_spans(
         self,
-        text,
-        pattern,
-        image_size,
-        allow_empty_phrase=False,
-        polygon_sep_token="<sep>",
-        polygon_start_token="<poly>",
-        polygon_end_token="</poly>",
-        with_box_at_start=False,
-    ):
-        # ref_seg format: '<expression><x1><y1><x2><y2><><><sep><><><><>'
-        # ignore <s> </s> and <pad>
+        text: str,
+        image_size: tuple[int, int],
+        allow_empty_phrase: bool = False,
+        polygon_sep_token: str = "<sep>",
+        polygon_start_token: str = "<poly>",
+        polygon_end_token: str = "</poly>",
+        with_box_at_start: bool = False,
+    ) -> list[dict[str, Any]]:
+        """
+        Parse descriptions with polygons.
 
-        text = text.replace("<s>", "")
-        text = text.replace("</s>", "")
-        text = text.replace("<pad>", "")
+        Args:
+            text (`str`):
+                The generated text.
+            image_size (`tuple[int, int]`):
+                Image size (width, height).
+            allow_empty_phrase (`bool`, *optional*, defaults to `False`):
+                Allow phrases without text.
+            polygon_sep_token (`str`, *optional*, defaults to "<sep>"):
+                Token separating polygons.
+            polygon_start_token (`str`, *optional*, defaults to "<poly>"):
+                Start token for polygons.
+            polygon_end_token (`str`, *optional*, defaults to "</poly>"):
+                End token for polygons.
+            with_box_at_start (`bool`, *optional*, defaults to `False`):
+                Whether a bounding box is at the start of polygons.
 
-        if allow_empty_phrase:
-            pattern = rf"(?:(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
-        else:
-            # [^<]+: This part matches one or more characters that are not the < symbol.
-            # The ^ inside the square brackets [] is a negation, meaning it matches anything except <.
-            #
-            pattern = rf"([^<]+(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
+        Returns:
+            `list[dict[str, Any]]`: list of instances with 'polygons', 'cat_name', and optional 'bbox'.
+        """
+        text = text.replace("<s>", "").replace("</s>", "").replace("<pad>", "")
+
+        pattern = (
+            rf"(?:(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
+            if allow_empty_phrase
+            else rf"([^<]+(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
+        )
         phrases = re.findall(pattern, text)
-
-        phrase_string_pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_|<poly>)"
+        phrase_pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_|<poly>)"
+        poly_instance_pattern = rf"{re.escape(polygon_start_token)}(.*?){re.escape(polygon_end_token)}"
         box_pattern = rf"((?:<loc_\d+>)+)(?:{re.escape(polygon_sep_token)}|$)"
-
-        # one polygons instance is separated by polygon_start_token and polygon_end_token
-        polygons_instance_pattern = rf"{re.escape(polygon_start_token)}(.*?){re.escape(polygon_end_token)}"
 
         instances = []
         for phrase_text in phrases:
-            # exclude loc_\d+>
-            # need to get span if want to include category score
-            phrase_text_strip = re.sub(r"^loc_\d+>", "", phrase_text, count=1)
-
-            # phrase = phrase.replace('<poly>', '')
-            # phrase = phrase.replace('poly>', '')
-
-            if phrase_text_strip == "" and not allow_empty_phrase:
+            phrase_text = re.sub(r"<loc_\d+>", "", phrase_text, count=1)  # Remove potential leading loc
+            if not phrase_text and not allow_empty_phrase:
                 continue
-
-            # parse phrase, get string
-            phrase = re.search(phrase_string_pattern, phrase_text_strip)
-            if phrase is None:
+            match = re.search(phrase_pattern, phrase_text)
+            if not match:
                 continue
-            phrase = phrase.group().strip()
-            # split by polygon_start_token and polygon_end_token first using polygons_instance_pattern
-            if polygon_start_token in phrase_text and polygon_end_token in phrase_text:
-                polygons_instances_parsed = list(re.finditer(polygons_instance_pattern, phrase_text))
-            else:
-                polygons_instances_parsed = [phrase_text]
+            phrase = match.group().strip()
 
-            for _polygons_instances_parsed in polygons_instances_parsed:
-                # Prepare instance.
-                instance = {}
+            poly_instances = (
+                re.findall(poly_instance_pattern, phrase_text)
+                if polygon_start_token in phrase_text and polygon_end_token in phrase_text
+                else [phrase_text]
+            )
 
-                # polygons_parsed= list(re.finditer(box_pattern, phrase_text))
-                if isinstance(_polygons_instances_parsed, str):
-                    polygons_parsed = list(re.finditer(box_pattern, _polygons_instances_parsed))
-                else:
-                    polygons_parsed = list(re.finditer(box_pattern, _polygons_instances_parsed.group(1)))
-                if len(polygons_parsed) == 0:
+            for poly_inst in poly_instances:
+                poly_matches = re.finditer(box_pattern, poly_inst)
+                if not poly_matches:
                     continue
-
-                # a list of list (polygon)
                 bbox = []
                 polygons = []
-                for _polygon_parsed in polygons_parsed:
-                    # group 1: whole <loc_\d+>...</loc_\d+>
-                    _polygon = _polygon_parsed.group(1)
-                    # parse into list of int
-                    _polygon = [int(_loc_parsed.group(1)) for _loc_parsed in re.finditer(r"<loc_(\d+)>", _polygon)]
-                    if with_box_at_start and len(bbox) == 0:
-                        if len(_polygon) > 4:
-                            # no valid bbox prediction
-                            bbox = _polygon[:4]
-                            _polygon = _polygon[4:]
+                for poly_match in poly_matches:
+                    poly_str = poly_match.group(1)
+                    poly_bins = [int(m.group(1)) for m in re.finditer(r"<loc_(\d+)>", poly_str)]
+                    if with_box_at_start and not bbox:
+                        if len(poly_bins) > 4:
+                            bbox = poly_bins[:4]
+                            poly_bins = poly_bins[4:]
                         else:
                             bbox = [0, 0, 0, 0]
-                    # abandon last element if is not paired
-                    if len(_polygon) % 2 == 1:
-                        _polygon = _polygon[:-1]
-
-                    # reshape into (n, 2)
-                    _polygon = (
-                        self.coordinates_quantizer.dequantize(
-                            torch.tensor(np.array(_polygon).reshape(-1, 2)), size=image_size
-                        )
-                        .reshape(-1)
+                    if len(poly_bins) % 2 == 1:
+                        poly_bins = poly_bins[:-1]
+                    poly_coords = (
+                        self.coordinates_quantizer.dequantize(torch.tensor(poly_bins).reshape(-1, 2), size=image_size)
+                        .flatten()
                         .tolist()
                     )
-                    # reshape back
-                    polygons.append(_polygon)
+                    polygons.append(poly_coords)
 
-                instance["cat_name"] = phrase
-                instance["polygons"] = polygons
-                if len(bbox) != 0:
-                    instance["bbox"] = self.box_quantizer.dequantize(
-                        boxes=torch.tensor([bbox]), size=image_size
-                    ).tolist()[0]
-
+                instance = {"cat_name": phrase, "polygons": polygons}
+                if bbox:
+                    instance["bbox"] = self.box_quantizer.dequantize(torch.tensor([bbox]), size=image_size)[0].tolist()
                 instances.append(instance)
-
         return instances
 
     def __call__(
         self,
-        text=None,
-        sequence=None,
-        transition_beam_score=None,
-        image_size=None,
-        parse_tasks=None,
-    ):
+        text: Optional[str] = None,
+        sequence: Optional[Union[list[int], torch.Tensor]] = None,
+        transition_scores: Optional[Union[list[float], torch.Tensor]] = None,
+        image_size: Optional[tuple[int, int]] = None,
+        parse_tasks: Optional[Union[str, list[str]]] = None,
+    ) -> dict[str, Any]:
         """
-        Args:
-            text: model outputs
-            image_size: (width, height)
-            parse_tasks: a list of tasks to parse, if None, parse all tasks.
+        Process model output and parse into task-specific results.
 
+        Args:
+            text (`Optional[str]`, *optional*):
+                Generated text. Either this or `sequence` must be provided.
+            sequence (`Optional[Union[list[int], torch.Tensor]]`, *optional*):
+                Token sequence. Either this or `text` must be provided.
+            transition_scores (`Optional[Union[list[float], torch.Tensor]]`, *optional*):
+                Transition scores for computing instance scores.
+            image_size (`Optional[tuple[int, int]]`, *optional*):
+                Image size (width, height) required for dequantization.
+            parse_tasks (`Optional[Union[str, list[str]]]`, *optional*):
+                Specific tasks to parse. If None, parse all supported tasks.
+
+        Returns:
+            `dict[str, Any]`: Parsed results for each task, including the raw 'text'.
         """
         if parse_tasks is not None:
-            if isinstance(parse_tasks, str):
-                parse_tasks = [parse_tasks]
-            for _parse_task in parse_tasks:
-                assert _parse_task in self.parse_tasks, f"parse task {_parse_task} not supported"
+            parse_tasks = [parse_tasks] if isinstance(parse_tasks, str) else parse_tasks
+            for task in parse_tasks:
+                if task not in self.parse_tasks:
+                    raise ValueError(f"Unsupported parse task: {task}")
 
-        # sequence or text should be provided
-        assert sequence is not None or text is not None, "sequence or text should be provided"
-        assert sequence is None or text is None, "only one of sequence and text should be provided"
+        if (text is None and sequence is None) or (text is not None and sequence is not None):
+            raise ValueError("Exactly one of 'text' or 'sequence' must be provided.")
 
+        spans = None
+        scores = None
         if sequence is not None:
-            sequence = sequence.tolist()[1:]
-            text, spans = self.decode_with_spans(self.tokenizer, sequence)
-            if transition_beam_score is not None:
-                transition_beam_score = transition_beam_score.tolist()
-                assert len(sequence) == len(transition_beam_score)
-        else:
-            spans = None
-            transition_beam_score = None
+            if isinstance(sequence, torch.Tensor):
+                sequence = sequence.tolist()
+            sequence = sequence[1:] if sequence[0] == self.tokenizer.bos_token_id else sequence  # Skip BOS if present
+            text, spans = self.decode_with_spans(sequence)
+            if transition_scores is not None:
+                if isinstance(transition_scores, torch.Tensor):
+                    transition_scores = transition_scores.tolist()
+                if len(sequence) != len(transition_scores):
+                    raise ValueError("Sequence and transition_scores must have the same length.")
+                scores = transition_scores
 
         parsed_dict = {"text": text}
 
-        for task in self.parse_tasks:
-            if parse_tasks is not None and task not in parse_tasks:
-                continue
-
-            pattern = self.parse_tasks_configs[task].get("PATTERN", None)
-            score_mode = self.parse_tasks_configs[task].get("SCORE_MODE", None)
+        tasks_to_parse = parse_tasks or self.parse_tasks
+        for task in tasks_to_parse:
+            config = self.parse_task_configs[task]
+            pattern = config.get("PATTERN")
 
             if task == "ocr":
-                instances = self.parse_ocr_from_text_and_spans(
-                    text,
-                    pattern=pattern,
-                    image_size=image_size,
-                    area_threshold=self.parse_tasks_configs[task].get("AREA_THRESHOLD", 0.0),
+                parsed_dict["ocr"] = self.parse_ocr_from_text_and_spans(
+                    text, pattern=pattern, image_size=image_size, area_threshold=config.get("AREA_THRESHOLD", 0.0)
                 )
-                parsed_dict["ocr"] = instances
             elif task == "phrase_grounding":
-                instances = self.parse_phrase_grounding_from_text_and_spans(
-                    text,
-                    pattern=pattern,
-                    image_size=image_size,
+                parsed_dict["phrase_grounding"] = self.parse_phrase_grounding_from_text_and_spans(
+                    text, image_size=image_size
                 )
-                parsed_dict["phrase_grounding"] = instances
             elif task == "pure_text":
                 parsed_dict["pure_text"] = text
             elif task == "description_with_bboxes":
-                instances = self.parse_description_with_bboxes_from_text_and_spans(
-                    text,
-                    spans=spans,
-                    scores=transition_beam_score,
-                    score_mode=score_mode,
-                    pattern=pattern,
-                    image_size=image_size,
+                parsed_dict["description_with_bboxes"] = self.parse_description_with_bboxes_from_text_and_spans(
+                    text, image_size=image_size, spans=spans, scores=scores, score_mode=config.get("SCORE_MODE")
                 )
-                parsed_dict["description_with_bboxes"] = instances
             elif task == "description_with_polygons":
-                instances = self.parse_description_with_polygons_from_text_and_spans(
-                    text,
-                    pattern=pattern,
-                    image_size=image_size,
+                parsed_dict["description_with_polygons"] = self.parse_description_with_polygons_from_text_and_spans(
+                    text, image_size=image_size
                 )
-                parsed_dict["description_with_polygons"] = instances
             elif task == "polygons":
-                instances = self.parse_description_with_polygons_from_text_and_spans(
-                    text,
-                    pattern=pattern,
-                    image_size=image_size,
-                    allow_empty_phrase=True,
+                parsed_dict["polygons"] = self.parse_description_with_polygons_from_text_and_spans(
+                    text, image_size=image_size, allow_empty_phrase=True
                 )
-                parsed_dict["polygons"] = instances
             elif task == "bboxes":
-                instances = self.parse_description_with_bboxes_from_text_and_spans(
-                    text,
-                    pattern=pattern,
-                    image_size=image_size,
-                    allow_empty_phrase=True,
+                parsed_dict["bboxes"] = self.parse_description_with_bboxes_from_text_and_spans(
+                    text, image_size=image_size, allow_empty_phrase=True
                 )
-                parsed_dict["bboxes"] = instances
             elif task == "description_with_bboxes_or_polygons":
                 if "<poly>" in text:
-                    # only support either polygons or bboxes, not both at the same time
-                    instances = self.parse_description_with_polygons_from_text_and_spans(
-                        text,
-                        pattern=pattern,
-                        image_size=image_size,
-                    )
+                    instances = self.parse_description_with_polygons_from_text_and_spans(text, image_size=image_size)
                 else:
-                    instances = self.parse_description_with_bboxes_from_text_and_spans(
-                        text,
-                        pattern=pattern,
-                        image_size=image_size,
-                    )
+                    instances = self.parse_description_with_bboxes_from_text_and_spans(text, image_size=image_size)
                 parsed_dict["description_with_bboxes_or_polygons"] = instances
-            else:
-                raise ValueError("task {} is not supported".format(task))
+            elif task == "od":
+                parsed_dict["od"] = self.parse_od_from_text_and_spans(text, pattern=pattern, image_size=image_size)
 
         return parsed_dict
 

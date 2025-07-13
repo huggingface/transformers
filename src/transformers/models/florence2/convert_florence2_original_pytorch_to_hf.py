@@ -18,8 +18,10 @@ from collections import OrderedDict
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoProcessor,
     Florence2Config,
     Florence2ForConditionalGeneration,
+    Florence2Processor,
     Florence2VisionConfig,
 )
 
@@ -326,12 +328,17 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
 
     hf_config = AutoConfig.from_pretrained(hf_model_id, trust_remote_code=True)
     hf_model = AutoModelForCausalLM.from_pretrained(hf_model_id, trust_remote_code=True)
-    original_weights = hf_model.state_dict()
+    hf_processor = AutoProcessor.from_pretrained(hf_model_id, trust_remote_code=True)
+    huggingface_weights = OrderedDict()
+    list_of_state_dict = []
+
     vision_config = convert_config(hf_config.vision_config.__dict__)
     text_config = hf_config.text_config.__dict__
     config = Florence2Config(text_config=text_config, vision_config=vision_config)
-    huggingface_weights = OrderedDict()
-    list_of_state_dict = []
+
+    tokenizer = hf_processor.tokenizer
+    image_processor = hf_processor.image_processor
+    processor = Florence2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
     for stage_idx in range(len(config.vision_config.embed_dim)):
         list_of_state_dict = list_of_state_dict + vision_conv_embeddings(stage_idx)
@@ -339,9 +346,9 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
             list_of_state_dict = list_of_state_dict + vision_spatial_block(stage_idx, block_idx)
             list_of_state_dict = list_of_state_dict + vision_channel_block(stage_idx, block_idx)
 
+    original_weights = hf_model.state_dict()
     list_of_state_dict = list_of_state_dict + vision_projector()
-    list_of_state_dict = list_of_state_dict + language_model(hf_model.state_dict())
-
+    list_of_state_dict = list_of_state_dict + language_model(original_weights)
     for i in range(len(list_of_state_dict)):
         if list_of_state_dict[i][0] == "image_projection":
             original_weights[list_of_state_dict[i][0]].transpose_(1, 0)
@@ -350,6 +357,7 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
     model = Florence2ForConditionalGeneration(config)
     model.load_state_dict(huggingface_weights)
     model.save_pretrained(pytorch_dump_folder)
+    processor.save_pretrained(pytorch_dump_folder)
 
 
 if __name__ == "__main__":
