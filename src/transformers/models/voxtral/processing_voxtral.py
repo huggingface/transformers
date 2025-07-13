@@ -97,7 +97,7 @@ class VoxtralProcessor(ProcessorMixin):
 
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "MistralCommonTokenizer"
+    tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(
         self,
@@ -192,6 +192,13 @@ class VoxtralProcessor(ProcessorMixin):
     #             audio_value = audio_value.cpu().float().numpy()
     #         sf.write(p, audio_value, sampling_rate)
 
+    @staticmethod
+    def _get_encoded_length(audio_length, pad_to_multiple_of, max_source_positions, audio_length_per_tok):
+        next_multiple_of = math.ceil(audio_length / pad_to_multiple_of)
+        num_audio_tokens = next_multiple_of * math.ceil(max_source_positions / audio_length_per_tok)
+
+        return num_audio_tokens
+
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
@@ -271,41 +278,43 @@ class VoxtralProcessor(ProcessorMixin):
                     f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
                     f"number of provided audios ({n_audio})."
                 )
-
-        audio_length_per_tok = audio_kwargs.pop("audio_length_per_tok")
-        max_source_positions = audio_kwargs.pop("max_source_positions")
-        pad_to_multiple_of = audio_kwargs.get("pad_to_multiple_of")
-
-        # TODO: @eustlb, no one-one using the tokenizer for special tokens, let's handle it manually
+            
         # TODO: @eustlb, we have a clear issue of mapping with batch!?
-        batch_audio_prefix = []
-        for audio_array in audio:
-            audio_length = audio_array.shape[-1]
-            next_multiple_of = math.ceil(audio_length / pad_to_multiple_of)
-            num_audio_tokens = next_multiple_of * math.ceil(max_source_positions / audio_length_per_tok)
-            batch_audio_prefix.append([self.audio_bos_token_id] + [self.audio_token_id] * num_audio_tokens)
+        if audio is not None:
+            pad_to_multiple_of = audio_kwargs.get("pad_to_multiple_of", 480000)
+            audio_length_per_tok = audio_kwargs.pop("audio_length_per_tok", 8)
+            max_source_positions = audio_kwargs.get("max_source_positions", 3000)
 
-        pattern = r'\[INST\](?:\[BEGIN_AUDIO\]\[AUDIO\])*?(.*?)\[/INST\]' 
-        input_ids = []
-        for text_el, audio_prefix in zip(text, batch_audio_prefix):
-            text_el_no_special_tokens = re.search(pattern, text_el).group(1) if re.search(pattern, text_el) else text_el
-            ids = self.tokenizer.encode(text_el_no_special_tokens, add_special_tokens=False)
-            input_ids.append(audio_prefix + ids)
+            num_audio_tokens_list = [
+                self._get_encoded_length(
+                    audio_array.shape[-1],
+                    pad_to_multiple_of,
+                    max_source_positions,
+                    audio_length_per_tok,
+                ) for audio_array in audio
+            ]
+            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
 
-        padding_strategy, truncation_strategy, max_length, kwargs = self.tokenizer._get_padding_truncation_strategies(
-            padding=text_kwargs.pop("padding", False),
-            truncation=text_kwargs.pop("truncation", False),
-            max_length=text_kwargs.pop("max_length", None),
-            pad_to_multiple_of=pad_to_multiple_of,
-            **text_kwargs,
-        )
-        text_kwargs["padding_strategy"] = padding_strategy
-        text_kwargs["truncation_strategy"] = truncation_strategy
-        text_kwargs["max_length"] = max_length
-        batch_outputs = self.tokenizer._batch_prepare_for_model(input_ids, **text_kwargs)
+            # expand the text to repeat the audio token for the corresponding number of frames
+            expanded_text = []
+            for sample in text:
+                replace_str = []
+                while self.audio_token in sample:
+                    num_audio_tokens = num_audio_tokens_list_copy.pop(0)
+                    expanded_audio_token = self.audio_token * num_audio_tokens
 
+                    replace_str.append(expanded_audio_token)
+                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+                expanded_text.append(sample)
+
+            text = expanded_text
+
+        encoding = self.tokenizer(text, **text_kwargs)
         data = {}
-        data.update(batch_outputs)
+        data.update(encoding)
 
         if audio is not None:
             # TODO: @eustlb, audio_kwargs cannot be everything here... we should warn the user
@@ -338,6 +347,23 @@ class VoxtralProcessor(ProcessorMixin):
         #     data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
+
+    def get_prompt_ids(self, text: str, return_tensors="np"):
+        return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
 
 
 __all__ = ["VoxtralProcessor"]
