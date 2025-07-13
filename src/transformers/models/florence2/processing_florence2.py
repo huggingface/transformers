@@ -17,16 +17,14 @@ import re
 from typing import Any, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
     _validate_images_text_input_order,
 )
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
 
 
@@ -35,20 +33,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_url
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
-
-
-def _is_str_or_image(elem):
-    return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
 class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -148,7 +132,7 @@ class Florence2Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[str, list[str], PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -224,12 +208,7 @@ class Florence2Processor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
     def post_process_generation(
-        self,
-        text: Optional[str] = None,
-        sequence: Optional[Union[list[int], torch.Tensor]] = None,
-        transition_scores: Optional[Union[list[float], torch.Tensor]] = None,
-        task: Optional[str] = None,
-        image_size: Optional[tuple[int, int]] = None,
+        self, text=None, sequence=None, transition_scores=None, task=None, image_size=None
     ) -> dict[str, Any]:
         """
         Post-process generation outputs based on the task.
@@ -323,7 +302,7 @@ class Quantizer:
         self.mode = mode
         self.bins = bins  # (width_bins, height_bins)
 
-    def quantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+    def quantize(self, locations, size: tuple[int, int]):
         """
         Quantize locations.
 
@@ -358,7 +337,7 @@ class Quantizer:
         else:
             raise ValueError(f"Unsupported location shape: last dim must be 2 or 4, got {locations.shape[-1]}.")
 
-    def dequantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+    def dequantize(self, locations, size: tuple[int, int]):
         """
         Dequantize locations back to original scale.
 
@@ -878,12 +857,7 @@ class Florence2PostProcessor:
         return instances
 
     def __call__(
-        self,
-        text: Optional[str] = None,
-        sequence: Optional[Union[list[int], torch.Tensor]] = None,
-        transition_scores: Optional[Union[list[float], torch.Tensor]] = None,
-        image_size: Optional[tuple[int, int]] = None,
-        parse_tasks: Optional[Union[str, list[str]]] = None,
+        self, text=None, sequence=None, transition_scores=None, image_size=None, parse_tasks=None
     ) -> dict[str, Any]:
         """
         Process model output and parse into task-specific results.
