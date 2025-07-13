@@ -185,7 +185,7 @@ class ClassInstantier(OrderedDict):
         return cls(**kwargs)
 
 
-class xIELUActivation(nn.Module):
+class XIELUActivation(nn.Module):
     """
     Applies the xIELU activation function introduced in https://arxiv.org/abs/2411.13010
 
@@ -294,7 +294,7 @@ ACT2CLS = {
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,
-    "xielu": xIELUActivation,
+    "xielu": XIELUActivation,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 
