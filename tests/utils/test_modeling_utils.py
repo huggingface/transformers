@@ -1232,6 +1232,9 @@ class ModelUtilsTest(TestCasePlus):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
 
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
     def test_save_offloaded_model_dynamic_tied_weights_keys(self):
         from accelerate import dispatch_model
 
