@@ -1540,6 +1540,35 @@ class HeliumConverter(SpmConverter):
         )
 
 
+class Ernie4_5Converter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        # slow tokenizer already has correct proto pieces
+        return [(piece.piece, piece.score) for piece in proto.pieces]
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    #"""
+    def decoder(self, replacement, add_prefix_space):
+        # Add_prefix_space should always be `False` due to the init
+        # Thus, we ignore it here...
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        return decoders.Sequence(sequence)#"""
+
+    def normalizer(self, proto):
+        return None
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return None
+
+
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -1704,6 +1733,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConverter,
     "Phi3Tokenizer": LlamaConverter,
+    "Ernie4_5Tokenizer": LlamaConverter,
 }
 
 

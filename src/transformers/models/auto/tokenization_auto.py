@@ -214,14 +214,14 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "ernie4_5",
             (
                 "Ernie4_5Tokenizer" if is_sentencepiece_available() else None,
-                None,  # TODO: fast tokenizer
+                "Ernie4_5TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         (
             "ernie4_5_moe",
             (
                 "Ernie4_5Tokenizer" if is_sentencepiece_available() else None,
-                None,  # TODO: fast tokenizer
+                "Ernie4_5TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
