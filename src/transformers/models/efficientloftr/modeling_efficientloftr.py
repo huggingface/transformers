@@ -205,9 +205,11 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.rope_type = config.rope_scaling.get("rope_type")
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.inv_freq: torch.Tensor
+        inv_freq, attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
+        self.attention_scaling = attention_scaling
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
