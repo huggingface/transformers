@@ -14,11 +14,7 @@
 # limitations under the License.
 
 import math
-import re
-from pathlib import Path
 from typing import Any, Optional, Union
-
-import numpy as np
 
 from ...utils import is_soundfile_available, is_torch_available
 
@@ -27,7 +23,7 @@ if is_torch_available():
     import torch
 
 if is_soundfile_available():
-    import soundfile as sf
+    pass
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -205,7 +201,7 @@ class VoxtralProcessor(ProcessorMixin):
                     f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
                     f"number of provided audios ({n_audio})."
                 )
-            
+
         # TODO: @eustlb, we have a clear issue of mapping with batch!?
         if audio is not None:
             pad_to_multiple_of = audio_kwargs.get("pad_to_multiple_of", 480000)

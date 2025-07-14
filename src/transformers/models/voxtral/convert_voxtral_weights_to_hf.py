@@ -16,25 +16,25 @@
 # TODO: @eustlb, should the copyright include Mistral?
 
 import argparse
+import gc
 import json
 import os
 import re
-import gc
 
 import torch
-from transformers.utils.hub import cached_file
-from transformers.models.whisper.modeling_whisper import sinusoids
 from safetensors.torch import load_file
 
 from transformers import (
-    VoxtralConfig,
-    VoxtralProcessor,
-    VoxtralForConditionalGeneration,
-    WhisperFeatureExtractor,
-    LlamaTokenizerFast,
     AutoTokenizer,
+    LlamaTokenizerFast,
+    VoxtralConfig,
+    VoxtralForConditionalGeneration,
+    VoxtralProcessor,
+    WhisperFeatureExtractor,
 )
 from transformers.integrations.mistral import convert_tekken_tokenizer
+from transformers.models.whisper.modeling_whisper import sinusoids
+from transformers.utils.hub import cached_file
 
 
 # TODO: @eustlb, I don't really like the audio_tower name
@@ -166,7 +166,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         audio_config=new_audio_config_kwargs,
         text_config=new_text_config_kwargs,
     )
-    
+
     return new_config
 
 
@@ -252,11 +252,11 @@ def write_model(
     with (
         torch.no_grad(), torch.device("cuda")
     ):
-        # TODO: @eustlb, we are here creating on GPU 
+        # TODO: @eustlb, we are here creating on GPU
         # vllm initalizes on device, while we save in state dict
         embed_positions_weight = sinusoids(config.audio_config.max_source_positions, config.audio_config.hidden_size)
     converted_state_dict["audio_tower.embed_positions.weight"] = embed_positions_weight.cpu()
-    
+
     # -------------------------
     # load the weights and save
     # -------------------------

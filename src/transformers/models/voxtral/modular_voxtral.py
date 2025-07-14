@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from torch import nn
+
 from ...activations import ACT2FN
-from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder, Qwen2AudioForConditionalGeneration
-from ..whisper.modeling_whisper import WhisperEncoder
-from ..llama.modeling_llama import LlamaForCausalLM
+from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
 from .configuration_voxtral import VoxtralConfig
 
-from torch import nn
 
 # TODO: @eustlb, I would really prefer to use WhisperEncoder but it's messing with modular
 class VoxtralEncoder(Qwen2AudioEncoder):
@@ -182,7 +181,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-    
+
     def get_audio_embeds(self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor):
         """
         TODO: @eustlb, add docstring
