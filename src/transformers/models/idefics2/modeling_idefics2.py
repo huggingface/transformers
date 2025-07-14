@@ -50,7 +50,7 @@ class Idefics2BaseModelOutputWithPast(ModelOutput):
         Sequence of hidden-states at the output of the last layer of the model.
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
         `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
@@ -84,7 +84,7 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
@@ -639,7 +639,7 @@ class Idefics2PerceiverAttention(nn.Module):
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -728,7 +728,7 @@ class Idefics2PerceiverLayer(nn.Module):
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
@@ -1012,7 +1012,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.BoolTensor] = None,
@@ -1051,7 +1051,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if use_cache and not isinstance(past_key_values, Cache):
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
@@ -1155,7 +1159,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.BoolTensor] = None,

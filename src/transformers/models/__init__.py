@@ -168,6 +168,7 @@ if TYPE_CHECKING:
     from .layoutxlm import *
     from .led import *
     from .levit import *
+    from .lfm2 import *
     from .lightglue import *
     from .lilt import *
     from .llama import *
@@ -236,6 +237,7 @@ if TYPE_CHECKING:
     from .pegasus import *
     from .pegasus_x import *
     from .perceiver import *
+    from .perception_lm import *
     from .persimmon import *
     from .phi import *
     from .phi3 import *
