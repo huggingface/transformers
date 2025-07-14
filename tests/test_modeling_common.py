@@ -4468,6 +4468,7 @@ class ModelTesterMixin:
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
         cls = self._torch_compile_train_cls
         attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
         if attn_implementation is not None:
