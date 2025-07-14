@@ -240,6 +240,7 @@ VLMS = [
     "mistral3",
     "mllama",
     "paligemma",
+    "shieldgemma2",
     "qwen2vl",
     "qwen2_5_vl",
     "videollava",
