@@ -86,7 +86,7 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "Lfm2 has a special cache format which is not compatible with compile has it has static address for conv cache"
+        "Lfm2 has a special cache format which is not compatible with compile as it has static address for conv cache"
     )
     def test_sdpa_can_compile_dynamic(self):
         pass
