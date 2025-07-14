@@ -32,7 +32,7 @@ from torch import nn
 import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
 
-from ...cache_utils import Cache  # we need __iter__ and __len__ of pkv
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
