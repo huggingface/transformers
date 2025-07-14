@@ -282,8 +282,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             dtype=self.model.dtype,
         )
         for i in range(len(self.static_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
+            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
 
     def forward(self, input_ids: torch.Tensor, cache_position: torch.Tensor):
         """
@@ -413,8 +413,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
         # Register all key and value cache tensors as buffers
         for i in range(len(self.cache)):
-            self.register_buffer(f"key_cache_{i}", self.cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.cache.value_cache[i], persistent=False)
+            self.register_buffer(f"key_cache_{i}", self.cache.layers[i].keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", self.cache.layers[i].values, persistent=False)
 
     def forward(
         self,
@@ -560,8 +560,8 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         # Register cache buffers to make them exportable
         for i in range(len(self.static_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
+            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Get outputs from decoder
