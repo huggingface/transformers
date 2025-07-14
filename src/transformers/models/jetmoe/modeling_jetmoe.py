@@ -386,8 +386,11 @@ class JetMoeRotaryEmbedding(nn.Module):
     def __init__(self, config: JetMoeConfig, device=None, is_global=True):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        rope_scaling_dict = (
+            getattr(config, "rope_scaling", None) if is_global else getattr(config, "local_rope_scaling", None)
+        )
+        if rope_scaling_dict is not None and isinstance(config.rope_scaling, dict):
+            self.rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type"))
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
