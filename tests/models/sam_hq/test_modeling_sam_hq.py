@@ -810,7 +810,6 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             }
         )
         EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
-        print(masks)
         torch.testing.assert_close(masks, EXPECTED_MASKS, atol=2e-3, rtol=2e-3)
 
     def test_inference_mask_generation_one_point_one_bb(self):
@@ -833,7 +832,6 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         torch.testing.assert_close(scores[-1], torch.tensor(0.9700).to(torch_device), atol=2e-4, rtol=2e-4)
-        print(masks)
         torch.testing.assert_close(
             masks, torch.tensor([-9.2033, -8.5505, -7.1361]).to(torch_device), atol=3e-2, rtol=3e-2
         )
@@ -903,7 +901,6 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         torch.testing.assert_close(scores, EXPECTED_SCORES, atol=1e-3, rtol=1e-3)
-        print(masks)
         torch.testing.assert_close(masks, EXPECTED_MASKS, atol=9e-3, rtol=9e-3)
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):

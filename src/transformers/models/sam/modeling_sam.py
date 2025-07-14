@@ -192,7 +192,7 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
-        attn_weights = torch.softmax(attn_weights, dim=-1)
+
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -217,6 +217,7 @@ class SamAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         if self.internal_dim % config.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // config.num_attention_heads) ** -0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
@@ -255,7 +256,6 @@ class SamAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamAttention
-        scale = query.shape[-1] ** -0.5
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -267,7 +267,7 @@ class SamAttention(nn.Module):
             value,
             attention_mask=attention_similarity,
             dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
@@ -636,11 +636,7 @@ class SamPromptEncoder(nn.Module):
 
         # This is required for the ONNX export. The dtype, device need to be explicitly
         # specified as otherwise torch.onnx.export interprets as double
-        point_embedding = torch.where(
-            labels[..., None] != -10,
-            point_embedding,
-            torch.zeros_like(point_embedding, dtype=point_embedding.dtype, device=point_embedding.device),
-        )
+        point_embedding = torch.where(labels[..., None] != -10, point_embedding, torch.zeros_like(point_embedding))
 
         point_embedding = torch.where(
             (labels == 0)[:, :, :, None],
@@ -688,7 +684,7 @@ class SamPromptEncoder(nn.Module):
         sparse_embeddings = None
         batch_size = 1
         if input_points is not None:
-            batch_size, _ = input_points.shape[:2]
+            batch_size = input_points.shape[0]
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
