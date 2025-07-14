@@ -56,6 +56,37 @@ def apply_processors(
     return _wrapped_update
 
 
+class KeyValuesBCWrapper:
+    """Efficiently simulates layer-indexed key or value lists from a layered cache.
+    This allows for BC access and writing, e.g., cache.key_cache[idx] = ..."""
+
+    def __init__(self, layers, cache_type="key"):
+        self.layers = layers
+        self.cache_type = cache_type
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return [getattr(layer, f"{self.cache_type}_cache") for layer in self.layers[idx]]
+        return getattr(self.layers[idx], f"{self.cache_type}_cache")
+
+    def __setitem__(self, idx, value):
+        if isinstance(idx, slice):
+            for layer, val in zip(self.layers[idx], value):
+                setattr(layer, f"{self.cache_type}_cache", val)
+        else:
+            setattr(self.layers[idx], f"{self.cache_type}_cache", value)
+
+    def __len__(self):
+        return len(self.layers)
+
+    def __iter__(self):
+        for layer in self.layers:
+            yield getattr(layer, f"{self.cache_type}_cache")
+
+    def __bool__(self):
+        return bool(self.layers)
+
+
 class Cache:
     """
     Base class for all caches.
@@ -215,6 +246,22 @@ class Cache:
         """
         kv_length, kv_offset = self.layers[layer_idx].get_mask_sizes(cache_position)
         return kv_length, kv_offset
+
+    @property
+    def key_cache(self) -> KeyValuesBCWrapper:
+        """Returns a list-like object of key cache tensors indexed by layer."""
+        warnings.warn(
+            "`cache.key_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].keys` instead."
+        )
+        return KeyValuesBCWrapper(self.layers, "key")
+
+    @property
+    def value_cache(self) -> KeyValuesBCWrapper:
+        """Returns a list-like object of value cache tensors indexed by layer."""
+        warnings.warn(
+            "`cache.value_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].values` instead."
+        )
+        return KeyValuesBCWrapper(self.layers, "value")
 
     ### Wrappers for layer operations and properties ###
 
