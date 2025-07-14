@@ -377,7 +377,7 @@ class EfficientLoFTRAggregationLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor, Optional[torch.Tensor]]:
         query_states = hidden_states
         is_cross_attention = encoder_hidden_states is not None
         kv_states = encoder_hidden_states if is_cross_attention else hidden_states
