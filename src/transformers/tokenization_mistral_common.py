@@ -36,6 +36,7 @@ from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, 
 from transformers.utils.generic import is_torch_tensor
 from transformers.utils.hub import PushToHubMixin
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
+from transformers.audio_utils import load_audio_base64
 
 
 if is_mistral_common_available():
@@ -1473,12 +1474,27 @@ class MistralCommonTokenizer(PushToHubMixin):
                     else:
                         raise ValueError("Image content must be specified.")
                     normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
+                elif content_type == "audio":
+                    maybe_url: Optional[str] = content.get("url")
+                    maybe_path: Optional[str] = content.get("path")
+                    maybe_base64: Optional[str] = content.get("base64")
+                    if maybe_url or maybe_path:
+                        audio_content = load_audio_base64(maybe_url or maybe_path, force_mono=True)
+                    elif maybe_base64:
+                        if not maybe_base64.startswith("data:audio"):
+                            # TODO: @eustlb check if this is correct
+                            maybe_base64 = "data:audio/unk;base64," + maybe_base64
+                        audio_content = maybe_base64
+                    else:
+                        raise ValueError("Audio content must be specified.")
+                    normalized_content.append({"type": "input_audio", "input_audio": {"data": audio_content}})
                 else:
                     normalized_content.append(content)
             message["content"] = normalized_content
 
         outputs = []
         images: list[np.ndarray] = []
+        audios: list[np.ndarray] = []
 
         for conversation in conversations:
             messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
@@ -1498,6 +1514,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             else:
                 outputs.append(tokenized_request.text)
             images.extend(tokenized_request.images)
+            audios.extend([el.audio_array for el in tokenized_request.audios])
 
         if not is_batched:
             outputs = outputs[0]
@@ -1528,6 +1545,21 @@ class MistralCommonTokenizer(PushToHubMixin):
                     else:
                         raise ValueError(f"Unsupported return_tensors type: {return_tensors}")
                     out.data["pixel_values"] = pixel_values
+                if audios:
+                    # Transformers convention is audio for plural audio (audio does not take a "s")
+                    audio: Union[list[np.ndarray], np.ndarray, torch.Tensor]
+                    if return_tensors == "pt":
+                        # TODO: @eustlb, we cannot batch the audio inputs, here we rather return a list of tensors
+                        if not is_torch_available():
+                            raise ImportError(
+                                "Unable to convert output to PyTorch tensors format, PyTorch is not installed."
+                            )
+                        audio = [torch.tensor(audio) for audio in audios]
+                    elif return_tensors == "np" or return_tensors is None:
+                        audio = audios
+                    else:
+                        raise ValueError(f"Unsupported return_tensors type: {return_tensors}")
+                    out.data["audio"] = audio
                 return out
             else:
                 return out["input_ids"]

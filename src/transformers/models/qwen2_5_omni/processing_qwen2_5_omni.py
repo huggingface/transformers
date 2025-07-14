@@ -255,7 +255,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                         video_token_indices = np.broadcast_to(
                             video_token_indices, (video_token_indices.shape[0], height, width)
                         ).reshape(-1)
-                        video_token_indices = (
+                  
+       video_token_indices = (
                             video_token_indices * next(video_second_per_grid) * position_id_per_seconds
                         )
 
