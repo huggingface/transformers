@@ -90,6 +90,11 @@ class AudioClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=audio-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = True
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         # Only set default top_k if explicitly provided
         if "top_k" in kwargs and kwargs["top_k"] is None:
