@@ -278,7 +278,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextModel"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
-        ("voxtral_encoder", "VoxtralEncoder"),
         ("qwen2_moe", "Qwen2MoeModel"),
         ("qwen2_vl", "Qwen2VLModel"),
         ("qwen2_vl_text", "Qwen2VLTextModel"),
@@ -359,6 +358,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
+        ("voxtral_encoder", "VoxtralEncoder"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -1077,6 +1077,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
 )

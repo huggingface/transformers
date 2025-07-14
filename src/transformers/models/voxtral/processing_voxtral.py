@@ -214,7 +214,8 @@ class VoxtralProcessor(ProcessorMixin):
                     pad_to_multiple_of,
                     max_source_positions,
                     audio_length_per_tok,
-                ) for audio_array in audio
+                )
+                for audio_array in audio
             ]
             num_audio_tokens_list_copy = num_audio_tokens_list.copy()
 
@@ -246,7 +247,9 @@ class VoxtralProcessor(ProcessorMixin):
                 audio_inputs = self.feature_extractor(audio_array, **audio_kwargs)
 
                 # let's split into chunks of max_source_positions, and then stack them along batch dimension
-                input_features = audio_inputs["input_features"].reshape(self.feature_extractor.feature_size, -1, max_source_positions)
+                input_features = audio_inputs["input_features"].reshape(
+                    self.feature_extractor.feature_size, -1, max_source_positions
+                )
                 input_features_list.append(input_features.transpose(0, 1))
             data["input_features"] = torch.cat(input_features_list)
 
@@ -271,4 +274,3 @@ class VoxtralProcessor(ProcessorMixin):
 
 
 __all__ = ["VoxtralProcessor"]
-

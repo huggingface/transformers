@@ -143,7 +143,6 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     if new_text_config_kwargs["sliding_window"] is not None:
         new_text_config_kwargs["sliding_window"] = int(new_text_config_kwargs["sliding_window"])
 
-
     # Audio config
     audio_key_mapping = {
         "hidden_size": "dim",
@@ -160,7 +159,6 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     ]
     new_audio_config_kwargs = {k: original_audio_config[v] for k, v in audio_key_mapping.items()}
     new_audio_config_kwargs.update({k: v for k, v in original_audio_config.items() if k in similar_audio_keys_to_keep})
-
 
     new_config = VoxtralConfig(
         audio_config=new_audio_config_kwargs,
@@ -249,9 +247,7 @@ def write_model(
     converted_state_dict = convert_state_dict(state_dict, config.text_config)
 
     # we need to add embed positions as they are not in the state dict
-    with (
-        torch.no_grad(), torch.device("cuda")
-    ):
+    with torch.no_grad(), torch.device("cuda"):
         # TODO: @eustlb, we are here creating on GPU
         # vllm initalizes on device, while we save in state dict
         embed_positions_weight = sinusoids(config.audio_config.max_source_positions, config.audio_config.hidden_size)
@@ -279,7 +275,9 @@ def write_model(
     print("Model reloaded successfully.")
 
 
-def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str, tokenizer_template_name: str = ""):
+def write_processor(
+    input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str, tokenizer_template_name: str = ""
+):
     """Convert the tokenizer and save it."""
     print("Converting the tokenizer...")
     # Tekken format
@@ -312,6 +310,7 @@ def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str
     )
     processor.save_pretrained(output_dir)
     print("Processor saved successfully.")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Convert Voxtral weights to Hugging Face format")
