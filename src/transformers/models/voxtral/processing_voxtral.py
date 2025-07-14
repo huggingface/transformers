@@ -119,79 +119,6 @@ class VoxtralProcessor(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    # @staticmethod
-    # def _get_encoded_length(audio_length, kernel_sizes=None, strides=None, dilations=None, use_causal_conv=None):
-    #     """
-    #     Compute the length of the encoded audio sequence.
-
-    #     Args:
-    #         audio_length (int): The length of the audio sequence.
-    #         kernel_sizes (list[int]): The kernel sizes for the convolutional layers.
-    #         strides (list[int]): The strides for the convolutional layers.
-    #         use_causal_conv (bool): Whether to use causal convolutions.
-    #     """
-    #     cur_length = audio_length
-
-    #     if kernel_sizes is None or strides is None or dilations is None or use_causal_conv is None:
-    #         return cur_length
-
-    #     for kernel_size, stride, dilation in zip(kernel_sizes, strides, dilations):
-    #         effective_kernel_size = (kernel_size - 1) * dilation + 1
-    #         padding_total = kernel_size - stride
-    #         padding_right = padding_total // 2
-    #         padding_left = padding_total - padding_right
-
-    #         n_frames = (cur_length - effective_kernel_size + padding_total) / stride + 1
-    #         n_frames = math.ceil(n_frames) - 1
-    #         ideal_length = n_frames * stride + kernel_size - padding_total
-    #         extra_padding = ideal_length - cur_length
-
-    #         if use_causal_conv:
-    #             padding_left = padding_total
-    #             padding_right = extra_padding
-    #         else:
-    #             padding_left = padding_left
-    #             padding_right = padding_right + extra_padding
-
-    #         cur_length = cur_length + padding_left + padding_right
-    #         cur_length = (cur_length - dilation * (kernel_size - 1) - 1) // stride + 1
-
-    #     return cur_length
-
-    # def save_audio(
-    #     self,
-    #     audio: AudioInput,
-    #     saving_path: Union[str, Path, list[Union[str, Path]]],
-    #     **kwargs: Unpack[VoxtralProcessorKwargs],
-    # ):
-    #     # TODO: @eustlb, this should be in AudioProcessor
-    #     if not is_soundfile_available():
-    #         raise ImportError("Please install `soundfile` to save audio files.")
-
-    #     # ensure correct audio input
-    #     audio = make_list_of_audio(audio)
-
-    #     # ensure correct saving path
-    #     if isinstance(saving_path, (str, Path)):
-    #         saving_path = [saving_path]
-    #     elif not (isinstance(saving_path, (list, tuple)) and all(isinstance(p, (str, Path)) for p in saving_path)):
-    #         raise ValueError("Invalid input path. Please provide a string, or a list of strings")
-
-    #     if len(audio) != len(saving_path):
-    #         raise ValueError("The number of audio and saving paths must be the same")
-
-    #     output_kwargs = self._merge_kwargs(
-    #         VoxtralProcessorKwargs,
-    #         **kwargs,
-    #     )
-    #     audio_kwargs = output_kwargs["audio_kwargs"]
-    #     sampling_rate = audio_kwargs["sampling_rate"]
-
-    #     for audio_value, p in zip(audio, saving_path):
-    #         if isinstance(audio_value, torch.Tensor):
-    #             audio_value = audio_value.cpu().float().numpy()
-    #         sf.write(p, audio_value, sampling_rate)
-
     @staticmethod
     def _get_encoded_length(audio_length, pad_to_multiple_of, max_source_positions, audio_length_per_tok):
         next_multiple_of = math.ceil(audio_length / pad_to_multiple_of)
@@ -318,33 +245,14 @@ class VoxtralProcessor(ProcessorMixin):
 
         if audio is not None:
             # TODO: @eustlb, audio_kwargs cannot be everything here... we should warn the user
-            audio_inputs = self.feature_extractor(audio, **audio_kwargs)
+            input_features_list = []
+            for audio_array in audio:
+                audio_inputs = self.feature_extractor(audio_array, **audio_kwargs)
 
-            # TODO: @eustlb, not really sure how to correctly handle when batched
-            # TODO: @eustlb, written with bs 1
-            # let's split into chunks of max_source_positions, and then stack them along batch dimension
-            input_features = audio_inputs["input_features"].reshape(self.feature_extractor.feature_size, -1, max_source_positions)
-            input_features = input_features.transpose(0, 1)
-            data["input_features"] = input_features
-
-        # if output_labels:
-        #     audio_frame_idxs = (data["input_ids"] == self.audio_token_id).nonzero()
-        #     n_audio_frames = audio_frame_idxs.shape[0]
-
-        #     if depth_decoder_labels_ratio <= 1.0:
-        #         rand_idxs = torch.randperm(n_audio_frames)[: int(n_audio_frames * (1 - depth_decoder_labels_ratio))]
-        #         skip_frames_idxs = audio_frame_idxs[rand_idxs]
-        #     else:
-        #         skip_frames_idxs = audio_frame_idxs
-
-        #     labels = torch.where(
-        #         (data["input_ids"] == self.audio_token_id) | (data["input_ids"] == self.audio_eos_token_id),
-        #         data["input_ids"],
-        #         -100,
-        #     )
-        #     labels[skip_frames_idxs[:, 0], skip_frames_idxs[:, 1]] = -101
-
-        #     data["labels"] = labels
+                # let's split into chunks of max_source_positions, and then stack them along batch dimension
+                input_features = audio_inputs["input_features"].reshape(self.feature_extractor.feature_size, -1, max_source_positions)
+                input_features_list.append(input_features.transpose(0, 1))
+            data["input_features"] = torch.cat(input_features_list)
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
