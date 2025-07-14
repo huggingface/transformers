@@ -56,8 +56,7 @@ from ..gemma2.modeling_gemma2 import (
 )
 
 
-# TODO(bzhanggo): figure out these documentations
-_CHECKPOINT_FOR_DOC = "google/t5gemma-placeholder"
+_CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
 
 
 if is_torch_flex_attn_available():
@@ -68,10 +67,7 @@ logger = logging.get_logger(__name__)
 
 
 class T5GemmaModuleConfig(Gemma2Config):
-    """Module config (encoder or decoder): the same as Gemma2Config."""
-
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
+    pass
 
 
 class T5GemmaConfig(PretrainedConfig):
@@ -79,10 +75,10 @@ class T5GemmaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`T5GemmaModel`]. It is used to instantiate an T5Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to a hypothetical balanced Gemma2 encoder-decoder model.
-    e.g. [google/t5gemma-placeholder](https://huggingface.co/google/t5gemma-placeholder)
+    e.g. [google/t5gemma-2b-2b-prefixlm-it](https://huggingface.co/google/t5gemma-2b-2b-prefixlm-it)
     ```python
     >>> from transformers import T5GemmaConfig, T5GemmaModel
-    >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-placeholder")
+    >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
     >>> model = T5GemmaModel(t5gemma_config)
     ```
     Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
@@ -102,6 +98,8 @@ class T5GemmaConfig(PretrainedConfig):
             The dropout ratio for attention.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether tie input and output embeddings.
+        vocab_size (`int`, *optional*, defaults to 256000):
+            Vocabulary size of the T5Gemma model (the same as Gemma 2).
         kwargs (additional keyword arguments, optional, *optional*):
             Will be passed to the PretrainedConfig base class.
     """
@@ -150,6 +148,7 @@ class T5GemmaConfig(PretrainedConfig):
         classifier_dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,
         tie_word_embeddings: bool = True,
+        vocab_size: int = 256000,
         **kwargs,
     ):
         if isinstance(encoder, dict):
@@ -195,6 +194,9 @@ class T5GemmaConfig(PretrainedConfig):
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
 
+        # Used in pipeline generation.
+        self.vocab_size = vocab_size
+
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
             "output_hidden_states",
@@ -202,6 +204,7 @@ class T5GemmaConfig(PretrainedConfig):
             "_attn_implementation",
             "dropout_rate",
             "attention_dropout",
+            "vocab_size",
         ]
 
         if key in shared_attr_with_submodules:

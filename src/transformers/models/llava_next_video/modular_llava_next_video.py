@@ -29,6 +29,7 @@ from transformers.models.llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
@@ -183,7 +184,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
 
 class LlavaNextVideoModelOutputWithPast(LlavaNextModelOutputWithPast):
     r"""
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -206,7 +207,7 @@ class LlavaNextVideoCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -406,7 +407,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -545,7 +546,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
