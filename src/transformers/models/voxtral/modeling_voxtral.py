@@ -40,6 +40,39 @@ from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
+class VoxtralPreTrainedModel(PreTrainedModel):
+    config_class = VoxtralConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["VoxtralAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        # important: this ported version of Voxtral isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.audio_config.initializer_range
+        )
+
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -226,39 +259,6 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
             outputs += (attn_weights,)
 
         return outputs
-
-
-@auto_docstring
-class VoxtralPreTrainedModel(PreTrainedModel):
-    config_class = VoxtralConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["VoxtralAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        # important: this ported version of Voxtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -486,14 +486,14 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_audio_embeds(self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor):
+    def get_audio_embeds(self, input_features: torch.FloatTensor):
         """
         TODO: @eustlb, add docstring
         Takes (bs, num_mel_bins, num_frames)
         and returns (stacked dim, config.text_config.hidden_size)
         """
         # TODO: @eustlb, is this memory efficient? we only need the last hidden state
-        audio_outputs = self.audio_tower(input_features=input_features, attention_mask=feature_attention_mask)
+        audio_outputs = self.audio_tower(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
@@ -506,7 +506,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        feature_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -522,11 +521,9 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if input_features is not None and input_ids.shape[1] != 1:
+        if input_features is not None:
             # TODO: @eustlb, handle better input_features given and inputs_embeds too?
-            audio_embeds = self.get_audio_embeds(
-                input_features=input_features, feature_attention_mask=feature_attention_mask
-            )
+            audio_embeds = self.get_audio_embeds(input_features)
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = input_ids == self.config.audio_token_id
@@ -547,6 +544,20 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
 
         # TODO: @eustlb, do we wan't to return audio embeds?
         return outputs
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        # Overwritten -- we should not pass input_features when we are in cached decoding stage
+
+        input_features = kwargs.pop("input_features", None)
+        cache_position = kwargs.get("cache_position")
+
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+
+        if cache_position is not None and cache_position[0] == 0:
+            # input_features should only be passed when we are not in cached decoding stage
+            model_inputs["input_features"] = input_features
+
+        return model_inputs
 
 
 __all__ = ["VoxtralEncoder", "VoxtralForConditionalGeneration"]
