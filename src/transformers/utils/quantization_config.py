@@ -1577,7 +1577,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         backward_dtype: str = "mxfp4",
         store_master_weights: bool = False,
         hadamard_group_size: int = 32,
-        modules_to_not_convert: Optional[List[str]] = None,
+        modules_to_not_convert: Optional[list[str]] = None,
         **kwargs,
     ):
         self.forward_dtype = forward_dtype
