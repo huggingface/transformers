@@ -44,6 +44,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
+    repeat_kv,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 

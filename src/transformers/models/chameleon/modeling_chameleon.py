@@ -203,6 +203,7 @@ class ChameleonLayerNorm(nn.LayerNorm):
         return hidden_states
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -226,28 +227,18 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if multi_head_attention := key.shape[1] != query.shape[1]:
-        query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
-        attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key)
-        attn_weights = attn_weights.view(*query.shape[:3], query.shape[3]) * scaling
-    else:
-        attn_weights = torch.einsum("bhjd, bhsd -> bhjs", query, key) * scaling
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        if multi_head_attention:
-            causal_mask = attention_mask[:, :, None, :, : key.shape[-2]]
-        else:
-            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    if multi_head_attention:
-        # Can we fold the transpose into the einsum?
-        attn_output = torch.einsum("bkgjs, bksd -> bjkgd", attn_weights, value).flatten(2, 3)
-        attn_weights = attn_weights.flatten(1, 2)
-    else:
-        attn_output = torch.einsum("bhjs, bhsd -> bjhd", attn_weights, value)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
