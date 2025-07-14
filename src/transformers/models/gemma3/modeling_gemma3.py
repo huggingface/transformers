@@ -291,10 +291,10 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     if multi_head_attention:
-        attn_output = torch.einsum("bkgjs, bksd -> bjkgd", attn_weights, value).flatten(2, 3)
+        attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2).transpose(1, 2)
         attn_weights = attn_weights.flatten(1, 2)
     else:
-        attn_output = torch.einsum("bhjs, bhsd -> bjhd", attn_weights, value)
+        attn_output = torch.einsum("bhjs, bhsd -> bhjd", attn_weights, value).transpose(1, 2)
 
     return attn_output, attn_weights
 
