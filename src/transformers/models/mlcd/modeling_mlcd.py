@@ -223,12 +223,11 @@ def apply_rotary_pos_emb_vision(
 
 
 class MLCDAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper
-    Multi-headed attention with RoPE. Refer to papers:
-        - Attention is all you need:
-            https://huggingface.co/papers/1706.03762
-        - RoFormer: Enhanced Transformer with Rotary Position Embedding:
-            https://huggingface.co/papers/2104.09864
+    """Multi-headed attention with RoPE. Refer to papers:
+    - Attention is all you need:
+        https://huggingface.co/papers/1706.03762
+    - RoFormer: Enhanced Transformer with Rotary Position Embedding:
+        https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config: MLCDVisionConfig):
@@ -510,6 +509,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):

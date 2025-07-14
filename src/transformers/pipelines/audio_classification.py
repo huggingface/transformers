@@ -17,7 +17,7 @@ from typing import Any, Union
 import numpy as np
 import requests
 
-from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, logging
+from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -174,6 +174,21 @@ class AudioClassificationPipeline(Pipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
+        if is_torch_available():
+            import torch
+
+            if isinstance(inputs, torch.Tensor):
+                inputs = inputs.cpu().numpy()
+
+        if is_torchcodec_available():
+            import torch
+            import torchcodec
+
+            if isinstance(inputs, torchcodec.decoders.AudioDecoder):
+                _audio_samples = inputs.get_all_samples()
+                _array = _audio_samples.data
+                inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
+
         if isinstance(inputs, dict):
             inputs = inputs.copy()  # So we don't mutate the original dictionary outside the pipeline
             # Accepting `"array"` which is the key defined in `datasets` for
@@ -181,7 +196,7 @@ class AudioClassificationPipeline(Pipeline):
             if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
                 raise ValueError(
                     "When passing a dictionary to AudioClassificationPipeline, the dict needs to contain a "
-                    '"raw" key containing the numpy array representing the audio and a "sampling_rate" key, '
+                    '"raw" key containing the numpy array or torch tensor representing the audio and a "sampling_rate" key, '
                     "containing the sampling_rate associated with that array"
                 )
 
@@ -204,11 +219,13 @@ class AudioClassificationPipeline(Pipeline):
                     )
 
                 inputs = F.resample(
-                    torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
+                    torch.from_numpy(inputs) if isinstance(inputs, np.ndarray) else inputs,
+                    in_sampling_rate,
+                    self.feature_extractor.sampling_rate,
                 ).numpy()
 
         if not isinstance(inputs, np.ndarray):
-            raise TypeError("We expect a numpy ndarray as input")
+            raise TypeError("We expect a numpy ndarray or torch tensor as input")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
 

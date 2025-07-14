@@ -59,7 +59,7 @@ logger = logging.get_logger(__name__)
 )
 class Qwen2VLModelOutputWithPast(ModelOutput):
     r"""
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -88,7 +88,7 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -333,7 +333,6 @@ class VisionAttention(nn.Module):
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -357,27 +356,51 @@ class VisionAttention(nn.Module):
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask=attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
-            cu_seq_lens_k=cu_seqlens,
-            max_length_q=max_seqlen,
-            max_length_k=max_seqlen,
-            is_causal=False,
-            **kwargs,
-        )
+        if self.config._attn_implementation == "flash_attention_2":
+            # Flash Attention 2: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.proj(attn_output)
@@ -400,7 +423,6 @@ class Qwen2VLVisionBlock(GradientCheckpointingLayer):
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
@@ -408,7 +430,6 @@ class Qwen2VLVisionBlock(GradientCheckpointingLayer):
             cu_seqlens=cu_seqlens,
             rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
@@ -542,7 +563,7 @@ class Qwen2VLAttention(nn.Module):
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class Qwen2VLDecoderLayer(GradientCheckpointingLayer):
@@ -601,7 +622,7 @@ class Qwen2VLDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -625,9 +646,6 @@ class Qwen2VLDecoderLayer(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         return outputs
 
 
@@ -639,6 +657,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -721,25 +740,6 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if self.config._attn_implementation == "flash_attention_2":
-            return None
-
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
-
     @auto_docstring
     def forward(
         self,
@@ -765,14 +765,12 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        attention_mask = self._prepare_attention_mask(hidden_states, cu_seqlens)
 
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
                 **kwargs,
             )
 
@@ -813,7 +811,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -886,7 +884,6 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -906,9 +903,6 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -918,13 +912,13 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns] if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
@@ -1145,7 +1139,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1233,8 +1227,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             )
             if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
                 attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
-                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
-                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
+                # Only apply conversion for floating point tensors (inverted masks)
+                if attention_mask_tensor.dtype.is_floating_point:
+                    attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
+                    attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
             # Calculate RoPE index once per generation in the pre-fill stage only.
             # When compiling, we can't check tensor values thus we check only input length
@@ -1345,7 +1341,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

@@ -56,6 +56,8 @@ if TYPE_CHECKING:
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("aimv2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("aimv2_vision_model", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
@@ -133,6 +135,7 @@ else:
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
+            ("perception_lm", ("PerceptionLMImageProcessorFast",)),
             ("phi4_multimodal", ("Phi4MultimodalImageProcessorFast",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
@@ -598,7 +601,6 @@ class AutoImageProcessor:
                     raise ValueError(
                         "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
                     )
-
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
