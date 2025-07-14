@@ -235,7 +235,7 @@ class T5GemmaMLP(Gemma2MLP):
 
 
 class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config, device=None):
+    def __init__(self, config, device=None, is_global=True):
         super().__init__(config, device)
 
 

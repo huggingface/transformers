@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -158,11 +157,14 @@ class Gemma3RMSNorm(nn.Module):
 
 
 class Gemma3RotaryEmbedding(nn.Module):
-    def __init__(self, config: Gemma3TextConfig, device=None):
+    def __init__(self, config: Gemma3TextConfig, device=None, is_global=True):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        rope_scaling_dict = (
+            getattr(config, "rope_scaling", None) if is_global else getattr(config, "local_rope_scaling", None)
+        )
+        if rope_scaling_dict is not None and isinstance(config.rope_scaling, dict):
+            self.rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type"))
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -171,7 +173,7 @@ class Gemma3RotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, is_global=is_global)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -480,12 +482,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         self.rotary_emb = Gemma3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
-        # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas
-        # when we want to create a local RoPE layer. Config defaults should hold values for global RoPE
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config)
+        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config, is_global=False)
 
         # Initialize weights and apply final processing
         self.post_init()
