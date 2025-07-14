@@ -519,7 +519,7 @@ class EfficientLoFTRAttention(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, seq_len, dim = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
 
@@ -739,7 +739,7 @@ class EfficientLoFTROutConvBlock(nn.Module):
         self.activation = ACT2CLS[config.mlp_activation_function]()
         self.out_conv3 = nn.Conv2d(intermediate_size, hidden_size, kernel_size=3, stride=1, padding=1, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor, residual_states: list[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, residual_states: torch.Tensor) -> torch.Tensor:
         residual_states = self.out_conv1(residual_states)
         residual_states = residual_states + hidden_states
         residual_states = self.out_conv2(residual_states)
@@ -891,8 +891,7 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, "BackboneOutput"]:
+    ) -> BackboneOutput:
         r"""
         Examples:
 
@@ -1317,8 +1316,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, "KeypointMatchingOutput"]:
+    ) -> KeypointMatchingOutput:
         r"""
         Examples:
 
@@ -1350,7 +1348,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         )
 
         # 1. Extract coarse and residual features
-        model_outputs = self.efficientloftr(
+        model_outputs: BackboneOutput = self.efficientloftr(
             pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
         features = model_outputs[0]
