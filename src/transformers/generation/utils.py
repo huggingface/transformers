@@ -1968,6 +1968,7 @@ class GenerationMixin(ContinuousMixin):
                 "reformer",
                 "minimax",
                 "xlnet",
+                "lfm2",
             ]
         )
 

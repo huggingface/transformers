@@ -28,6 +28,7 @@ from transformers.testing_utils import HfDoctestModule, HfDocTestParser
 
 NOT_DEVICE_TESTS = {
     "test_tokenization",
+    "test_tokenization_mistral_common",
     "test_processor",
     "test_processing",
     "test_beam_constraints",
