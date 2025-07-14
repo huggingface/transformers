@@ -75,7 +75,7 @@ class MistralConverter:
         return tokenizer
 
 
-def convert_tekken_tokenizer(tokenizer_file: str):
+def convert_tekken_tokenizer(tokenizer_file: str, add_eos_token: bool = False):
     """Convert a "tekken" tokenizer to a fast Tokenizer."""
     # Tekken format -- need to use the Converter
 
@@ -86,9 +86,17 @@ def convert_tekken_tokenizer(tokenizer_file: str):
 
     # Extract vocab and special tokens
     vocab = mistral_tokenizer.instruct_tokenizer.tokenizer._tekken_token2id_nospecial
+
+    def _get_token_value(token):
+        if hasattr(token, "value"):
+            return token.value
+        elif isinstance(token, dict) and "token_str" in token:
+            return token["token_str"]
+        else:
+            return token
+
     all_special = [
-        token.value if hasattr(token, "value") else token
-        for token in mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens
+        _get_token_value(token) for token in mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens
     ]
     specials_tokens = {token: all_special.index(token) for token in all_special}
     specials_tokens.update(vocab)
@@ -97,6 +105,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
     # Convert
     tokenizer = LlamaTokenizerFast(
         tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
+        add_eos_token=add_eos_token,
     )
 
     # Post-process
