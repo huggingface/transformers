@@ -765,48 +765,8 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring(
-    custom_intro="""
-    The text model from Siglip2 without any head or projection on top.
-    """
-)
-class Siglip2TextModel(Siglip2PreTrainedModel):
-    config_class = Siglip2TextConfig
-
-    def __init__(self, config: Siglip2TextConfig):
-        super().__init__(config)
-        self.text_model = Siglip2TextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        output_attentions=None,
-        output_hidden_states=None,
-    ) -> BaseModelOutputWithPooling:
-        """
-        SigLIP2 uses the last token's hidden state for pooling — regardless of whether it's <eos> or <pad>.
-        This matches the original implementation and handles padded inputs gracefully.
-        """
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+class Siglip2TextModel:
+    pass
 
 
 class Siglip2MultiheadAttentionPoolingHead(nn.Module):
