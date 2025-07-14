@@ -34,8 +34,8 @@ from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
 def create_meshgrid(
-    height: int,
-    width: int,
+    height: Union[int, torch.Tensor],
+    width: Union[int, torch.Tensor],
     normalized_coordinates: bool = False,
     device: Optional[torch.device] = None,
     dtype: Optional[torch.dtype] = None,
@@ -202,7 +202,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
         self.config = config
-        self.rope_type = config.rope_scaling.get("rope_type")
+        self.rope_type = config.rope_scaling["rope_type"]
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         self.inv_freq: torch.Tensor
