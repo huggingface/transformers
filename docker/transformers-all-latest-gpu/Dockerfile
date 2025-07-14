@@ -30,6 +30,8 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime] && 
 
 RUN python3 -m pip uninstall -y flax jax
 
+RUN python3 -m pip install --no-cache-dir -U timm
+
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
