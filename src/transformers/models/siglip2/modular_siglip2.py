@@ -285,7 +285,7 @@ class Siglip2PreTrainedModel(SiglipPreTrainedModel):
     pass
 
 
-class Siglip2TextModel():
+class Siglip2TextModel(SiglipTextModel):
         pass
 
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
