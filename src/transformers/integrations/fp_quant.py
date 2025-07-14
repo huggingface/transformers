@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,16 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"FPQuant integration file"
+"FP-Quant integration file"
 
 from ..utils import (
     is_fp_quant_available,
-    is_torch_available,
 )
-
-
-if is_torch_available():
-    pass
 
 
 if is_fp_quant_available():

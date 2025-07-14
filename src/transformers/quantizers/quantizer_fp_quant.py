@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -32,12 +32,12 @@ logger = logging.get_logger(__name__)
 
 class FPQuantHfQuantizer(HfQuantizer):
     """
-    Quantizer of the HIGGS method. Enables the loading of prequantized models and in-flight quantization of full-precision models.
+    Quantizer for the FP-Quant method. Enables the loading of prequantized models and in-flight quantization of full-precision models.
     """
 
     requires_calibration = False
     requires_parameters_quantization = True
-    is_qat_trainable = True
+    is_qat_trainable = False
     required_packages = ["qutlass", "fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -84,15 +84,13 @@ class FPQuantHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
-        from fp_quant import FPQuantLinear
-
         module, _ = get_module_from_name(model, param_name)
-        assert isinstance(module, FPQuantLinear), f"Module {param_name} is not a FPQuantLinear somehow..."
 
         if param_name.endswith(".qweight"):
+            # Loading an already quantized checkpoint
             module.qweight = torch.nn.Parameter(
                 param_value.to(target_device),
                 requires_grad=False,
@@ -132,7 +130,7 @@ class FPQuantHfQuantizer(HfQuantizer):
             if not self.quantization_config.store_master_weights and module.weight is not None:
                 module.weight = None
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from fp_quant import FPQuantLinear
 
         fp_quant_names = {name for name, module in model.named_modules() if isinstance(module, FPQuantLinear)}
@@ -147,7 +145,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        return True
+        return False
 
     def is_serializable(self, safe_serialization=None):
         return True
@@ -157,7 +155,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         from fp_quant import FPQuantLinear
