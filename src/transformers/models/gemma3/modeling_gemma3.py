@@ -767,13 +767,17 @@ def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor], tokens_
         return None
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # If the difference is less than image size, both are part of the same image block
-        same_image_block = torch.abs(kv_idx - q_idx) <= tokens_per_image
-        # If it's 1 for both query and key/value, we are in an image block
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids[batch_idx, kv_idx] == 1)
+        try:
+            # If the difference is less than image size, both are part of the same image block
+            same_image_block = torch.abs(kv_idx - q_idx) <= tokens_per_image
+            # If it's 1 for both query and key/value, we are in an image block
+            is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids[batch_idx, kv_idx] == 1)
 
-        # This is bidirectional attention whenever we are dealing with image tokens
-        return is_image_block & same_image_block
+            # This is bidirectional attention whenever we are dealing with image tokens
+            return is_image_block & same_image_block
+        except IndexError:
+            # Static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
+            return False
 
     return inner_mask
 
