@@ -37,8 +37,8 @@ def create_meshgrid(
     height: int,
     width: int,
     normalized_coordinates: bool = False,
-    device: torch.device = None,
-    dtype: torch.dtype = None,
+    device: Optional[torch.device] = None,
+    dtype: Optional[torch.dtype] = None,
 ) -> torch.Tensor:
     """
     Copied from kornia library : kornia/kornia/utils/grid.py:26
