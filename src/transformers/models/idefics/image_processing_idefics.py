@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 
 from PIL import Image
 
@@ -55,11 +55,11 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Args:
         image_size (`int`, *optional*, defaults to 224):
             Resize to image size
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -78,8 +78,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         image_size: int = 224,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         image_num_channels: Optional[int] = 3,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -98,9 +98,9 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         image_num_channels: Optional[int] = 3,
-        image_size: Optional[Dict[str, int]] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_size: Optional[dict[str, int]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         transform: Optional[Callable] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -117,11 +117,11 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 Resize to image size
             image_num_channels (`int`, *optional*, defaults to `self.image_num_channels`):
                 Number of image channels.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
                 Mean to use if normalizing the image. This is a float or list of floats the length of the number of
                 channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can
                 be overridden by the `image_mean` parameter in the `preprocess` method.
-            image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
                 Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
                 number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
                 method. Can be overridden by the `image_std` parameter in the `preprocess` method.

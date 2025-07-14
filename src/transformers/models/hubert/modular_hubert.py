@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Hubert model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -130,6 +130,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -228,7 +229,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -239,16 +240,14 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, HubertModel
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

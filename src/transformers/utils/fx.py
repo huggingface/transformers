@@ -1235,9 +1235,9 @@ class HFTracer(Tracer):
             root (`torch.nn.Module` or  `Callable`):
                 Either a `torch.nn.Module`` or a function to be traced through. If root is not a
                 [`~transformers.PreTrainedModel`], then `dummy_inputs` must be passed, otherwise tracing will fail.
-            concrete_args (`Dict[str, Any], *optional*):
+            concrete_args (`dict[str, Any], *optional*):
                 Concrete arguments that should not be treated as Proxies
-            dummy_inputs (`Dict[str, Any]`, *optional*):
+            dummy_inputs (`dict[str, Any]`, *optional*):
                 The dummy inputs needed to handle data-dependent control-flow if `root` is not a
                 [`~transformers.PreTrainedModel`]. It can also be used when `root` is a
                 [`~transformers.PreTrainedModel`] to specify custom dummy inputs for a subset or all the model inputs.
@@ -1448,7 +1448,7 @@ def symbolic_trace(
     Args:
         model ([`PretrainedModel`]):
             The model to trace.
-        input_names (`List[str]`, *optional*):
+        input_names (`list[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
