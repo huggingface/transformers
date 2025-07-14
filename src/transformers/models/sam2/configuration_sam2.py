@@ -49,9 +49,9 @@ class Sam2HieraDetConfig(PretrainedConfig):
             The padding of the patch.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The stochastic depth rate.
-        q_pool (`int`, *optional*, defaults to 3):
-            The number of q_pool stages.
-        q_stride (`Tuple[int, int]`, *optional*, defaults to `[2, 2]`):
+        num_query_pool_stages (`int`, *optional*, defaults to 3):
+            The number of query pool stages.
+        query_stride (`Tuple[int, int]`, *optional*, defaults to `[2, 2]`):
             The downsample stride between stages.
         stages (`Tuple[int, ...]`, *optional*, defaults to `[1, 2, 7, 2]`):
             The number of blocks per stage.
@@ -87,8 +87,8 @@ class Sam2HieraDetConfig(PretrainedConfig):
         patch_stride=4,
         patch_padding=3,
         drop_path_rate=0.0,
-        q_pool=3,
-        q_stride=[2, 2],
+        num_query_pool_stages=3,
+        query_stride=[2, 2],
         stages=[1, 2, 7, 2],
         dim_mul=2.0,
         head_mul=2.0,
@@ -110,8 +110,8 @@ class Sam2HieraDetConfig(PretrainedConfig):
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
         self.drop_path_rate = drop_path_rate
-        self.q_pool = q_pool
-        self.q_stride = q_stride
+        self.num_query_pool_stages = num_query_pool_stages
+        self.query_stride = query_stride
         self.stages = stages
         self.dim_mul = dim_mul
         self.head_mul = head_mul

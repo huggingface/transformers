@@ -639,7 +639,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
 
 class Sam2VisionNeck(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Sam2HieraDetConfig):
         super().__init__()
         self.config = config
 
@@ -701,7 +701,6 @@ class Sam2VisionNeck(nn.Module):
         return fpn_hidden_states, fpn_position_encoding
 
 
-# TODO refactor
 class Sam2MultiScaleAttention(nn.Module):
     def __init__(
         self,
@@ -709,7 +708,7 @@ class Sam2MultiScaleAttention(nn.Module):
         dim: int,
         dim_out: int,
         num_attention_heads: int,
-        q_pool: nn.Module = None,
+        query_stride: Optional[tuple[int, int]] = None,
     ):
         super().__init__()
 
@@ -717,12 +716,11 @@ class Sam2MultiScaleAttention(nn.Module):
 
         self.dim = dim
         self.dim_out = dim_out
+        self.query_stride = query_stride
 
         self.num_attention_heads = num_attention_heads
         head_dim = dim_out // num_attention_heads
         self.scale = head_dim**-0.5
-
-        self.q_pool = q_pool
         self.qkv = nn.Linear(dim, dim_out * 3)
         self.proj = nn.Linear(dim_out, dim_out)
 
@@ -739,8 +737,8 @@ class Sam2MultiScaleAttention(nn.Module):
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
         # Q pooling (for downsample at stage changes)
-        if self.q_pool:
-            query = do_pool(query.reshape(batch_size, height, width, -1), self.q_pool)
+        if self.query_stride:
+            query = do_pool(query.reshape(batch_size, height, width, -1), self.query_stride)
             height, width = query.shape[1:3]  # downsampled shape
             query = query.reshape(batch_size, height * width, self.num_attention_heads, -1)
 
@@ -764,7 +762,6 @@ class Sam2MultiScaleAttention(nn.Module):
         return attn_output
 
 
-# TODO refactor
 class Sam2MultiScaleBlock(GradientCheckpointingLayer):
     def __init__(
         self,
@@ -774,7 +771,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
         num_attention_heads: int,
         mlp_ratio: float = 4.0,
         drop_path: float = 0.0,
-        q_stride: Optional[tuple[int, int]] = None,
+        query_stride: Optional[tuple[int, int]] = None,
         window_size: int = 0,
     ):
         super().__init__()
@@ -785,17 +782,13 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
 
         self.window_size = window_size
 
-        self.q_stride = q_stride
-        self.pool = None
-        if self.q_stride:
-            self.pool = nn.MaxPool2d(kernel_size=q_stride, stride=q_stride, ceil_mode=False)
-
+        self.query_stride = query_stride
         self.attn = Sam2MultiScaleAttention(
             config,
             dim,
             dim_out,
             num_attention_heads=num_attention_heads,
-            q_pool=self.pool,
+            query_stride=self.query_stride,
         )
         self.drop_path = Sam2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
@@ -822,7 +815,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
 
         # Skip connection
         if self.dim != self.dim_out:
-            residual = do_pool(self.proj(hidden_states), self.pool)
+            residual = do_pool(self.proj(hidden_states), self.query_stride)
 
         # Window partition
         window_size = self.window_size
@@ -836,9 +829,9 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = attn_output
-        if self.q_stride:
+        if self.query_stride:
             # Shapes have changed due to Q pooling
-            window_size = self.window_size // self.q_stride[0]
+            window_size = self.window_size // self.query_stride[0]
             H, W = residual.shape[1:3]
 
             pad_h = (window_size - H % window_size) % window_size
@@ -948,7 +941,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
             (config.drop_path_rate * i / (sum(config.stages) - 1) if sum(config.stages) > 1 else 0.0)
             for i in range(sum(config.stages))
         ]
-        self.q_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.q_pool]
+        self.query_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.num_query_pool_stages]
         cur_stage = 1
         for i in range(sum(config.stages)):
             dim_out = embed_dim
@@ -971,7 +964,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
                 dim_out=dim_out,
                 num_attention_heads=num_attention_heads,
                 drop_path=drop_path_rates[i],
-                q_stride=config.q_stride if i in self.q_pool_blocks else None,
+                query_stride=config.query_stride if i in self.query_pool_blocks else None,
                 window_size=window_size,
             )
 
@@ -1526,18 +1519,14 @@ class Sam2FeedForward(nn.Module):
         return hidden_states
 
 
-# TODO refactor
-def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.Tensor:
-    if pool is None:
+def do_pool(x: torch.Tensor, query_stride: Optional[int] = None) -> torch.Tensor:
+    if query_stride is None:
         return x
     # (B, H, W, C) -> (B, C, H, W)
     x = x.permute(0, 3, 1, 2)
-    x = pool(x)
+    x = nn.functional.max_pool2d(x, kernel_size=query_stride, stride=query_stride, ceil_mode=False)
     # (B, C, H', W') -> (B, H', W', C)
     x = x.permute(0, 2, 3, 1)
-    if norm:
-        x = norm(x)
-
     return x
 
 
@@ -2075,7 +2064,7 @@ class Sam2Model(Sam2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
 
-    def __init__(self, config):
+    def __init__(self, config: Sam2Config):
         super().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         # For single image inference
