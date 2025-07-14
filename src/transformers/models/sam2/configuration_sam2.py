@@ -14,8 +14,6 @@
 # limitations under the License.
 """SAM2 model configuration"""
 
-import math
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -358,172 +356,12 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class Sam2MemoryAttentionConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Sam2MemoryAttention`]. It is used to instantiate a SAM 2
-    memory attention module according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        num_layers (`int`, *optional*, defaults to 4):
-            The number of layers in the memory attention module.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the memory attention module.
-        dim_feedforward (`int`, *optional*, defaults to 2048):
-            The dimension of the feedforward network in the memory attention module.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the memory attention module.
-        rope_theta (`float`, *optional*, defaults to 10000):
-            The Rope theta parameter.
-        rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
-            The feature sizes for the Rope positional encoding.
-        num_attention_heads (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the memory attention.
-        attention_downsample_rate (`int`, *optional*, defaults to 1):
-            The downsample rate for the attention layers.
-        rope_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the Rope positional encoding.
-        apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the self-attention of the memory attention module.
-        apply_pe_at_cross_attn_keys (`bool`, *optional*, defaults to `True`):
-            Whether to apply positional encoding at the keys of the cross-attention of the memory attention module.
-        apply_pe_at_cross_attn_queries (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
-
-    """
-
-    base_config_key = "memory_attention_config"
-
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=4,
-        hidden_act="relu",
-        dim_feedforward=2048,
-        dropout=0.1,
-        rope_theta=10000,
-        rope_feat_sizes=[64, 64],
-        num_attention_heads=1,
-        attention_downsample_rate=1,
-        rope_dropout=0.1,
-        apply_pe_at_self_attn=False,
-        apply_pe_at_cross_attn_keys=True,
-        apply_pe_at_cross_attn_queries=False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.hidden_act = hidden_act
-        self.dim_feedforward = dim_feedforward
-        self.dropout = dropout
-        self.rope_theta = rope_theta
-        self.rope_feat_sizes = rope_feat_sizes
-        self.num_attention_heads = num_attention_heads
-        self.attention_downsample_rate = attention_downsample_rate
-        self.rope_dropout = rope_dropout
-        self.apply_pe_at_self_attn = apply_pe_at_self_attn
-        self.apply_pe_at_cross_attn_keys = apply_pe_at_cross_attn_keys
-        self.apply_pe_at_cross_attn_queries = apply_pe_at_cross_attn_queries
-
-
-class Sam2MemoryEncoderConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Sam2MemoryEncoder`]. It is used to instantiate a SAM 2
-    memory encoder according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        output_channels (`int`, *optional*, defaults to 64):
-            The number of output channels for the mask downsampler.
-        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the mask downsampler embedding.
-        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the mask downsampler.
-        mask_downsampler_stride (`int`, *optional*, defaults to 2):
-            The stride for the mask downsampler.
-        mask_downsampler_padding (`int`, *optional*, defaults to 1):
-            The padding for the mask downsampler.
-        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
-            The total stride for the mask downsampler.
-        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the mask downsampler.
-        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the memory fuser.
-        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the memory fuser embedding.
-        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
-            The kernel size for the memory fuser.
-        memory_fuser_padding (`int`, *optional*, defaults to 3):
-            The padding for the memory fuser.
-        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
-            The initial value for the layer scale in the memory fuser.
-        memory_fuser_use_depthwise_conv (`bool`, *optional*, defaults to `True`):
-            Whether to use a depthwise convolution for the memory fuser.
-        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the memory fuser.
-
-    """
-
-    base_config_key = "memory_encoder_config"
-
-    def __init__(
-        self,
-        hidden_size=256,
-        output_channels=64,
-        mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=16,
-        mask_downsampler_hidden_act="gelu",
-        memory_fuser_num_layers=2,
-        memory_fuser_embed_dim=256,
-        memory_fuser_kernel_size=7,
-        memory_fuser_padding=3,
-        memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_use_depthwise_conv=True,
-        memory_fuser_hidden_act="gelu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        assert (
-            mask_downsampler_stride
-            ** int(math.log2(mask_downsampler_total_stride) // math.log2(mask_downsampler_stride))
-            == mask_downsampler_total_stride
-        )
-
-        self.hidden_size = hidden_size
-        self.output_channels = output_channels
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
-        self.memory_fuser_num_layers = memory_fuser_num_layers
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_kernel_size = memory_fuser_kernel_size
-        self.memory_fuser_padding = memory_fuser_padding
-        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_use_depthwise_conv = memory_fuser_use_depthwise_conv
-        self.memory_fuser_hidden_act = memory_fuser_hidden_act
-
-
 class Sam2Config(PretrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2 Hiera-B+
-    [facebook/sam2-hiera-base-plus](https://huggingface.co/facebook/sam2-hiera-base-plus) architecture.
+    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
+    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -535,10 +373,6 @@ class Sam2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
         mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
-        memory_attention_config (Union[`dict`, `Sam2MemoryAttentionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2MemoryAttentionConfig`].
-        memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2MemoryEncoderConfig`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             Standard deviation for parameter initialization.
         num_maskmem (`int`, *optional*, defaults to 7):
@@ -571,6 +405,62 @@ class Sam2Config(PretrainedConfig):
             Whether to project temporal positional encoding in object pointers.
         preserve_temporal_direction_in_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to preserve temporal direction in object pointers.
+        memory_attention_hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the memory attention hidden states.
+        memory_attention_num_layers (`int`, *optional*, defaults to 4):
+            The number of layers in the memory attention module.
+        memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
+            Number of attention heads for each attention layer in the memory attention.
+        memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
+            The downsample rate for the attention layers.
+        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
+            The dimension of the feedforward network in the memory attention module.
+        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the feedforward network in the memory attention module.
+        memory_attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout rate for the memory attention module.
+        memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
+            The Rope theta parameter.
+        memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
+            The feature sizes for the Rope positional encoding.
+        memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout rate for the Rope positional encoding.
+        memory_attention_apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
+            Whether to apply positional encoding at the self-attention of the memory attention module.
+        memory_attention_apply_pe_at_cross_attn_keys (`bool`, *optional*, defaults to `True`):
+            Whether to apply positional encoding at the keys of the cross-attention of the memory attention module.
+        memory_attention_apply_pe_at_cross_attn_queries (`bool`, *optional*, defaults to `False`):
+            Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
+        memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the memory encoder hidden states.
+        memory_encoder_output_channels (`int`, *optional*, defaults to 64):
+            The number of output channels for the memory encoder.
+        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the mask downsampler embedding.
+        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
+            The kernel size for the mask downsampler.
+        mask_downsampler_stride (`int`, *optional*, defaults to 2):
+            The stride for the mask downsampler.
+        mask_downsampler_padding (`int`, *optional*, defaults to 1):
+            The padding for the mask downsampler.
+        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
+            The total stride for the mask downsampler.
+        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the mask downsampler.
+        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
+            The number of layers in the memory fuser.
+        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the memory fuser embedding.
+        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
+            The kernel size for the memory fuser.
+        memory_fuser_padding (`int`, *optional*, defaults to 3):
+            The padding for the memory fuser.
+        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+            The initial value for the layer scale in the memory fuser.
+        memory_fuser_use_depthwise_conv (`bool`, *optional*, defaults to `True`):
+            Whether to use a depthwise convolution for the memory fuser.
+        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the memory fuser.
         fill_hole_area (`int`, *optional*, defaults to 8):
             The maximum area of holes to fill in the masks.
         non_overlap_masks (`bool`, *optional*, defaults to `False`):
@@ -585,8 +475,6 @@ class Sam2Config(PretrainedConfig):
     ...     Sam2VisionConfig,
     ...     Sam2PromptEncoderConfig,
     ...     Sam2MaskDecoderConfig,
-    ...     Sam2MemoryAttentionConfig,
-    ...     Sam2MemoryEncoderConfig,
     ...     Sam2Model,
     ... )
 
@@ -599,16 +487,14 @@ class Sam2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a Sam2Config from a Sam2VisionConfig, Sam2MemoryAttentionConfig, and Sam2MemoryEncoderConfig
+    >>> # We can also initialize a Sam2Config from a Sam2VisionConfig, Sam2PromptEncoderConfig, and Sam2MaskDecoderConfig
 
     >>> # Initializing SAM2 vision encoder, memory attention, and memory encoder configurations
     >>> vision_config = Sam2VisionConfig()
     >>> prompt_encoder_config = Sam2PromptEncoderConfig()
     >>> mask_decoder_config = Sam2MaskDecoderConfig()
-    >>> memory_attention_config = Sam2MemoryAttentionConfig()
-    >>> memory_encoder_config = Sam2MemoryEncoderConfig()
 
-    >>> config = Sam2Config(vision_config, prompt_encoder_config, mask_decoder_config, memory_attention_config, memory_encoder_config)
+    >>> config = Sam2Config(vision_config, prompt_encoder_config, mask_decoder_config)
     ```"""
 
     model_type = "sam2"
@@ -616,8 +502,6 @@ class Sam2Config(PretrainedConfig):
         "vision_config": Sam2VisionConfig,
         "prompt_encoder_config": Sam2PromptEncoderConfig,
         "mask_decoder_config": Sam2MaskDecoderConfig,
-        "memory_attention_config": Sam2MemoryAttentionConfig,
-        "memory_encoder_config": Sam2MemoryEncoderConfig,
     }
 
     def __init__(
@@ -625,8 +509,6 @@ class Sam2Config(PretrainedConfig):
         vision_config=None,
         prompt_encoder_config=None,
         mask_decoder_config=None,
-        memory_attention_config=None,
-        memory_encoder_config=None,
         initializer_range=0.02,
         num_maskmem=7,
         image_size=1024,
@@ -643,6 +525,37 @@ class Sam2Config(PretrainedConfig):
         enable_temporal_pos_encoding_for_object_pointers=True,
         project_temporal_pos_encoding_in_object_pointers=True,
         preserve_temporal_direction_in_object_pointers=True,
+        # memory attention
+        memory_attention_hidden_size=256,
+        memory_attention_num_layers=4,
+        memory_attention_num_attention_heads=1,
+        memory_attention_downsample_rate=1,
+        memory_attention_feed_forward_hidden_size=2048,
+        memory_attention_feed_forward_hidden_act="relu",
+        memory_attention_dropout=0.1,
+        memory_attention_rope_theta=10000,
+        memory_attention_rope_feat_sizes=[64, 64],
+        memory_attention_rope_dropout=0.1,
+        memory_attention_apply_pe_at_self_attn=False,
+        memory_attention_apply_pe_at_cross_attn_keys=True,
+        memory_attention_apply_pe_at_cross_attn_queries=False,
+        # memory encoder
+        memory_encoder_hidden_size=256,
+        memory_encoder_output_channels=64,
+        mask_downsampler_embed_dim=256,
+        mask_downsampler_kernel_size=3,
+        mask_downsampler_stride=2,
+        mask_downsampler_padding=1,
+        mask_downsampler_total_stride=16,
+        mask_downsampler_hidden_act="gelu",
+        memory_fuser_num_layers=2,
+        memory_fuser_embed_dim=256,
+        memory_fuser_kernel_size=7,
+        memory_fuser_padding=3,
+        memory_fuser_layer_scale_init_value=1e-6,
+        memory_fuser_use_depthwise_conv=True,
+        memory_fuser_hidden_act="gelu",
+        # post-processing parameters
         fill_hole_area=8,
         non_overlap_masks=False,
         **kwargs,
@@ -651,8 +564,6 @@ class Sam2Config(PretrainedConfig):
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
-        memory_attention_config = memory_attention_config if memory_attention_config is not None else {}
-        memory_encoder_config = memory_encoder_config if memory_encoder_config is not None else {}
 
         if isinstance(vision_config, Sam2VisionConfig):
             vision_config = vision_config.to_dict()
@@ -660,16 +571,10 @@ class Sam2Config(PretrainedConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, Sam2MaskDecoderConfig):
             mask_decoder_config = mask_decoder_config.to_dict()
-        if isinstance(memory_attention_config, Sam2MemoryAttentionConfig):
-            memory_attention_config = memory_attention_config.to_dict()
-        if isinstance(memory_encoder_config, Sam2MemoryEncoderConfig):
-            memory_encoder_config = memory_encoder_config.to_dict()
 
         self.vision_config = Sam2VisionConfig(**vision_config)
         self.prompt_encoder_config = Sam2PromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = Sam2MaskDecoderConfig(**mask_decoder_config)
-        self.memory_attention_config = Sam2MemoryAttentionConfig(**memory_attention_config)
-        self.memory_encoder_config = Sam2MemoryEncoderConfig(**memory_encoder_config)
 
         self.initializer_range = initializer_range
         self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
@@ -688,6 +593,38 @@ class Sam2Config(PretrainedConfig):
         self.project_temporal_pos_encoding_in_object_pointers = project_temporal_pos_encoding_in_object_pointers
         self.preserve_temporal_direction_in_object_pointers = preserve_temporal_direction_in_object_pointers
 
+        # memory attention
+        self.memory_attention_hidden_size = memory_attention_hidden_size
+        self.memory_attention_num_layers = memory_attention_num_layers
+        self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
+        self.memory_attention_downsample_rate = memory_attention_downsample_rate
+        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
+        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
+        self.memory_attention_dropout = memory_attention_dropout
+        self.memory_attention_rope_theta = memory_attention_rope_theta
+        self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
+        self.memory_attention_rope_dropout = memory_attention_rope_dropout
+        self.memory_attention_apply_pe_at_self_attn = memory_attention_apply_pe_at_self_attn
+        self.memory_attention_apply_pe_at_cross_attn_keys = memory_attention_apply_pe_at_cross_attn_keys
+        self.memory_attention_apply_pe_at_cross_attn_queries = memory_attention_apply_pe_at_cross_attn_queries
+
+        # memory encoder
+        self.memory_encoder_hidden_size = memory_encoder_hidden_size
+        self.memory_encoder_output_channels = memory_encoder_output_channels
+        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
+        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
+        self.mask_downsampler_stride = mask_downsampler_stride
+        self.mask_downsampler_padding = mask_downsampler_padding
+        self.mask_downsampler_total_stride = mask_downsampler_total_stride
+        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
+        self.memory_fuser_num_layers = memory_fuser_num_layers
+        self.memory_fuser_embed_dim = memory_fuser_embed_dim
+        self.memory_fuser_kernel_size = memory_fuser_kernel_size
+        self.memory_fuser_padding = memory_fuser_padding
+        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
+        self.memory_fuser_use_depthwise_conv = memory_fuser_use_depthwise_conv
+        self.memory_fuser_hidden_act = memory_fuser_hidden_act
+
         # post-processing parameters
         self.fill_hole_area = fill_hole_area  # area threshold for filling holes in masks
         self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
@@ -699,6 +636,4 @@ __all__ = [
     "Sam2VisionConfig",
     "Sam2PromptEncoderConfig",
     "Sam2MaskDecoderConfig",
-    "Sam2MemoryAttentionConfig",
-    "Sam2MemoryEncoderConfig",
 ]

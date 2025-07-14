@@ -24,8 +24,6 @@ from transformers import (
     Sam2Config,
     Sam2HieraDetConfig,
     Sam2MaskDecoderConfig,
-    Sam2MemoryAttentionConfig,
-    Sam2MemoryEncoderConfig,
     Sam2Processor,
     Sam2PromptEncoderConfig,
     Sam2VisionConfig,
@@ -359,52 +357,6 @@ class Sam2MaskDecoderTester:
         return config, dummy_inputs
 
 
-class Sam2MemoryEncoderTester:
-    def __init__(
-        self,
-        hidden_size=32,
-        num_heads=1,
-        num_channels=3,
-        image_size=64,
-        patch_kernel_size=2,
-        patch_stride=2,
-        patch_padding=1,
-        mask_downsampler_embed_dim=32,
-        memory_fuser_embed_dim=32,
-    ):
-        self.hidden_size = hidden_size
-        self.num_heads = num_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-
-    def get_config(self):
-        return Sam2MemoryEncoderConfig(
-            hidden_size=self.hidden_size,
-            num_heads=self.num_heads,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_kernel_size=self.patch_kernel_size,
-            patch_stride=self.patch_stride,
-            patch_padding=self.patch_padding,
-            mask_downsampler_embed_dim=self.mask_downsampler_embed_dim,
-            memory_fuser_embed_dim=self.memory_fuser_embed_dim,
-        )
-
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-
-        dummy_inputs = {
-            "image_embedding": floats_tensor([self.batch_size, self.hidden_size]),
-        }
-
-        return config, dummy_inputs
-
-
 class Sam2ModelTester:
     def __init__(
         self,
@@ -420,6 +372,7 @@ class Sam2ModelTester:
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
+        memory_encoder_hidden_size=32,
         batch_size=2,
         is_training=False,
     ):
@@ -437,9 +390,10 @@ class Sam2ModelTester:
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.is_training = is_training
+        self.memory_encoder_hidden_size = memory_encoder_hidden_size
+
         self.prompt_encoder_tester = Sam2PromptEncoderTester()
         self.mask_decoder_tester = Sam2MaskDecoderTester()
-        self.memory_encoder_tester = Sam2MemoryEncoderTester()
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -465,25 +419,21 @@ class Sam2ModelTester:
             fpn_hidden_size=self.fpn_hidden_size,
         )
 
-        memory_attention_config = Sam2MemoryAttentionConfig(
-            hidden_size=self.hidden_size,
-            num_layers=1,
-            dim_feedforward=32,
-        )
-
         prompt_encoder_config = self.prompt_encoder_tester.get_config()
 
         mask_decoder_config = self.mask_decoder_tester.get_config()
-
-        memory_encoder_config = self.memory_encoder_tester.get_config()
 
         return Sam2Config(
             vision_config=vision_config,
             prompt_encoder_config=prompt_encoder_config,
             mask_decoder_config=mask_decoder_config,
-            memory_attention_config=memory_attention_config,
-            memory_encoder_config=memory_encoder_config,
+            memory_attention_hidden_size=self.hidden_size,
+            memory_encoder_hidden_size=self.memory_encoder_hidden_size,
             image_size=self.image_size,
+            mask_downsampler_embed_dim=32,
+            memory_fuser_embed_dim=32,
+            memory_attention_num_layers=1,
+            memory_attention_feed_forward_hidden_size=32,
         )
 
     def create_and_check_model(self, config, pixel_values):

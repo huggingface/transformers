@@ -52,7 +52,6 @@ from .configuration_sam2 import (
     Sam2Config,
     Sam2HieraDetConfig,
     Sam2MaskDecoderConfig,
-    Sam2MemoryEncoderConfig,
     Sam2PromptEncoderConfig,
     Sam2VisionConfig,
 )
@@ -415,7 +414,7 @@ def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.T
 class Sam2MultiScaleAttention(nn.Module):
     def __init__(
         self,
-        config: Sam2VisionConfig,
+        config: Sam2HieraDetConfig,
         dim: int,
         dim_out: int,
         num_attention_heads: int,
@@ -563,7 +562,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class Sam2MultiScaleBlock(GradientCheckpointingLayer):
     def __init__(
         self,
-        config,
+        config: Sam2HieraDetConfig,
         dim: int,
         dim_out: int,
         num_attention_heads: int,
@@ -1558,20 +1557,23 @@ class Sam2Attention(nn.Module):
 
     def __init__(
         self,
-        config,
+        config: Union[Sam2Config, Sam2MaskDecoderConfig],
+        hidden_size: Optional[int] = None,
+        num_attention_heads: Optional[int] = None,
         downsample_rate: Optional[int] = None,
-        dropout: float = 0.0,
         kv_in_dim: Optional[int] = None,
     ):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
+        self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
+        self.num_attention_heads = (
+            num_attention_heads if num_attention_heads is not None else config.num_attention_heads
+        )
 
-        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
+        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
+        self.internal_dim = self.hidden_size // downsample_rate
 
-        self.internal_dim = config.hidden_size // downsample_rate
-        self.num_attention_heads = config.num_attention_heads
-        if self.internal_dim % config.num_attention_heads != 0:
+        if self.internal_dim % self.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
         self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
 
@@ -1831,45 +1833,48 @@ class Sam2RoPEAttention(Sam2Attention):
 
 
 class Sam2MemoryAttentionLayer(nn.Module):
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config: Sam2Config):
         super().__init__()
-        self.dim_feedforward = config.dim_feedforward
+        hidden_size = config.memory_attention_hidden_size
         self.self_attn = Sam2RoPEAttention(
             config,
-            rope_theta=config.rope_theta,
-            feat_sizes=config.rope_feat_sizes,
-            dropout=config.rope_dropout,
+            hidden_size=hidden_size,
+            num_attention_heads=config.memory_attention_num_attention_heads,
+            downsample_rate=config.memory_attention_downsample_rate,
+            rope_theta=config.memory_attention_rope_theta,
+            feat_sizes=config.memory_attention_rope_feat_sizes,
+            dropout=config.memory_attention_rope_dropout,
         )
         self.cross_attn_image = Sam2RoPEAttention(
             config,
-            rope_theta=config.rope_theta,
-            feat_sizes=config.rope_feat_sizes,
-            dropout=config.rope_dropout,
+            hidden_size=hidden_size,
+            num_attention_heads=config.memory_attention_num_attention_heads,
+            downsample_rate=config.memory_attention_downsample_rate,
+            rope_theta=config.memory_attention_rope_theta,
+            feat_sizes=config.memory_attention_rope_feat_sizes,
+            dropout=config.memory_attention_rope_dropout,
             rope_k_repeat=True,
             kv_in_dim=64,
         )
 
         # Implementation of Feedforward model
-        self.linear1 = nn.Linear(config.hidden_size, config.dim_feedforward)
-        self.dropout = nn.Dropout(config.dropout)
-        self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_size)
+        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
+        self.dropout = nn.Dropout(config.memory_attention_dropout)
+        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
 
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
-        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
-        self.dropout1 = nn.Dropout(config.dropout)
-        self.dropout2 = nn.Dropout(config.dropout)
-        self.dropout3 = nn.Dropout(config.dropout)
+        self.layer_norm1 = nn.LayerNorm(hidden_size)
+        self.layer_norm2 = nn.LayerNorm(hidden_size)
+        self.layer_norm3 = nn.LayerNorm(hidden_size)
+        self.dropout1 = nn.Dropout(config.memory_attention_dropout)
+        self.dropout2 = nn.Dropout(config.memory_attention_dropout)
+        self.dropout3 = nn.Dropout(config.memory_attention_dropout)
 
-        self.activation = ACT2FN[config.hidden_act]
+        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
 
         # Where to add pos enc
-        self.apply_pe_at_self_attn = config.apply_pe_at_self_attn
-        self.apply_pe_at_cross_attn_queries = config.apply_pe_at_cross_attn_queries
-        self.apply_pe_at_cross_attn_keys = config.apply_pe_at_cross_attn_keys
+        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
+        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
+        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
 
     def forward(
         self,
@@ -1904,14 +1909,12 @@ class Sam2MemoryAttentionLayer(nn.Module):
 
 
 class Sam2MemoryAttention(nn.Module):
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config: Sam2Config):
         super().__init__()
-        self.layers = nn.ModuleList([Sam2MemoryAttentionLayer(config) for _ in range(config.num_layers)])
-        self.hidden_size = config.hidden_size
-        self.layer_norm = nn.LayerNorm(self.hidden_size)
+        self.layers = nn.ModuleList(
+            [Sam2MemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
+        )
+        self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
 
     def forward(
         self,
@@ -1970,7 +1973,7 @@ class Sam2MemoryAttention(nn.Module):
 
 # Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
 class Sam2MemoryFuserCXBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Sam2MemoryEncoderConfig, drop_path: float = 0.0):
+    def __init__(self, config: Sam2Config, drop_path: float = 0.0):
         super().__init__()
         memory_fuser_embed_dim = config.memory_fuser_embed_dim
         memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
@@ -2008,7 +2011,7 @@ class Sam2MemoryFuserCXBlock(GradientCheckpointingLayer):
 
 
 class Sam2MemoryFuser(nn.Module):
-    def __init__(self, config: Sam2MemoryEncoderConfig):
+    def __init__(self, config: Sam2Config):
         super().__init__()
         self.layers = nn.ModuleList([Sam2MemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)])
 
@@ -2028,10 +2031,7 @@ class Sam2MaskDownSampler(nn.Module):
     In the end, we linearly project to embed_dim channels.
     """
 
-    def __init__(
-        self,
-        config: Sam2MemoryEncoderConfig,
-    ):
+    def __init__(self, config: Sam2Config):
         super().__init__()
 
         num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
@@ -2061,11 +2061,11 @@ class Sam2MaskDownSampler(nn.Module):
 
 
 class Sam2MemoryEncoder(nn.Module):
-    def __init__(self, config: Sam2MemoryEncoderConfig):
+    def __init__(self, config: Sam2Config):
         super().__init__()
 
-        hidden_size = config.hidden_size
-        output_channels = config.output_channels
+        hidden_size = config.memory_encoder_hidden_size
+        output_channels = config.memory_encoder_output_channels
         self.mask_downsampler = Sam2MaskDownSampler(config)
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam2MemoryFuser(config)
@@ -2195,8 +2195,8 @@ class Sam2Model(Sam2PreTrainedModel):
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
         self.mask_decoder = Sam2MaskDecoder(config.mask_decoder_config)
         # For video sequence inference
-        self.memory_attention = Sam2MemoryAttention(config.memory_attention_config)
-        self.memory_encoder = Sam2MemoryEncoder(config.memory_encoder_config)
+        self.memory_attention = Sam2MemoryAttention(config)
+        self.memory_encoder = Sam2MemoryEncoder(config)
 
         self.num_feature_levels = config.vision_config.num_feature_levels
         self.backbone_feature_sizes = config.vision_config.backbone_feature_sizes
@@ -2208,7 +2208,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
         self.hidden_dim = config.vision_config.fpn_hidden_size
 
-        self.mem_dim = config.memory_encoder_config.output_channels
+        self.mem_dim = config.memory_encoder_output_channels
         self.num_maskmem = config.num_maskmem  # Number of memories accessible
         # Temporal encoding of the memories
         self.memory_temporal_positional_encoding = torch.nn.Parameter(

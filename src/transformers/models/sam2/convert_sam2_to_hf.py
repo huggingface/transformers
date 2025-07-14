@@ -32,8 +32,6 @@ from transformers import (
     Sam2HieraDetConfig,
     Sam2ImageProcessorFast,
     Sam2MaskDecoderConfig,
-    Sam2MemoryAttentionConfig,
-    Sam2MemoryEncoderConfig,
     Sam2Model,
     Sam2Processor,
     Sam2PromptEncoderConfig,
@@ -75,8 +73,6 @@ def get_config(model_name):
         )
     prompt_encoder_config = Sam2PromptEncoderConfig()
     mask_decoder_config = Sam2MaskDecoderConfig()
-    memory_attention_config = Sam2MemoryAttentionConfig()
-    memory_encoder_config = Sam2MemoryEncoderConfig()
 
     if "sam2.1" in model_name:
         project_temporal_pos_encoding_in_object_pointers = True
@@ -89,8 +85,6 @@ def get_config(model_name):
         vision_config=vision_config,
         prompt_encoder_config=prompt_encoder_config,
         mask_decoder_config=mask_decoder_config,
-        memory_attention_config=memory_attention_config,
-        memory_encoder_config=memory_encoder_config,
         project_temporal_pos_encoding_in_object_pointers=project_temporal_pos_encoding_in_object_pointers,
         enable_occlusion_spatial_embedding=enable_occlusion_spatial_embedding,
     )

@@ -123,14 +123,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2PromptEncoderConfig
 
-## Sam2MemoryAttentionConfig
-
-[[autodoc]] Sam2MemoryAttentionConfig
-
-## Sam2MemoryEncoderConfig
-
-[[autodoc]] Sam2MemoryEncoderConfig
-
 ## Sam2Processor
 
 [[autodoc]] Sam2Processor
