@@ -27,24 +27,20 @@ if is_soundfile_available():
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack, AllKwargsForChatTemplate
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class VoxtralAudioKwargs(AudioKwargs, total=False):
-    encoded_length_kwargs: Optional[dict[str, Any]]
+    max_source_positions: Optional[int]
 
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
-    audio_kwargs: VoxtralAudioKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
         },
         "audio_kwargs": {
-            "audio_length_per_tok": 8,
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
@@ -93,65 +89,150 @@ class VoxtralProcessor(ProcessorMixin):
 
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "LlamaTokenizerFast"
+    tokenizer_class = "MistralCommonTokenizer"
 
     def __init__(
         self,
         feature_extractor,
         tokenizer,
-        chat_template=None,
     ):
-        self.audio_token = "[AUDIO]"
         self.audio_token_id = 24
+        self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
 
-        self.audio_bos_token = "[BEGIN_AUDIO]"
-        self.audio_bos_token_id = 25
+        super().__init__(feature_extractor, tokenizer)
 
-        self.inst_bos_token = "[INST]"
-        self.inst_bos_token_id = 3
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        chat_template: Optional[str] = None,
+        **kwargs: Unpack[AllKwargsForChatTemplate],
+    ) -> str:
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
 
-        self.inst_eos_token = "[/INST]"
-        self.inst_eos_token_id = 4
+        The input is expected to be in the following format, where each message content is a list consisting of text and
+        optionally image or video inputs. One can also provide an image, video, URL or local path which will be used to form
+        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
 
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Please describe this image in detail."},
+                ],
+            },
+        ]
 
-    @staticmethod
-    def _get_encoded_length(audio_length, pad_to_multiple_of, max_source_positions, audio_length_per_tok):
-        next_multiple_of = math.ceil(audio_length / pad_to_multiple_of)
-        num_audio_tokens = next_multiple_of * math.ceil(max_source_positions / audio_length_per_tok)
+        Args:
+            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
+        """
+        if chat_template is not None:
+            raise ValueError("Using a custom `chat_template` is not supported for VoxtralProcessor since it relies on mistral_common directly.")
 
-        return num_audio_tokens
+        if kwargs.get("continue_final_message", False):
+            if kwargs.get("add_generation_prompt", False):
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if kwargs.get("return_assistant_tokens_mask", False):
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        # Fill sets of kwargs that should be used by different parts of template
+        processed_kwargs = {
+            "mm_load_kwargs": {},
+            "template_kwargs": {},
+        }
+
+        for kwarg_type in processed_kwargs:
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
+                default_value = getattr(kwarg_type_defaults, key, None)
+                value = kwargs.pop(key, default_value)
+                if value is not None and not isinstance(value, dict):
+                    processed_kwargs[kwarg_type][key] = value
+
+        # Pass unprocessed custom kwargs
+        processed_kwargs["template_kwargs"].update(kwargs)
+
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        ):
+            is_batched = True
+            conversations = conversation
+        else:
+            is_batched = False
+            conversations = [conversation]
+
+        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
+        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
+
+        # Check for any overlapping keys between mm_load_kwargs and kwargs
+        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
+        if any(key in kwargs for key in mm_load_kwargs):
+            overlapping_keys = [key for key in mm_load_kwargs if key in kwargs]
+            logger.warning(
+                f"{overlapping_keys[0] if len(overlapping_keys) == 1 else ', '.join(overlapping_keys)} load multimodal data kwarg{'s' if len(overlapping_keys) > 1 else ''} {'have' if len(overlapping_keys) > 1 else 'has'} been passed to the processor, but {'they are' if len(overlapping_keys) > 1 else 'it is'} not supported for VoxtralProcessor since it relies on mistral_common directly. {'They' if len(overlapping_keys) > 1 else 'It'} will be ignored."
+            )
+
+        output_kwargs = self._merge_kwargs(
+            VoxtralProcessorKwargs,
+            **kwargs,
+        )
+        text_kwargs = output_kwargs["text_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
+
+        encoded_instruct_inputs = self.tokenizer.apply_chat_template(
+            conversations,
+            tokenize=tokenize,
+            return_dict=return_dict,
+            **{**processed_kwargs["template_kwargs"], **text_kwargs},
+        )
+
+        if tokenize:
+            if return_dict:
+                audio = encoded_instruct_inputs.pop("audio", None)
+                data = dict(encoded_instruct_inputs)
+                if audio is not None:
+                    input_features_list = []
+                    for audio_array in audio:
+                        audio_inputs = self.feature_extractor(audio_array, **audio_kwargs)
+
+                        # let's split into chunks of max_source_positions, and then stack them along batch dimension
+                        max_source_positions = audio_kwargs["max_source_positions"]
+                        input_features = audio_inputs["input_features"].reshape(self.feature_extractor.feature_size, -1, max_source_positions)
+                        input_features_list.append(input_features.transpose(0, 1))
+
+                    data["input_features"] = torch.cat(input_features_list) 
+            
+                return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].pop("return_tensors", None))
+
+        if not is_batched:
+            return encoded_instruct_inputs[0]
+
+        return encoded_instruct_inputs
 
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
-        depth_decoder_labels_ratio: Optional[float] = 1.0,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         r"""
-        Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
-        the text. To prepare the audio, this method forwards the `audio` arguments to
-        EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`]. Please refer
-        to the docstring of the above two methods for more information.
+        Method to prepare text to be fed as input to the model. This method forwards the `text`
+        arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.__call__`] to encode
+        the text. Please refer to the docstring of the above methods for more information. 
+        This methods does not support audio. To prepare the audio, please use the `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
-                tensor.
             text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
-                - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
-                - `-100` will be ignored in the loss computation
-                - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
-            depth_decoder_labels_ratio (float, *optional*, default=1.0):
-                The ratio of audio frames to keep for the depth decoder labels.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                     - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -169,108 +250,37 @@ class VoxtralProcessor(ProcessorMixin):
             - **labels** -- List of labels for the audio frames. Returned when `output_labels=True`.
         """
 
+        if isinstance(text, str):
+            text = [text]
+        
+        if any(self.audio_token in t for t in text):
+            raise ValueError(f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead.")
+
         output_kwargs = self._merge_kwargs(
             VoxtralProcessorKwargs,
             **kwargs,
         )
-
         text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+        out = self.tokenizer(text, **text_kwargs)
 
-        if isinstance(text, str):
-            text = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-        n_audio_in_text = [t.count(self.audio_token) for t in text]
-
-        n_audio = 0
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            n_audio = len(audio)
-
-        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
-            if audio is None:
-                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
-            else:
-                raise ValueError(
-                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
-                    f"number of provided audios ({n_audio})."
-                )
-
-        # TODO: @eustlb, we have a clear issue of mapping with batch!?
-        if audio is not None:
-            pad_to_multiple_of = audio_kwargs.get("pad_to_multiple_of", 480000)
-            audio_length_per_tok = audio_kwargs.pop("audio_length_per_tok", 8)
-            max_source_positions = audio_kwargs.get("max_source_positions", 3000)
-
-            num_audio_tokens_list = [
-                self._get_encoded_length(
-                    audio_array.shape[-1],
-                    pad_to_multiple_of,
-                    max_source_positions,
-                    audio_length_per_tok,
-                )
-                for audio_array in audio
-            ]
-            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
-
-            # expand the text to repeat the audio token for the corresponding number of frames
-            expanded_text = []
-            for sample in text:
-                replace_str = []
-                while self.audio_token in sample:
-                    num_audio_tokens = num_audio_tokens_list_copy.pop(0)
-                    expanded_audio_token = self.audio_token * num_audio_tokens
-
-                    replace_str.append(expanded_audio_token)
-                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-
-            text = expanded_text
-
-        encoding = self.tokenizer(text, **text_kwargs)
-        data = {}
-        data.update(encoding)
-
-        if audio is not None:
-            # TODO: @eustlb, audio_kwargs cannot be everything here... we should warn the user
-            input_features_list = []
-            for audio_array in audio:
-                audio_inputs = self.feature_extractor(audio_array, **audio_kwargs)
-
-                # let's split into chunks of max_source_positions, and then stack them along batch dimension
-                input_features = audio_inputs["input_features"].reshape(
-                    self.feature_extractor.feature_size, -1, max_source_positions
-                )
-                input_features_list.append(input_features.transpose(0, 1))
-            data["input_features"] = torch.cat(input_features_list)
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=out, tensor_type=common_kwargs.pop("return_tensors", None))
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to MistralCommonTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def get_prompt_ids(self, text: str, return_tensors="np"):
-        return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
-
 
 __all__ = ["VoxtralProcessor"]
+
