@@ -519,26 +519,27 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
-    def _static_update(
+    def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_position: Optional[torch.LongTensor],
+        cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Updates the static cache tensors in place.
+        Update the static cache tensors in place.
 
         Args:
-            k_cache (`torch.Tensor`): The key cache tensor to update.
-            v_cache (`torch.Tensor`): The value cache tensor to update.
-            key_states (`torch.Tensor`): The new key states to add.
-            value_states (`torch.Tensor`): The new value states to add.
-            cache_position (`Optional[torch.LongTensor]`): The position indices where the new states should be inserted.
-                                                        If None, the entire cache is overwritten (prefill).
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
+            tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
         """
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
+        key_states = key_states.to(self.keys.dtype)
+        value_states = value_states.to(self.values.dtype)
+
         if cache_position is None:
             # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
             self.keys.copy_(key_states)
@@ -554,18 +555,6 @@ class StaticLayer(CacheLayerMixin):
                 self.keys[:, :, cache_position] = key_states
                 self.values[:, :, cache_position] = value_states
         return self.keys, self.values
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Update the static cache tensors in place"""
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
-        key_states = key_states.to(self.keys.dtype)
-        value_states = value_states.to(self.values.dtype)
-        return self._static_update(key_states, value_states, cache_position)
 
     def get_seq_length(self, cache_position=None) -> int:
         if cache_position is not None:
@@ -600,33 +589,32 @@ class SlidingWindowLayer(StaticLayer):
     def __init__(self, sliding_window, max_cache_len=None, *args, **kwargs):
         super().__init__(*args, max_cache_len=sliding_window, *args, **kwargs)
 
-    def _static_update(
+    def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_position: torch.LongTensor,
+        cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Updates the sliding window cache tensors, returning the potentially modified tensors.
+        Update the sliding window cache tensors in place.
 
         Args:
-            k_cache (`torch.Tensor`): The key cache tensor to update.
-            v_cache (`torch.Tensor`): The value cache tensor to update.
-            key_states (`torch.Tensor`): The new key states to add.
-            value_states (`torch.Tensor`): The new value states to add.
-            cache_position (`torch.LongTensor`): The position indices where the new states should be inserted.
-            max_cache_len (`int`): The maximum length of the sliding window cache.
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
-                                                For prefill > window, these are the full input states.
-                                                Otherwise, they are the updated cache tensors.
+            tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
         """
-
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
 
-        # Handle prefill phase when prompt length > sliding_window_size
+        key_states = key_states.to(self.keys.dtype)
+        value_states = value_states.to(self.values.dtype)
+
+        # Handle prefill phase when prompt length > sliding_window_size.
+        # Note that we store cropped key/value states in the cache but return the full key/value states.
         if cache_position.shape[0] > self.max_cache_len:
             new_k = key_states[:, :, -self.max_cache_len :, :]
             new_v = value_states[:, :, -self.max_cache_len :, :]
