@@ -155,11 +155,11 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        rope_local_base_freq (float, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings for local attention.
         local_rope_scaling (`Dict`, *optional*):
             Dictionary equivalent to `config.rope_scaling` containing the scaling configuration for the RoPE embeddings used
             in local attention.
+        rope_local_base_freq (float, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings for local attention.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
