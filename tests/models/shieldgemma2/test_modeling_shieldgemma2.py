@@ -53,7 +53,7 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        inputs = processor(images=[image]).to(torch_device)
+        inputs = processor(images=[image], return_tensors="pt").to(torch_device)
         output = model(**inputs)
         self.assertEqual(len(output.probabilities), 3)
         for element in output.probabilities:
