@@ -200,7 +200,7 @@ def eager_attention_forward(
         attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key)
         attn_weights = attn_weights.view(*query.shape[:3], query.shape[3]) * scaling
     else:
-        attn_weights = torch.einsum("bhsd, bhjd -> bhjs", query, key) * scaling
+        attn_weights = torch.einsum("bhjd, bhsd -> bhjs", query, key) * scaling
 
     if attention_mask is not None:
         if multi_head_attention:
@@ -216,7 +216,7 @@ def eager_attention_forward(
         attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2).transpose(1, 2).contiguous()
         attn_weights = attn_weights.flatten(1, 2)
     else:
-        attn_output = torch.einsum("bhjs, bhjd -> bshd", attn_weights, value)
+        attn_output = torch.einsum("bhjs, bhsd -> bjhd", attn_weights, value)
 
     return attn_output, attn_weights
 
