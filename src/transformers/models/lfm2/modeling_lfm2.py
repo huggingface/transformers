@@ -128,8 +128,11 @@ class Lfm2HybridConvCache(DynamicCache):
     Conv layer cache shape: `[batch_size, hidden_size, L_cache-1]`.
     """
 
+    # Override @property existing in Cache
     max_batch_size = None
     is_compileable = False
+    key_cache = None
+    value_cache = None
 
     def __init__(
         self,
