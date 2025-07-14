@@ -1674,7 +1674,9 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DFineObjectDetectionOutput]:
-        """
+        r"""
+        Example:
+
         ```python
         >>> import torch
         >>> from transformers.image_utils import load_image

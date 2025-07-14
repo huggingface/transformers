@@ -2088,6 +2088,7 @@ class GenerationTesterMixin:
 
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._supports_static_cache:
@@ -2095,7 +2096,9 @@ class GenerationTesterMixin:
 
             # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+            set_config_for_less_flaky_test(config)
             model = model_class(config).to(torch_device)
+            set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
 
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
@@ -2500,6 +2503,7 @@ class GenerationTesterMixin:
             "xlnet",
             "zamba",
             "zamba2",
+            "lfm2",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
