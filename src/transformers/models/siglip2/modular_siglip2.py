@@ -286,7 +286,8 @@ class Siglip2PreTrainedModel(SiglipPreTrainedModel):
 
 
 class Siglip2TextModel(SiglipTextModel):
-        pass
+    pass
+
 
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
     def __init__(self, config: Siglip2VisionConfig):
