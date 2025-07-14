@@ -89,6 +89,9 @@ class Lfm2HybridConvCache(DynamicCache):
     Conv layer cache shape: `[batch_size, hidden_size, L_cache-1]`.
     """
 
+    max_batch_size = None
+    is_compileable = False
+
     def __init__(
         self,
         config: Lfm2Config,
@@ -96,7 +99,8 @@ class Lfm2HybridConvCache(DynamicCache):
         dtype: torch.dtype = torch.float32,
         device: Union[torch.device, str, None] = None,
     ):
-        super().__init__()  # initialize key and value cache
+        self.key_cache = []
+        self.value_cache = []
         self.max_batch_size = max_batch_size
         self.layer_types = config.layer_types
         self.first_attention_layer = self.layer_types.index("full_attention")
@@ -178,6 +182,34 @@ class Lfm2HybridConvCache(DynamicCache):
         if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        full_mask_kv_offset = 0
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length()
+        kv_length = query_length + past_seen_tokens
+        return kv_length, full_mask_kv_offset
+
+    def crop(self, max_length: int):
+        """Crop the cache to the given length"""
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+
+        if self.get_seq_length() <= max_length:
+            return
+
+        if self.key_cache is not None and self.key_cache.numel():
+            self.key_cache = self.key_cache[..., :max_length, :]
+            self.value_cache = self.value_cache[..., :max_length, :]
+
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
         raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
