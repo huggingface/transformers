@@ -33,6 +33,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     make_list_of_images,
@@ -266,8 +267,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     @auto_docstring
     def preprocess(
         self,
-        images,
-        segmentation_maps=None,
+        images: ImageInput,
+        segmentation_maps: ImageInput = None,
         **kwargs: Unpack[SamFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""

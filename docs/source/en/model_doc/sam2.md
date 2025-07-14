@@ -135,10 +135,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2Processor
 
-## Sam2ImageProcessor
-
-[[autodoc]] Sam2ImageProcessor
-
 ## Sam2ImageProcessorFast
 
 [[autodoc]] Sam2ImageProcessorFast

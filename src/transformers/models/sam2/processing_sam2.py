@@ -17,10 +17,11 @@ Processor class for SAM2.
 """
 
 from copy import deepcopy
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_tf_available, is_torch_available, logging
@@ -45,12 +46,12 @@ class Sam2Processor(ProcessorMixin):
     Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
     single processor.
 
-    [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessor`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessor.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
+    [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
+    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`Sam2ImageProcessor`):
-            An instance of [`Sam2ImageProcessor`].
+        image_processor (`Sam2ImageProcessorFast`):
+            An instance of [`Sam2ImageProcessorFast`].
         video_processor (`Sam2VideoProcessor`):
             An instance of [`Sam2VideoProcessor`].
         target_size (`int`, *optional*):
@@ -72,17 +73,19 @@ class Sam2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images=None,
-        segmentation_maps=None,
-        input_points=None,
-        input_labels=None,
-        input_boxes=None,
-        original_sizes=None,
+        images: ImageInput = None,
+        segmentation_maps: ImageInput = None,
+        input_points: Optional[
+            Union[list[float], list[list[float]], list[list[list[float]]], list[list[list[list[float]]]], torch.Tensor]
+        ] = None,
+        input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
+        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
         """
-        This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
+        This method uses [`Sam2ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
         points and bounding boxes for the model if they are provided.
         """
         if images is not None:
@@ -541,11 +544,13 @@ class Sam2Processor(ProcessorMixin):
         inference_state: Sam2VideoSessionState,
         frame_idx: int,
         obj_ids: Union[list[int], int],
-        input_points: Optional[list[list[float]]] = None,
-        input_labels: Optional[list[int]] = None,
-        input_boxes: Optional[list[list[float]]] = None,
+        input_points: Optional[
+            Union[list[float], list[list[float]], list[list[list[float]]], list[list[list[list[float]]]], torch.Tensor]
+        ] = None,
+        input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
         clear_old_inputs: bool = True,
-    ) -> dict[str, Any]:
+    ) -> Sam2VideoSessionState:
         """
         Process new points or box for a video frame and return preprocessed inputs for model.
 
@@ -557,11 +562,11 @@ class Sam2Processor(ProcessorMixin):
             obj_ids (`list[int]` or `int`):
                 The object ID(s) to associate with the points or box.
                 These can be any integers and can be reused later on to specify an object.
-            input_points (`list[list[float]]`, *optional*):
+            input_points (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
                 The points to add to the frame.
-            input_labels (`list[int]`, *optional*):
+            input_labels (`int`, `list[int]`, `list[list[int]]`, `list[list[list[int]]]`, `torch.Tensor`, *optional*):
                 The labels for the points.
-            input_boxes (`list[list[float]]`, *optional*):
+            input_boxes (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `torch.Tensor`, *optional*):
                 The bounding boxes to add to the frame.
             clear_old_inputs (`bool`, *optional*, defaults to `True`):
                 Whether to clear old inputs for the object.
@@ -650,7 +655,7 @@ class Sam2Processor(ProcessorMixin):
         frame_idx: int,
         obj_ids: Union[list[int], int],
         input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
-    ) -> dict[str, Any]:
+    ) -> Sam2VideoSessionState:
         """
         Add new mask to a frame and return preprocessed inputs for model.
 

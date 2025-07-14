@@ -18,11 +18,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import collections.abc
-import copy
+
 import math
 import warnings
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
@@ -38,6 +38,7 @@ from transformers.utils.generic import OutputRecorder, TransformersKwargs, check
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -51,6 +52,7 @@ from .configuration_sam2 import (
     Sam2Config,
     Sam2HieraDetConfig,
     Sam2MaskDecoderConfig,
+    Sam2MemoryEncoderConfig,
     Sam2PromptEncoderConfig,
     Sam2VisionConfig,
 )
@@ -111,8 +113,8 @@ class Sam2VideoSessionState:
             torch_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the video.
         """
-        self.images = list(video)
-        self.num_frames = len(video)
+        self.images = video
+        self.num_frames = video.shape[0]
         self.inference_device = inference_device
         self.video_storage_device = video_storage_device
         self.inference_state_device = inference_state_device
@@ -253,6 +255,15 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+def to_pair(x: Union[int, Iterable[int]]) -> tuple[int, int]:
+    if isinstance(x, int):
+        return (x, x)
+    elif isinstance(x, Iterable) and len(x) == 2:
+        return tuple(x)
+    else:
+        raise ValueError(f"Invalid input: {x}")
+
+
 class Sam2PatchEmbeddings(nn.Module):
     r"""
     Turns pixel values into patch embeddings for transformer consumption.
@@ -260,34 +271,25 @@ class Sam2PatchEmbeddings(nn.Module):
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Sam2ImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`Sam2ImageProcessorFast.__call__`] for details.
 
     Returns:
         embeddings (`torch.FloatTensor`):
             Patch embeddings depend on image_size, patch_kernel_size, patch_stride and patch_padding
     """
 
-    def __init__(self, config: Sam2VisionConfig):
+    def __init__(self, config: Sam2HieraDetConfig):
         super().__init__()
-        image_size, patch_kernel_size, patch_stride, patch_padding = (
-            config.image_size,
-            config.patch_kernel_size,
-            config.patch_stride,
-            config.patch_padding,
-        )
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_kernel_size = (
-            patch_kernel_size
-            if isinstance(patch_kernel_size, collections.abc.Iterable)
-            else (patch_kernel_size, patch_kernel_size)
-        )
-        patch_stride = (
-            patch_stride if isinstance(patch_stride, collections.abc.Iterable) else (patch_stride, patch_stride)
-        )
-        patch_padding = (
-            patch_padding if isinstance(patch_padding, collections.abc.Iterable) else (patch_padding, patch_padding)
-        )
+        image_size = config.image_size
+        patch_kernel_size = config.patch_kernel_size
+        patch_stride = config.patch_stride
+        patch_padding = config.patch_padding
+        num_channels = config.num_channels
+        hidden_size = config.hidden_size
+        image_size = to_pair(image_size)
+        patch_kernel_size = to_pair(patch_kernel_size)
+        patch_stride = to_pair(patch_stride)
+        patch_padding = to_pair(patch_padding)
         self.image_size = image_size
         self.num_channels = num_channels
 
@@ -341,7 +343,7 @@ class Sam2VisionNeck(nn.Module):
             config.fpn_top_down_levels = range(len(self.convs))
         self.fpn_top_down_levels = list(config.fpn_top_down_levels)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
         fpn_hidden_states = ()
         fpn_position_encoding = ()
 
@@ -558,7 +560,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 
 
 # TODO refactor
-class Sam2MultiScaleBlock(nn.Module):
+class Sam2MultiScaleBlock(GradientCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -578,7 +580,8 @@ class Sam2MultiScaleBlock(nn.Module):
 
         self.window_size = window_size
 
-        self.pool, self.q_stride = None, q_stride
+        self.q_stride = q_stride
+        self.pool = None
         if self.q_stride:
             self.pool = nn.MaxPool2d(kernel_size=q_stride, stride=q_stride, ceil_mode=False)
 
@@ -607,7 +610,7 @@ class Sam2MultiScaleBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor]:
+    ) -> torch.FloatTensor:
         residual = hidden_states  # batch_size, height, width, channel
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -721,7 +724,6 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
     def __init__(self, config: Sam2HieraDetConfig):
         super().__init__(config)
 
-        # Patch embdding
         self.patch_embed = Sam2PatchEmbeddings(config)
         # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
         self.pos_embed = nn.Parameter(
@@ -850,10 +852,8 @@ class Sam2VisionModel(Sam2PreTrainedModel):
 
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
         # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
-        fpn_hidden_states, fpn_position_encoding = (
-            fpn_hidden_states[-self.num_feature_levels :][::-1],
-            fpn_position_encoding[-self.num_feature_levels :][::-1],
-        )
+        fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
+        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
 
         return Sam2VisionEncoderOutput(
             last_hidden_state=hidden_states,
@@ -863,10 +863,11 @@ class Sam2VisionModel(Sam2PreTrainedModel):
 
 
 class Sam2PositionalEmbedding(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Sam2PromptEncoderConfig):
         super().__init__()
         self.scale = config.scale
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.hidden_size // 2)))
+        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
+        self.register_buffer("positional_embedding", positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1039,11 +1040,7 @@ class Sam2PromptEncoder(nn.Module):
 
 
 class Sam2TwoWayAttentionBlock(nn.Module):
-    def __init__(
-        self,
-        config: Sam2MaskDecoderConfig,
-        skip_first_layer_pe: bool = False,
-    ) -> None:
+    def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
             (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
@@ -1169,7 +1166,7 @@ class Sam2TwoWayTransformer(nn.Module):
                 attention_similarity=attention_similarity,
                 **kwargs,
             )
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
@@ -1316,11 +1313,11 @@ class Sam2MaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        high_resolution_features: Optional[list[torch.Tensor]] = None,
+        high_resolution_features: list[torch.Tensor],
         attention_similarity: Optional[torch.Tensor] = None,
         target_embedding: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
 
@@ -1906,19 +1903,13 @@ class Sam2MemoryAttentionLayer(nn.Module):
         return queries
 
 
-def get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
 class Sam2MemoryAttention(nn.Module):
     def __init__(
         self,
         config,
     ):
         super().__init__()
-        layer = Sam2MemoryAttentionLayer(config)
-        self.layers = get_clones(layer, config.num_layers)
-
+        self.layers = nn.ModuleList([Sam2MemoryAttentionLayer(config) for _ in range(config.num_layers)])
         self.hidden_size = config.hidden_size
         self.layer_norm = nn.LayerNorm(self.hidden_size)
 
@@ -1943,7 +1934,7 @@ class Sam2MemoryAttention(nn.Module):
             num_object_pointer_tokens (`int`, *optional*, defaults to 0):
                 The number of object pointer tokens.
         """
-        if isinstance(current_vision_features, list):
+        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
             current_vision_features, current_vision_position_embeddings = (
                 current_vision_features[0],
                 current_vision_position_embeddings[0],
@@ -1978,12 +1969,8 @@ class Sam2MemoryAttention(nn.Module):
 
 
 # Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
-class Sam2MemoryFuserCXBlock(nn.Module):
-    def __init__(
-        self,
-        config,
-        drop_path=0.0,
-    ):
+class Sam2MemoryFuserCXBlock(GradientCheckpointingLayer):
+    def __init__(self, config: Sam2MemoryEncoderConfig, drop_path: float = 0.0):
         super().__init__()
         memory_fuser_embed_dim = config.memory_fuser_embed_dim
         memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
@@ -2021,7 +2008,7 @@ class Sam2MemoryFuserCXBlock(nn.Module):
 
 
 class Sam2MemoryFuser(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Sam2MemoryEncoderConfig):
         super().__init__()
         self.layers = nn.ModuleList([Sam2MemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)])
 
@@ -2043,7 +2030,7 @@ class Sam2MaskDownSampler(nn.Module):
 
     def __init__(
         self,
-        config,
+        config: Sam2MemoryEncoderConfig,
     ):
         super().__init__()
 
@@ -2074,10 +2061,7 @@ class Sam2MaskDownSampler(nn.Module):
 
 
 class Sam2MemoryEncoder(nn.Module):
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config: Sam2MemoryEncoderConfig):
         super().__init__()
 
         hidden_size = config.hidden_size
@@ -2110,23 +2094,23 @@ class Sam2MemoryEncoder(nn.Module):
 
         vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
 
-        return {"vision_features": vision_features, "vision_pos_enc": [vision_pos_enc]}
+        return vision_features, [vision_pos_enc]
 
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
-CUDA_KERNELS = None
+CONNECTED_COMPONENTS_CUDA_KERNEL = None
 
 
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
-    global CUDA_KERNELS
+    global CONNECTED_COMPONENTS_CUDA_KERNEL
 
     root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
     src_files = [root / "connected_components.cu"]
-    CUDA_KERNELS = load(
-        "CUDA_KERNELS",
+    CONNECTED_COMPONENTS_CUDA_KERNEL = load(
+        "CONNECTED_COMPONENTS_CUDA_KERNEL",
         src_files,
         with_cuda=True,
         extra_include_paths=[str(root)],
@@ -2164,7 +2148,7 @@ def get_connected_components(mask):
     - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
               components for foreground pixels and 0 for background pixels.
     """
-    return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
+    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
 def fill_holes_in_mask_scores(mask, max_area):
@@ -2770,7 +2754,7 @@ class Sam2Model(Sam2PreTrainedModel):
         obj_ids: Union[list[int], int],
         consolidate_at_video_res: bool = True,
         **kwargs,
-    ) -> dict[str, torch.Tensor]:
+    ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """
         Add new conditioning inputs to a video frame and run inference.
         """
@@ -3422,11 +3406,11 @@ class Sam2Model(Sam2PreTrainedModel):
         is_mask_from_pts,
     ):
         """Encode the current image and its prediction into a memory feature."""
-        B = current_vision_feats[-1].size(1)  # batch size on this frame
-        C = self.hidden_dim
-        H, W = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
+        batch_size = current_vision_feats[-1].size(1)  # batch size on this frame
+        channels = self.hidden_dim
+        height, width = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
-        pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
+        pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(batch_size, channels, height, width)
         if self.non_overlap_masks_for_mem_enc and not self.training:
             # optionally, apply non-overlapping constraints to the masks (it's applied
             # in the batch dimension and should only be used during eval, where all
@@ -3443,13 +3427,11 @@ class Sam2Model(Sam2PreTrainedModel):
         mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
         mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
 
-        maskmem_out = self.memory_encoder(
+        maskmem_features, maskmem_pos_enc = self.memory_encoder(
             pix_feat,
             mask_for_mem,
             skip_mask_sigmoid=True,  # sigmoid already applied
         )
-        maskmem_features = maskmem_out["vision_features"]
-        maskmem_pos_enc = maskmem_out["vision_pos_enc"]
         # add a no-object embedding to the spatial memory to indicate that the frame
         # is predicted to be occluded (i.e. no object is appearing in the frame)
         if self.occlusion_spatial_embedding_parameter is not None:

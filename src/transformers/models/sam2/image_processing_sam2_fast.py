@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 import warnings
 from copy import deepcopy
@@ -34,6 +35,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     make_list_of_images,
@@ -402,18 +404,18 @@ def _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold):
     return mask
 
 
-CUDA_KERNELS = None
+CONNECTED_COMPONENTS_CUDA_KERNEL = None
 
 
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
-    global CUDA_KERNELS
+    global CONNECTED_COMPONENTS_CUDA_KERNEL
 
     root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
     src_files = [root / "connected_components.cu"]
-    CUDA_KERNELS = load(
-        "CUDA_KERNELS",
+    CONNECTED_COMPONENTS_CUDA_KERNEL = load(
+        "CONNECTED_COMPONENTS_CUDA_KERNEL",
         src_files,
         with_cuda=True,
         extra_include_paths=[str(root)],
@@ -438,7 +440,7 @@ def get_connected_components(mask):
     - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
               components for foreground pixels and 0 for background pixels.
     """
-    return CUDA_KERNELS.get_connected_components(mask.to(torch.uint8).contiguous())
+    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
 @auto_docstring
@@ -534,8 +536,8 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     @auto_docstring
     def preprocess(
         self,
-        images,
-        segmentation_maps=None,
+        images: ImageInput,
+        segmentation_maps: ImageInput = None,
         **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -793,7 +795,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                     try:
                         load_cuda_kernels()
                     except Exception as e:
-                        print(f"Could not load custom CUDA kernels for postprocessing: {e}")
+                        raise Exception(f"Could not load custom CUDA kernels for postprocessing: {e}")
                 try:
                     if max_hole_area > 0:
                         mask = _fill_holes(mask_flat, mask, max_hole_area, mask_threshold)
@@ -802,7 +804,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                     processed_masks.append(mask)
                 except Exception as e:
                     # Skip the post-processing step if the CUDA kernel fails
-                    print(f"Error in post-processing: {e}")
                     warnings.warn(
                         f"{e}\n\nSkipping the post-processing step due to the error above. You can "
                         "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
