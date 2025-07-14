@@ -33,137 +33,6 @@ from ...utils.generic import check_model_inputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
-def create_meshgrid(
-    height: Union[int, torch.Tensor],
-    width: Union[int, torch.Tensor],
-    normalized_coordinates: bool = False,
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
-) -> torch.Tensor:
-    """
-    Copied from kornia library : kornia/kornia/utils/grid.py:26
-
-    Generate a coordinate grid for an image.
-
-    When the flag ``normalized_coordinates`` is set to True, the grid is
-    normalized to be in the range :math:`[-1,1]` to be consistent with the pytorch
-    function :py:func:`torch.nn.functional.grid_sample`.
-
-    Args:
-        height (`int`):
-            The image height (rows).
-        width (`int`):
-            The image width (cols).
-        normalized_coordinates (`bool`):
-            Whether to normalize coordinates in the range :math:`[-1,1]` in order to be consistent with the
-            PyTorch function :py:func:`torch.nn.functional.grid_sample`.
-        device (`torch.device`):
-            The device on which the grid will be generated.
-        dtype (`torch.dtype`):
-            The data type of the generated grid.
-
-    Return:
-        grid (`torch.Tensor` of shape `(1, height, width, 2)`):
-            The grid tensor.
-
-    Example:
-        >>> create_meshgrid(2, 2)
-        tensor([[[[-1., -1.],
-                  [ 1., -1.]],
-        <BLANKLINE>
-                 [[-1.,  1.],
-                  [ 1.,  1.]]]])
-
-        >>> create_meshgrid(2, 2, normalized_coordinates=False)
-        tensor([[[[0., 0.],
-                  [1., 0.]],
-        <BLANKLINE>
-                 [[0., 1.],
-                  [1., 1.]]]])
-
-    """
-    xs = torch.linspace(0, width - 1, width, device=device, dtype=dtype)
-    ys = torch.linspace(0, height - 1, height, device=device, dtype=dtype)
-    if normalized_coordinates:
-        xs = (xs / (width - 1) - 0.5) * 2
-        ys = (ys / (height - 1) - 0.5) * 2
-    grid = torch.stack(torch.meshgrid(ys, xs, indexing="ij"), dim=-1)
-    grid = grid.permute(1, 0, 2).unsqueeze(0)
-    return grid
-
-
-def spatial_expectation2d(input: torch.Tensor, normalized_coordinates: bool = True) -> torch.Tensor:
-    r"""
-    Copied from kornia library : kornia/geometry/subpix/dsnt.py:76
-    Compute the expectation of coordinate values using spatial probabilities.
-
-    The input heatmap is assumed to represent a valid spatial probability distribution,
-    which can be achieved using :func:`~kornia.geometry.subpixel.spatial_softmax2d`.
-
-    Args:
-        input (`torch.Tensor` of shape `(batch_size, embed_dim, height, width)`):
-            The input tensor representing dense spatial probabilities.
-        normalized_coordinates (`bool`):
-            Whether to return the coordinates normalized in the range of :math:`[-1, 1]`. Otherwise, it will return
-            the coordinates in the range of the input shape.
-
-    Returns:
-        output (`torch.Tensor` of shape `(batch_size, embed_dim, 2)`)
-            Expected value of the 2D coordinates. Output order of the coordinates is (x, y).
-
-    Examples:
-        >>> heatmaps = torch.tensor([[[
-        ... [0., 0., 0.],
-        ... [0., 0., 0.],
-        ... [0., 1., 0.]]]])
-        >>> spatial_expectation2d(heatmaps, False)
-        tensor([[[1., 2.]]])
-
-    """
-    batch_size, embed_dim, height, width = input.shape
-
-    # Create coordinates grid.
-    grid = create_meshgrid(height, width, normalized_coordinates, input.device)
-    grid = grid.to(input.dtype)
-
-    pos_x = grid[..., 0].reshape(-1)
-    pos_y = grid[..., 1].reshape(-1)
-
-    input_flat = input.view(batch_size, embed_dim, -1)
-
-    # Compute the expectation of the coordinates.
-    expected_y = torch.sum(pos_y * input_flat, -1, keepdim=True)
-    expected_x = torch.sum(pos_x * input_flat, -1, keepdim=True)
-
-    output = torch.cat([expected_x, expected_y], -1)
-
-    return output.view(batch_size, embed_dim, 2)
-
-
-def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, float, int]) -> torch.Tensor:
-    """
-    Mask a tensor border with a given value
-
-    Args:
-        tensor (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
-            The tensor to mask
-        border_margin (`int`) :
-            The size of the border
-        value (`Union[bool, int, float]`):
-            The value to place in the tensor's borders
-
-    Returns:
-        tensor (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
-            The masked tensor
-    """
-    if border_margin <= 0:
-        return tensor
-
-    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
-    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
-    return tensor
-
-
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -924,6 +793,137 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         features = (coarse_features,) + tuple(residual_features)
 
         return BackboneOutput(feature_maps=features)
+
+
+def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, float, int]) -> torch.Tensor:
+    """
+    Mask a tensor border with a given value
+
+    Args:
+        tensor (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
+            The tensor to mask
+        border_margin (`int`) :
+            The size of the border
+        value (`Union[bool, int, float]`):
+            The value to place in the tensor's borders
+
+    Returns:
+        tensor (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
+            The masked tensor
+    """
+    if border_margin <= 0:
+        return tensor
+
+    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
+    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
+    return tensor
+
+
+def create_meshgrid(
+    height: Union[int, torch.Tensor],
+    width: Union[int, torch.Tensor],
+    normalized_coordinates: bool = False,
+    device: Optional[torch.device] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> torch.Tensor:
+    """
+    Copied from kornia library : kornia/kornia/utils/grid.py:26
+
+    Generate a coordinate grid for an image.
+
+    When the flag ``normalized_coordinates`` is set to True, the grid is
+    normalized to be in the range :math:`[-1,1]` to be consistent with the pytorch
+    function :py:func:`torch.nn.functional.grid_sample`.
+
+    Args:
+        height (`int`):
+            The image height (rows).
+        width (`int`):
+            The image width (cols).
+        normalized_coordinates (`bool`):
+            Whether to normalize coordinates in the range :math:`[-1,1]` in order to be consistent with the
+            PyTorch function :py:func:`torch.nn.functional.grid_sample`.
+        device (`torch.device`):
+            The device on which the grid will be generated.
+        dtype (`torch.dtype`):
+            The data type of the generated grid.
+
+    Return:
+        grid (`torch.Tensor` of shape `(1, height, width, 2)`):
+            The grid tensor.
+
+    Example:
+        >>> create_meshgrid(2, 2)
+        tensor([[[[-1., -1.],
+                  [ 1., -1.]],
+        <BLANKLINE>
+                 [[-1.,  1.],
+                  [ 1.,  1.]]]])
+
+        >>> create_meshgrid(2, 2, normalized_coordinates=False)
+        tensor([[[[0., 0.],
+                  [1., 0.]],
+        <BLANKLINE>
+                 [[0., 1.],
+                  [1., 1.]]]])
+
+    """
+    xs = torch.linspace(0, width - 1, width, device=device, dtype=dtype)
+    ys = torch.linspace(0, height - 1, height, device=device, dtype=dtype)
+    if normalized_coordinates:
+        xs = (xs / (width - 1) - 0.5) * 2
+        ys = (ys / (height - 1) - 0.5) * 2
+    grid = torch.stack(torch.meshgrid(ys, xs, indexing="ij"), dim=-1)
+    grid = grid.permute(1, 0, 2).unsqueeze(0)
+    return grid
+
+
+def spatial_expectation2d(input: torch.Tensor, normalized_coordinates: bool = True) -> torch.Tensor:
+    r"""
+    Copied from kornia library : kornia/geometry/subpix/dsnt.py:76
+    Compute the expectation of coordinate values using spatial probabilities.
+
+    The input heatmap is assumed to represent a valid spatial probability distribution,
+    which can be achieved using :func:`~kornia.geometry.subpixel.spatial_softmax2d`.
+
+    Args:
+        input (`torch.Tensor` of shape `(batch_size, embed_dim, height, width)`):
+            The input tensor representing dense spatial probabilities.
+        normalized_coordinates (`bool`):
+            Whether to return the coordinates normalized in the range of :math:`[-1, 1]`. Otherwise, it will return
+            the coordinates in the range of the input shape.
+
+    Returns:
+        output (`torch.Tensor` of shape `(batch_size, embed_dim, 2)`)
+            Expected value of the 2D coordinates. Output order of the coordinates is (x, y).
+
+    Examples:
+        >>> heatmaps = torch.tensor([[[
+        ... [0., 0., 0.],
+        ... [0., 0., 0.],
+        ... [0., 1., 0.]]]])
+        >>> spatial_expectation2d(heatmaps, False)
+        tensor([[[1., 2.]]])
+
+    """
+    batch_size, embed_dim, height, width = input.shape
+
+    # Create coordinates grid.
+    grid = create_meshgrid(height, width, normalized_coordinates, input.device)
+    grid = grid.to(input.dtype)
+
+    pos_x = grid[..., 0].reshape(-1)
+    pos_y = grid[..., 1].reshape(-1)
+
+    input_flat = input.view(batch_size, embed_dim, -1)
+
+    # Compute the expectation of the coordinates.
+    expected_y = torch.sum(pos_y * input_flat, -1, keepdim=True)
+    expected_x = torch.sum(pos_x * input_flat, -1, keepdim=True)
+
+    output = torch.cat([expected_x, expected_y], -1)
+
+    return output.view(batch_size, embed_dim, 2)
 
 
 @auto_docstring(
