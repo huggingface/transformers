@@ -362,7 +362,6 @@ class Idefics3Encoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
