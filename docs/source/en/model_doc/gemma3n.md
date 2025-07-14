@@ -29,11 +29,11 @@ rendered properly in your Markdown viewer.
 Gemma3n is a multimodal model with pretrained and instruction-tuned variants, available in E4B and E2B sizes. While
 large portions of the language model architecture are shared with prior Gemma releases, there are many new additions in
 this model, including [Alternating Updates][altup] (AltUp), [Learned Augmented Residual Layer][laurel] (LAuReL),
-[MatFormer][matformer], Per-Layer Embeddings (PLE), activation sparsity, and KV cache sharing. The language model uses
+[MatFormer][matformer], Per-Layer Embeddings (PLE), [Activation Sparsity with Statistical Top-k][spark-transformer], and KV cache sharing. The language model uses
 a similar attention pattern to [Gemma 3](./gemma3.md) with alternating 4 local sliding window self-attention layers for
 every global self-attention layer with a maximum context length of 32k tokens. Gemma 3n introduces
-[MobileNet v5][mobilenetv5] as the vision encoder, using a default resolution of 768x768 pixels, and adds a
-[Universal Speech Model][usm] (USM) as the audio encoder.
+[MobileNet v5][mobilenetv5] as the vision encoder, using a default resolution of 768x768 pixels, and adds a newly
+trained audio encoder based on the [Universal Speech Model][usm] (USM) architecture.
 
 The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
 
@@ -121,7 +121,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 ## Notes
 
 -   Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text,
-    image-only and aduio-only inputs.
+    image-only and audio-only inputs.
 -   Gemma 3n supports multiple images per input, but make sure the images are correctly batched before passing them to
     the processor. Each batch should be a list of one or more images.
 
@@ -201,4 +201,5 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 [gemma3n-collection]: https://huggingface.co/collections/google/gemma-3n
 [laurel]: https://arxiv.org/abs/2411.07501
 [matformer]: https://arxiv.org/abs/2310.07707
+[spark-transformer]: https://arxiv.org/abs/2506.06644
 [usm]: https://arxiv.org/abs/2303.01037

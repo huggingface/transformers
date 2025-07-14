@@ -100,8 +100,6 @@
       title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
-    - local: tf_xla
-      title: XLA
     title: Optimization
   - local: agents
     title: Agents
@@ -141,8 +139,6 @@
       title: GPU
     - local: perf_train_cpu
       title: CPU
-    - local: perf_train_tpu_tf
-      title: TPU
     - local: perf_train_special
       title: Apple Silicon
     - local: perf_train_gaudi
@@ -433,6 +429,8 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/doge
+        title: Doge
       - local: model_doc/dots1
         title: dots1
       - local: model_doc/dpr
@@ -519,6 +517,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/lfm2
+        title: LFM2
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -693,6 +693,8 @@
         title: Zamba2
       title: Text models
     - sections:
+      - local: model_doc/aimv2
+        title: Aimv2
       - local: model_doc/beit
         title: BEiT
       - local: model_doc/bit
@@ -709,6 +711,8 @@
         title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -737,6 +741,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn
@@ -1033,6 +1039,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
       - local: model_doc/pix2struct
@@ -1142,4 +1150,3 @@
       title: Environment Variables
     title: Reference
   title: API
-
