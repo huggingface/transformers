@@ -9,7 +9,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Phi4 Multimodal
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white&style=flat">
@@ -36,10 +35,8 @@ The example below demonstrates how to generate text based on an image with [`Pip
 from transformers import pipeline
 generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", torch_dtype="auto", device=0)
 
-# Your input text prompt
 prompt = "Explain the concept of multimodal AI in simple terms."
 
-# Generate output
 result = generator(prompt, max_length=50)
 print(result[0]['generated_text'])
 ```
@@ -55,19 +52,16 @@ import torch
 tokenizer = AutoProcessor.from_pretrained("microsoft/Phi-4-multimodal-instruct")
 model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-4-multimodal-instruct", torch_dtype=torch.bfloat16).to("cuda")
 
-# Load image
 image = Image.open("your_image.png")
-
-# Prepare inputs
 inputs = tokenizer(text="Describe this image:", images=image, return_tensors="pt").to("cuda")
-
-# Generate output
 outputs = model.generate(**inputs, max_length=200)
 
-# Decode output
 generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(generated_text)
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Notes
 
