@@ -27,10 +27,14 @@ from transformers.models.whisper.modeling_whisper import sinusoids
 from safetensors.torch import load_file
 
 from transformers import (
-    WhisperConfig,
     VoxtralConfig,
+    VoxtralProcessor,
     VoxtralForConditionalGeneration,
+    WhisperFeatureExtractor,
+    LlamaTokenizerFast,
+    AutoTokenizer,
 )
+from transformers.integrations.mistral import convert_tekken_tokenizer
 
 
 # TODO: @eustlb, I don't really like the audio_tower name
@@ -69,6 +73,43 @@ STATE_DICT_MAPPING = {
     r"mm_whisper_embeddings.audio_language_projection\.0\.weight":               r"multi_modal_projector.linear_1.weight",
     r"mm_whisper_embeddings.audio_language_projection\.2\.weight":               r"multi_modal_projector.linear_2.weight",
 }
+# fmt: on
+
+
+# fmt: off
+chat_template = """
+{%- if messages[0]['role'] == 'system' %}
+    {%- set system_message = messages[0]['content'] %}
+    {%- set loop_messages = messages[1:] %}
+{%- else %}
+    {%- set loop_messages = messages %}
+{%- endif %}
+{{- bos_token }}
+{%- for message in loop_messages %}
+    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}
+        {{- raise_exception('After the optional system message, conversation roles must alternate user/assistant/user/assistant/...') }}
+    {%- endif %}
+    {%- if message['role'] == 'user' %}
+        {%- if loop.first and system_message is defined %}
+            {{- '[INST]' + system_message + '\n\n' }}
+        {%- else %}
+            {{- '[INST]' }}
+        {%- endif %}
+        {%- for item in message['content'] %}
+            {%- if item['type'] == 'audio' %}
+                {{- '[BEGIN_AUDIO][AUDIO]' }}
+            {%- elif item['type'] == 'text' %}
+                {{- item['text'] }}
+            {%- endif %}
+        {%- endfor %}
+        {{- '[/INST]' }}
+    {%- elif message['role'] == 'assistant' %}
+        {{- ' ' + message['content']|join(' ') + eos_token}}
+    {%- else %}
+        {{- raise_exception('Only user and assistant roles are supported, with the exception of an initial optional system message!') }}
+    {%- endif %}
+{%- endfor %}
+"""
 # fmt: on
 
 
@@ -238,6 +279,40 @@ def write_model(
     print("Model reloaded successfully.")
 
 
+def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str, tokenizer_template_name: str = ""):
+    """Convert the tokenizer and save it."""
+    print("Converting the tokenizer...")
+    # Tekken format
+    tekken_path = cached_file(input_path_or_repo, "tekken.json")
+    if os.path.exists(tekken_path):
+        tokenizer = convert_tekken_tokenizer(tekken_path)
+    else:
+        # May have .v3 or .v7 at the end
+        tokenizer_model_path = cached_file(input_path_or_repo, "tokenizer.model")
+        tokenizer = LlamaTokenizerFast(tokenizer_model_path)
+
+    # Load a chat template from another model
+    if tokenizer_template_name != "":
+        template_tok = AutoTokenizer.from_pretrained(tokenizer_template_name)
+        tokenizer.chat_template = template_tok.chat_template
+
+    # Add a pad token
+    tokenizer.pad_token = "<pad>"
+    print("Tokenizer converted successfully.")
+
+    # Load the feature extractor
+    feature_extractor = WhisperFeatureExtractor.from_pretrained(feature_extractor_path_or_repo)
+
+    print("Creating the processor...")
+    # Create the processor and save it
+    processor = VoxtralProcessor(
+        feature_extractor=feature_extractor,
+        tokenizer=tokenizer,
+        chat_template=chat_template,
+    )
+    processor.save_pretrained(output_dir)
+    print("Processor saved successfully.")
+
 def main():
     parser = argparse.ArgumentParser(description="Convert Voxtral weights to Hugging Face format")
     parser.add_argument(
@@ -259,6 +334,12 @@ def main():
         help="Name of the config in input_path_or_repo",
     )
     parser.add_argument(
+        "--feature_extractor_path_or_repo",
+        type=str,
+        required=True,
+        help="Path or repo containing the feature extractor",
+    )
+    parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
@@ -271,8 +352,14 @@ def main():
         args.input_path_or_repo,
         args.model_name,
         args.config_name,
-        output_dir=args.output_dir,
+        args.output_dir,
         safe_serialization=args.safe_serialization,
+    )
+
+    write_processor(
+        args.input_path_or_repo,
+        args.feature_extractor_path_or_repo,
+        args.output_dir,
     )
 
 
@@ -281,5 +368,10 @@ if __name__ == "__main__":
         "mistralai/voxtral-mini",
         "consolidated.safetensors",
         "params.json",
+        "/scratch/voxtral-mini-converted",
+    )
+    write_processor(
+        "mistralai/voxtral-mini",
+        "openai/whisper-large-v3",
         "/scratch/voxtral-mini-converted",
     )
