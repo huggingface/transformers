@@ -2286,7 +2286,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             and attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys()
         ):
             message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
-            if cls._supports_flash_attn:
+            # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
+            if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
                 message += (
                     ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
                     ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
@@ -2427,7 +2428,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         torch_dtype = self.config.torch_dtype if hasattr(self.config, "torch_dtype") else torch.get_default_dtype()
         device_map = self.hf_device_map if hasattr(self, "hf_device_map") else None
 
-        if not self._supports_flash_attn:
+        # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
+        if not (self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False)):
             raise ValueError(
                 f"{self.__class__.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
