@@ -337,6 +337,7 @@ if TYPE_CHECKING:
     from .vivit import *
     from .vjepa2 import *
     from .voxtral import *
+    from .vocos import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *

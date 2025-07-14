@@ -1109,6 +1109,8 @@
         title: VisualBERT
       - local: model_doc/voxtral
         title: Voxtral
+      - local: model_doc/vocos
+        title: VOCOS
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models

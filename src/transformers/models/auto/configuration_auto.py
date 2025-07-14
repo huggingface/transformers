@@ -395,6 +395,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("vjepa2", "VJEPA2Config"),
         ("voxtral", "VoxtralConfig"),
         ("voxtral_encoder", "VoxtralEncoderConfig"),
+        ("vocos", "VocosConfig"),
+        ("vocos_with_encodec", "VocosWithEncodecConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
@@ -808,8 +810,13 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("vjepa2", "VJEPA2Model"),
+<<<<<<< HEAD
         ("voxtral", "Voxtral"),
         ("voxtral_encoder", "Voxtral Encoder"),
+=======
+        ("vocos", "Vocos"),
+        ("vocos_with_encodec", "VocosWithEncodec"),
+>>>>>>> 9c5de7b66b (add working vocos)
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
