@@ -18,7 +18,6 @@ import torch
 from torch import nn
 
 from ...activations import ACT2CLS, ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BackboneOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -30,6 +29,7 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
+from ...utils.generic import check_model_inputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
@@ -306,15 +306,10 @@ class EfficientLoFTRRepVGGStage(nn.Module):
             current_channel_dim = out_channels
         self.blocks = nn.ModuleList(blocks)
 
-    def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
-        all_hidden_states = () if output_hidden_states else None
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for block in self.blocks:
             hidden_states = block(hidden_states)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-        return hidden_states, all_hidden_states
+        return hidden_states
 
 
 class EfficientLoFTRepVGG(nn.Module):
@@ -333,21 +328,15 @@ class EfficientLoFTRepVGG(nn.Module):
             current_in_channels = out_channels
             self.stages.append(stage)
 
-    def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> tuple[list[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:
         outputs = []
-        all_hidden_states = () if output_hidden_states else None
         for stage in self.stages:
-            stage_outputs = stage(hidden_states, output_hidden_states=output_hidden_states)
-            hidden_states = stage_outputs[0]
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + stage_outputs[1]
+            hidden_states = stage(hidden_states)
             outputs.append(hidden_states)
 
         # Exclude first stage in outputs
         outputs = outputs[1:]
-        return outputs, all_hidden_states
+        return outputs
 
 
 class EfficientLoFTRAggregationLayer(nn.Module):
@@ -520,7 +509,7 @@ class EfficientLoFTRAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, seq_len, dim = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
@@ -544,6 +533,7 @@ class EfficientLoFTRAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -603,8 +593,9 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> tuple[torch.Tensor]:
-        batch_size, embed_dim, h, w = hidden_states.shape
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, embed_dim, _, _ = hidden_states.shape
 
         # Aggregate features
         aggregated_hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask = self.aggregation(
@@ -619,14 +610,14 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
             position_embeddings = tuple(tensor.reshape(batch_size, -1, embed_dim) for tensor in position_embeddings)
 
         # Multi-head attention
-        attention_outputs = self.attention(
+        message, _ = self.attention(
             attention_hidden_states,
             attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
-        message = attention_outputs[0]
 
         # Upsample features
         _, aggregated_h, aggregated_w, _ = aggregated_hidden_states.shape
@@ -644,8 +635,7 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
 
         hidden_states = hidden_states + output_states
 
-        outputs = (hidden_states,) + attention_outputs[1:]
-        return outputs
+        return hidden_states
 
 
 class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
@@ -660,19 +650,20 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
-        all_attentions = () if output_attentions else None
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         batch_size, _, embed_dim, height, width = hidden_states.shape
 
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
         if attention_mask is not None:
             attention_mask = attention_mask.reshape(-1, embed_dim, height, width)
 
-        self_attention_outputs = self.self_attention(
-            hidden_states, attention_mask, position_embeddings=position_embeddings
+        hidden_states = self.self_attention(
+            hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            **kwargs,
         )
-        hidden_states = self_attention_outputs[0]
 
         encoder_hidden_states = (
             hidden_states.reshape(-1, 2, embed_dim, height, width).flip(1).reshape(-1, embed_dim, height, width)
@@ -683,26 +674,21 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
                 attention_mask.reshape(-1, 2, embed_dim, height, width).flip(1).reshape(-1, embed_dim, height, width)
             )
 
-        cross_attention_outputs = self.cross_attention(
+        hidden_states = self.cross_attention(
             hidden_states,
             attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
+            **kwargs,
         )
-
-        hidden_states = cross_attention_outputs[0]
         hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
 
-        if output_attentions:
-            all_attentions = all_attentions + (self_attention_outputs[1], cross_attention_outputs[1])
-
-        return hidden_states, all_attentions
+        return hidden_states
 
 
 class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
-
         self.layers = nn.ModuleList(
             [
                 EfficientLoFTRLocalFeatureTransformerLayer(config, layer_idx=i)
@@ -714,19 +700,11 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
-        all_attentions = () if output_attentions else None
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         for layer in self.layers:
-            layer_outputs = layer(
-                hidden_states, position_embeddings=position_embeddings, output_attentions=output_attentions
-            )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + layer_outputs[1]
-        return hidden_states, all_attentions
+            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
+        return hidden_states
 
 
 class EfficientLoFTROutConvBlock(nn.Module):
@@ -839,6 +817,10 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": EfficientLoFTRRepVGGBlock,
+        "attentions": EfficientLoFTRAttention,
+    }
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
@@ -880,19 +862,17 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         self.config = config
         self.backbone = EfficientLoFTRepVGG(config)
         self.local_feature_transformer = EfficientLoFTRLocalFeatureTransformer(config)
-
         self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
         self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -919,24 +899,15 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         if labels is not None:
             raise ValueError("EfficientLoFTR is not trainable, no labels should be provided.")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
-
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
 
         batch_size, _, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
         # 1. Local Feature CNN
-        backbone_outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states)
-        features = backbone_outputs[0]
+        features = self.backbone(pixel_values)
         # Last stage outputs are coarse outputs
         coarse_features = features[-1]
         # Rest is residual features used in EfficientLoFTRFineFusionLayer
@@ -946,24 +917,13 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         # 2. Coarse-level LoFTR module
         position_embeddings = self.rotary_emb(coarse_features)
         coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
-        local_feature_transformer_outputs = self.local_feature_transformer(
-            coarse_features, position_embeddings=position_embeddings, output_attentions=output_attentions
+        coarse_features = self.local_feature_transformer(
+            coarse_features, position_embeddings=position_embeddings, **kwargs
         )
-        coarse_features = local_feature_transformer_outputs[0]
 
         features = (coarse_features,) + tuple(residual_features)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + backbone_outputs[1]
-
-        if output_attentions:
-            all_attentions = all_attentions + local_feature_transformer_outputs[1]
-
-        return BackboneOutput(
-            feature_maps=features,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-        )
+        return BackboneOutput(feature_maps=features)
 
 
 @auto_docstring(
@@ -1316,8 +1276,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> KeypointMatchingOutput:
         r"""
         Examples:
@@ -1344,16 +1303,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         if labels is not None:
             raise ValueError("SuperGlue is not trainable, no labels should be provided.")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         # 1. Extract coarse and residual features
-        model_outputs: BackboneOutput = self.efficientloftr(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
-        features = model_outputs[0]
+        model_outputs: BackboneOutput = self.efficientloftr(pixel_values, **kwargs)
+        features = model_outputs.feature_maps
 
         # 2. Compute coarse-level matching
         coarse_features = features[0]
