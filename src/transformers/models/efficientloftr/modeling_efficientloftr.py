@@ -215,21 +215,19 @@ class EfficientLoFTRAggregationLayer(nn.Module):
         super().__init__()
 
         hidden_size = config.hidden_size
-        q_aggregation_kernel_size = config.q_aggregation_kernel_size
-        q_aggregation_stride = config.q_aggregation_stride
-        kv_aggregation_kernel_size = config.kv_aggregation_kernel_size
-        kv_aggregation_stride = config.kv_aggregation_stride
 
         self.q_aggregation = nn.Conv2d(
             hidden_size,
             hidden_size,
-            kernel_size=q_aggregation_kernel_size,
+            kernel_size=config.q_aggregation_kernel_size,
             padding=0,
-            stride=q_aggregation_stride,
+            stride=config.q_aggregation_stride,
             bias=False,
             groups=hidden_size,
         )
-        self.kv_aggregation = torch.nn.MaxPool2d(kernel_size=kv_aggregation_kernel_size, stride=kv_aggregation_stride)
+        self.kv_aggregation = torch.nn.MaxPool2d(
+            kernel_size=config.kv_aggregation_kernel_size, stride=config.kv_aggregation_stride
+        )
         self.norm = nn.LayerNorm(hidden_size)
 
     def forward(
