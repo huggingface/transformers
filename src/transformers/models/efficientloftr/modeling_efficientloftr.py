@@ -18,6 +18,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2CLS, ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -126,7 +127,7 @@ class EfficientLoFTRConvNormLayer(nn.Module):
         return hidden_state
 
 
-class EfficientLoFTRRepVGGBlock(nn.Module):
+class EfficientLoFTRRepVGGBlock(GradientCheckpointingLayer):
     """
     RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
     """
@@ -506,7 +507,7 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         return hidden_states
 
 
-class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
+class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
     def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
 
@@ -682,7 +683,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     config_class = EfficientLoFTRConfig
     base_model_prefix = "efficientloftr"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = False
+    supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_record_outputs = {
