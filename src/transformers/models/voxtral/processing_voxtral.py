@@ -68,10 +68,6 @@ class VoxtralProcessor(ProcessorMixin):
     [`MistralCommonTokenizer`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities. See the [`~VoxtralProcessor.__call__`] for more
     information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```
-        TODO: @eustlb, add example
-        ```
 
     Args:
         feature_extractor ([`WhisperFeatureExtractor`]):
@@ -118,19 +114,21 @@ class VoxtralProcessor(ProcessorMixin):
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
-        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
-        conversations to turn them into a single tokenizable string.
+        This method applies the model's chat completion template given a conversation. It relies on MistralCommonTokenizer's
+        [`~MistralCommonTokenizer.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
+        [`~WhisperFeatureExtractor.__call__`] to prepare input features to the model.
+        Please refer to the docstring of these methods for more information.
 
         The input is expected to be in the following format, where each message content is a list consisting of text and
-        optionally image or video inputs. One can also provide an image, video, URL or local path which will be used to form
-        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+        optionally audio input. For the audio, one can provide a URL or local path which will be used to form
+        `input_features` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
 
         conversation = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-                    {"type": "text", "text": "Please describe this image in detail."},
+                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg"},
+                    {"type": "text", "text": "What can you tell me about this audio?"},
                 ],
             },
         ]
@@ -138,9 +136,6 @@ class VoxtralProcessor(ProcessorMixin):
         Args:
             conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
                 The conversation to format.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
-                chat template is used.
         """
         if chat_template is not None:
             raise ValueError(
@@ -256,13 +251,11 @@ class VoxtralProcessor(ProcessorMixin):
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **input_values** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
+            - **input_features** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
-            - **labels** -- List of labels for the audio frames. Returned when `output_labels=True`.
         """
-
         if isinstance(text, str):
             is_batched = False
             text = [text]
@@ -293,7 +286,19 @@ class VoxtralProcessor(ProcessorMixin):
         model_id: str = "model",
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
-        # TODO: @eustlb, add docstring
+        """
+        This method applies the model's transcription request template given a language and audio.
+        It relies on MistralCommonTokenizer and WhisperFeatureExtractor to prepare input ids and input features to the model.
+
+        Args:
+            language (`str`, `list[str]`):
+                The language or languages of the audio. If provided as a string, will be applied uniformly to all audio.
+                If provided as a list, will be applied to each audio individually with a one-to-one mapping.
+            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The audio or batch of audio to be prepared. If provided as a string, it should correspond to the path or url of the audio file.
+            model_id (`str`, *optional*, default="model"):
+                The hub model id of the model to use for transcription.
+        """
         output_kwargs = self._merge_kwargs(
             VoxtralProcessorKwargs,
             **kwargs,
