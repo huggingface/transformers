@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for Ernie 4.5"""
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from ...tokenization_utils import AddedToken
 from ...utils import logging
@@ -108,5 +108,52 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
             **kwargs,
         )
 
+    def _decode(
+        self,
+        token_ids: Union[int, list[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        """
+        Overwritten as we want to handle the legacy-added tokens as normal tokens instead.
+        The easiest way to see the issue is by decoding sequences of numbers (e.g. "15 663").
+        """
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # If given is a single id, prevents splitting the string in upcoming loop
+        if isinstance(filtered_tokens, str):
+            filtered_tokens = [filtered_tokens]
+
+        # To avoid mixing byte-level and unicode for byte-level BPT
+        # we need to build string separately for added tokens and byte-level tokens
+        # cf. https://github.com/huggingface/transformers/issues/1133
+        sub_texts = []
+        current_sub_text = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_tokens:
+                continue
+            else:
+                current_sub_text.append(token)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        if spaces_between_special_tokens:
+            text = " ".join(sub_texts)
+        else:
+            text = "".join(sub_texts)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
 
 __all__ = ["Ernie4_5Tokenizer"]
