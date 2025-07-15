@@ -71,6 +71,10 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         requires_backends(self, ["vision", "timm"])
         super().__init__(*args, **kwargs)
 
+    def post_init(self):
+        self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        super().post_init()
+
     @staticmethod
     def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
         """
@@ -108,6 +112,24 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
+    def _timm_model_supports_gradient_checkpointing(self):
+        """
+        Check if the timm model supports gradient checkpointing by checking if the `set_grad_checkpointing` method is available.
+        Some timm models will have the method but will raise an AssertionError when called so in this case we return False.
+        """
+        if not hasattr(self.timm_model, "set_grad_checkpointing"):
+            return False
+        
+        try:
+            self.timm_model.set_grad_checkpointing(enable=True)
+            self.timm_model.set_grad_checkpointing(enable=False)
+            return True
+        except AssertionError:
+            return False
+
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+        self.timm_model.set_grad_checkpointing(enable)
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -119,12 +141,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
         self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
-        if hasattr(self.timm_model, "set_grad_checkpointing"):
-            self.supports_gradient_checkpointing = True
         self.post_init()
-
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
-        self.timm_model.set_grad_checkpointing(enable)
 
     @auto_docstring
     def forward(
@@ -243,12 +260,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
-        if hasattr(self.timm_model, "set_grad_checkpointing"):
-            self.supports_gradient_checkpointing = True
         self.post_init()
-
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
-        self.timm_model.set_grad_checkpointing(enable)
 
     @auto_docstring
     def forward(
