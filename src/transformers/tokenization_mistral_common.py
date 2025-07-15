@@ -42,10 +42,12 @@ from transformers.utils.import_utils import is_mistral_common_available, is_torc
 if is_mistral_common_available():
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.protocol.instruct.validator import ValidationMode
-    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, TokenizerVersion
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.tekken import Tekkenizer
     from mistral_common.tokens.tokenizers.utils import download_tokenizer_from_hf_hub
+    from mistral_common.tokens.tokenizers.image import MultiModalVersion
+
 
 if is_torch_available():
     import torch
@@ -1764,7 +1766,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.from_pretrained`."
             )
 
-        if not os.path.isfile(pretrained_model_name_or_path):
+        if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
                 repo_id=pretrained_model_name_or_path,
                 cache_dir=cache_dir,
@@ -1774,7 +1776,35 @@ class MistralCommonTokenizer(PushToHubMixin):
                 local_files_only=local_files_only,
             )
         else:
-            tokenizer_path = pretrained_model_name_or_path
+            valid_tokenizer_files = []
+            tokenizer_file: str
+
+            instruct_versions = list(TokenizerVersion.__members__)
+            mm_versions = list(MultiModalVersion.__members__) + [""]  # allow no mm version
+            sentencepiece_suffixes = [f".model.{v}{m}" for v in instruct_versions for m in mm_versions] + [".model"]
+
+            for path in os.listdir(pretrained_model_name_or_path):
+                pathlib_repo_file = Path(path)
+                file_name = pathlib_repo_file.name
+                suffix = "".join(pathlib_repo_file.suffixes)
+                if file_name == "tekken.json":
+                    valid_tokenizer_files.append(file_name)
+                elif suffix in sentencepiece_suffixes:
+                    valid_tokenizer_files.append(file_name)
+
+            if len(valid_tokenizer_files) == 0:
+                raise ValueError(f"No tokenizer file found in directory: {pretrained_model_name_or_path}")
+            # If there are multiple tokenizer files, we use tekken.json if it exists, otherwise the versioned one.
+            if len(valid_tokenizer_files) > 1:
+                if "tekken.json" in valid_tokenizer_files:
+                    tokenizer_file = "tekken.json"
+                else:
+                    tokenizer_file = sorted(valid_tokenizer_files)[-1]
+                logger.warning(f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}.")
+            else:
+                tokenizer_file = valid_tokenizer_files[0]
+
+            tokenizer_path = os.path.join(pretrained_model_name_or_path, tokenizer_file)
 
         return cls(
             tokenizer_path=tokenizer_path,
