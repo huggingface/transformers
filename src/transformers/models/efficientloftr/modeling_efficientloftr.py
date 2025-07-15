@@ -951,6 +951,12 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         Based on a keypoint score matrix, compute the best keypoint matches between the first and second image.
         Since each image pair can have different number of matches, the matches are concatenated together for all pair
         in the batch and a batch_indices tensor is returned to specify which match belong to which element in the batch.
+
+        Note:
+            This step can be done as a postprocessing step, because does not involve any model weights/params.
+            However, we keep it in the modeling code for consistency with other keypoint matching models AND for
+            easier torch.compile/torch.export (all ops are in torch).
+
         Args:
             scores (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
                 Scores of keypoints
@@ -999,6 +1005,11 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         """
         For each image pair, compute the matching confidence between each coarse element (by default (image_height / 8)
         * (image_width / 8 elements)) from the first image to the second image.
+
+        Note:
+            This step can be done as a postprocessing step, because does not involve any model weights/params.
+            However, we keep it in the modeling code for consistency with other keypoint matching models AND for
+            easier torch.compile/torch.export (all ops are in torch).
 
         Args:
             coarse_features (`torch.Tensor` of shape `(batch_size, 2, hidden_size, coarse_height, coarse_width)`):
@@ -1054,6 +1065,11 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         (2474 // 64) in the fine window of the first image, and the index 42 in the second image. This means that 38
         which corresponds to the position (4, 6) (4 // 8 and 4 % 8) is matched with the position (5, 2). In this example
         the coarse matched coordinate will be shifted to the matched fine coordinates in the first and second image.
+
+        Note:
+            This step can be done as a postprocessing step, because does not involve any model weights/params.
+            However, we keep it in the modeling code for consistency with other keypoint matching models AND for
+            easier torch.compile/torch.export (all ops are in torch).
 
         Args:
             fine_confidence (`torch.Tensor` of shape `(num_matches, fine_window_size, fine_window_size)`):
@@ -1113,6 +1129,11 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         After applying softmax to these confidences, compute the 2D spatial expected coordinates.
         Shift the first stage fine matching with these expected coordinates.
 
+        Note:
+            This step can be done as a postprocessing step, because does not involve any model weights/params.
+            However, we keep it in the modeling code for consistency with other keypoint matching models AND for
+            easier torch.compile/torch.export (all ops are in torch).
+
         Args:
             indices (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
                 Indices representing the position of each keypoint in the fine window
@@ -1124,6 +1145,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
                 Size of the window used to refine matches
             fine_scale (`float`):
                 Scale between the size of fine features and coarse features
+
         Returns:
             fine_matches (`torch.Tensor` of shape `(2, num_matches, 2)`):
                 Coordinates of matched keypoints after the second fine stage
