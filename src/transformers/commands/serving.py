@@ -56,6 +56,7 @@ if serve_dependencies_available:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types.audio.transcription_create_params import TranscriptionCreateParamsStreaming
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         Choice,
@@ -90,18 +91,24 @@ if serve_dependencies_available:
         OpenAI's ResponseCreateParamsStreaming with an additional field for the generation config (as a json string).
         """
 
-        generation_config: Optional[str]
+        generation_config: str
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
         OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
         """
 
-        generation_config: Optional[str]
+        generation_config: str
+
+    class TransformersTranscriptionCreateParamsStreaming(TranscriptionCreateParamsStreaming):
+        generation_config: str
+        """foo bar"""
 
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
     completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
+    # TODO: this crashes because of `typing.IO[bytes]`
+    # transcription_validator = TypeAdapter(TransformersTranscriptionCreateParamsStreaming)
 
     # Define request fields that are not yet used in `transformers serve`. Receiving these fields will raise an
     # HTTPException.
@@ -144,6 +151,42 @@ if serve_dependencies_available:
         "user",
         "web_search_options",
     }
+    UNUSED_TRANSCRIPTION_FIELDS = {
+        "chunking_strategy", "include", "language", "prompt", "response_format", "timestamp_granularities"
+    }
+
+
+####### TESTING #######
+
+from pydantic import create_model, ConfigDict
+import typing
+
+def dict_model(name:str,dict_def:dict):
+    fields = {}
+    for field_name in dict_def.__mutable_keys__:
+        field_annotation = dict_def.__annotations__[field_name]
+        # if the field is a forward reference, we need to evaluate it (mostly for `Required[]`, see below)
+        if isinstance(field_annotation, typing.ForwardRef):
+            field_type = typing._eval_type(field_annotation, globals(), locals())
+        else:
+            field_type = field_annotation
+
+        # pydantic doesn't accept `Required[...]` -> replaces it by Union[...]
+        if isinstance(field_type, typing._GenericAlias) and "Required[" in field_type.__repr__():
+            field_type = typing.Union[field_type.__args__[0]]
+
+        fields[field_name] = field_type
+
+    # Some input types are `typing.IO[bytes]`, which requires `arbitrary_types_allowed=True`
+    base_model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_cls = create_model(name, **fields, __config__=base_model_config)
+    model_cls.model_rebuild()
+    return model_cls
+
+TranscriptionCreateParamsStreamingBaseModel = dict_model("TranscriptionCreateParamsStreamingBaseModel", TransformersTranscriptionCreateParamsStreaming)
+#######################
+
+
 
 
 logger = logging.get_logger(__name__)
@@ -518,6 +561,19 @@ class ServeCommand(BaseTransformersCLICommand):
             )
 
             output = self.generate_response(request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.post("/v1/audio/transcriptions")
+        def audio_transcriptions(request: dict):
+            # TODO: see comment on `transcription_validator`
+            # self.validate_request(
+            #     request=request,
+            #     schema=TransformersTranscriptionCreateParamsStreaming,
+            #     validator=transcription_validator,
+            #     unused_fields=UNUSED_TRANSCRIPTION_FIELDS,
+            # )
+
+            output = self.generate_transcription(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.get("/v1/models")
@@ -1039,6 +1095,164 @@ class ServeCommand(BaseTransformersCLICommand):
                 thread.join()
 
         return stream_response(generation_streamer, request_id)
+
+    def generate_transcription(self, req: dict) -> Generator[str, None, None]:
+        """
+        Generates an OpenAI Transcription using `generate`.
+
+        Args:
+            req (`dict`): The request to generate an OpenAI Transcription for.
+
+        Returns:
+            `Generator[str, None, None]`: A generator that yields the OpenAI Transcription chunks.
+        """
+        print(req)
+        if self.args.force_model is not None:
+            req["model"] = self.args.force_model
+
+        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
+        if update_model:
+            self.load_model_and_tokenizer(req["model"], self.args)
+
+        # # HACK for tiny-agents: it sends a request after the assistant message (???). Let's assume we can't have a
+        # # request whose last message is from the assistant.
+        # if req["messages"][-1]["role"] == "assistant":
+        #     return
+
+        # # ====== TOOL PREPROCESSING LOGIC ======
+        # tool_model_family = None
+        # for supported_model_families in _MODELS_WITH_TOOL_SUPPORT:
+        #     if supported_model_families in self.model.config.architectures[0].lower():
+        #         tool_model_family = supported_model_families
+        #         break
+        # # TODO: trigger 2 constrained generations after the tool call start token is emitted:
+        # # 1. force generation to pick from the tool names
+        # # 2. force generation to pick from that tool's arguments
+        # # ====== END OF TOOL PREPROCESSING LOGIC ======
+
+        # if tool_model_family is not None:
+        #     text = self.tokenizer.apply_chat_template(
+        #         req["messages"], add_generation_prompt=True, tokenize=False, tools=req.get("tools")
+        #     )
+        # else:
+        #     text = self.tokenizer.apply_chat_template(req["messages"], add_generation_prompt=True, tokenize=False)
+        # inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
+        # request_id = req.get("request_id", "req_0")
+
+        # generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
+        # generation_config = create_generation_config_from_req(
+        #     req, model_generation_config=self.model.generation_config
+        # )
+
+        # last_kv_cache = None
+        # if self.is_continuation(req) and not update_model:
+        #     last_kv_cache = self.last_kv_cache
+
+        # generation_kwargs = {
+        #     "inputs": inputs,
+        #     "attention_mask": torch.ones_like(inputs),
+        #     "streamer": generation_streamer,
+        #     "generation_config": generation_config,
+        #     "return_dict_in_generate": True,
+        #     "past_key_values": last_kv_cache,
+        # }
+
+        # def stream_chat_completion(streamer, _request_id):
+        #     # Thin wrapper to save the KV cache after generation
+        #     def generate_with_cache(**kwargs):
+        #         generate_output = self.model.generate(**kwargs)
+        #         self.last_kv_cache = generate_output.past_key_values
+
+        #     thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
+
+        #     try:
+        #         thread.start()
+        #         tool_state = ToolState()
+
+        #         # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
+        #         # they come from the assistant.
+        #         yield self.build_chat_completion_chunk(request_id, role="assistant")
+
+        #         for result in streamer:
+        #             # ====== TOOL CALL LOGIC ======
+        #             if tool_model_family is not None:
+        #                 # Start of a tool call: reset state variables, set `inside_tool_call`
+        #                 if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["start"]:
+        #                     tool_state.inside_tool_call = True
+        #                     continue
+
+        #                 # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
+        #                 if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
+        #                     tool_state.reset()
+        #                     yield self.build_chat_completion_chunk(
+        #                         request_id=_request_id, role=None, finish_reason="tool_calls"
+        #                     )
+        #                     continue
+
+        #                 # Inside a tool call
+        #                 if tool_state.inside_tool_call:
+        #                     tool_state.buffer += result
+
+        #                     # First step: extract the tool name (may need several tokens, and we can't emit a delta
+        #                     # until we have the full name)
+        #                     if not tool_state.has_tool_name_defined:
+        #                         tool_name = re.search(r"\"name\": \"(.*?)\"", tool_state.buffer)
+        #                         if tool_name is None:
+        #                             continue
+        #                         else:
+        #                             tool_name = tool_name.group(1)
+        #                         tool_state.has_tool_name_defined = True
+        #                         tool = ChoiceDeltaToolCall(
+        #                             function=ChoiceDeltaToolCallFunction(name=tool_name),
+        #                             index=0,
+        #                             type="function",
+        #                             id=_request_id + "_tool_call",  # Only the first tool call delta has an id
+        #                         )
+
+        #                     # Second step: extract tool arguments. The tool arguments can be seen as a json string
+        #                     # within the tool json string. We emit a delta for the arguments.
+        #                     else:
+        #                         # Empty text: skip
+        #                         if result == "":
+        #                             continue
+        #                         # Until we see the `"arguments": {` in the buffer, we skip
+        #                         # TODO: other models will likely need more elaborate processing here
+        #                         if '"arguments": {' not in tool_state.buffer:
+        #                             continue
+
+        #                         # Handle nesting. We want to exclude the last } from the emitted arguments (it's
+        #                         # closing the outermost nesting level, outside the arguments block)
+        #                         tool_state.arg_nesting_level += result.count("{")
+        #                         tool_state.arg_nesting_level -= result.count("}")
+        #                         if tool_state.arg_nesting_level < 0:
+        #                             result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
+
+        #                         tool = ChoiceDeltaToolCall(
+        #                             function=ChoiceDeltaToolCallFunction(arguments=result),
+        #                             index=0,
+        #                             type="function",
+        #                         )
+
+        #                     yield self.build_chat_completion_chunk(
+        #                         request_id=_request_id, role=None, tool_calls=[tool]
+        #                     )
+        #                     continue
+        #             # ====== END OF TOOL CALL LOGIC ======
+
+        #             # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
+        #             if result != "":
+        #                 yield self.build_chat_completion_chunk(_request_id, content=result)
+        #         yield self.build_chat_completion_chunk(_request_id, finish_reason="stop")
+
+        #         thread.join()
+        #     except Exception as e:
+        #         logger.error(str(e))
+        #         yield f'data: {{"error": "{str(e)}"}}'
+
+        #     finally:
+        #         thread.join()
+
+        # return stream_chat_completion(generation_streamer, request_id)
 
     def is_continuation(self, req: dict) -> bool:
         """
