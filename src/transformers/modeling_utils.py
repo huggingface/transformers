@@ -2078,7 +2078,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         full_annotation = get_type_hints(cls).get("config", None)
         full_attribute = cls.config_class
 
-        # priority (subclass class_config -> subclass annotation -> global class_config -> global annotation)
+        # priority (child class_config -> child annotation -> global class_config -> global annotation)
         if child_attribute is not None:
             cls.config_class = child_attribute
         elif child_annotation is not None:
