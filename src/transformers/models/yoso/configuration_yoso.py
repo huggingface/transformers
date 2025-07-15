@@ -91,6 +91,7 @@ class YosoConfig(PretrainedConfig):
     ```"""
 
     model_type = "yoso"
+    architectures = ["YosoForMaskedLM"]
 
     def __init__(
         self,
