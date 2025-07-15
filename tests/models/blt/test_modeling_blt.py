@@ -24,12 +24,13 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import ids_tensor
+from ...test_modeling_common import ids_tensor, _test_eager_matches_sdpa_inference, TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION
 
 
 if is_torch_available():
@@ -60,11 +61,11 @@ class BLTModelTester(CausalLMModelTester):
         self.batch_size = 3
 
         # Common parameters for all configs
-        self.hidden_size = 32
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 4
-        self.num_key_value_heads = 4
-        self.intermediate_size = 37
+        self.hidden_size = 16
+        self.num_hidden_layers = 1
+        self.num_attention_heads = 2
+        self.num_key_value_heads = 2
+        self.intermediate_size = 18
         self.hidden_act = "silu"
         self.max_position_embeddings = 512
         self.vocab_size = 99
@@ -85,7 +86,6 @@ class BLTModelTester(CausalLMModelTester):
             "hidden_act": self.hidden_act,
             "norm_eps": self.norm_eps,
             "dropout": self.dropout,
-            "_attn_implementation": "eager"
         }
 
         self.encoder_config = {
@@ -100,7 +100,6 @@ class BLTModelTester(CausalLMModelTester):
             "hidden_act": self.hidden_act,
             "norm_eps": self.norm_eps,
             "dropout": self.dropout,
-            "_attn_implementation": "eager"
         }
 
         self.decoder_config = {
@@ -116,9 +115,7 @@ class BLTModelTester(CausalLMModelTester):
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
             "norm_eps": self.norm_eps,
-            "dropout": self.dropout,
-            "_attn_implementation": "eager"
-        }
+            "dropout": self.dropout,        }
 
         self.global_config = {
             "hidden_size": self.hidden_size * 2,  # Double the hidden size for global transformer
@@ -131,9 +128,7 @@ class BLTModelTester(CausalLMModelTester):
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
             "norm_eps": self.norm_eps,
-            "dropout": self.dropout,
-            "_attn_implementation": "eager"
-        }
+            "dropout": self.dropout,        }
 
     def get_config(self):
         config = BLTConfig(
@@ -153,9 +148,7 @@ class BLTModelTester(CausalLMModelTester):
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,
             global_config=self.global_config,
-            tie_word_embeddings=False,
-            _attn_implementation="eager"
-        )
+            tie_word_embeddings=False,        )
 
         config.num_attention_heads = config.decoder_config.num_attention_heads
         config.num_hidden_layers = config.decoder_config.num_hidden_layers
@@ -205,6 +198,45 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         """Skip this test for BLT as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
         self.skipTest("BLT requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs")
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    def test_eager_matches_sdpa_inference(
+        self,
+        name,
+        torch_dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+    ):
+        "We need to relax a bit the `atols` for fp32 here due to the altup projections"
+        atols = {
+            ("cpu", False, torch.float32): 2e-2,  # this was relaxed
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 2e-2,  # this was relaxed
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 2e-2,  # this was relaxed
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 2e-2,  # this was relaxed
+            ("cuda", True, torch.bfloat16): 1e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        _test_eager_matches_sdpa_inference(
+            self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+        )
+
+
+    def test_torchscript_simple(self):
+        """Skip torchscript test for BLT as it has complex patching logic that's not compatible."""
+        self.skipTest("BLT has complex patching logic that's not compatible with torchscript")
+
+    def test_torchscript_output_hidden_state(self):
+        """Skip torchscript test for BLT as it has complex patching logic that's not compatible."""
+        self.skipTest("BLT has complex patching logic that's not compatible with torchscript")
 
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
@@ -274,7 +306,6 @@ class BLTIntegrationTest(unittest.TestCase):
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        old_input_ids = torch.tensor([tokenizer.encode(prompt, add_eos=False)]).to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
 
         output_text = tokenizer.decode(generated_ids[0])

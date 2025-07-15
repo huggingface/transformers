@@ -47,7 +47,6 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         intermediate_size=2816,
-        _attn_implementation="sdpa",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -69,8 +68,6 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
-
-        self._attn_implementation = _attn_implementation
 
 
 class BLTLocalDecoderConfig(PretrainedConfig):
@@ -97,7 +94,6 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         intermediate_size=2816,
-        _attn_implementation="sdpa",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -116,11 +112,9 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling or {"type": "default"}
         self.hidden_act = hidden_act
-        self._attn_implementation = _attn_implementation
 
         super().__init__(**kwargs)
 
-        self._attn_implementation = _attn_implementation
 
 
 class BLTGlobalTransformerConfig(PretrainedConfig):
@@ -143,7 +137,6 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         intermediate_size=5632,
-        _attn_implementation="sdpa",
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -161,7 +154,6 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-        self._attn_implementation = _attn_implementation
 
 
 class BLTPatcherConfig(PretrainedConfig):
@@ -212,7 +204,6 @@ class BLTPatcherConfig(PretrainedConfig):
         norm_eps=1e-5,
         dropout=0.0,
         rope_theta=10000.0,
-        _attn_implementation="sdpa",
         attn_bias_type="local_block_causal",
         intermediate_size=2048,
         **kwargs,
@@ -232,8 +223,6 @@ class BLTPatcherConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.rope_scaling = {"type": "default"}
         super().__init__(**kwargs)
-
-        self._attn_implementation = _attn_implementation
 
 
 class BLTConfig(PretrainedConfig):
@@ -332,7 +321,6 @@ class BLTConfig(PretrainedConfig):
         decoder_config=None,
         global_config=None,
         tie_word_embeddings=False,
-        _attn_implementation="sdpa",
         initializer_range=0.02,
         rope_theta=500000.0,
         rope_scaling=None,
@@ -342,7 +330,6 @@ class BLTConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self._attn_implementation = _attn_implementation
         self.initializer_range = initializer_range
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling or {"type": "default"}
@@ -370,7 +357,7 @@ class BLTConfig(PretrainedConfig):
 
         # Initialize component configurations
         if patcher_config is None:
-            self.patcher_config = BLTPatcherConfig(_attn_implementation=_attn_implementation)
+            self.patcher_config = BLTPatcherConfig()
             logger.info("patcher_config is None, using default BLT patcher config")
         elif isinstance(patcher_config, dict):
             self.patcher_config = BLTPatcherConfig(**patcher_config)
@@ -378,7 +365,7 @@ class BLTConfig(PretrainedConfig):
             self.patcher_config = patcher_config
 
         if encoder_config is None:
-            self.encoder_config = BLTLocalEncoderConfig(_attn_implementation=_attn_implementation)
+            self.encoder_config = BLTLocalEncoderConfig()
             logger.info("encoder_config is None, using default BLT encoder config")
         elif isinstance(encoder_config, dict):
             self.encoder_config = BLTLocalEncoderConfig(**encoder_config)
@@ -386,7 +373,7 @@ class BLTConfig(PretrainedConfig):
             self.encoder_config = encoder_config
 
         if decoder_config is None:
-            self.decoder_config = BLTLocalDecoderConfig(_attn_implementation=_attn_implementation)
+            self.decoder_config = BLTLocalDecoderConfig()
             logger.info("decoder_config is None, using default BLT decoder config")
         elif isinstance(decoder_config, dict):
             self.decoder_config = BLTLocalDecoderConfig(**decoder_config)
@@ -394,7 +381,7 @@ class BLTConfig(PretrainedConfig):
             self.decoder_config = decoder_config
 
         if global_config is None:
-            self.global_config = BLTGlobalTransformerConfig(_attn_implementation=_attn_implementation)
+            self.global_config = BLTGlobalTransformerConfig()
             logger.info("global_config is None, using default BLT global config")
         elif isinstance(global_config, dict):
             self.global_config = BLTGlobalTransformerConfig(**global_config)

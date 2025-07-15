@@ -14,6 +14,7 @@
 # limitations under the License.
 """BLT model."""
 
+import os
 from enum import Enum
 from typing import Callable, Optional, Union
 
@@ -36,7 +37,8 @@ from .configuration_blt import (
     BLTLocalDecoderConfig,
     BLTLocalEncoderConfig,
     BLTPatcherConfig,
-)
+)   
+from ...masking_utils import create_causal_mask
 
 
 if is_torch_flex_attn_available():
@@ -251,6 +253,10 @@ class BLTSelfAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
+        # For BLT: We'll dynamically set is_causal based on context
+        # Decoder layers need causal behavior for generation
+        self.is_causal = False  # Default, will be set dynamically
+
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -283,7 +289,6 @@ class BLTSelfAttention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = (
                 {"sin": sin, "cos": cos, "cache_position": cache_position}
                 if position_embeddings is not None
@@ -292,6 +297,7 @@ class BLTSelfAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
+
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -301,6 +307,14 @@ class BLTSelfAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        # Dynamic is_causal: Check if we're in a decoder context by checking the layer index
+        # BLT decoder layers should use causal attention for correct generation
+        original_is_causal = self.is_causal
+        # Enable causal behavior for decoder layers (based on context clues)
+        # If attention_mask is None, we're likely in a decoder that should be causal
+        if attention_mask is None:
+            self.is_causal = True
+        
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -311,6 +325,9 @@ class BLTSelfAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
+        
+        # Restore original is_causal
+        self.is_causal = original_is_causal
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -792,6 +809,9 @@ class BLTCrossAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.dropout = config.dropout
+        
+        # Cross-attention should not be causal
+        self.is_causal = False
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -963,6 +983,8 @@ class BLTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+
+
 class BLTModel(BLTPreTrainedModel):
     def __init__(self, config: BLTConfig):
         super().__init__(config)
@@ -1057,6 +1079,19 @@ class BLTModel(BLTPreTrainedModel):
                 self.config.encoder_hash_byte_group_size,
                 self.config.encoder_hash_byte_group_vocab,
             )
+
+        # Create cache_position for mask construction if not provided (like LLaMA)
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + encoder_embeds.shape[1], device=encoder_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = attention_mask
+
         cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
@@ -1092,6 +1127,7 @@ class BLTModel(BLTPreTrainedModel):
             input_ids=input_ids,
             embeds=encoder_hidden_states,
             patch_embeds=global_hidden_states,
+            attention_mask=causal_mask,
             mask=None,
             cross_mask=cross_attn_mask_dec,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask_dec,
