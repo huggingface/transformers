@@ -1367,34 +1367,33 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_propagate_on_streamed_video(self):
         raw_video = prepare_video()
-        inputs = self.processor(images=raw_video, device=torch_device, return_tensors="pt")
-        processed_frames = inputs.pixel_values
 
         inference_state = self.processor.init_video_session(inference_device=torch_device)
-        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
         video_res_masks = []
         max_frame_num_to_track = 3
-        for frame_idx, processed_frame in enumerate(processed_frames):
+        for frame_idx, frame in enumerate(raw_video):
             if frame_idx >= max_frame_num_to_track:
                 break
             if frame_idx == 0:
+                inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
                 inference_state = self.processor.process_new_points_or_box_for_video_frame(
                     inference_state,
                     frame_idx=0,
-                    obj_ids=ann_obj_id,
+                    obj_ids=1,
                     input_points=[[[[210, 350], [250, 220]]]],
                     input_labels=[[[1, 1]]],
                     original_size=inputs.original_sizes[0],
                 )
                 _, video_res_mask = self.model.infer_on_video_frame_with_new_inputs(
                     inference_state=inference_state,
-                    frame=processed_frame,
-                    obj_ids=ann_obj_id,
+                    frame=inputs.pixel_values[0],
+                    obj_ids=1,
                     consolidate_at_video_res=False,
                 )
                 video_res_masks.append(video_res_mask)
             else:
-                video_res_mask = self.model.propagate_in_frame(inference_state, frame=processed_frame)
+                inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
+                video_res_mask = self.model.propagate_in_frame(inference_state, frame=inputs.pixel_values[0])
                 video_res_masks.append(video_res_mask)
 
         video_res_masks = torch.stack(video_res_masks, dim=0)
