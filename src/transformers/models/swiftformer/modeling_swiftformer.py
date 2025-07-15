@@ -410,7 +410,7 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
                 module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
                 module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
         elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
-            nn.init.normmal_(module.w_g)
+            nn.init.normal_(module.w_g)
 
 
 @auto_docstring
