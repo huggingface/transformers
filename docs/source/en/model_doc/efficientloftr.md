@@ -84,7 +84,7 @@ for i, output in enumerate(outputs):
 
 From the post processed outputs, you can visualize the matches between the two images using the following code:
 ```python
-processor.visualize_output(images, outputs)
+images_with_matching = processor.visualize_keypoint_matching(images, outputs)
 ```
 
 ![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/2nJZQlFToCYp_iLurvcZ4.png)
@@ -102,7 +102,7 @@ The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 
 - preprocess
 - post_process_keypoint_matching
-- visualize_output
+- visualize_keypoint_matching
 
 ## EfficientLoFTRModel
 

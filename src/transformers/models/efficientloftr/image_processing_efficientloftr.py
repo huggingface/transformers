@@ -396,11 +396,11 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
 
         return results
 
-    def visualize_output(
+    def visualize_keypoint_matching(
         self,
         images: ImageInput,
         keypoint_matching_output: list[dict[str, torch.Tensor]],
-    ):
+    ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
 
@@ -410,11 +410,16 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
             outputs (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
+
+        Returns:
+            `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
+            keypoints as well as the matching between them.
         """
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
 
+        results = []
         for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
             height0, width0 = image_pair[0].shape[:2]
             height1, width1 = image_pair[1].shape[:2]
@@ -442,7 +447,8 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
                     fill="black",
                 )
 
-            plot_image_pil.save("default_pil.png")
+            results.append(plot_image_pil)
+        return results
 
     def _get_color(self, score):
         """Maps a score to a color."""
