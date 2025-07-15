@@ -44,7 +44,7 @@ if is_torch_available():
 
 
 def decode_spans(
-    start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
+    start: np.ndarray, end: np.ndarray, max_answer_len: int, undesired_tokens: np.ndarray
 ) -> tuple:
     """
     Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the actual
@@ -76,13 +76,7 @@ def decode_spans(
 
     #  Inspired by Chen & al. (https://github.com/facebookresearch/DrQA)
     scores_flat = candidates.flatten()
-    if topk == 1:
-        idx_sort = [np.argmax(scores_flat)]
-    elif len(scores_flat) < topk:
-        idx_sort = np.argsort(-scores_flat)
-    else:
-        idx = np.argpartition(-scores_flat, topk)[0:topk]
-        idx_sort = idx[np.argsort(-scores_flat[idx])]
+    idx_sort = np.argsort(-scores_flat)
 
     starts, ends = np.unravel_index(idx_sort, candidates.shape)[1:]
     desired_spans = np.isin(starts, undesired_tokens.nonzero()) & np.isin(ends, undesired_tokens.nonzero())
@@ -99,7 +93,6 @@ def select_starts_ends(
     p_mask,
     attention_mask,
     min_null_score=1000000,
-    top_k=1,
     handle_impossible_answer=False,
     max_answer_len=15,
 ):
@@ -143,7 +136,7 @@ def select_starts_ends(
     # Mask CLS
     start[0, 0] = end[0, 0] = 0.0
 
-    starts, ends, scores = decode_spans(start, end, top_k, max_answer_len, undesired_tokens)
+    starts, ends, scores = decode_spans(start, end, max_answer_len, undesired_tokens)
     return starts, ends, scores, min_null_score
 
 
@@ -557,7 +550,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             )
 
             starts, ends, scores, min_null_score = select_starts_ends(
-                start_, end_, p_mask, attention_mask, min_null_score, top_k, handle_impossible_answer, max_answer_len
+                start_, end_, p_mask, attention_mask, min_null_score, handle_impossible_answer, max_answer_len
             )
 
             if not self.tokenizer.is_fast:
