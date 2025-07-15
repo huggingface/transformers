@@ -391,7 +391,7 @@ def _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda(
     num_training_steps: int,
     num_cycles: float,
     min_lr_rate: float = 0.0,
-    warmup_lr_rate: float = None,
+    warmup_lr_rate: Optional[float] = None,
 ):
     current_step = float(current_step)
     num_warmup_steps = float(num_warmup_steps)
