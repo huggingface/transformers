@@ -229,10 +229,8 @@ class EfficientLoFTRAggregationLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         query_states = hidden_states
         is_cross_attention = encoder_hidden_states is not None
         kv_states = encoder_hidden_states if is_cross_attention else hidden_states
@@ -243,11 +241,7 @@ class EfficientLoFTRAggregationLayer(nn.Module):
         kv_states = kv_states.permute(0, 2, 3, 1)
         hidden_states = self.norm(query_states)
         encoder_hidden_states = self.norm(kv_states)
-        if attention_mask is not None:
-            current_mask = encoder_attention_mask if is_cross_attention else attention_mask
-            attention_mask = self.kv_aggregation(attention_mask.float()).bool()
-            encoder_attention_mask = self.kv_aggregation(current_mask.float()).bool()
-        return hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask
+        return hidden_states, encoder_hidden_states
 
 
 # Copied from transformers.models.cohere.modeling_cohere.rotate_half
@@ -360,9 +354,7 @@ class EfficientLoFTRAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -373,7 +365,6 @@ class EfficientLoFTRAttention(nn.Module):
 
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        current_attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
@@ -394,7 +385,7 @@ class EfficientLoFTRAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            current_attention_mask,
+            attention_mask=None,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -445,18 +436,14 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, embed_dim, _, _ = hidden_states.shape
 
         # Aggregate features
-        aggregated_hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask = self.aggregation(
-            hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask
-        )
+        aggregated_hidden_states, encoder_hidden_states = self.aggregation(hidden_states, encoder_hidden_states)
 
         attention_hidden_states = aggregated_hidden_states.reshape(batch_size, -1, embed_dim)
         encoder_hidden_states = encoder_hidden_states.reshape(batch_size, -1, embed_dim)
@@ -468,9 +455,7 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         # Multi-head attention
         message, _ = self.attention(
             attention_hidden_states,
-            attention_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -504,18 +489,14 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, _, embed_dim, height, width = hidden_states.shape
 
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
-        if attention_mask is not None:
-            attention_mask = attention_mask.reshape(-1, embed_dim, height, width)
 
         hidden_states = self.self_attention(
             hidden_states,
-            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -523,17 +504,10 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         encoder_hidden_states = (
             hidden_states.reshape(-1, 2, embed_dim, height, width).flip(1).reshape(-1, embed_dim, height, width)
         )
-        encoder_attention_mask = None
-        if attention_mask is not None:
-            encoder_attention_mask = (
-                attention_mask.reshape(-1, 2, embed_dim, height, width).flip(1).reshape(-1, embed_dim, height, width)
-            )
 
         hidden_states = self.cross_attention(
             hidden_states,
-            attention_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
