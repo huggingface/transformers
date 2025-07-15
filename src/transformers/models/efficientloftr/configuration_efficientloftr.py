@@ -70,6 +70,9 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
+        partial_rotary_factor (`float`, *optional*, defaults to 4.0):
+            Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
+            the whole hidden_size, so this factor is used to compensate.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -169,6 +172,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling if rope_scaling is not None else {"rope_type": "default"}
+
+        # for compatibility with "default" rope type
         self.partial_rotary_factor = partial_rotary_factor
         rope_config_validation(self)
 
