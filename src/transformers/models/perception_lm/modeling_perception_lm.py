@@ -239,7 +239,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
-        r"""
+        """
         pixel_values_videos (`torch.FloatTensor`, *optional*):
             Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
 
@@ -362,7 +362,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
-        r"""
+        """
         pixel_values_videos (`torch.FloatTensor`, *optional*):
             Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
 
