@@ -410,7 +410,7 @@ def convert_model(
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
     model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
-    model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
+    model.generation_config.boi_token_id = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict
     print("Loading state dict...")
