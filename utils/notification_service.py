@@ -1495,42 +1495,45 @@ if __name__ == "__main__":
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
 
-    # Only for AMD at this moment
-    diff_file_url = None
-    if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
+    # Only for AMD at this moment.
+    # TODO: put this into a method
+    # if is_amd_daily_ci_workflow:
+    if is_nvidia_daily_ci_workflow:
+        diff_file_url = None
+        if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
 
-        ci_artifacts = get_last_daily_ci_reports(
-            artifact_names=None,
-            output_dir=output_dir,
-            token=os.environ["ACCESS_REPO_INFO_TOKEN"],
-            workflow_run_id=prev_workflow_run_id,
-        )
+            ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=None,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id=prev_workflow_run_id,
+            )
 
-        current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
-        prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])
+            current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+            prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])
 
-        current_artifacts_set = {}
-        for d in current_artifacts:
-            current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
+            current_artifacts_set = {}
+            for d in current_artifacts:
+                current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
 
-        prev_artifacts_set = {}
-        for d in prev_artifacts:
-            prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
+            prev_artifacts_set = {}
+            for d in prev_artifacts:
+                prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
 
-        report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
+            report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-        with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
-            fp.write(report)
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+                fp.write(report)
 
-        # upload
-        commit_info = api.upload_file(
-            path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
-            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
-            repo_id=report_repo_id,
-            repo_type="dataset",
-            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-        )
-        diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/resolve/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
+            # upload
+            commit_info = api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
+                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
+                repo_id=report_repo_id,
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/resolve/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:
