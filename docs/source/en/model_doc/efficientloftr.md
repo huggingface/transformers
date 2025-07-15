@@ -45,17 +45,14 @@ Project page: [https://zju3dv.github.io/efficientloftr/](https://zju3dv.github.i
 
 Here is a quick example of using the model. 
 ```python
-import requests
 import torch
-from PIL import Image
 
 from transformers import AutoImageProcessor, AutoModelForKeypointMatching
+from transformers.image_utils import load_image
 
 
-url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
-image1 = Image.open(requests.get(url_image1, stream=True).raw)
-url_image2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
-image2 = Image.open(requests.get(url_image2, stream=True).raw)
+image1 = load_image("https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg")
+image2 = load_image("https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg")
 
 images = [image1, image2]
 
