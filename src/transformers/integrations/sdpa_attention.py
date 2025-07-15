@@ -37,10 +37,6 @@ def sdpa_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
 
-    if hasattr(module, "num_key_value_groups"):
-        key = repeat_kv(key, module.num_key_value_groups)
-        value = repeat_kv(value, module.num_key_value_groups)
-
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
@@ -71,6 +67,7 @@ def sdpa_attention_forward(
         dropout_p=dropout,
         scale=scaling,
         is_causal=is_causal,
+        enable_gqa=hasattr(module, "num_key_value_groups"),
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
