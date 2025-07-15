@@ -39,8 +39,10 @@ import torch
 import torch.distributed as dist
 import torch.distributed.checkpoint as dcp
 import torch.optim as optim
+import wandb
 from datasets import load_dataset
-from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
+from torch.distributed.checkpoint.state_dict import (get_state_dict,
+                                                     set_state_dict)
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
@@ -50,10 +52,7 @@ from torch.distributed.tensor.experimental import context_parallel
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-
-import wandb
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
@@ -264,7 +263,8 @@ def main():
             position_ids = torch.arange(0, seq_len, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
             batch["position_ids"] = position_ids
-            from torch.distributed.tensor.experimental._attention import _cp_options
+            from torch.distributed.tensor.experimental._attention import \
+                _cp_options
 
             _cp_options.enable_load_balance = False
 
