@@ -23,7 +23,7 @@ if is_torch_available():
     import torch
 
 if is_soundfile_available():
-    pass
+    import soundfile as sf
 
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import TranscriptionRequest
@@ -280,6 +280,8 @@ class VoxtralProcessor(ProcessorMixin):
         language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
         model_id: str = "model",
+        sampling_rate: Optional[int] = None,
+        format: Optional[Union[str, list[str]]] = None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         """
@@ -294,6 +296,11 @@ class VoxtralProcessor(ProcessorMixin):
                 The audio or batch of audio to be prepared. If provided as a string, it should correspond to the path or url of the audio file.
             model_id (`str`, *optional*, default="model"):
                 The hub model id of the model to use for transcription.
+            sampling_rate (`int`, *optional*):
+                The sampling rate of the audio. Necessary if it is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
+                Used to avoid silent errors when passing audio that is not in the expected sampling rate.
+            format (`str`, `list[str]`, *optional*):
+                The format of the audio, necessary if is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
         """
         output_kwargs = self._merge_kwargs(
             VoxtralProcessorKwargs,
@@ -302,6 +309,11 @@ class VoxtralProcessor(ProcessorMixin):
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
+
+        if sampling_rate is None:
+            logger.warning_once(f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors.")
+        elif sampling_rate != audio_kwargs["sampling_rate"]:
+            raise ValueError(f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate.")
 
         return_dict = common_kwargs.pop("return_dict", False)
         tokenize = common_kwargs.pop("tokenize", False)
@@ -322,9 +334,20 @@ class VoxtralProcessor(ProcessorMixin):
             audio = [load_audio_into_buffer(el, force_mono=True) for el in audio]
         else:
             audio = make_list_of_audio(audio)
-            # mono conversion
-            audio = [array.mean(axis=1) for array in audio]
-            audio = [io.BytesIO(array.tobytes()) for array in audio]
+            if len(audio) != len(format):
+                raise ValueError(f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})")
+            audio_buffers = []
+            for array, f in zip(audio, format):
+                # Create new BytesIO object and write audio data to it
+                buffer = io.BytesIO()
+                # Convert to mono if needed
+                if array.ndim == 2:
+                    array = array.mean(axis=1)
+                # Write to buffer with default format and sampling rate
+                sf.write(buffer, array, samplerate=audio_kwargs["sampling_rate"], format=f)
+                buffer.seek(0)
+                audio_buffers.append(buffer)
+            audio = audio_buffers
 
         # validate language input
         n_audio = len(audio)
