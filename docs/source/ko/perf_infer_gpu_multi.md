@@ -13,42 +13,42 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Distributed inference
+# 분산 추론[[distributed-inference]]
 
-When a model doesn't fit on a single GPU, distributed inference with [tensor parallelism](./perf_train_gpu_many#tensor-parallelism) can help. Tensor parallelism shards a model onto multiple accelerators (CUDA GPU, Intel XPU, etc.) and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each accelerator can process a tensor slice.
+모델이 단일 GPU에 맞지 않는 경우, [텐서 병렬화](./perf_train_gpu_many#tensor-parallelism)를 사용한 분산 추론이 도움이 될 수 있습니다. 텐서 병렬화는 모델을 여러 가속기(CUDA GPU, Intel XPU 등)에 분할하고 행렬 곱셈과 같은 계산을 병렬화합니다. 더 큰 모델 크기를 메모리에 맞춰 넣을 수 있게 해주며, 각 가속기가 텐서 슬라이스를 처리할 수 있어 더 빠릅니다.
 
-However, tensor parallelism adds communication overhead and should be used on single machine setups with multiple accelerators to take advantage of fast intra-node communication. For multi-node training, it may be more efficient to use pipeline or data parallelism depending on your use case.
+그러나 텐서 병렬화는 통신 오버헤드를 추가하므로 빠른 노드 내 통신을 활용하기 위해 여러 가속기가 있는 단일 머신 설정에서 사용해야 합니다. 다중 노드 훈련의 경우, 사용 사례에 따라 파이프라인이나 데이터 병렬화를 사용하는 것이 더 효율적일 수 있습니다.
 
 > [!TIP]
-> Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) section on tensor parallelism to learn more.
+> 텐서 병렬화에 대해 더 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)의 텐서 병렬화 섹션을 참조하세요.
 
-Check the list below for models that natively support tensor parallelism. Open a GitHub issue or pull request to add support for a model.
+텐서 병렬화를 기본적으로 지원하는 모델 목록을 아래에서 확인하세요. 모델에 대한 지원을 추가하려면 GitHub 이슈나 풀 리퀘스트를 열어주세요.
 
 <details>
-<summary>Show supported models</summary>
+<summary>지원되는 모델 보기</summary>
 
-* [Cohere](./model_doc/cohere) and [Cohere 2](./model_doc/cohere2)
-* [Gemma](./model_doc/gemma) and [Gemma 2](./model_doc/gemma2)
+* [Cohere](./model_doc/cohere) 및 [Cohere 2](./model_doc/cohere2)
+* [Gemma](./model_doc/gemma) 및 [Gemma 2](./model_doc/gemma2)
 * [GLM](./model_doc/glm)
 * [Granite](./model_doc/granite)
 * [Llama](./model_doc/llama)
 * [Mistral](./model_doc/mistral)
 * [Mixtral](./model_doc/mixtral)
-* [OLMo](./model_doc/olmo) and [OLMo2](./model_doc/olmo2)
-* [Phi](./model_doc/phi) and [Phi-3](./model_doc/phi3)
-* [Qwen2](./model_doc/qwen2), [Qwen2Moe](./model_doc/qwen2_moe), and [Qwen2-VL](./model_doc/qwen2_5_vl)
+* [OLMo](./model_doc/olmo) 및 [OLMo2](./model_doc/olmo2)
+* [Phi](./model_doc/phi) 및 [Phi-3](./model_doc/phi3)
+* [Qwen2](./model_doc/qwen2), [Qwen2Moe](./model_doc/qwen2_moe), 및 [Qwen2-VL](./model_doc/qwen2_5_vl)
 * [Starcoder2](./model_doc/starcoder2)
 
 </details>
 
-This guide shows how to enable tensor parallelism with Transformers and different partitioning strategies.
+이 가이드는 Transformers와 다양한 분할 전략을 사용하여 텐서 병렬화를 활성화하는 방법을 보여줍니다.
 
-## Partitioning a model
+## 모델 분할[[partitioning-a-model]]
 
-Transformers supports tensor parallelism if a model has a `tp_plan`. There are two plans to partition a model.
+모델에 `tp_plan`이 있는 경우 Transformers는 텐서 병렬화를 지원합니다. 모델을 분할하는 두 가지 계획이 있습니다.
 
-- The `auto` tensor parallelism plan partitions a model (see the supported models above) based on a predefined configuration.
-- You can also manually specify your own partitioning plan and pass it to the `tp_plan` parameter in [`~PreTrainedModel.from_pretrained`].
+- `auto` 텐서 병렬화 계획은 사전 정의된 구성을 기반으로 모델(위의 지원되는 모델 참조)을 분할합니다.
+- 고유한 분할 계획을 수동으로 지정하고 [`~PreTrainedModel.from_pretrained`]의 `tp_plan` 매개변수에 전달할 수도 있습니다.
 
 <hfoptions id="sharding">
 <hfoption id="auto plan">
@@ -58,8 +58,8 @@ import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
-model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # better for smaller number of GPUs
+# model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # 모든 가능한 전략을 시각화하기에 더 좋음
+model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # 적은 수의 GPU에 더 좋음
 
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan="auto")
 print(model._tp_plan)
@@ -68,11 +68,11 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 prompt = "Can I help"
 inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 
-# distributed run
+# 분산 실행
 outputs = model(inputs)
 ```
 
-Launch the inference script above on [torchrun](https://pytorch.org/docs/stable/elastic/run.html) with 4 processes per GPU.
+위의 추론 스크립트를 GPU당 4개 프로세스로 [torchrun](https://pytorch.org/docs/stable/elastic/run.html)에서 실행하세요.
 
 ```bash
 torchrun --nproc-per-node 4 demo.py
@@ -81,10 +81,10 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-Define a tensor parallel plan for each layer in `tp_plan` and pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses a combination of column and row partitioning. Refer to the [Partitioning strategies](#partitioning-strategies) section to learn about other supported partitioning strategies.
+`tp_plan`의 각 레이어에 대해 텐서 병렬 계획을 정의하고 [`~PreTrainedModel.from_pretrained`]에 전달하세요. 아래 예시는 열 및 행 분할의 조합을 사용합니다. 다른 지원되는 분할 전략에 대해 알아보려면 [분할 전략](#partitioning-strategies) 섹션을 참조하세요.
 
 > [!WARNING]
-> Manually specifying your own partitioning plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about the partitioning strategies, the resulting model can be very slow, even failing or incorrect. Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) to learn more.
+> 고유한 분할 계획을 수동으로 지정하려면 모델 아키텍처와 분할 전략이 함께 상호 작용하는 방식에 대한 충분한 이해가 필요합니다. 분할 전략에 대해 확실하지 않다면 결과 모델이 매우 느려지거나 실패하거나 부정확할 수 있습니다. 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)을 참조하세요.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -104,16 +104,16 @@ print(model._tp_plan)
 </hfoption>
 </hfoptions>
 
-## Partitioning strategies
+## 분할 전략[[partitioning-strategies]]
 
-All partitioning strategies are defined in the [`ParallelInterface`] class which maps a string to the strategy implementation. You don't need to interact with this class directly since all the strategies are set with `tp_plan` in [`~PreTrainedModel.from_pretrained`], but it is useful for checking what strategies are available.
+모든 분할 전략은 문자열을 전략 구현에 매핑하는 [`ParallelInterface`] 클래스에서 정의됩니다. [`~PreTrainedModel.from_pretrained`]의 `tp_plan`으로 모든 전략이 설정되므로 이 클래스와 직접 상호 작용할 필요는 없지만, 사용 가능한 전략을 확인하는 데 유용합니다.
 
 ```py
 class ParallelInterface(MutableMapping):
     """
-    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
-    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
-    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
+    허용된 attention 함수를 추적하는 딕셔너리 같은 객체입니다. `register()` 호출로 새로운 attention 함수를 쉽게 추가할 수 있습니다. 
+    모델이 기존 attention 함수(예: `sdpa`)를 로컬에서 덮어쓰려면 `modeling_<model>.py` 내부에서 이 클래스의 새 인스턴스를 선언하고 
+    해당 인스턴스에서 선언해야 합니다.
     """
     _global_mapping = {
         "colwise": ColwiseParallel(),
@@ -130,24 +130,24 @@ class ParallelInterface(MutableMapping):
     }
 ```
 
-Refer to the table below to learn more about each strategy.
+각 전략에 대해 자세히 알아보려면 아래 표를 참조하세요.
 
-| Strategy | Description |
+| 전략 | 설명 |
 |---|---|
-| `ColwiseParallel` | Column-wise partitioning of weights and biases. |
-| `RowwiseParallel` | Row-wise partitioning of weights and biases. Also supports partitioning `nn.Embedding` modules. |
-| `SequenceParallel` | Sequence parallel implementation to support `LayerNorm` and `Dropout` layers. Also supports Python implementation of [RMSNorm](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34). |
-| `PackedColwiseParallel` | Variant of `ColwiseParallel` to support packed weights (for example, packing `up_proj` and `gate_proj` together). Refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for more details. |
-| `PackedRowwiseParallel` | Variant of `RowwiseParallel` to support packed weights (refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for more details). |
-| `GatherParallel` | Gather outputs of the module across devices. |
-| `IsolatedParallel` | Used for Experts in Mixture-of-Experts (MoE) layers to isolates module from other devices. |
-| `ReplicateParallel` | Replicate modules across all devices to prevent `torch.distributed` APIs from breaking due to a partially sharded model. |
+| `ColwiseParallel` | 가중치와 편향의 열 방향 분할. |
+| `RowwiseParallel` | 가중치와 편향의 행 방향 분할. `nn.Embedding` 모듈 분할도 지원. |
+| `SequenceParallel` | `LayerNorm`과 `Dropout` 레이어를 지원하는 시퀀스 병렬 구현. [RMSNorm](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34)의 Python 구현도 지원. |
+| `PackedColwiseParallel` | 패킹된 가중치를 지원하는 `ColwiseParallel`의 변형(예: `up_proj`와 `gate_proj`를 함께 패킹). 자세한 내용은 [코드](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)를 참조하세요. |
+| `PackedRowwiseParallel` | 패킹된 가중치를 지원하는 `RowwiseParallel`의 변형([코드](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) 참조). |
+| `GatherParallel` | 기기 간 모듈의 출력을 수집. |
+| `IsolatedParallel` | Mixture-of-Experts(MoE) 레이어의 전문가에 사용되어 다른 기기로부터 모듈을 격리. |
+| `ReplicateParallel` | 부분적으로 분할된 모델로 인해 `torch.distributed` API가 중단되는 것을 방지하기 위해 모든 기기에 모듈을 복제. |
 
-### Packed strategies
+### 패킹된 전략[[packed-strategies]]
 
-Weight packing packs multiple linear layers into a single, bigger layer. Packed strategies, `PackedColwiseParallel` and `PackedRowwiseParallel`, are used to shard packed weights. The more basic `ColwiseParallel` or `RowwiseParallel` will incorrectly shard the packed weights.
+가중치 패킹은 여러 선형 레이어를 하나의 더 큰 레이어로 패킹합니다. 패킹된 전략인 `PackedColwiseParallel`과 `PackedRowwiseParallel`은 패킹된 가중치를 분할하는 데 사용됩니다. 더 기본적인 `ColwiseParallel`이나 `RowwiseParallel`은 패킹된 가중치를 잘못 분할합니다.
 
-The example below packs `up_proj` and `gate_proj` into a single `gate_up_proj` module and requires the `PackedRowwiseParallel` strategy to shard `gate_up_proj`.
+아래 예시는 `up_proj`와 `gate_proj`를 단일 `gate_up_proj` 모듈로 패킹하고 `gate_up_proj`를 분할하기 위해 `PackedRowwiseParallel` 전략이 필요합니다.
 
 ```python
 class Llama4TextExperts(nn.Module):
@@ -155,89 +155,89 @@ class Llama4TextExperts(nn.Module):
     self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
 ```
 
-Batch matrix multiplication can be used in the `forward` pass to compute the output of the `gate_up_proj` module.
+배치 행렬 곱셈을 `forward` 패스에서 사용하여 `gate_up_proj` 모듈의 출력을 계산할 수 있습니다.
 
 ```python
 def forward(self, hidden_states):
     ...
-    gate_up = torch.bmm(hidden_states, self.gate_up_proj) # Compute the output of the gate_up_proj module
-    gate, up = gate_up.chunk(2, dim=-1) # Split the output into gate and up
+    gate_up = torch.bmm(hidden_states, self.gate_up_proj) # gate_up_proj 모듈의 출력 계산
+    gate, up = gate_up.chunk(2, dim=-1) # 출력을 gate와 up으로 분할
 ```
 
 > [!TIP]
-> Refer to [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for an visual representation of why `Packed*` needs to be used.
+> `Packed*`를 사용해야 하는 이유에 대한 시각적 표현은 [이 주석](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)을 참조하세요.
 
-### Local strategies
+### 로컬 전략[[local-strategies]]
 
-Local strategies (`local_colwise`, `local_rowwise`, `local_packed_rowwise`) don't use [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) because it isn't supported for some operations such as [torch.chunk](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html). Instead, local strategies use the basic [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html) and performs some of the distributed logic manually.
+로컬 전략(`local_colwise`, `local_rowwise`, `local_packed_rowwise`)은 [torch.chunk](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html)와 같은 일부 연산에서 지원되지 않기 때문에 [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html)를 사용하지 않습니다. 대신 로컬 전략은 기본 [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html)를 사용하고 일부 분산 로직을 수동으로 수행합니다.
 
 <!--
 Readd this when I get the exact error message
 > [!TIP]
-> If you are using a custom partitioning strategy, and it's not working with `... is not supported` error, try using the `local*` strategies to see if they work better.
+> 사용자 정의 분할 전략을 사용하는데 `... is not supported` 오류로 작동하지 않는 경우, `local*` 전략을 사용해서 더 잘 작동하는지 시도해보세요.
 -->
 
-## Custom partitioning strategies
+## 사용자 정의 분할 전략[[custom-partitioning-strategies]]
 
-A custom partitioning strategy should inherit from [`TensorParallelLayer`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py) and implement `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn`.
+사용자 정의 분할 전략은 [`TensorParallelLayer`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py)를 상속하고 `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn`을 구현해야 합니다.
 
-Then it needs to be registered in the `ParallelInterface` mapping so the dispatching logic can find it when specified in `tp_plan`.
+그런 다음 `tp_plan`에서 지정될 때 디스패칭 로직이 찾을 수 있도록 `ParallelInterface` 매핑에 등록되어야 합니다.
 
-The example below shows how to implement `ColwiseParallel` with this workflow.
+아래 예시는 이 워크플로우로 `ColwiseParallel`을 구현하는 방법을 보여줍니다.
 
-1. Inherit from `TensorParallelLayer`. In the `__init__` method, define `input_layouts` and `output_layouts` to describe how the input and output tensors should be placed on devices. The `desired_input_layouts` attribute is used to specify how the input *should* be placed on devices.
+1. `TensorParallelLayer`를 상속합니다. `__init__` 메서드에서 입력 및 출력 텐서가 기기에 어떻게 배치되어야 하는지 설명하는 `input_layouts`과 `output_layouts`을 정의합니다. `desired_input_layouts` 속성은 입력이 기기에 어떻게 배치*되어야* 하는지 지정하는 데 사용됩니다.
 
     ```python
     class ColwiseParallel(TensorParallelLayer):
         def __init__(
             self,
             *,
-            input_layouts: Optional[Placement] = None, # The input layout coming from the previous layer
-            output_layouts: Optional[Placement] = None, # The output layout we want to achieve
-            use_local_output: bool = True, # Whether to use local output or not
-            use_dtensor=True, # Whether to use DTensor or not
+            input_layouts: Optional[Placement] = None, # 이전 레이어에서 오는 입력 레이아웃
+            output_layouts: Optional[Placement] = None, # 달성하고자 하는 출력 레이아웃
+            use_local_output: bool = True, # 로컬 출력 사용 여부
+            use_dtensor=True, # DTensor 사용 여부
         ):
-            self.input_layouts = (input_layouts or Replicate(),) # The input sharding coming from the previous layer
-            self.output_layouts = (output_layouts or Shard(-1),) # Desired output sharding
-            self.desired_input_layouts = (Replicate(),) # Desired input sharding, inputs should be replicated across GPUs
+            self.input_layouts = (input_layouts or Replicate(),) # 이전 레이어에서 오는 입력 분할
+            self.output_layouts = (output_layouts or Shard(-1),) # 원하는 출력 분할
+            self.desired_input_layouts = (Replicate(),) # 원하는 입력 분할, 입력은 GPU 간에 복제되어야 함
             self.use_local_output = use_local_output
             self.use_dtensor = use_dtensor
     ```
 
-2. Implement the `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn` methods.
+2. `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn` 메서드를 구현합니다.
 
-    The `partition_tensor` method partitions the tensor and fills `empty_param` with the partitioned tensor. Use the utility function `get_tensor_shard` to help you get the correct shard of the original parameter for a given rank and `get_packed_weights` to help with packed weights.
+    `partition_tensor` 메서드는 텐서를 분할하고 분할된 텐서로 `empty_param`을 채웁니다. 유틸리티 함수 `get_tensor_shard`를 사용하여 주어진 순위에 대한 원본 매개변수의 올바른 분할을 얻고, 패킹된 가중치에 대해서는 `get_packed_weights`를 사용하세요.
 
     ```python
     def partition_tensor(
         self,
-        param, # Full tensor of the parameter
-        empty_param, # Empty tensor of the parameter, will be filled with the partitioned tensor
-        param_type, # Type of the parameter, `bias` or `weight`
-        param_casting_dtype, # The type to cast the parameter to
-        to_contiguous, # Whether to convert the tensor to a contiguous memory layout
-        rank, # The rank of the current device
-        device_mesh, # The device mesh
-    ) -> nn.Parameter: # Return the partitioned parameter
+        param, # 매개변수의 전체 텐서
+        empty_param, # 매개변수의 빈 텐서, 분할된 텐서로 채워짐
+        param_type, # 매개변수 유형, `bias` 또는 `weight`
+        param_casting_dtype, # 매개변수를 캐스팅할 유형
+        to_contiguous, # 텐서를 연속적인 메모리 레이아웃으로 변환할지 여부
+        rank, # 현재 기기의 순위
+        device_mesh, # 기기 메시
+    ) -> nn.Parameter: # 분할된 매개변수 반환
         ...
     ```
 
-    The `_prepare_input_fn` and `_prepare_output_fn` methods are used in the [pre-forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) and [forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) hooks. They redistribute the inputs and outputs to the desired layout as specified in the `__init__`.
+    `_prepare_input_fn`과 `_prepare_output_fn` 메서드는 [사전 포워드](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) 및 [포워드](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) 훅에서 사용됩니다. `__init__`에서 지정된 대로 입력과 출력을 원하는 레이아웃으로 재분배합니다.
 
     ```python
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         ...
-        # Do some custom logic, cast to DTensor etc.
+        # 사용자 정의 로직 수행, DTensor로 캐스팅 등.
         ...
         return inputs.redistribute(placements=desired_input_layouts, device_mesh=device_mesh)
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         ...
-        # Do some custom logic, cast to DTensor etc.
+        # 사용자 정의 로직 수행, DTensor로 캐스팅 등.
         ...
         return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
     ```
 
-3. Register the strategy to [`ParallelInterface`] to enable it for use with `tp_plan`.
+3. `tp_plan`과 함께 사용할 수 있도록 전략을 [`ParallelInterface`]에 등록합니다.
 
     ```python
     from transformers.integrations.tensor_parallel import ParallelInterface
@@ -250,62 +250,62 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
     model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
     ```
 
-## Benchmarks
+## 벤치마크[[benchmarks]]
 
-Tensor parallelism can considerably speedup inference, especially for inputs with large batch sizes or long sequences.
+텐서 병렬화는 특히 큰 배치 크기나 긴 시퀀스를 가진 입력에 대해 추론을 상당히 가속화할 수 있습니다.
 
-Refer to the chart below for the expected speedup for a single forward pass on [Llama](./model_doc/llama) with a sequence length of 512.
+시퀀스 길이가 512인 [Llama](./model_doc/llama)에서 단일 포워드 패스에 대한 예상 가속화는 아래 차트를 참조하세요.
 
 <div style="text-align: center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">
 </div>
 
-## Design implementation
+## 설계 구현[[design-implementation]]
 
-The Transformers tensor parallelism implementation is framework-agnostic, but for specific implementations, we rely on [DeviceMesh](https://docs.pytorch.org/tutorials/recipes/distributed_device_mesh.html) and [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) from [torch.distributed](https://docs.pytorch.org/tutorials/beginner/dist_overview.html) to provide a simple and extensible interface.
+Transformers 텐서 병렬화 구현은 프레임워크에 구애받지 않지만, 구체적인 구현을 위해서는 [DeviceMesh](https://docs.pytorch.org/tutorials/recipes/distributed_device_mesh.html)와 [torch.distributed](https://docs.pytorch.org/tutorials/beginner/dist_overview.html)의 [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html)에 의존하여 간단하고 확장 가능한 인터페이스를 제공합니다.
 
 ### DeviceMesh
 
-Imagine `DeviceMesh` as a multi-dimensional grid of devices that communicate together. Different parallelization strategies require different types of communication patterns, so you can create a `DeviceMesh` with multiple sub-meshes.
+`DeviceMesh`를 함께 통신하는 기기의 다차원 그리드로 상상해보세요. 다양한 병렬화 전략은 다양한 유형의 통신 패턴을 필요로 하므로 여러 하위 메시가 있는 `DeviceMesh`를 만들 수 있습니다.
 
 ```python
 from torch.distributed.device_mesh import init_device_mesh
 
-# Create a 1D mesh of 4 GPUs
+# 4개 GPU의 1D 메시 생성
 device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
 ```
 
-Most of the `torch.distributed` defined parallelization strategies can be applied to the mesh itself, or its sub-mesh, and it automatically handles the communication patterns.
+`torch.distributed`에서 정의된 대부분의 병렬화 전략은 메시 자체나 하위 메시에 적용할 수 있으며, 자동으로 통신 패턴을 처리합니다.
 
 ### DTensor
 
-`DTensor` (Distributed Tensor) is a tensor subclass that handles the distributed logic on top of the usual tensor operations. Most of the model weights in tensor parallelism are stored as `DTensor`s.
+`DTensor`(분산 텐서)는 일반적인 텐서 연산 위에 분산 로직을 처리하는 텐서 하위 클래스입니다. 텐서 병렬화의 대부분의 모델 가중치는 `DTensor`로 저장됩니다.
 
-The most important part of DTensor is the `placement` attribute because it tells PyTorch how a tensor is placed on the devices in `DeviceMesh`. The `placement` attribute can take the following values.
+DTensor의 가장 중요한 부분은 `placement` 속성입니다. 이는 PyTorch에게 텐서가 `DeviceMesh`의 기기에 어떻게 배치되는지 알려주기 때문입니다. `placement` 속성은 다음 값을 가질 수 있습니다.
 
-- `Shard(dimension)` - Indicates how a `DTensor` is sharded across a given dimension, over the `DeviceMesh` it was constructed under. The example below demonstrates how to shard weights over different dimensions for column-wise partitioning.
-
-    ```python
-    weight = ...
-    weight = DTensor.from_local(weight, device_mesh["tp"], placements=[Shard(0)]) # Shard across the 1st (column-wise) dimension
-    bias = ...
-    bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Shard(-1)]) # Shard across the ONLY dimension
-    ```
-
-    This example demonstrates how to shard weights over different dimensions for row-wise partitioning.
+- `Shard(dimension)` - `DTensor`가 구성된 `DeviceMesh`에서 주어진 차원에 걸쳐 어떻게 분할되는지 나타냅니다. 아래 예시는 열 방향 분할을 위해 다양한 차원에 걸쳐 가중치를 분할하는 방법을 보여줍니다.
 
     ```python
     weight = ...
-    weight = DTensor.from_local(weight, device_mesh["tp"], placements=[Shard(1)]) # Shard across the 2nd (row-wise) dimension
+    weight = DTensor.from_local(weight, device_mesh["tp"], placements=[Shard(0)]) # 첫 번째(열 방향) 차원에 걸쳐 분할
     bias = ...
-    bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Replicate()]) # Replicate bias across all GPUs
+    bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Shard(-1)]) # 유일한 차원에 걸쳐 분할
     ```
 
-- `Replicate()` - Indicates a `DTensor` is replicated across the `DeviceMesh`. It only creates a full copy of the tensor on each device.
+    이 예시는 행 방향 분할을 위해 다양한 차원에 걸쳐 가중치를 분할하는 방법을 보여줍니다.
+
+    ```python
+    weight = ...
+    weight = DTensor.from_local(weight, device_mesh["tp"], placements=[Shard(1)]) # 두 번째(행 방향) 차원에 걸쳐 분할
+    bias = ...
+    bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Replicate()]) # 모든 GPU에 편향 복제
+    ```
+
+- `Replicate()` - `DTensor`가 `DeviceMesh`에 걸쳐 복제됨을 나타냅니다. 각 기기에 텐서의 전체 사본만 생성합니다.
 
     ```py
     bias = ...
-    bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Replicate()]) # Replicate bias across all GPUs
+    bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Replicate()]) # 모든 GPU에 편향 복제
     ```
 
-- `Partial()` - Indicates a tensor is pending a reduction operation (not typically relevant for usage in Transformers).
+- `Partial()` - 텐서가 감소 연산을 대기 중임을 나타냅니다(일반적으로 Transformers에서 사용과는 관련이 없음).
