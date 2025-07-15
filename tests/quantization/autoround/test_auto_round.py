@@ -143,9 +143,9 @@ class AutoRoundTest(unittest.TestCase):
             self.assertIn(output_tokens, self.EXPECTED_OUTPUTS)
 
     @require_torch_multi_accelerator
-    def test_quantized_model_multi_gpu(self):
+    def test_quantized_model_multi_accelerator(self):
         """
-        Simple test that checks if the quantized model is working properly with multiple GPUs
+        Simple test that checks if the quantized model is working properly with multiple accelerators
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = AutoRoundConfig(backend="triton")

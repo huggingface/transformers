@@ -29,21 +29,13 @@ import datasets
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForPermutationLanguageModeling,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    XLNetConfig,
-    XLNetLMHeadModel,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoTokenizer,
+                          DataCollatorForPermutationLanguageModeling,
+                          HfArgumentParser, Trainer, TrainingArguments,
+                          XLNetConfig, XLNetLMHeadModel, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")
@@ -100,15 +92,6 @@ class ModelArguments:
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
                 "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
-            )
-        },
-    )
-    low_cpu_mem_usage: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
-                "set True will benefit LLM loading time and RAM consumption."
             )
         },
     )
@@ -397,7 +380,6 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
-            low_cpu_mem_usage=model_args.low_cpu_mem_usage,
         )
     else:
         logger.info("Training new model from scratch")

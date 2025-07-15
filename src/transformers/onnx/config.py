@@ -16,7 +16,8 @@ import dataclasses
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import numpy as np
 from packaging import version
@@ -109,7 +110,7 @@ class OnnxConfig(ABC):
     }
 
     def __init__(
-        self, config: "PretrainedConfig", task: str = "default", patching_specs: Optional[List[PatchingSpec]] = None
+        self, config: "PretrainedConfig", task: str = "default", patching_specs: Optional[list[PatchingSpec]] = None
     ):
         self._config = config
 
@@ -424,7 +425,7 @@ class OnnxConfig(ABC):
             setattr(spec.o, spec.name, orig_op)
 
     @classmethod
-    def flatten_output_collection_property(cls, name: str, field: Iterable[Any]) -> Dict[str, Any]:
+    def flatten_output_collection_property(cls, name: str, field: Iterable[Any]) -> dict[str, Any]:
         """
         Flatten any potential nested structure expanding the name of the field with the index of the element within the
         structure.
@@ -434,7 +435,7 @@ class OnnxConfig(ABC):
             field: The structure to, potentially, be flattened
 
         Returns:
-            (Dict[str, Any]): Outputs with flattened structure and key mapping this new structure.
+            (dict[str, Any]): Outputs with flattened structure and key mapping this new structure.
 
         """
         from itertools import chain
@@ -578,7 +579,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         flattened_output[f"{name}.{idx}.key"] = t[0]
         flattened_output[f"{name}.{idx}.value"] = t[1]
 
-    def flatten_output_collection_property(self, name: str, field: Iterable[Any]) -> Dict[str, Any]:
+    def flatten_output_collection_property(self, name: str, field: Iterable[Any]) -> dict[str, Any]:
         flattened_output = {}
         if name in ["present", "past_key_values"]:
             for idx, t in enumerate(field):
@@ -608,7 +609,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         return common_outputs
 
     @property
-    def num_layers(self) -> Tuple[int]:
+    def num_layers(self) -> tuple[int]:
         try:
             num_layers = super().num_layers
             num_layers = (num_layers, num_layers)
@@ -624,7 +625,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         return num_layers
 
     @property
-    def num_attention_heads(self) -> Tuple[int]:
+    def num_attention_heads(self) -> tuple[int]:
         try:
             num_attention_heads = super().num_attention_heads
             num_attention_heads = (num_attention_heads, num_attention_heads)

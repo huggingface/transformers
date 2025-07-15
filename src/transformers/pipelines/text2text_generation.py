@@ -1,5 +1,6 @@
 import enum
 import warnings
+from typing import Any, Union
 
 from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
@@ -154,12 +155,12 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, list[str]], **kwargs: Any) -> list[dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Input text for the encoder.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -276,7 +277,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Summarize the text(s) given as inputs.
 
         Args:
-            documents (*str* or `List[str]`):
+            documents (*str* or `list[str]`):
                 One or several articles (or one list of articles) to summarize.
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs
@@ -377,7 +378,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         Translate the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Texts to be translated.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.

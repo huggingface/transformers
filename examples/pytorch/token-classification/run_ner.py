@@ -30,22 +30,14 @@ import numpy as np
 from datasets import ClassLabel, load_dataset
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoModelForTokenClassification,
-    AutoTokenizer,
-    DataCollatorForTokenClassification,
-    HfArgumentParser,
-    PretrainedConfig,
-    PreTrainedTokenizerFast,
-    Trainer,
-    TrainingArguments,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoModelForTokenClassification,
+                          AutoTokenizer, DataCollatorForTokenClassification,
+                          HfArgumentParser, PretrainedConfig,
+                          PreTrainedTokenizerFast, Trainer, TrainingArguments,
+                          set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")
@@ -399,7 +391,7 @@ def main():
     # Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models at"
+            "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
             " this requirement"
         )

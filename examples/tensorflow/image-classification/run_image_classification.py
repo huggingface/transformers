@@ -32,24 +32,16 @@ from datasets import load_dataset
 from PIL import Image
 
 import transformers
-from transformers import (
-    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    AutoConfig,
-    AutoImageProcessor,
-    DefaultDataCollator,
-    HfArgumentParser,
-    PushToHubCallback,
-    TFAutoModelForImageClassification,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+                          AutoConfig, AutoImageProcessor, DefaultDataCollator,
+                          HfArgumentParser, PushToHubCallback,
+                          TFAutoModelForImageClassification,
+                          TFTrainingArguments, create_optimizer, set_seed)
 from transformers.keras_callbacks import KerasMetricCallback
 from transformers.modeling_tf_utils import keras
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 logger = logging.getLogger(__name__)
 

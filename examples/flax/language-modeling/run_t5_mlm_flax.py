@@ -26,7 +26,6 @@ import os
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from enum import Enum
 from itertools import chain
@@ -46,21 +45,13 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-from transformers import (
-    CONFIG_MAPPING,
-    FLAX_MODEL_FOR_MASKED_LM_MAPPING,
-    AutoTokenizer,
-    BatchEncoding,
-    FlaxT5ForConditionalGeneration,
-    HfArgumentParser,
-    PreTrainedTokenizerBase,
-    T5Config,
-    is_tensorboard_available,
-    set_seed,
-)
+from transformers import (CONFIG_MAPPING, FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+                          AutoTokenizer, BatchEncoding,
+                          FlaxT5ForConditionalGeneration, HfArgumentParser,
+                          PreTrainedTokenizerBase, T5Config,
+                          is_tensorboard_available, set_seed)
 from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
 from transformers.utils import send_example_telemetry
-
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -309,7 +300,7 @@ class FlaxDataCollatorForT5MLM:
     Data collator used for T5 span-masked language modeling.
     It is made sure that after masking the inputs are of length `data_args.max_seq_length` and targets are also of fixed length.
     For more information on how T5 span-masked language modeling works, one can take a look
-    at the `official paper <https://arxiv.org/pdf/1910.10683.pdf>`__
+    at the `official paper <https://huggingface.co/papers/1910.10683>`__
     or the `official code for preprocessing <https://github.com/google-research/text-to-text-transfer-transformer/blob/master/t5/data/preprocessors.py>`__ .
 
     Args:

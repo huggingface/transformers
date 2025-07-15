@@ -45,21 +45,13 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-from transformers import (
-    CONFIG_MAPPING,
-    FLAX_MODEL_FOR_MASKED_LM_MAPPING,
-    AutoTokenizer,
-    BartConfig,
-    BatchEncoding,
-    FlaxBartForConditionalGeneration,
-    HfArgumentParser,
-    PreTrainedTokenizerBase,
-    is_tensorboard_available,
-    set_seed,
-)
+from transformers import (CONFIG_MAPPING, FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+                          AutoTokenizer, BartConfig, BatchEncoding,
+                          FlaxBartForConditionalGeneration, HfArgumentParser,
+                          PreTrainedTokenizerBase, is_tensorboard_available,
+                          set_seed)
 from transformers.models.bart.modeling_flax_bart import shift_tokens_right
 from transformers.utils import send_example_telemetry
-
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -265,7 +257,7 @@ class FlaxDataCollatorForBartDenoisingLM:
     Data collator used for BART denoising language modeling. The code is largely copied from
     `<https://github.com/morganmcg1/rotobart/blob/main/data_collator.py#L223>`__.
     For more information on how BART denoising language modeling works, one can take a look
-    at the `official paper <https://arxiv.org/pdf/1910.13461.pdf>`__
+    at the `official paper <https://huggingface.co/papers/1910.13461>`__
     or the `official code for preprocessing <https://github.com/facebookresearch/fairseq/blob/main/fairseq/data/denoising_dataset.py>`__ .
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):

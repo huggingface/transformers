@@ -24,7 +24,6 @@ import tensorflow as tf
 
 from transformers import AutoTokenizer
 
-
 logger = logging.getLogger(__name__)
 
 

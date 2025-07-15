@@ -21,18 +21,13 @@ from torch.utils.data import DistributedSampler, RandomSampler
 from transformers import PreTrainedModel, Trainer, logging
 from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
-    Adafactor,
-    get_constant_schedule,
-    get_constant_schedule_with_warmup,
+    Adafactor, get_constant_schedule, get_constant_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
-    get_linear_schedule_with_warmup,
-    get_polynomial_decay_schedule_with_warmup,
-)
+    get_linear_schedule_with_warmup, get_polynomial_decay_schedule_with_warmup)
 from transformers.trainer_pt_utils import get_tpu_sampler
 from transformers.training_args import ParallelMode
 from transformers.utils import is_torch_xla_available
-
 
 logger = logging.get_logger(__name__)
 
@@ -184,7 +179,7 @@ class Seq2SeqTrainer(Trainer):
         Args:
             model (:obj:`nn.Module`):
                 The model to evaluate.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (:obj:`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
@@ -193,7 +188,7 @@ class Seq2SeqTrainer(Trainer):
                 Whether or not to return the loss only.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+            tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
         inputs = self._prepare_inputs(inputs)

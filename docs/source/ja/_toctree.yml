@@ -29,8 +29,6 @@
 - sections:
   - isExpanded: false
     sections:
-    - local: tasks/sequence_classification
-      title: テキストの分類
     - local: tasks/token_classification
       title: トークンの分類
     - local: tasks/question_answering

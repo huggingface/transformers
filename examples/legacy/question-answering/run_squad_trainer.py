@@ -21,19 +21,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoModelForQuestionAnswering,
-    AutoTokenizer,
-    DataCollatorWithPadding,
-    HfArgumentParser,
-    SquadDataset,
-    Trainer,
-    TrainingArguments,
-)
+from transformers import (AutoConfig, AutoModelForQuestionAnswering,
+                          AutoTokenizer, DataCollatorWithPadding,
+                          HfArgumentParser, SquadDataset)
 from transformers import SquadDataTrainingArguments as DataTrainingArguments
+from transformers import Trainer, TrainingArguments
 from transformers.trainer_utils import is_main_process
-
 
 logger = logging.getLogger(__name__)
 

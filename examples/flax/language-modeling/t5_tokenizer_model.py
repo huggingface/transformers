@@ -3,7 +3,8 @@ import json
 from collections.abc import Iterator
 from typing import Union
 
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, trainers
+from tokenizers import (AddedToken, Regex, Tokenizer, decoders, normalizers,
+                        pre_tokenizers, trainers)
 from tokenizers.implementations.base_tokenizer import BaseTokenizer
 from tokenizers.models import Unigram
 from tokenizers.processors import TemplateProcessing

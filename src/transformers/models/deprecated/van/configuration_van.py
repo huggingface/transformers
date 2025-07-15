@@ -36,15 +36,15 @@ class VanConfig(PretrainedConfig):
             The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
+        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
             Patch size to use in each stage's embedding layer.
-        strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride size to use in each stage's embedding layer to downsample the input.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
             Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to `[3, 3, 12, 3]`):
+        depths (`list[int]`, *optional*, defaults to `[3, 3, 12, 3]`):
             Depth (number of layers) for each stage.
-        mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
+        mlp_ratios (`list[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             The expansion ratio for mlp layer at each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each layer. If string, `"gelu"`, `"relu"`,

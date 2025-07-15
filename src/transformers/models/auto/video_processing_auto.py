@@ -19,7 +19,7 @@ import json
 import os
 import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all video processors
 from ...configuration_utils import PretrainedConfig
@@ -42,10 +42,11 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, Tuple[Optional[str], Optional[str]]] = OrderedDict()
+    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
             ("internvl", "InternVLVideoProcessor"),
@@ -56,6 +57,7 @@ else:
             ("qwen2_vl", "Qwen2VLVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
+            ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
 
@@ -100,7 +102,7 @@ def get_video_processor_config(
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
@@ -127,7 +129,7 @@ def get_video_processor_config(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
@@ -205,7 +207,7 @@ class AutoVideoProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoVideoProcessor is designed to be instantiated "
             "using the `AutoVideoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
@@ -242,7 +244,7 @@ class AutoVideoProcessor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
@@ -261,7 +263,7 @@ class AutoVideoProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are video processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* video processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -305,15 +307,20 @@ class AutoVideoProcessor:
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
             video_processor_auto_map = config_dict["auto_map"]["AutoVideoProcessor"]
 
-        # If we still don't have the video processor class, check if we're loading from a previous feature extractor config
+        # If we still don't have the video processor class, check if we're loading from a previous image processor config
         # and if so, infer the video processor class from there.
         if video_processor_class is None and video_processor_auto_map is None:
-            feature_extractor_class = config_dict.pop("feature_extractor_type", None)
-            if feature_extractor_class is not None:
-                video_processor_class = feature_extractor_class.replace("FeatureExtractor", "VideoProcessor")
-            if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
-                feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
-                video_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "VideoProcessor")
+            image_processor_class = config_dict.pop("image_processor_type", None)
+            if image_processor_class is not None:
+                video_processor_class_inferred = image_processor_class.replace("ImageProcessor", "VideoProcessor")
+
+                # Some models have different image processors, e.g. InternVL uses GotOCRImageProcessor
+                # We cannot use GotOCRVideoProcessor when falling back for BC and should try to infer from config later on
+                if video_processor_class_inferred in VIDEO_PROCESSOR_MAPPING_NAMES.values():
+                    video_processor_class = video_processor_class_inferred
+            if "AutoImageProcessor" in config_dict.get("auto_map", {}):
+                image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
+                video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
         if video_processor_class is None and video_processor_auto_map is None:
@@ -339,8 +346,7 @@ class AutoVideoProcessor:
             class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                video_processor_class.register_for_auto_class()
+            video_processor_class.register_for_auto_class()
             return video_processor_class.from_dict(config_dict, **kwargs)
         elif video_processor_class is not None:
             return video_processor_class.from_dict(config_dict, **kwargs)

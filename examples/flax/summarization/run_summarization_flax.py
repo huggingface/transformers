@@ -41,22 +41,17 @@ from filelock import FileLock
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import (get_metrics, onehot, shard,
+                                        shard_prng_key)
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    AutoConfig,
-    AutoTokenizer,
-    FlaxAutoModelForSeq2SeqLM,
-    HfArgumentParser,
-    is_tensorboard_available,
-)
+from transformers import (CONFIG_MAPPING,
+                          FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                          AutoConfig, AutoTokenizer, FlaxAutoModelForSeq2SeqLM,
+                          HfArgumentParser, is_tensorboard_available)
 from transformers.utils import is_offline_mode, send_example_telemetry
-
 
 logger = logging.getLogger(__name__)
 

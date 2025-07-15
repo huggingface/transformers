@@ -31,7 +31,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 Bart モデルは、[BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation、
-翻訳と理解](https://arxiv.org/abs/1910.13461) Mike Lewis、Yinhan Liu、Naman Goyal、Marjan 著
+翻訳と理解](https://huggingface.co/papers/1910.13461) Mike Lewis、Yinhan Liu、Naman Goyal、Marjan 著
 ガズビニネジャド、アブデルラフマン・モハメド、オメル・レヴィ、ベス・ストヤノフ、ルーク・ゼトルモイヤー、2019年10月29日。
 
 要約によると、
@@ -65,7 +65,7 @@ Bart モデルは、[BART: Denoising Sequence-to-Sequence Pre-training for Natur
   [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md)。
 - Hugging Face `datasets` を使用して [`BartForConditionalGeneration`] をトレーニングする方法の例
   オブジェクトは、この [フォーラム ディスカッション](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904) で見つけることができます。
-- [抽出されたチェックポイント](https://huggingface.co/models?search=distilbart) は、この [論文](https://arxiv.org/abs/2010.13002) で説明されています。
+- [抽出されたチェックポイント](https://huggingface.co/models?search=distilbart) は、この [論文](https://huggingface.co/papers/2010.13002) で説明されています。
 
 ## Implementation Notes
 
@@ -129,10 +129,10 @@ BART を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - [翻訳タスクガイド](../tasks/translation)
 
 以下も参照してください。
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
-- [抽出されたチェックポイント](https://huggingface.co/models?search=distilbart) は、この [論文](https://arxiv.org/abs/2010.13002) で説明されています。
+- [抽出されたチェックポイント](https://huggingface.co/models?search=distilbart) は、この [論文](https://huggingface.co/papers/2010.13002) で説明されています。
 
 ## BartConfig
 

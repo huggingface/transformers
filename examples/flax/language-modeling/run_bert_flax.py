@@ -7,7 +7,6 @@ import numpy as np
 
 from transformers import BertConfig, FlaxBertModel
 
-
 parser = ArgumentParser()
 parser.add_argument("--precision", type=str, choices=["float32", "bfloat16"], default="float32")
 args = parser.parse_args()

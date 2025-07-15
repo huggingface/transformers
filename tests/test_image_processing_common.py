@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     check_json_file_has_correct_format,
     is_flaky,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -162,6 +162,10 @@ class ImageProcessingTestMixin:
 
         self.image_processor_list = image_processor_list
 
+    def _assert_slow_fast_tensors_equivalence(self, slow_tensor, fast_tensor, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
+        torch.testing.assert_close(slow_tensor, fast_tensor, atol=atol, rtol=rtol)
+        self.assertLessEqual(torch.mean(torch.abs(slow_tensor - fast_tensor)).item(), mean_atol)
+
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
@@ -179,10 +183,7 @@ class ImageProcessingTestMixin:
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-3)
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 5e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @require_vision
     @require_torch
@@ -205,10 +206,7 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-3)
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 5e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @require_vision
     @require_torch
@@ -233,7 +231,7 @@ class ImageProcessingTestMixin:
             avg_time = sum(sorted(all_times[:3])) / 3.0
             return avg_time
 
-        dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
+        dummy_images = [torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8) for _ in range(4)]
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -562,7 +560,7 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="No validation found for `preprocess` method")
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
@@ -577,8 +575,10 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
-
-        torch.testing.assert_close(output_eager.pixel_values, output_compiled.pixel_values, rtol=1e-4, atol=1e-4)
+        print(output_eager.pixel_values.dtype, output_compiled.pixel_values.dtype)
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+        )
 
 
 class AnnotationFormatTestMixin:

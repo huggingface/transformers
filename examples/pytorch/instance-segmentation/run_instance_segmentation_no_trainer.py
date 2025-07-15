@@ -38,16 +38,12 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from tqdm import tqdm
 
 import transformers
-from transformers import (
-    AutoImageProcessor,
-    AutoModelForUniversalSegmentation,
-    SchedulerType,
-    get_scheduler,
-)
+from transformers import (AutoImageProcessor,
+                          AutoModelForUniversalSegmentation, SchedulerType,
+                          get_scheduler)
 from transformers.image_processing_utils import BatchFeature
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 logger = logging.getLogger(__name__)
 

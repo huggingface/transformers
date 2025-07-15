@@ -28,23 +28,15 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 import transformers
-from transformers import (
-    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-    WEIGHTS_NAME,
-    AutoConfig,
-    AutoModelForQuestionAnswering,
-    AutoTokenizer,
-    get_linear_schedule_with_warmup,
-    squad_convert_examples_to_features,
-)
+from transformers import (MODEL_FOR_QUESTION_ANSWERING_MAPPING, WEIGHTS_NAME,
+                          AutoConfig, AutoModelForQuestionAnswering,
+                          AutoTokenizer, get_linear_schedule_with_warmup,
+                          squad_convert_examples_to_features)
 from transformers.data.metrics.squad_metrics import (
-    compute_predictions_log_probs,
-    compute_predictions_logits,
-    squad_evaluate,
-)
-from transformers.data.processors.squad import SquadResult, SquadV1Processor, SquadV2Processor
+    compute_predictions_log_probs, compute_predictions_logits, squad_evaluate)
+from transformers.data.processors.squad import (SquadResult, SquadV1Processor,
+                                                SquadV2Processor)
 from transformers.trainer_utils import is_main_process
-
 
 try:
     from torch.utils.tensorboard import SummaryWriter

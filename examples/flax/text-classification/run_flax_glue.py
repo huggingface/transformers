@@ -41,17 +41,11 @@ from huggingface_hub import HfApi
 from tqdm import tqdm
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    FlaxAutoModelForSequenceClassification,
-    HfArgumentParser,
-    PretrainedConfig,
-    TrainingArguments,
-    is_tensorboard_available,
-)
+from transformers import (AutoConfig, AutoTokenizer,
+                          FlaxAutoModelForSequenceClassification,
+                          HfArgumentParser, PretrainedConfig,
+                          TrainingArguments, is_tensorboard_available)
 from transformers.utils import check_min_version, send_example_telemetry
-
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

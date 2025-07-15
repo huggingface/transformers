@@ -23,27 +23,13 @@ import torch
 from accelerate import PartialState
 from accelerate.utils import set_seed
 
-from transformers import (
-    AutoTokenizer,
-    BloomForCausalLM,
-    BloomTokenizerFast,
-    CTRLLMHeadModel,
-    CTRLTokenizer,
-    GenerationMixin,
-    GPT2LMHeadModel,
-    GPT2Tokenizer,
-    GPTJForCausalLM,
-    LlamaForCausalLM,
-    OpenAIGPTLMHeadModel,
-    OpenAIGPTTokenizer,
-    OPTForCausalLM,
-    XLMTokenizer,
-    XLMWithLMHeadModel,
-    XLNetLMHeadModel,
-    XLNetTokenizer,
-)
+from transformers import (AutoTokenizer, BloomForCausalLM, BloomTokenizerFast,
+                          CTRLLMHeadModel, CTRLTokenizer, GenerationMixin,
+                          GPT2LMHeadModel, GPT2Tokenizer, GPTJForCausalLM,
+                          LlamaForCausalLM, OpenAIGPTLMHeadModel,
+                          OpenAIGPTTokenizer, OPTForCausalLM, XLMTokenizer,
+                          XLMWithLMHeadModel, XLNetLMHeadModel, XLNetTokenizer)
 from transformers.modeling_outputs import CausalLMOutputWithPast
-
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",

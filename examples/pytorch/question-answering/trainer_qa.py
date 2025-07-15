@@ -21,7 +21,6 @@ import time
 from transformers import Trainer, is_torch_xla_available
 from transformers.trainer_utils import PredictionOutput, speed_metrics
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met

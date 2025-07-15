@@ -20,15 +20,10 @@ import sys
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
-from transformers.testing_utils import (
-    CaptureLogger,
-    TestCasePlus,
-    backend_device_count,
-    is_torch_fp16_available_on_device,
-    slow,
-    torch_device,
-)
-
+from transformers.testing_utils import (CaptureLogger, TestCasePlus,
+                                        backend_device_count,
+                                        is_torch_fp16_available_on_device,
+                                        slow, torch_device)
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
@@ -390,7 +385,6 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --model_name_or_path google/vit-base-patch16-224-in21k
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -424,7 +418,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -455,7 +448,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -488,7 +480,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -516,7 +507,6 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
             --dataset_name anton-l/superb_demo
-            --trust_remote_code
             --dataset_config_name ks
             --train_split_name test
             --eval_split_name test
@@ -551,7 +541,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_names clean
             --dataset_split_names validation
-            --trust_remote_code
             --learning_rate 1e-4
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
@@ -572,7 +561,6 @@ class ExamplesTests(TestCasePlus):
             run_mae.py
             --output_dir {tmp_dir}
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4

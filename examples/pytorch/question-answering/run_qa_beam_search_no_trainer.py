@@ -39,19 +39,12 @@ from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
 import transformers
-from transformers import (
-    DataCollatorWithPadding,
-    EvalPrediction,
-    SchedulerType,
-    XLNetConfig,
-    XLNetForQuestionAnswering,
-    XLNetTokenizerFast,
-    default_data_collator,
-    get_scheduler,
-)
+from transformers import (DataCollatorWithPadding, EvalPrediction,
+                          SchedulerType, XLNetConfig,
+                          XLNetForQuestionAnswering, XLNetTokenizerFast,
+                          default_data_collator, get_scheduler)
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")

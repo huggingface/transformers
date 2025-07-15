@@ -24,7 +24,6 @@ from unittest.mock import patch
 import tensorflow as tf
 from packaging.version import parse
 
-
 try:
     import tf_keras as keras
 except (ModuleNotFoundError, ImportError):
@@ -38,7 +37,6 @@ except (ModuleNotFoundError, ImportError):
         )
 
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
-
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
@@ -315,7 +313,6 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_image_classification.py
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --model_name_or_path microsoft/resnet-18
             --do_train
             --do_eval

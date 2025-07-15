@@ -11,15 +11,12 @@ This adds noise to the modular, but is unfortunately unavoidable.
 
 from torch import nn
 
-from transformers.models.clip.modeling_clip import (
-    CLIPMLP,
-    CLIPAttention,
-    CLIPEncoder,
-    CLIPEncoderLayer,
-    CLIPPreTrainedModel,
-    CLIPVisionModel,
-    CLIPVisionTransformer,
-)
+from transformers.models.clip.modeling_clip import (CLIPMLP, CLIPAttention,
+                                                    CLIPEncoder,
+                                                    CLIPEncoderLayer,
+                                                    CLIPPreTrainedModel,
+                                                    CLIPVisionModel,
+                                                    CLIPVisionTransformer)
 from transformers.utils import add_start_docstrings
 
 

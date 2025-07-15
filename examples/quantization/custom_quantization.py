@@ -4,7 +4,8 @@ from typing import Any
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.quantizers import HfQuantizer, register_quantization_config, register_quantizer
+from transformers.quantizers import (HfQuantizer, register_quantization_config,
+                                     register_quantizer)
 from transformers.utils.quantization_config import QuantizationConfigMixin
 
 

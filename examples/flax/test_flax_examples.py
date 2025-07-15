@@ -22,7 +22,6 @@ from unittest.mock import patch
 
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
 
-
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
     for dirname in [
@@ -264,7 +263,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --num_train_epochs=2

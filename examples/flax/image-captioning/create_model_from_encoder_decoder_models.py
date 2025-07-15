@@ -21,7 +21,8 @@ The cross-attention will be randomly initialized.
 from dataclasses import dataclass, field
 from typing import Optional
 
-from transformers import AutoConfig, AutoImageProcessor, AutoTokenizer, FlaxVisionEncoderDecoderModel, HfArgumentParser
+from transformers import (AutoConfig, AutoImageProcessor, AutoTokenizer,
+                          FlaxVisionEncoderDecoderModel, HfArgumentParser)
 
 
 @dataclass

@@ -5,7 +5,6 @@ from typing import TextIO, Union
 from conllu import parse_incr
 from utils_ner import InputExample, Split, TokenClassificationTask
 
-
 logger = logging.getLogger(__name__)
 
 
