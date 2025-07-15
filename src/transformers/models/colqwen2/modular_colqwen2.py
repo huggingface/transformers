@@ -25,6 +25,7 @@ from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from .configuration_colqwen2 import ColQwen2Config
 
 
 if is_torch_available():
@@ -273,6 +274,11 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
 )
 class ColQwen2ForRetrieval(ColPaliForRetrieval):
     _checkpoint_conversion_mapping = {}
+
+    def __init__(self, config: ColQwen2Config):
+        super().__init__(config)
+        del self._tied_weights_keys
+        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
     @can_return_tuple
     @auto_docstring
