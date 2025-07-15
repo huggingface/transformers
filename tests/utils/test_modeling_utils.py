@@ -1959,6 +1959,37 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(explicit_transformers_weights not in os.listdir(tmpdirname))
             self.assertTrue("model.safetensors.index.json" in os.listdir(tmpdirname))
 
+    def test_config_class_attribute(self):
+        # custom configs
+        class MyConfigA(PretrainedConfig):
+            pass
+
+        class MyConfigB(PretrainedConfig):
+            pass
+
+        class MyConfigC(PretrainedConfig):
+            pass
+
+        # custom models
+        class MyModelA(PreTrainedModel):
+            config: dict
+            config_class = MyConfigA
+
+        class MyModelB(MyModelA):
+            config: MyConfigB
+
+        class MyModelC(MyModelA):
+            config_class = MyConfigC
+
+        class MyModelD(MyModelA):
+            pass
+
+        # child config_class > child 'config:' > parent config_class > parent 'config:'
+        self.assertIs(MyModelA.config_class, MyConfigA)
+        self.assertIs(MyModelB.config_class, MyConfigB)
+        self.assertIs(MyModelC.config_class, MyConfigC)
+        self.assertIs(MyModelD.config_class, MyConfigA)
+
 
 @slow
 @require_torch
