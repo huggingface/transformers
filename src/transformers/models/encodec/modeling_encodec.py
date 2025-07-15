@@ -572,6 +572,23 @@ class EncodecModel(EncodecPreTrainedModel):
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
+        elif len(padding_mask.shape) == 2:
+            if padding_mask.shape[0] == input_values.shape[0] and padding_mask.shape[1] == input_values.shape[2]:
+                padding_mask = padding_mask.unsqueeze(1)
+            else:
+                raise ValueError(
+                    f"Expected `padding_mask` to be of shape `({input_values.shape[0]}, [1 or 2], {input_values.shape[2]})`, "
+                    f"got {padding_mask.shape}."
+                )
+        elif (
+            len(padding_mask.shape) != 3
+            or padding_mask.shape[0] != input_values.shape[0]
+            or padding_mask.shape[2] != input_values.shape[2]
+        ):
+            raise ValueError(
+                f"Expected `padding_mask` to be of shape `({input_values.shape[0]}, [1 or 2], {input_values.shape[2]})`, "
+                f"got {padding_mask.shape}."
+            )
 
         encoded_frames = []
         scales = []
@@ -753,9 +770,23 @@ class EncodecModel(EncodecPreTrainedModel):
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
-        assert torch.broadcast_shapes(padding_mask.shape, input_values.shape), (
-            "Shapes are not broadcastable, check number of channels"
-        )
+        elif len(padding_mask.shape) == 2:
+            if padding_mask.shape[0] == input_values.shape[0] and padding_mask.shape[1] == input_values.shape[2]:
+                padding_mask = padding_mask.unsqueeze(1)
+            else:
+                raise ValueError(
+                    f"Expected `padding_mask` to be of shape `({input_values.shape[0]}, [1 or 2], {input_values.shape[2]})`, "
+                    f"got {padding_mask.shape}."
+                )
+        elif (
+            len(padding_mask.shape) != 3
+            or padding_mask.shape[0] != input_values.shape[0]
+            or padding_mask.shape[2] != input_values.shape[2]
+        ):
+            raise ValueError(
+                f"Expected `padding_mask` to be of shape `({input_values.shape[0]}, [1 or 2], {input_values.shape[2]})`, "
+                f"got {padding_mask.shape}."
+            )
 
         if audio_codes is not None and audio_scales is None:
             raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
