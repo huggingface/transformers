@@ -407,6 +407,7 @@ def convert_model(
     with init_empty_weights():
         model = JanusForConditionalGeneration(config)
 
+    model.generation_config._from_model_config = False
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
     model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
