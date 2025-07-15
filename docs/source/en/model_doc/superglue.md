@@ -88,7 +88,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     ```
 
 - The model outputs matching indices, keypoints, and confidence scores for each match.
-- For better visualization and analysis, use the `post_process_keypoint_matching` method from the `SuperGlueImageProcessor` to get matches in a more readable format.
+- For better visualization and analysis, use the [`SuperGlueImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
 
     ```py
     # Process outputs for visualization
@@ -103,7 +103,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
             print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
     ```
 
-- You can visualize the matches between the two images using the following code:
+- The example below demonstrates how to visualize matches between two images.
 
     ```py
     import matplotlib.pyplot as plt
