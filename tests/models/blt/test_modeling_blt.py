@@ -308,6 +308,10 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
+        return
+
 
 @require_torch_accelerator
 class BLTIntegrationTest(unittest.TestCase):
