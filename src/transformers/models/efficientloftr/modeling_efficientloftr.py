@@ -188,15 +188,11 @@ class EfficientLoFTRepVGG(nn.Module):
         super().__init__()
 
         self.stages = nn.ModuleList([])
-        num_stages = len(config.stage_block_dims)
-        current_in_channels = 1
 
-        for i in range(num_stages):
-            out_channels = int(config.stage_block_dims[i] * config.stage_hidden_expansion[i])
-            stage = EfficientLoFTRRepVGGStage(
-                config, current_in_channels, out_channels, config.stage_num_blocks[i], config.stage_stride[i]
-            )
-            current_in_channels = out_channels
+        for in_channels, out_channels, num_blocks, stride in zip(
+            config.stage_in_channels, config.stage_out_channels, config.stage_num_blocks, config.stage_stride
+        ):
+            stage = EfficientLoFTRRepVGGStage(config, in_channels, out_channels, num_blocks, stride)
             self.stages.append(stage)
 
     def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:

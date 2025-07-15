@@ -143,6 +143,11 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
         self.stage_hidden_expansion = stage_hidden_expansion if stage_hidden_expansion is not None else [1, 1, 1, 1]
         self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
+        self.stage_out_channels = [
+            self.stage_block_dims[i] * self.stage_hidden_expansion[i] for i in range(len(self.stage_block_dims))
+        ]
+        self.stage_in_channels = [1] + self.stage_out_channels[:-1]
+
         self.hidden_size = hidden_size
         if self.hidden_size != self.stage_block_dims[-1]:
             raise ValueError(
