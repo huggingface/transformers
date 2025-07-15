@@ -65,15 +65,18 @@ class BLTModelTester(CausalLMModelTester):
         self.num_hidden_layers = 1
         self.num_attention_heads = 2
         self.num_key_value_heads = 2
-        self.intermediate_size = 18
+        self.intermediate_size = 32
         self.hidden_act = "silu"
-        self.max_position_embeddings = 512
-        self.vocab_size = 99
+        self.max_position_embeddings = 32
+        self.vocab_size = 32
         self.rope_theta = 500000.0
         self.rope_scaling = {"rope_type": "default"}
         self.norm_eps = 1e-5
         self.dropout = 0.0
-
+        self.encoder_hash_byte_group_size = [2, 3]
+        self.encoder_hash_byte_group_vocab = 64
+        self.encoder_hash_byte_group_nb_functions = 1
+        # Common parameters for all configs
         self.patcher_config = {
             "hidden_size": self.hidden_size,
             "num_hidden_layers": self.num_hidden_layers,
@@ -115,7 +118,8 @@ class BLTModelTester(CausalLMModelTester):
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
             "norm_eps": self.norm_eps,
-            "dropout": self.dropout,        }
+            "dropout": self.dropout,
+        }
 
         self.global_config = {
             "hidden_size": self.hidden_size * 2,  # Double the hidden size for global transformer
@@ -128,7 +132,8 @@ class BLTModelTester(CausalLMModelTester):
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
             "norm_eps": self.norm_eps,
-            "dropout": self.dropout,        }
+            "dropout": self.dropout,
+        }
 
     def get_config(self):
         config = BLTConfig(
@@ -141,9 +146,9 @@ class BLTModelTester(CausalLMModelTester):
             patching_batch_size=1,
             max_patch_length=None,
             cross_attn_k=2,
-            encoder_hash_byte_group_size=[3, 4, 5, 6, 7, 8],
-            encoder_hash_byte_group_vocab=500002,
-            encoder_hash_byte_group_nb_functions=1,
+            encoder_hash_byte_group_size=self.encoder_hash_byte_group_size,
+            encoder_hash_byte_group_vocab=self.encoder_hash_byte_group_vocab,
+            encoder_hash_byte_group_nb_functions=self.encoder_hash_byte_group_nb_functions,
             patcher_config=self.patcher_config,
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,

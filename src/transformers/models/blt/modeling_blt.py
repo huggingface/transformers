@@ -23,6 +23,7 @@ import torch.distributions
 import torch.nn
 import torch.nn as nn
 from torch.nn import functional as F
+from ...modeling_layers import GradientCheckpointingLayer
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -160,7 +161,7 @@ class BLTRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class BLTTransformerLayer(nn.Module):
+class BLTTransformerLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -253,9 +254,7 @@ class BLTSelfAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
-        # For BLT: We'll dynamically set is_causal based on context
-        # Decoder layers need causal behavior for generation
-        self.is_causal = False  # Default, will be set dynamically
+        self.is_causal = False  
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -289,6 +288,7 @@ class BLTSelfAttention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = (
                 {"sin": sin, "cos": cos, "cache_position": cache_position}
                 if position_embeddings is not None
@@ -297,7 +297,6 @@ class BLTSelfAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -307,10 +306,9 @@ class BLTSelfAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Dynamic is_causal: Check if we're in a decoder context by checking the layer index
+        # Check if we're in a decoder context by checking the layer index
         # BLT decoder layers should use causal attention for correct generation
         original_is_causal = self.is_causal
-        # Enable causal behavior for decoder layers (based on context clues)
         # If attention_mask is None, we're likely in a decoder that should be causal
         if attention_mask is None:
             self.is_causal = True
@@ -326,7 +324,6 @@ class BLTSelfAttention(nn.Module):
             **kwargs,
         )
         
-        # Restore original is_causal
         self.is_causal = original_is_causal
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -572,6 +569,7 @@ class BLTLocalEncoder(nn.Module):
         super().__init__()
 
         self.config = config
+        self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -635,7 +633,19 @@ class BLTLocalEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    position_embeddings,
+                    None,  # attention_mask
+                    None,  # past_key_value
+                    False, # output_attentions
+                    False, # use_cache
+                    None,  # cache_position
+                )
+            else:
+                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -700,6 +710,7 @@ class BLTLocalDecoder(nn.Module):
         # Extract config values to instance attributes
         self.config = config
         self.cross_attn_decoder = True  # config.cross_attn_decoder #TODO: maybe remove
+        self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -779,7 +790,19 @@ class BLTLocalDecoder(nn.Module):
                 )
                 hidden_states = hidden_states + cross_attention_output
 
-            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    position_embeddings,
+                    None,  # attention_mask
+                    None,  # past_key_value
+                    False, # output_attentions
+                    False, # use_cache
+                    None,  # cache_position
+                )
+            else:
+                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -810,7 +833,6 @@ class BLTCrossAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.dropout = config.dropout
         
-        # Cross-attention should not be causal
         self.is_causal = False
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -906,6 +928,7 @@ class BLTGlobalTransformer(nn.Module):
         super().__init__()
 
         self.config = config
+        self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList()
         for layer_idx in range(config.num_hidden_layers):
@@ -944,7 +967,19 @@ class BLTGlobalTransformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    position_embeddings,
+                    None,  # attention_mask
+                    None,  # past_key_value
+                    False, # output_attentions
+                    False, # use_cache
+                    None,  # cache_position
+                )
+            else:
+                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None, output_attentions=output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -981,8 +1016,6 @@ class BLTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.RMSNorm):
             module.weight.data.fill_(1.0)
-
-
 
 
 class BLTModel(BLTPreTrainedModel):
@@ -1080,7 +1113,6 @@ class BLTModel(BLTPreTrainedModel):
                 self.config.encoder_hash_byte_group_vocab,
             )
 
-        # Create cache_position for mask construction if not provided (like LLaMA)
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
