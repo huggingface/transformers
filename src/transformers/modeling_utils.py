@@ -640,17 +640,7 @@ def _get_tied_weight_keys(module: nn.Module, prefix=""):
     for name, submodule in module.named_children():
         local_prefix = f"{prefix}.{name}" if prefix else name
         tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
-
-    key_mapping = getattr(module, "_checkpoint_conversion_mapping", {})
-    tied_weight_keys_processed = []
-    for key in tied_weight_keys:
-        for replacement, pattern in key_mapping.items():
-            key, n_replace = re.subn(pattern, replacement, key)
-            # Early exit of the loop
-            if n_replace > 0:
-                break
-        tied_weight_keys_processed.append(key)
-    return tied_weight_keys_processed
+    return tied_weight_keys
 
 
 def _find_disjoint(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]) -> tuple[list[set[str]], list[str]]:
