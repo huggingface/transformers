@@ -366,7 +366,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         {
                             "id": model.id,
                             "object": "model",
-                            "crated": model.created_at.timestamp(),
+                            "created": model.created_at.timestamp(),
                             "owned_by": model.author,
                         }
                         for model in get_text_gen_models()
