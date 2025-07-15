@@ -944,8 +944,8 @@ class Florence2Model(Florence2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=True,
+            cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1001,6 +1001,18 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def vision_projector(self):
+        return self.model.vision_projector
 
     @can_return_tuple
     @auto_docstring
