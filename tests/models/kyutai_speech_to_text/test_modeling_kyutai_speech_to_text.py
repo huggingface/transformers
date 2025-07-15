@@ -766,6 +766,8 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
             samples,
         ).to(torch_device)
 
+        # There seem to have some stuff(s) that is/are random causing the test flaky
+        torch.manual_seed(0)
         out = model.generate(**inputs)
 
         # fmt: off
