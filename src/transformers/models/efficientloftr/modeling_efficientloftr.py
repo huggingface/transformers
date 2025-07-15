@@ -409,9 +409,10 @@ class EfficientLoFTRMLP(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
         hidden_size = config.hidden_size
-        self.fc1 = nn.Linear(2 * hidden_size, 2 * hidden_size, bias=False)
+        intermediate_size = config.intermediate_size
+        self.fc1 = nn.Linear(hidden_size * 2, intermediate_size, bias=False)
         self.activation = ACT2FN[config.mlp_activation_function]
-        self.fc2 = nn.Linear(2 * hidden_size, hidden_size, bias=False)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=False)
         self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

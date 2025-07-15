@@ -163,6 +163,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
+        self.intermediate_size = self.hidden_size * 2
         self.mlp_activation_function = mlp_activation_function
         self.coarse_matching_skip_softmax = coarse_matching_skip_softmax
         self.coarse_matching_threshold = coarse_matching_threshold
