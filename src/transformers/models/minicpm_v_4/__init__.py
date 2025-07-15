@@ -20,10 +20,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_minicpm_o_2_6 import *
-    from .modeling_minicpm_o_2_6 import *
-    from .processing_minicpm_o_2_6 import *
-    from .tokenization_minicpm_o_2_6_fast import *
+    from .configuration_minicpm_v_4 import *
+    from .image_processing_minicpm import *
+    from .modeling_minicpm_v_4 import *
+    from .processing_minicpm_v_4 import *
+    from .tokenization_minicpm_v_4_fast import *
+    from .tokenization_minicpm_v_4 import *
 else:
     import sys
 
