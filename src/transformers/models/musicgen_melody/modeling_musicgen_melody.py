@@ -154,7 +154,7 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
         position_ids = (torch.arange(seq_len) + past_key_values_length).to(inputs_embeds.device)
         # expand embeddings if needed
         if seq_len > self.weights.size(0):
-            self.make_weights(seq_len + self.offset, self.embedding_dim)
+            self.make_weights(seq_len, self.embedding_dim)
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
@@ -400,16 +400,19 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenMelodyDecoderLayer", "MusicgenMelodyAttention"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.initializer_factor
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1270,7 +1273,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = MusicgenMelodyConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -1286,7 +1289,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             The text encoder model that encodes text into hidden states for conditioning.
         audio_encoder (`PreTrainedModel`, *optional*):
             The audio encoder model that encodes audio into hidden states for conditioning.
-        decoder (`MusicgenForCausalLM`, *optional*):
+        decoder (`MusicgenMelodyForCausalLM`, *optional*):
             The decoder model that generates audio tokens based on conditioning signals.
         """
         if config is None and None in (text_encoder, audio_encoder, decoder):

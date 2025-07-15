@@ -167,16 +167,7 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
 
 
 class Zamba2RotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(
-        self,
-        config: Zamba2Config,
-        device=None,
-    ):
-        super().__init__(config, device)
-        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            device=device, base=config.rope_theta, dim=config.attention_head_dim
-        )
+    pass
 
 
 class Zamba2Attention(ZambaAttention):
@@ -908,7 +899,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache

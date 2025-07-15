@@ -18,18 +18,24 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from transformers.models.llava.modeling_llava import (
-    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
+from transformers.models.sam.modeling_sam import (
+    SamMLPBlock,
+    SamPreTrainedModel,
+    SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionLayer,
+)
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
@@ -242,7 +248,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.window_size = window_size
 
 
-class GotOcr2VisionEncoder(SamVisionEncoder):
+class GotOcr2PreTrainedModel(SamPreTrainedModel):
+    pass
+
+
+class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     pass
 
 
@@ -321,7 +331,7 @@ class GotOcr2Model(LlavaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -394,7 +404,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -403,7 +413,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, GotOcr2CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

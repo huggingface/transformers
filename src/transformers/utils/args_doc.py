@@ -248,9 +248,10 @@ class ModelArgs:
     input_values = {
         "description": """
     Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-    into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-    soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-    conversion into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
+    into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+    (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+    To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
+    into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
     }
@@ -926,11 +927,8 @@ class ClassAttrs:
     _skip_keys_device_placement = r"""
     A list of keys to ignore when moving inputs or outputs between devices when using the `accelerate` library.
     """
-    _supports_flash_attn_3 = r"""
-    Whether the model's attention implementation supports FlashAttention 3.0.
-    """
-    _supports_flash_attn_2 = r"""
-    Whether the model's attention implementation supports FlashAttention 2.0.
+    _supports_flash_attn = r"""
+    Whether the model's attention implementation supports FlashAttention.
     """
     _supports_sdpa = r"""
     Whether the model's attention implementation supports SDPA (Scaled Dot Product Attention).

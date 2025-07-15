@@ -31,7 +31,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -197,7 +197,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -532,7 +532,7 @@ class MllamaTextCrossAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -647,7 +647,7 @@ class MllamaTextSelfAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.gemma2.modeling_gemma2.Gemma2MLP with Gemma2->MllamaText
@@ -724,7 +724,7 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -747,9 +747,6 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
@@ -787,7 +784,7 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
-        hidden_states, attn_weights, past_key_value = self.cross_attn(
+        hidden_states, attn_weights = self.cross_attn(
             hidden_states=hidden_states,
             attention_mask=cross_attention_mask,
             cross_attention_states=cross_attention_states,
@@ -809,9 +806,6 @@ class MllamaCrossAttentionDecoderLayer(torch.nn.Module):
 
         if output_attentions:
             outputs += (attn_weights,)
-
-        if use_cache:
-            outputs += (past_key_value,)
 
         return outputs
 
@@ -858,7 +852,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_quantized_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -1385,7 +1379,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1435,9 +1428,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -1447,19 +1437,16 @@ class MllamaTextModel(MllamaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns] if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -1518,7 +1505,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         cross_attention_states (`torch.FloatTensor`, *optional*):
@@ -1659,7 +1646,7 @@ class MllamaModel(MllamaPreTrainedModel):
         cross_attention_mask: Optional[torch.Tensor] = None,
         cross_attention_states: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1833,7 +1820,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         aspect_ratio_mask (`torch.Tensor` of shape `(batch_size, max_num_images, max_num_tiles)`, *optional*):

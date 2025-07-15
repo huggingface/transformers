@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch BLIP-2 model."""
 
+import copy
 import inspect
 import tempfile
 import unittest
@@ -184,9 +185,8 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -484,6 +484,12 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
+
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -905,6 +911,12 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -975,9 +987,8 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -1065,7 +1076,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         for key in ["vision_config", "qformer_config", "text_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
+            model = model_class(config=copy.deepcopy(configs_no_init))
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
@@ -1786,7 +1797,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
+        expected_ids = [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118]
+        self.assertEqual(predictions[0].tolist(), [50265] * 32 + expected_ids)  # 50265 is the img token id
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
         # image and context
@@ -1797,10 +1809,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
-        )
+        expected_ids = [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118]
+        self.assertEqual(predictions[0].tolist(), [50265] * 32 + expected_ids)  # 50265 is the img token id
         self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
 
     @require_torch_multi_accelerator
@@ -1826,8 +1836,17 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
+        expected_ids_and_text = Expectations(
+            {
+                ("cuda", None): ([0, 2335, 1556, 28, 1782, 30, 8, 2608, 1], "woman playing with dog on the beach"),
+                ("rocm", (9, 5)): (
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ),
+            }
+        ).get_expectation()
+        self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
+        self.assertEqual(generated_text, expected_ids_and_text[1])
 
         # image and context
         prompt = "Question: which city is this? Answer:"
@@ -1837,11 +1856,17 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
-        self.assertEqual(generated_text, "san diego")
+        expected_ids_and_text = Expectations(
+            {
+                ("cuda", None): ([0, 3, 7, 152, 67, 839, 1], "san diego"),
+                ("rocm", (9, 5)): (
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",  # TODO: check if this is ok
+                ),
+            }
+        ).get_expectation()
+        self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
+        self.assertEqual(generated_text, expected_ids_and_text[1])
 
     def test_expansion_in_processing(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")

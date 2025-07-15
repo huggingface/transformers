@@ -267,7 +267,7 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -283,6 +283,9 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -359,8 +362,9 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         Args:
             input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
@@ -739,10 +743,11 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
+            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
+            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
+            See [`~WhisperFeatureExtractor.__call__`]
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 

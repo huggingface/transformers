@@ -219,7 +219,7 @@ class GraniteMoeHybridAttention(nn.Module):
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache for the v2 mixer
@@ -1118,7 +1118,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
             # No attention weights for state space layers
             self_attn_weights = None
         else:
-            hidden_states, self_attn_weights, _ = self.self_attn(
+            hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 past_key_value=past_key_value,
@@ -1149,9 +1149,6 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (past_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
@@ -1165,7 +1162,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
@@ -1202,7 +1199,7 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
     def __init__(self, config: GraniteMoeHybridConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -1334,7 +1331,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
@@ -1356,9 +1352,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 if layer_outputs[1] is not None:
                     # append attentions only of attention layers. Mamba layers return `None` as the attention weights
@@ -1378,11 +1371,9 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         if past_key_values and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
 
-        next_cache = next_decoder_cache if use_cache else None
-
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
@@ -1785,7 +1776,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
-        else:
+        elif use_cache:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )

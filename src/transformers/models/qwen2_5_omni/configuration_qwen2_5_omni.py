@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -1074,7 +1073,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False):
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
