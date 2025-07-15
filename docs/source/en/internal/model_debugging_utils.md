@@ -247,3 +247,58 @@ first and last layer will be shown. This is useful when some layers (typically c
 layers.
 
 [[autodoc]] model_addition_debugger_context
+
+## Analyzer of skipped tests
+
+### Scan skipped tests - for model adders and maintainers
+
+This small util is a power user tool intended for model adders and maintainers. It lists all test methods
+existing in `test_modeling_common.py`, inherited by all model tester classes, and scans the repository to measure
+how many tests are being skipped and for which models. 
+
+### Rationale
+
+When porting models to transformers, tests fail as they should, and sometimes `test_modeling_common` feels irreconcilable with the peculiarities of our brand new model. But how can we be sure we're not breaking everything by adding a seemingly innocent skip?
+
+This utility:
+- scans all test_modeling_common methods
+- looks for times where a method is skipped
+- returns a summary json you can load as a DataFrame/inspect
+
+**For instance test_inputs_embeds is skipped in a whooping 39% proportion at the time of writing this util.**
+
+![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/f7f671f69b88ce4967e19179172c248958d35742/transformers/tests_skipped_visualisation.png)
+
+### Usage
+
+From the root of `transformers` repo, run
+
+```python
+
+python utils/scan_skipped_tests.py
+
+```
+
+And it will generate `all_tests_scan_result.json` file that you can inspect. The JSON is indexed by method name, and each entry follows this schema:
+
+```json
+{
+  "<method_name>": {
+    "models_ran": ["<model_name>", ...],
+    "models_skipped": ["<model_name>", ...],
+    "skipped_proportion": <float>,
+    "reasons_skipped": ["<model_name>: <reason>",
+      ...
+    ]
+  },
+  ...
+}
+```
+
+Which you can visualise as above with e.g. `pandas`
+
+```python
+df = pd.read_json('all_tests_scan_result.json').T
+df.sort_values(by=['skipped_proportion'], ascending=False)
+
+```
