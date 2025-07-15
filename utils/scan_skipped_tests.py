@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import json
 import re
 from pathlib import Path
@@ -23,17 +24,17 @@ REPO_ROOT = Path().cwd()
 
 COMMON_TESTS_FILE = REPO_ROOT / "tests/test_modeling_common.py"
 MODELS_DIR = REPO_ROOT / "tests/models"
-OUTPUT_FILE = REPO_ROOT / "all_tests_scan_result.json"
 
 
 def get_common_tests(file_path: Path) -> list[str]:
-    """Extracts all test function names (e.g., 'test_forward') from the common test file."""
+    """Extract all common test function names (e.g., 'test_forward')."""
     if not file_path.is_file():
         raise FileNotFoundError(f"Common tests file not found at {file_path}")
     content = file_path.read_text(encoding="utf-8")
     # find all function definitions starting with 'test_'
-    test_names = re.findall(r"^\s*def\s+(test_[a-zA-Z0-9_]+)", content, re.MULTILINE)
-    return sorted(set(test_names))
+    return sorted(
+        set(re.findall(r"^\s*def\s+(test_[a-zA-Z0-9_]+)", content, re.MULTILINE))
+    )
 
 
 def get_models_and_test_files(models_dir: Path) -> tuple[list[str], list[Path]]:
@@ -51,28 +52,24 @@ def _extract_reason_from_decorators(decorators: str) -> str:
     reason_match = re.search(r'reason\s*=\s*["\'](.*?)["\']', decorators)
     if reason_match:
         return reason_match.group(1)
-    # fallback for formats like @skip("reason") or @skipIf(..., "reason")
+
     reason_match = re.search(r'\((?:.*?,\s*)?["\'](.*?)["\']\)', decorators)
     if reason_match:
         return reason_match.group(1)
-    # if nothing matched, take the last decorator line
+
     return decorators.strip().split("\n")[-1].strip()
 
 
 def extract_test_info(file_content: str) -> dict[str, tuple[str, str]]:
     """
-    Parses a test file once and returns a mapping of test functions to their
+    Parse a test file once and return a mapping of test functions to their
     status and skip reason, e.g. {'test_forward': ('SKIPPED', 'too slow')}.
     """
     result: dict[str, tuple[str, str]] = {}
-    pattern = re.compile(
-        r"((?:^\s*@.*?\n)*?)^\s*def\s+(test_[a-zA-Z0-9_]+)\b",
-        re.MULTILINE,
-    )
+    pattern = re.compile(r"((?:^\s*@.*?\n)*?)^\s*def\s+(test_[a-zA-Z0-9_]+)\b", re.MULTILINE)
 
     for decorators, test_fn in pattern.findall(file_content):
-        status = "RAN"
-        reason = ""
+        status, reason = "RAN", ""
         if "skip" in decorators:
             status = "SKIPPED"
             reason = _extract_reason_from_decorators(decorators)
@@ -80,53 +77,85 @@ def extract_test_info(file_content: str) -> dict[str, tuple[str, str]]:
     return result
 
 
-def main():
-    """Scans tests, analyzes overrides in a single pass per file, and generates a JSON report."""
-    try:
-        common_tests = get_common_tests(COMMON_TESTS_FILE)
-        all_models, model_files = get_models_and_test_files(MODELS_DIR)
-    except FileNotFoundError as e:
-        print(f"❌ Error: {e}")
-        return
-
-    # cache overrides per model (merged across all its files)
-    model_overrides: dict[str, dict[str, tuple[str, str]]] = {m: {} for m in all_models}
-
-    print(f"🔬 Parsing {len(model_files)} model test files once each...")
+def build_overrides(model_files: list[Path]) -> dict[str, dict[str, tuple[str, str]]]:
+    """Cache overrides per model (merged across all its files)."""
+    overrides: dict[str, dict[str, tuple[str, str]]] = {}
     for file_path in model_files:
         model_name = file_path.parent.name
         content = file_path.read_text(encoding="utf-8")
-        overrides = extract_test_info(content)
-        # merge with existing overrides for the model
-        model_overrides[model_name].update(overrides)
+        overrides.setdefault(model_name, {}).update(extract_test_info(content))
+    return overrides
 
-    final_results: dict[str, dict[str, object]] = {}
+
+def save_json(data: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def summarize_single_test(
+    test_name: str,
+    all_models: list[str],
+    model_overrides: dict[str, dict[str, tuple[str, str]]],
+) -> dict[str, object]:
+    """Aggregate results for a single test and print a concise terminal summary."""
+    models_ran, models_skipped, reasons_for_skipping = [], [], []
+
+    for model in all_models:
+        status, reason = model_overrides.get(model, {}).get(test_name, ("RAN", ""))
+        if status == "SKIPPED":
+            models_skipped.append(model)
+            reasons_for_skipping.append(f"{model}: {reason}")
+        else:
+            models_ran.append(model)
+
+    total_models = len(all_models)
+    skipped_proportion = len(models_skipped) / total_models if total_models else 0.0
+
+    print(f"\n== {test_name} ==")
+    print(f"Ran on    : {len(models_ran)}/{total_models} models")
+    print(f"Skipped on: {len(models_skipped)}/{total_models} models "
+          f"({skipped_proportion:.1%})")
+    if models_skipped:
+        for reason in reasons_for_skipping[:10]:
+            print(f" - {reason}")
+        if len(reasons_for_skipping) > 10:
+            print(" - ...")
+
+    return {
+        "models_ran": sorted(models_ran),
+        "models_skipped": sorted(models_skipped),
+        "skipped_proportion": round(skipped_proportion, 4),
+        "reasons_skipped": sorted(reasons_for_skipping),
+    }
+
+
+def summarize_all_tests(
+    common_tests: list[str],
+    all_models: list[str],
+    model_overrides: dict[str, dict[str, tuple[str, str]]],
+) -> dict[str, dict[str, object]]:
+    """Aggregate results for all common tests (original behaviour)."""
+    results: dict[str, dict[str, object]] = {}
     total_models = len(all_models)
 
     print(f"📝 Aggregating results for {len(common_tests)} common tests...")
     for i, test_fn in enumerate(common_tests, start=1):
         print(f"  ({i}/{len(common_tests)}) {test_fn}", end="\r")
 
-        models_ran: list[str] = []
-        models_skipped: list[str] = []
-        reasons_for_skipping: list[str] = []
+        models_ran, models_skipped, reasons_for_skipping = [], [], []
 
-        for model_name in all_models:
-            overrides = model_overrides.get(model_name, {})
-            if test_fn in overrides:
-                status, reason_text = overrides[test_fn]
-                if status == "SKIPPED":
-                    models_skipped.append(model_name)
-                    reasons_for_skipping.append(f"{model_name}: {reason_text}")
-                else:  # explicitly overridden and executed
-                    models_ran.append(model_name)
+        for model in all_models:
+            status, reason = model_overrides.get(model, {}).get(test_fn, ("RAN", ""))
+            if status == "SKIPPED":
+                models_skipped.append(model)
+                reasons_for_skipping.append(f"{model}: {reason}")
             else:
-                # not overridden => inherited from common tests and executed
-                models_ran.append(model_name)
+                models_ran.append(model)
 
         skipped_proportion = len(models_skipped) / total_models if total_models else 0.0
 
-        final_results[test_fn] = {
+        results[test_fn] = {
             "models_ran": sorted(models_ran),
             "models_skipped": sorted(models_skipped),
             "skipped_proportion": round(skipped_proportion, 4),
@@ -134,12 +163,52 @@ def main():
         }
 
     print("\n✅ Scan complete.")
+    return results
 
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(final_results, f, indent=2)
 
-    print(f"📄 Report saved to {OUTPUT_FILE}")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Scan model tests for overridden or skipped methods.")
+    parser.add_argument(
+        "--output_dir",
+        default=".",
+        help="Directory in which JSON results will be saved (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--test_method_name",
+        help="Specific test method to scan. "
+             "If provided, only that method is analysed and reported.",
+    )
+    args = parser.parse_args()
+
+    output_dir = Path(args.output_dir).expanduser()
+    test_method_name = args.test_method_name
+
+    try:
+        common_tests = (
+            [test_method_name]
+            if test_method_name
+            else get_common_tests(COMMON_TESTS_FILE)
+        )
+        all_models, model_files = get_models_and_test_files(MODELS_DIR)
+    except FileNotFoundError as e:
+        print(f"❌ Error: {e}")
+        return
+
+    print(f"🔬 Parsing {len(model_files)} model test files once each...")
+    model_overrides = build_overrides(model_files)
+
+    if test_method_name:
+        # single-test mode
+        result = summarize_single_test(test_method_name, all_models, model_overrides)
+        json_path = output_dir / f"scan_{test_method_name}.json"
+        save_json(result, json_path)
+        print(f"\n📄 JSON saved to {json_path.resolve()}")
+    else:
+        # full scan mode
+        results = summarize_all_tests(common_tests, all_models, model_overrides)
+        json_path = output_dir / "all_tests_scan_result.json"
+        save_json(results, json_path)
+        print(f"\n📄 JSON saved to {json_path.resolve()}")
 
 
 if __name__ == "__main__":
