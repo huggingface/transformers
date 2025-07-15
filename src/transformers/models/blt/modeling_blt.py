@@ -1370,6 +1370,7 @@ class BLTPatcher(BLTPreTrainedModel):
 
 
 class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
     config_class = BLTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
