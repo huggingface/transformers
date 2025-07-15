@@ -2094,13 +2094,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
         self.config = config
 
-        # The `hasattr` here is used as some Transformers tests for some reason do not call
-        # PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
-        if hasattr(config, "_attn_implementation_internal") and not getattr(
-            config, "_attn_implementation_autoset", False
-        ):
-            self.set_attention_implementation(self.config._attn_implementation_internal)
-
         # for initialization of the loss
         loss_type = self.__class__.__name__
         if loss_type not in LOSS_MAPPING:
@@ -2157,6 +2150,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                             f"{module} was specified in the `_keep_in_fp32_modules_strict` list, but is not part of the modules in"
                             f" {self.__class__.__name__}"
                         )
+
+        # The `hasattr` here is used as some Transformers tests for some reason do not call
+        # PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
+        if hasattr(self.config, "_attn_implementation_internal"):
+            self.set_attention_implementation(self.config._attn_implementation_internal)
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
@@ -2273,7 +2271,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[dict, str]) -> Union[dict, str]:
+    def _check_attn_implementation(cls, attn_implementation: Optional[str]) -> Optional[str]:
         """
         Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
@@ -2293,19 +2291,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
             except FileNotFoundError as e:
                 logger.warning(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
+                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using default attention implementation instead."
                 )
                 attn_implementation = None  # try to dispatch SDPA and fallback eager if not available
             except AttributeError:
                 raise ValueError(
-                    "the kernel function name or class specified in the attn_implementation argument is not valid. \
-                                 Please check the documentation for the correct format, \
-                                 and check that the kernel exports the class and the function correctly."
+                    "the kernel function name or class specified in the attn_implementation argument is not valid. Please check "
+                    "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
                 )
-        if (
-            not isinstance(attn_implementation, dict)
-            and attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys()
-        ):
+        if attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
@@ -2325,30 +2319,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         Checks and dispatches to the requested attention implementation.
         """
-        requested_attn_implementation = self._check_attn_implementation(attn_implementation)
+        current_implementation = (
+            attn_implementation if not isinstance(attn_implementation, dict) else attn_implementation.get("", None)
+        )
 
-        # Composite models consisting of several PretrainedModels can specify attention implementation as a dict where
-        # keys are sub-config names. But most people will specify one `str` which means that should dispatch it for all sub-models.
-        # See https://github.com/huggingface/transformers/pull/32238
-        for key in self.config.sub_configs.keys():
-            sub_config = getattr(self.config, key)
-            curr_attn_implementation = (
-                requested_attn_implementation
-                if not isinstance(requested_attn_implementation, dict)
-                else requested_attn_implementation.get(key, None)
-            )
-            # For models with backbone sub-config might be not initialized. Set the requested att
-            # if the config hasn't got any attn pre-set and the requested attn in not `None` (i.e not the default attn)
-            if (
-                sub_config is not None
-                and sub_config._attn_implementation_internal is None
-                and curr_attn_implementation is not None
-            ):
-                sub_config._attn_implementation_internal = curr_attn_implementation
+        requested_attn_implementation = self._check_attn_implementation(current_implementation)
 
         if requested_attn_implementation == "flash_attention_3" and self._flash_attn_3_can_dispatch():
             self.config._attn_implementation = "flash_attention_3"
-        if requested_attn_implementation == "flash_attention_2" and self._flash_attn_2_can_dispatch():
+        elif requested_attn_implementation == "flash_attention_2" and self._flash_attn_2_can_dispatch():
             self.config._attn_implementation = "flash_attention_2"
         elif requested_attn_implementation == "flex_attention" and self._flex_attn_can_dispatch():
             self.config._attn_implementation = "flex_attention"
@@ -2360,12 +2339,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             self.config._attn_implementation = "sdpa"
         elif requested_attn_implementation in ALL_ATTENTION_FUNCTIONS.valid_keys():
             self.config._attn_implementation = requested_attn_implementation
-        elif isinstance(requested_attn_implementation, dict):
-            self.config._attn_implementation = requested_attn_implementation.get("", None)
         else:
             self.config._attn_implementation = "eager"
 
-        self.config._attn_implementation_autoset = True
+        # Apply it to all submodels as well
+        for submodule in self.modules():
+            if isinstance(submodule, PreTrainedModel):
+                if isinstance(attn_implementation, dict):
+                    for subconfig_key in self.config.sub_configs:
+                        if getattr(self.config, subconfig_key).__class__ == submodule.config_class:
+                            sub_implementation = attn_implementation.get(subconfig_key, None)
+                            break
+                submodule.set_attention_implementation(sub_implementation)
 
     @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
@@ -2445,9 +2430,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
         """
-        # Config always has `torch_dtype` but we need the next line for `no_super_init()` tests
-        torch_dtype = self.config.torch_dtype if hasattr(self.config, "torch_dtype") else torch.get_default_dtype()
-        device_map = self.hf_device_map if hasattr(self, "hf_device_map") else None
+        torch_dtype = self.config.torch_dtype
 
         # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
         if not (self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False)):
@@ -2494,43 +2477,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if torch_dtype is None:
             logger.warning_once(
-                "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour"
+                "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
         elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
-                "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes, but"
+                "Flash Attention 2 only supports torch.float16 and torch.bfloat16 dtypes, but"
                 f" the current dype in {self.__class__.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
                 ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
             )
 
-        # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
-        # or the model may be initialized under the context manager `with torch.device("cuda"):`.
-        if device_map is None and torch.empty(0).device.type not in ["cuda", "mlu"]:
+        param_devices = list({param.device for param in self.parameters()})
+        if len(param_devices) == 1 and param_devices[0].type == "cpu":
             if torch.cuda.is_available():
                 logger.warning_once(
-                    "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
+                    "You are attempting to use Flash Attention 2 with a model not initialized on GPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
                 )
             elif is_torch_mlu_available():
                 logger.warning_once(
-                    "You are attempting to use Flash Attention 2.0 with a model not initialized on MLU. Make sure to move the model to MLU"
+                    "You are attempting to use Flash Attention 2 with a model not initialized on MLU. Make sure to move the model to MLU"
                     " after initializing it on CPU with `model.to('mlu')`."
                 )
             else:
                 raise ValueError(
-                    "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU and with no GPU available. "
+                    "You are attempting to use Flash Attention 2 with a model not initialized on GPU and with no GPU available. "
                     "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                     "or initialising the model on CPU and then moving it to GPU."
                 )
-        elif (
-            device_map is not None
-            and isinstance(device_map, dict)
-            and ("cpu" in device_map.values() or "disk" in device_map.values())
-        ):
-            raise ValueError(
-                "You are attempting to use Flash Attention 2.0 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
-                "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
-            )
 
         # If no error raise by this point, we can return `True`
         return True
@@ -2541,13 +2514,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_3" so that the model can initialize the correct attention module.
         """
-        # Config always has `torch_dtype` but we need the next line for `no_super_init()` tests
-        torch_dtype = self.config.torch_dtype if hasattr(self.config, "torch_dtype") else torch.get_default_dtype()
-        device_map = self.hf_device_map if hasattr(self, "hf_device_map") else None
+        torch_dtype = self.config.torch_dtype
 
         if not self._supports_flash_attn:
             raise ValueError(
-                f"{self.__class__.__name__} does not support Flash Attention 3.0 yet. Please request to add support where"
+                f"{self.__class__.__name__} does not support Flash Attention 3 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
                 " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
@@ -2591,9 +2562,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
 
-        # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
-        # or the model may be initialized under the context manager `with torch.device("cuda"):`.
-        if device_map is None and torch.empty(0).device.type not in ["cuda", "mlu"]:
+        param_devices = list({param.device for param in self.parameters()})
+        if len(param_devices) == 1 and param_devices[0].type == "cpu":
             if torch.cuda.is_available():
                 logger.warning_once(
                     "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
@@ -2605,15 +2575,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                     "or initialising the model on CPU and then moving it to GPU."
                 )
-        elif (
-            device_map is not None
-            and isinstance(device_map, dict)
-            and ("cpu" in device_map.values() or "disk" in device_map.values())
-        ):
-            raise ValueError(
-                "You are attempting to use Flash Attention 3 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
-                "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
-            )
+
         return True
 
     def _sdpa_can_dispatch(self, hard_check_only: bool = False) -> bool:
@@ -4814,6 +4776,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
+
+        # We need this additional check for the attn implementation, as `hf_device_map` attribute could not be set prior to
+        # initializing the model
+        if (
+            device_map is not None
+            and ("cpu" in device_map.values() or "disk" in device_map.values())
+            and getattr(config, "_attn_implementation", None) in ("flash_attention_2", "flash_attention_3")
+        ):
+            raise ValueError(
+                "You are attempting to use Flash Attention with a model dispatched on CPU or disk. This is not supported. Please make sure to "
+                "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
+            )
 
         # Finalize model weight initialization
         if from_tf:

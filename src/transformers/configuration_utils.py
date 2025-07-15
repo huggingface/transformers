@@ -325,7 +325,6 @@ class PretrainedConfig(PushToHubMixin):
 
         # Attention implementation to use, if relevant.
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
-        self._attn_implementation_autoset = False
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -402,15 +401,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def _attn_implementation(self):
-        # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
-        if hasattr(self, "_attn_implementation_internal"):
-            if self._attn_implementation_internal is None:
-                # `config.attn_implementation` should never be None, for backward compatibility.
-                return "eager"
-            else:
-                return self._attn_implementation_internal
-        else:
-            return "eager"
+        return self._attn_implementation_internal if self._attn_implementation_internal is not None else "eager"
 
     @_attn_implementation.setter
     def _attn_implementation(self, value):
@@ -1053,8 +1044,6 @@ class PretrainedConfig(PushToHubMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
-        if "_attn_implementation_autoset" in d:
-            del d["_attn_implementation_autoset"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
