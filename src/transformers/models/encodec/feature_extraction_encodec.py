@@ -191,7 +191,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
                 return_attention_mask=padding,
             )
             if padding:
-                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
+                # add channel dimension for shape `(batch_size, channels, sequence_length)`
+                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")[:, None, :]
 
         input_values = []
         for example in padded_inputs.pop("input_values"):

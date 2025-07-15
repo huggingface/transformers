@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
@@ -56,7 +55,7 @@ class EncodecOutput(ModelOutput):
 class EncodecEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-        Discret code embeddings computed using `model.encode`.
+        Discrete code embeddings computed using `model.encode`.
     audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
         Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
@@ -139,17 +138,18 @@ class EncodecConv1d(nn.Module):
         """
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
-        if not mode == "reflect":
+        assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
+        if mode == "reflect":
+            max_pad = max(padding_left, padding_right)
+            extra_pad = 0
+            if length <= max_pad:
+                extra_pad = max_pad - length + 1
+                hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
+            padded = nn.functional.pad(hidden_states, paddings, mode, value)
+            end = padded.shape[-1] - extra_pad
+            return padded[..., :end]
+        else:
             return nn.functional.pad(hidden_states, paddings, mode, value)
-
-        max_pad = max(padding_left, padding_right)
-        extra_pad = 0
-        if length <= max_pad:
-            extra_pad = max_pad - length + 1
-            hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
-        padded = nn.functional.pad(hidden_states, paddings, mode, value)
-        end = padded.shape[-1] - extra_pad
-        return padded[..., :end]
 
     def forward(self, hidden_states):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
@@ -513,11 +513,11 @@ class EncodecModel(EncodecPreTrainedModel):
 
         scale = None
         if self.config.normalize:
-            # if the padding is non zero
-            input_values = input_values * padding_mask.unsqueeze(1)
+            input_values = input_values * padding_mask
             mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
             scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
+            scale = scale.view(-1, 1)
 
         embeddings = self.encoder(input_values)
         codes = self.quantizer.encode(embeddings, bandwidth)
@@ -575,21 +575,15 @@ class EncodecModel(EncodecPreTrainedModel):
 
         encoded_frames = []
         scales = []
-
-        step = chunk_length - stride
-        if (input_length % stride) - step != 0:
-            raise ValueError(
-                "The input length is not properly padded for batched chunked decoding. Make sure to pad the input correctly."
-            )
-
-        for offset in range(0, input_length - step, stride):
+        for offset in range(0, input_length, stride):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
             frame = input_values[:, :, offset : offset + chunk_length]
             encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)
             encoded_frames.append(encoded_frame)
             scales.append(scale)
 
-        encoded_frames = torch.stack(encoded_frames)
+        encoded_frames = tuple(encoded_frames)
+        scales = tuple(scales)
 
         if not return_dict:
             return (encoded_frames, scales)
@@ -666,7 +660,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Args:
             audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-                Discret code embeddings computed using `model.encode`.
+                Discrete code embeddings computed using `model.encode`.
             audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
                 Scaling factor for each `audio_codes` input.
             padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
@@ -759,6 +753,9 @@ class EncodecModel(EncodecPreTrainedModel):
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
+        assert torch.broadcast_shapes(padding_mask.shape, input_values.shape), (
+            "Shapes are not broadcastable, check number of channels"
+        )
 
         if audio_codes is not None and audio_scales is None:
             raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
