@@ -120,7 +120,8 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
         """
         Converts a sequence of tokens (string) in a single string.
 
-        Overwritten to fix wrong behavior around adding spaces during decoding.
+        Overwritten to fix wrong behavior around adding spaces during decoding, e.g.
+        when decoding " <s> Hello<s> how".
         """
         current_sub_tokens = []
         out_string = ""
