@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_maskformer import MaskFormerImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MaskFormerFeatureExtractor(MaskFormerImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -216,7 +215,7 @@ class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=22050))
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
@@ -238,4 +237,4 @@ class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         feature_extractor = ClvpFeatureExtractor.from_pretrained("susnato/clvp_dev")
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, 80, 517))
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)

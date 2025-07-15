@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for TVP."""
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -49,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.vivit.image_processing_vivit.make_batched
-def make_batched(videos) -> List[List[ImageInput]]:
+def make_batched(videos) -> list[list[ImageInput]]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
@@ -66,7 +67,7 @@ def get_resize_output_image_size(
     input_image: np.ndarray,
     max_size: int = 448,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     height, width = get_image_size(input_image, input_data_format)
     if height >= width:
         ratio = width * 1.0 / height
@@ -89,9 +90,9 @@ class TvpImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"longest_edge": 448}`):
+        size (`dict[str, int]` *optional*, defaults to `{"longest_edge": 448}`):
             Size of the output image after resizing. The longest edge of the image will be resized to
-            `size["longest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            `size["longest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
             `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
@@ -99,7 +100,7 @@ class TvpImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by the `do_center_crop`
             parameter in the `preprocess` method.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
+        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
             Size of the image after applying the center crop. Can be overridden by the `crop_size` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -110,7 +111,7 @@ class TvpImageProcessor(BaseImageProcessor):
             in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess` method.
-        pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
+        pad_size (`dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
             Size of the image after applying the padding. Can be overridden by the `pad_size` parameter in the
             `preprocess` method.
         constant_values (`Union[float, Iterable[float]]`, *optional*, defaults to 0):
@@ -123,10 +124,10 @@ class TvpImageProcessor(BaseImageProcessor):
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
             Whether to flip the color channels from RGB to BGR. Can be overridden by the `do_flip_channel_order`
             parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -136,20 +137,20 @@ class TvpImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        pad_size: Dict[str, int] = None,
+        pad_size: Optional[dict[str, int]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         pad_mode: PaddingMode = PaddingMode.CONSTANT,
         do_normalize: bool = True,
         do_flip_channel_order: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -176,7 +177,7 @@ class TvpImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -188,7 +189,7 @@ class TvpImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image. If `size` is of the form `{"height": h, "width": w}`, the output image will
                 have the size `(h, w)`. If `size` is of the form `{"longest_edge": s}`, the output image will have its
                 longest edge of length `s` while keeping the aspect ratio of the original image.
@@ -219,7 +220,7 @@ class TvpImageProcessor(BaseImageProcessor):
     def pad_image(
         self,
         image: np.ndarray,
-        pad_size: Dict[str, int] = None,
+        pad_size: Optional[dict[str, int]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         pad_mode: PaddingMode = PaddingMode.CONSTANT,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -232,7 +233,7 @@ class TvpImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            pad_size (`Dict[str, int]`)
+            pad_size (`dict[str, int]`)
                 Size of the output image with pad.
             constant_values (`Union[float, Iterable[float]]`)
                 The fill value to use when padding the image.
@@ -266,21 +267,21 @@ class TvpImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
         do_pad: bool = True,
-        pad_size: Dict[str, int] = None,
-        constant_values: Union[float, Iterable[float]] = None,
+        pad_size: Optional[dict[str, int]] = None,
+        constant_values: Optional[Union[float, Iterable[float]]] = None,
         pad_mode: PaddingMode = None,
-        do_normalize: bool = None,
-        do_flip_channel_order: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_normalize: Optional[bool] = None,
+        do_flip_channel_order: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -339,22 +340,22 @@ class TvpImageProcessor(BaseImageProcessor):
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        videos: Union[ImageInput, List[ImageInput], List[List[ImageInput]]],
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_pad: bool = None,
-        pad_size: Dict[str, int] = None,
-        constant_values: Union[float, Iterable[float]] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_pad: Optional[bool] = None,
+        pad_size: Optional[dict[str, int]] = None,
+        constant_values: Optional[Union[float, Iterable[float]]] = None,
         pad_mode: PaddingMode = None,
-        do_normalize: bool = None,
-        do_flip_channel_order: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_normalize: Optional[bool] = None,
+        do_flip_channel_order: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -363,18 +364,18 @@ class TvpImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            videos (`ImageInput` or `List[ImageInput]` or `List[List[ImageInput]]`):
+            videos (`ImageInput` or `list[ImageInput]` or `list[list[ImageInput]]`):
                 Frames to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after applying resize.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_centre_crop`):
                 Whether to centre crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
@@ -382,7 +383,7 @@ class TvpImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `True`):
                 Whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess` method.
-            pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
+            pad_size (`dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
                 Size of the image after applying the padding. Can be overridden by the `pad_size` parameter in the
                 `preprocess` method.
             constant_values (`Union[float, Iterable[float]]`, *optional*, defaults to 0):
@@ -393,9 +394,9 @@ class TvpImageProcessor(BaseImageProcessor):
                 Whether to normalize the image.
             do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
                 Whether to flip the channel order of the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:

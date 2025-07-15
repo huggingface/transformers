@@ -103,3 +103,6 @@ class RetriBertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.share_encoders = share_encoders
         self.projection_dim = projection_dim
+
+
+__all__ = ["RetriBertConfig"]

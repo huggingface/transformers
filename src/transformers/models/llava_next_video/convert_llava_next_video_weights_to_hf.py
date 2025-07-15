@@ -159,18 +159,18 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if model_id == "lmms-lab/LLaVA-NeXT-Video-7B-32K":
         text_model_id = "mistralai/Mistral-7B-Instruct-v0.2"
-        video_token_index = 32000
-        image_token_index = 32001
+        video_token_id = 32000
+        image_token_id = 32001
         overwrite_text_config = {}
     elif model_id in ["lmms-lab/LLaVA-NeXT-Video-7B", "lmms-lab/LLaVA-NeXT-Video-7B-DPO"]:
         text_model_id = "lmsys/vicuna-7b-v1.5"
-        video_token_index = 32000
-        image_token_index = 32001
+        video_token_id = 32000
+        image_token_id = 32001
         overwrite_text_config = {"factor": 2.0, "type": "linear"}
     elif model_id in ["lmms-lab/LLaVA-NeXT-Video-34B", "lmms-lab/LLaVA-NeXT-Video-34B-DPO"]:
         text_model_id = "NousResearch/Nous-Hermes-2-Yi-34B"
-        video_token_index = 64000
-        image_token_index = 64001
+        video_token_id = 64000
+        image_token_id = 64001
         overwrite_text_config = {}
     else:
         raise ValueError("Incorrect checkpoint referenced. Text model-id not identified!")
@@ -199,8 +199,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         text_config=text_config,
         image_grid_pinpoints=image_processor.image_grid_pinpoints,
         use_image_newline_parameter=True,
-        video_token_index=video_token_index,
-        image_token_index=image_token_index,
+        video_token_id=video_token_id,
+        image_token_id=image_token_id,
     )
 
     with init_empty_weights():
@@ -227,13 +227,11 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     num_tokens = vocab_size + 3
     model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-        tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-        ),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
 

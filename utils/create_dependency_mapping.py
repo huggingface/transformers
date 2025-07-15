@@ -3,7 +3,19 @@ from collections import defaultdict
 
 
 # Function to perform topological sorting
-def topological_sort(dependencies: dict):
+def topological_sort(dependencies: dict) -> list[list[str]]:
+    """Given the dependencies graph construct sorted list of list of modular files
+
+    For example, returned list of lists might be:
+        [
+            ["../modular_llama.py", "../modular_gemma.py"],    # level 0
+            ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
+            ["../modular_glm4.py"],                            # level 2
+        ]
+        which means llama and gemma do not depend on any other modular models, while llama4 and gemma2
+        depend on the models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
+    """
+
     # Nodes are the name of the models to convert (we only add those to the graph)
     nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
     # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
@@ -20,17 +32,17 @@ def topological_sort(dependencies: dict):
     while len(graph) > 0:
         # Find the nodes with 0 out-degree
         leaf_nodes = {node for node in graph if len(graph[node]) == 0}
-        # Add them to the list
-        sorting_list += list(leaf_nodes)
+        # Add them to the list as next level
+        sorting_list.append([name_mapping[node] for node in leaf_nodes])
         # Remove the leafs from the graph (and from the deps of other nodes)
         graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
 
-    return [name_mapping[x] for x in sorting_list]
+    return sorting_list
 
 
 # Function to extract class and import info from a file
 def extract_classes_and_imports(file_path):
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=file_path)
     imports = set()
 
@@ -55,6 +67,25 @@ def map_dependencies(py_files):
 
 
 def find_priority_list(py_files):
+    """
+    Given a list of modular files, sorts them by topological order. Modular models that DON'T depend on other modular
+    models will be higher in the topological order.
+
+    Args:
+        py_files: List of paths to the modular files
+
+    Returns:
+        Ordered list of lists of files and their dependencies (dict)
+
+        For example, ordered_files might be:
+        [
+            ["../modular_llama.py", "../modular_gemma.py"],    # level 0
+            ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
+            ["../modular_glm4.py"],                            # level 2
+        ]
+        which means llama and gemma do not depend on any other modular models, while llama4 and gemma2
+        depend on the models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
+    """
     dependencies = map_dependencies(py_files)
-    ordered_classes = topological_sort(dependencies)
-    return ordered_classes
+    ordered_files = topological_sort(dependencies)
+    return ordered_files, dependencies

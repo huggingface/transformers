@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -170,7 +170,7 @@ class TFGPTJAttention(keras.layers.Layer):
         value: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+    ) -> tuple[tf.Tensor, tf.Tensor]:
         # compute causal mask from causal mask buffer
         query_length, key_length = shape_list(query)[-2], shape_list(key)[-2]
         causal_mask = self.get_causal_mask(key_length, query_length)
@@ -203,7 +203,7 @@ class TFGPTJAttention(keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        layer_past: Optional[Tuple[tf.Tensor, tf.Tensor]] = None,
+        layer_past: Optional[tuple[tf.Tensor, tf.Tensor]] = None,
         attention_mask: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
@@ -428,7 +428,7 @@ class TFGPTJMainLayer(keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-    ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPast, tuple[tf.Tensor]]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -624,7 +624,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`List[tf.Tensor]` of length `config.n_layers`):
+        past_key_values (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past` output below). Can be used to speed up sequential decoding. The token ids which have their past
             given to this model should not be passed as input ids as they have already been computed.
@@ -635,7 +635,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
@@ -643,7 +643,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
@@ -654,7 +654,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`tf.Tensor` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -694,7 +694,7 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -705,7 +705,7 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPast, tuple[tf.Tensor]]:
         r"""
         use_cache (`bool`, *optional*, defaults to `True`):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
@@ -794,7 +794,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -806,9 +806,9 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFCausalLMOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutputWithPast, tuple[tf.Tensor]]:
         r"""
-        labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
@@ -902,7 +902,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -914,7 +914,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFSequenceClassifierOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFSequenceClassifierOutputWithPast, tuple[tf.Tensor]]:
         r"""
         labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -941,35 +941,30 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
         logits_shape = shape_list(logits)
-        in_logits = None
+        batch_size = logits_shape[0]
+
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
         else:
             if input_ids is not None:
-                sequence_lengths = (
-                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
-                    - 1
-                )
-                sequence_lengths = tf.where(
-                    sequence_lengths >= 0,
-                    sequence_lengths,
-                    tf.cast(shape_list(input_ids[-1]), sequence_lengths.dtype) - 1,
-                )
-                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
+                token_indices = tf.range(shape_list(input_ids)[-1])
+                non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
+                last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
             else:
-                sequence_lengths = -1
+                last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
                 logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
-        if labels is not None:
-            if not tf.is_tensor(sequence_lengths):
-                in_logits = logits[0 : logits_shape[0], sequence_lengths]
+        pooled_logits = tf.gather(logits, last_non_pad_token, batch_dims=1, axis=1)
 
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
-        pooled_logits = in_logits if in_logits is not None else logits
+        if labels is not None:
+            if self.config.pad_token_id is None and logits_shape[0] != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(pooled_logits, [-1, self.num_labels]))
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1024,7 +1019,7 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -1036,7 +1031,7 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFQuestionAnsweringModelOutput, tuple[tf.Tensor]]:
         r"""
         start_positions (`np.ndarray` or `tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

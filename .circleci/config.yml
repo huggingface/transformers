@@ -7,6 +7,18 @@ parameters:
     nightly:
         type: boolean
         default: false
+    GHA_Actor:
+        type: string
+        default: ""
+    GHA_Action:
+        type: string
+        default: ""
+    GHA_Event:
+        type: string
+        default: ""
+    GHA_Meta:
+        type: string
+        default: ""
 
 jobs:
     # Ensure running with CircleCI/huggingface
@@ -58,7 +70,7 @@ jobs:
             - run:
                 name: "Prepare pipeline parameters"
                 command: |
-                    python utils/process_test_artifacts.py 
+                    python utils/process_test_artifacts.py
 
             # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
             # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
@@ -100,8 +112,6 @@ jobs:
 
             - run:
                 name: "Retrieve Artifact Paths"
-                env:
-                    CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
                     job_number=${CIRCLE_BUILD_NUM}
@@ -110,7 +120,7 @@ jobs:
             - run:
                 name: "Prepare pipeline parameters"
                 command: |
-                    python utils/process_test_artifacts.py 
+                    python utils/process_test_artifacts.py
 
             # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
             # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
@@ -146,7 +156,7 @@ jobs:
                   path: ~/transformers/installed.txt
             - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
             - run: ruff check examples tests src utils
-            - run: ruff format tests src utils --check
+            - run: ruff format examples tests src utils --check
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
             - run: python utils/check_doc_toc.py
@@ -171,17 +181,16 @@ jobs:
                   path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
             - run: python utils/check_modular_conversion.py
-            - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: python utils/check_pipeline_typing.py
             - run: python utils/check_config_docstrings.py
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py
             - run: make deps_table_check_updated
             - run: python utils/update_metadata.py --check-only
             - run: python utils/check_docstrings.py
-            - run: python utils/check_support_list.py
 
 workflows:
     version: 2

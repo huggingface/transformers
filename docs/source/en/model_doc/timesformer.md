@@ -16,9 +16,13 @@ rendered properly in your Markdown viewer.
 
 # TimeSformer
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The TimeSformer model was proposed in [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://arxiv.org/abs/2102.05095) by Facebook Research.
+The TimeSformer model was proposed in [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://huggingface.co/papers/2102.05095) by Facebook Research.
 This work is a milestone in action-recognition field being the first video transformer. It inspired many transformer based video understanding and classification papers.
 
 The abstract from the paper is the following:

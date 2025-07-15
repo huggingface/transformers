@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -159,6 +158,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
@@ -184,6 +184,10 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Cvt does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
+
+    # Larger differences on A10 than T4
+    def test_batching_equivalence(self, atol=2e-4, rtol=2e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -265,6 +269,6 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.9285, 0.9015, -0.3150]).to(torch_device)
+        expected_slice = torch.tensor([0.9287, 0.9016, -0.3152]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)

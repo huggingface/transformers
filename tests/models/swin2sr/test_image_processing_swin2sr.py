@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,10 +30,13 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import Swin2SRImageProcessor
+
+    if is_torchvision_available():
+        from transformers import Swin2SRImageProcessorFast
     from transformers.image_transforms import get_image_size
 
 
-class Swin2SRImageProcessingTester(unittest.TestCase):
+class Swin2SRImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -48,7 +50,6 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
         do_pad=True,
         pad_size=8,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -99,6 +100,7 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
 @require_vision
 class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Swin2SRImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Swin2SRImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -109,11 +111,12 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "do_rescale"))
-        self.assertTrue(hasattr(image_processor, "rescale_factor"))
-        self.assertTrue(hasattr(image_processor, "do_pad"))
-        self.assertTrue(hasattr(image_processor, "pad_size"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "do_pad"))
+            self.assertTrue(hasattr(image_processing, "pad_size"))
 
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
@@ -183,3 +186,18 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    @unittest.skip(reason="No speed gain on CPU due to minimal processing.")
+    def test_fast_is_faster_than_slow(self):
+        pass
+
+    def test_slow_fast_equivalence_batched(self):
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoded_slow = image_processor_slow(image_inputs, return_tensors="pt")
+        encoded_fast = image_processor_fast(image_inputs, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoded_slow.pixel_values, encoded_fast.pixel_values)

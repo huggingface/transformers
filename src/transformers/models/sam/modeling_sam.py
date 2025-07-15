@@ -16,91 +16,86 @@
 
 import collections
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
+from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
+
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...processing_utils import Unpack
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "SamConfig"
-_CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
-
 
 @dataclass
-class SamVisionEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
-
-    Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class SamVisionEncoderOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class SamImageSegmentationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Segment-Anything model's output
+    """
+)
+class SamImageSegmentationOutput(ModelOutput):
+    r"""
+    iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
+        The iou scores of the predicted masks.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+        The predicted low resolutions masks. Needs to be post-processed by the processor
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-    Args:
-        iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
-            The iou scores of the predicted masks.
-        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-            The predicted low resolutions masks. Needs to be post-processed by the processor
-        vision_hidden_states  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden-states of the vision model at the output of each layer plus the optional initial embedding outputs.
+    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Hidden-states of the vision model at the output of each layer plus the optional initial embedding outputs.
-        vision_attentions  (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
+    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class SamPatchEmbeddings(nn.Module):
@@ -216,7 +211,9 @@ class SamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -255,7 +252,9 @@ class SamSdpaAttention(SamAttention):
     def __init__(self, config, downsample_rate=None):
         super().__init__(config, downsample_rate)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -331,7 +330,6 @@ class SamTwoWayAttentionBlock(nn.Module):
         query_point_embedding: Tensor,
         key_point_embedding: Tensor,
         attention_similarity: Tensor,
-        output_attentions: bool = False,
     ):
         # Self attention block
         if self.skip_first_layer_pe:
@@ -366,15 +364,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
-
-        outputs = (queries, keys)
-
-        if output_attentions:
-            outputs = outputs + (attn_out,)
-        else:
-            outputs = outputs + (None,)
-
-        return outputs
+        return queries, keys, attn_out
 
 
 class SamTwoWayTransformer(nn.Module):
@@ -398,18 +388,7 @@ class SamTwoWayTransformer(nn.Module):
         image_positional_embeddings: Tensor,
         attention_similarity: Tensor,
         target_embedding=None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        all_attentions = ()
-
+    ) -> Union[tuple, BaseModelOutput]:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
@@ -425,18 +404,13 @@ class SamTwoWayTransformer(nn.Module):
             if target_embedding is not None:
                 queries += target_embedding
 
-            queries, keys, attention_outputs = layer(
+            queries, keys, _ = layer(
                 queries=queries,
                 keys=keys,
                 query_point_embedding=point_embeddings,
                 key_point_embedding=image_positional_embeddings,
                 attention_similarity=attention_similarity,
-                output_attentions=output_attentions,
             )
-
-            if output_attentions:
-                all_attentions = all_attentions + (attention_outputs,)
-
         # Apply the final attenion layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
@@ -445,7 +419,7 @@ class SamTwoWayTransformer(nn.Module):
 
         queries = queries + attn_out
         queries = self.layer_norm_final_attn(queries)
-        return queries, keys, all_attentions
+        return queries, keys
 
 
 class SamFeedForward(nn.Module):
@@ -508,10 +482,9 @@ class SamMaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        output_attentions: Optional[bool] = None,
-        attention_similarity: torch.Tensor = None,
-        target_embedding: torch.Tensor = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        attention_similarity: Optional[torch.Tensor] = None,
+        target_embedding: Optional[torch.Tensor] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
 
@@ -526,8 +499,6 @@ class SamMaskDecoder(nn.Module):
                 the embeddings of the mask inputs
             multimask_output (bool):
                 Whether to return multiple masks or a single mask.
-            output_attentions (bool, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
@@ -547,13 +518,12 @@ class SamMaskDecoder(nn.Module):
         image_positional_embeddings = image_positional_embeddings.repeat_interleave(point_batch_size, 0)
 
         # Run the transformer, image_positional_embedding are consumed
-        point_embedding, image_embeddings, attentions = self.transformer(
+        point_embedding, image_embeddings = self.transformer(
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
-            output_attentions=output_attentions,
         )
         iou_token_out = point_embedding[:, :, 0, :]
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
@@ -587,15 +557,7 @@ class SamMaskDecoder(nn.Module):
             mask_slice = slice(0, 1)
         masks = masks[:, :, mask_slice, :, :]
         iou_pred = iou_pred[:, :, mask_slice]
-
-        outputs = (masks, iou_pred)
-
-        if output_attentions:
-            outputs = outputs + (attentions,)
-        else:
-            outputs = outputs + (None,)
-
-        return outputs
+        return masks, iou_pred
 
 
 class SamPositionalEmbedding(nn.Module):
@@ -649,9 +611,10 @@ class SamMaskEmbedding(nn.Module):
 
 
 class SamPromptEncoder(nn.Module):
-    def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding):
+    def __init__(self, config: SamPromptEncoderConfig):
         super().__init__()
-        self.shared_embedding = shared_patch_embedding
+        self.shared_embedding = SamPositionalEmbedding(config.vision_config)
+        config = config.prompt_encoder_config
         self.mask_embed = SamMaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
@@ -680,8 +643,8 @@ class SamPromptEncoder(nn.Module):
         # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
+        # This is required for the ONNX export. The dtype, device need to be explicitly
+        # specified as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
@@ -715,11 +678,11 @@ class SamPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
         input_labels: Optional[torch.Tensor],
         input_boxes: Optional[torch.Tensor],
         input_masks: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
@@ -820,22 +783,19 @@ class SamVisionAttention(nn.Module):
 
         return rel_pos_resized[relative_coords.long()]
 
-    def add_decomposed_rel_pos(
+    def get_decomposed_rel_pos(
         self,
-        attn: torch.Tensor,
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
         rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
     ) -> torch.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
 
         Args:
-            attn (`torch.Tensor`):
-                attention map.
             query (`torch.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`torch.Tensor`):
@@ -848,8 +808,8 @@ class SamVisionAttention(nn.Module):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (`torch.Tensor`):
-                attention map with added relative positional embeddings.
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -860,12 +820,12 @@ class SamVisionAttention(nn.Module):
         reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
         rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = attn.reshape(batch_size, query_height, query_width, key_height, key_width)
-        attn = attn + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-        attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
-        return attn
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+
+        return decomposed_rel_pos
+
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
@@ -879,9 +839,11 @@ class SamVisionAttention(nn.Module):
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
+            attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
@@ -891,13 +853,7 @@ class SamVisionAttention(nn.Module):
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
 
         attn_output = self.proj(attn_output)
-
-        if output_attentions:
-            outputs = (attn_output, attn_weights)
-        else:
-            outputs = (attn_output, None)
-
-        return outputs
+        return attn_output, attn_weights
 
 
 class SamVisionSdpaAttention(SamVisionAttention):
@@ -909,47 +865,19 @@ class SamVisionSdpaAttention(SamVisionAttention):
     def __init__(self, config, window_size):
         super().__init__(config, window_size)
 
-    def add_decomposed_rel_pos(
-        self,
-        query: torch.Tensor,
-        rel_pos_h: torch.Tensor,
-        rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
-    ) -> torch.Tensor:
-        """
-        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
-        This method is reimplemented to follow the implementation in:
-        https://github.com/pytorch-labs/segment-anything-fast/blob/main/segment_anything_fast/modeling/image_encoder.py   # noqa B950
-        This implementation is more memory efficient when using SDPA in the forward method.
-        Args:
-            q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-            rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
-            rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
-            q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
-            k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
-
-        Returns:
-            attn (Tensor): attention map with added relative positional embeddings.
-        """
-        query_height, query_width = q_size
-        key_height, key_width = k_size
-        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
-        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
-
-        batch_size, _, dim = query.shape
-        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
-        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
-        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        rel_h = rel_h.unsqueeze(-1)
-        rel_w = rel_w.unsqueeze(-2)
-        rel_h = rel_h.reshape(batch_size, query_height * query_width, key_height, 1)
-        rel_w = rel_w.reshape(batch_size, query_height * query_width, 1, key_width)
-
-        return rel_h, rel_w
-
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        if output_attentions:
+            logger.warning_once(
+                "`SamVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`output_attentions=True`. Falling back to the manual attention implementation, but "
+                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                output_attentions=output_attentions,
+            )
+
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -960,25 +888,21 @@ class SamVisionSdpaAttention(SamVisionAttention):
         # q, k, v with shape (B * nHead, H * W, C)
         query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
 
-        rel_h, rel_w = None, None
+        attn_bias = None
         if self.use_rel_pos:
-            rel_h, rel_w = self.add_decomposed_rel_pos(
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
                 query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = decomposed_rel_pos.reshape(
+                batch_size, self.num_attention_heads, height * width, height * width
+            )
+            attn_bias = decomposed_rel_pos
 
         query = query.view(batch_size, self.num_attention_heads, height * width, -1)
         key = key.view(batch_size, self.num_attention_heads, height * width, -1)
         value = value.view(batch_size, self.num_attention_heads, height * width, -1)
 
-        if self.use_rel_pos:
-            rel_h = rel_h.view(batch_size, self.num_attention_heads, rel_h.size(1), rel_h.size(2), rel_h.size(3))
-            rel_w = rel_w.view(batch_size, self.num_attention_heads, rel_w.size(1), rel_w.size(2), rel_w.size(3))
-            attn_bias = (rel_h + rel_w).view(
-                batch_size, self.num_attention_heads, rel_h.size(2), rel_h.size(3) * rel_w.size(4)
-            )
-            attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
-        else:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value)
+        attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
 
         attn_output = (
             attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
@@ -987,18 +911,7 @@ class SamVisionSdpaAttention(SamVisionAttention):
         )
 
         attn_output = self.proj(attn_output)
-
-        if output_attentions:
-            # For output_attentions, calculate the attention weights
-            attn_weights = (query @ key.transpose(-2, -1)) * self.scale
-            if attn_bias is not None:
-                attn_weights = attn_weights + attn_bias
-            attn_weights = F.softmax(attn_weights, dim=-1)
-            outputs = (attn_output, attn_weights)
-        else:
-            outputs = (attn_output, None)
-
-        return outputs
+        return attn_output, None
 
 
 SAM_VISION_ATTENTION_CLASSES = {
@@ -1007,7 +920,7 @@ SAM_VISION_ATTENTION_CLASSES = {
 }
 
 
-class SamVisionLayer(nn.Module):
+class SamVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1016,7 +929,7 @@ class SamVisionLayer(nn.Module):
         self.mlp = SamMLPBlock(config)
         self.window_size = window_size
 
-    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
@@ -1041,7 +954,7 @@ class SamVisionLayer(nn.Module):
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
+        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
     ) -> torch.Tensor:
         """
         Args:
@@ -1070,13 +983,8 @@ class SamVisionLayer(nn.Module):
         hidden_states = hidden_states[:, :height, :width, :].contiguous()
         return hidden_states
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
         residual = hidden_states
-
         hidden_states = self.layer_norm1(hidden_states)
         # Window partition
         if self.window_size > 0:
@@ -1085,7 +993,6 @@ class SamVisionLayer(nn.Module):
 
         hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
-            output_attentions=output_attentions,
         )
         # Reverse window partition
         if self.window_size > 0:
@@ -1094,12 +1001,7 @@ class SamVisionLayer(nn.Module):
         hidden_states = residual + hidden_states
         layernorm_output = self.layer_norm2(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class SamVisionNeck(nn.Module):
@@ -1122,12 +1024,41 @@ class SamVisionNeck(nn.Module):
         return hidden_states
 
 
-class SamVisionEncoder(nn.Module):
+@auto_docstring
+class SamPreTrainedModel(PreTrainedModel):
+    config_class = SamConfig
+    base_model_prefix = "sam"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, SamVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+
+
+class SamVisionEncoder(SamPreTrainedModel):
+    _can_record_outputs = {"hidden_states": SamVisionLayer, "attentions": SamVisionAttention}
+
     def __init__(self, config: SamVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.image_size = config.image_size
-
         self.patch_embed = SamPatchEmbeddings(config)
 
         self.pos_embed = None
@@ -1157,189 +1088,75 @@ class SamVisionEncoder(nn.Module):
     def get_input_embeddings(self):
         return self.patch_embed
 
+    @check_model_inputs
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionEncoderOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> SamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.pos_embed
-
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
         hidden_states = self.neck(hidden_states)
-
-        if not return_dict:
-            outputs = (hidden_states,)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_self_attentions,)
-            return outputs
-
         return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
-class SamPreTrainedModel(PreTrainedModel):
-    config_class = SamConfig
-    base_model_prefix = "sam"
+@auto_docstring(
+    custom_intro="""
+    The vision model from Sam without any head or projection on top.
+    """
+)
+class SamVisionModel(SamPreTrainedModel):
+    config_class = SamVisionConfig
     main_input_name = "pixel_values"
-    _no_split_modules = ["SamVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+    def __init__(self, config: SamVisionConfig):
+        super().__init__(config)
+        self.vision_encoder = SamVisionEncoder(config)
+        self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_encoder.patch_embed
 
-SAM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SamConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, SamVisionEncoderOutput]:
+        return self.vision_encoder(pixel_values, **kwargs)
 
 
-SAM_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
-            details.
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
-            Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
-            better results. The points can be obtained by passing a list of list of list to the processor that will
-            create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
-            second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
-            per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
-            multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
-            coordinates of the point. If a different number of points is passed either for each image, or for each
-            mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
-            computation of the embedding will be skipped for these points using the labels.
-        input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
-            Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
-            official implementation, there are 3 types of labels
-
-            - `1`: the point is a point that contains the object of interest
-            - `0`: the point is a point that does not contain the object of interest
-            - `-1`: the point corresponds to the background
-
-            We added the label:
-
-            - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
-
-            The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
-            Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
-            much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
-            that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
-            In the order (`x1`, `y1`, `x2`, `y2`):
-
-            - `x1`: the x coordinate of the top left point of the input box
-            - `y1`: the y coordinate of the top left point of the input box
-            - `x2`: the x coordinate of the bottom right point of the input box
-            - `y2`: the y coordinate of the bottom right point of the input box
-
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
-            SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
-            generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
-            manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
-            Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
-            efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
-            method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
-        multimask_output (`bool`, *optional*):
-            In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
-            bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
-            "best" mask, by specifying `multimask_output=False`.
-        attention_similarity (`torch.FloatTensor`, *optional*):
-            Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
-            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
-            Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
-            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "Segment Anything Model (SAM) for generating segmentation masks, given an input image and ",
-    " optional 2D location and bounding boxes.",
-    SAM_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model (SAM) for generating segmentation masks, given an input image and
+    """
 )
 class SamModel(SamPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config):
         super().__init__(config)
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
-        self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+        self.prompt_encoder = SamPromptEncoder(config)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
+
+    def _tie_weights(self):
+        self.prompt_encoder.shared_embedding.positional_embedding.data = (
+            self.shared_image_embedding.positional_embedding.data
+        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -1358,13 +1175,7 @@ class SamModel(SamPreTrainedModel):
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # channel x height x width
 
     @torch.no_grad()
-    def get_image_embeddings(
-        self,
-        pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
+    def get_image_embeddings(self, pixel_values, **kwargs: Unpack[TransformersKwargs]):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
@@ -1375,15 +1186,10 @@ class SamModel(SamPreTrainedModel):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         """
         vision_output = self.vision_encoder(
             pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         image_embeddings = vision_output[0]
         return image_embeddings
@@ -1421,7 +1227,8 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @add_start_docstrings_to_model_forward(SAM_INPUTS_DOCSTRING)
+    @check_model_inputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1433,12 +1240,62 @@ class SamModel(SamPreTrainedModel):
         multimask_output: bool = True,
         attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> List[Dict[str, torch.Tensor]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SamImageSegmentationOutput:
         r"""
+        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+            Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
+            better results. The points can be obtained by passing a list of list of list to the processor that will
+            create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
+            second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
+            per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
+            multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
+            coordinates of the point. If a different number of points is passed either for each image, or for each
+            mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
+            computation of the embedding will be skipped for these points using the labels.
+        input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
+            Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
+            official implementation, there are 3 types of labels
+
+            - `1`: the point is a point that contains the object of interest
+            - `0`: the point is a point that does not contain the object of interest
+            - `-1`: the point corresponds to the background
+
+            We added the label:
+
+            - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
+
+            The padding labels should be automatically done by the processor.
+        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+            Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
+            much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
+            that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
+            In the order (`x1`, `y1`, `x2`, `y2`):
+
+            - `x1`: the x coordinate of the top left point of the input box
+            - `y1`: the y coordinate of the top left point of the input box
+            - `x2`: the x coordinate of the bottom right point of the input box
+            - `y2`: the y coordinate of the bottom right point of the input box
+        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+            SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
+            generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
+            manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
+        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+            Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
+            efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
+            method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
+        multimask_output (`bool`, *optional*):
+            In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
+            bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
+            "best" mask, by specifying `multimask_output=False`.
+        attention_similarity (`torch.FloatTensor`, *optional*):
+            Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
+            model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
+        target_embedding (`torch.FloatTensor`, *optional*):
+            Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
+            the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
+
         Example:
 
         ```python
@@ -1463,12 +1320,6 @@ class SamModel(SamPreTrainedModel):
         ... )
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
 
@@ -1478,21 +1329,19 @@ class SamModel(SamPreTrainedModel):
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
                 "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
-                " got {}.".format(input_points.shape),
+                f" got {input_points.shape}.",
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
                 "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
-                " got {}.".format(input_boxes.shape),
+                f" got {input_boxes.shape}.",
             )
         if input_points is not None and input_boxes is not None:
             point_batch_size = input_points.shape[1]
             box_batch_size = input_boxes.shape[1]
             if point_batch_size != box_batch_size:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {point_batch_size} and {box_batch_size}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
@@ -1504,18 +1353,10 @@ class SamModel(SamPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            vision_outputs = self.vision_encoder(
-                pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            image_embeddings = vision_outputs[0]
-
-            if output_hidden_states:
-                vision_hidden_states = vision_outputs[1]
-            if output_attentions:
-                vision_attentions = vision_outputs[-1]
+            vision_outputs: SamVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
+            image_embeddings = vision_outputs.last_hidden_state
+            vision_hidden_states = vision_outputs.hidden_states
+            vision_attentions = vision_outputs.attentions
 
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
@@ -1523,7 +1364,7 @@ class SamModel(SamPreTrainedModel):
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
                 "The batch size of the image embeddings and the input points must be the same. ",
-                "Got {} and {} respectively.".format(image_embeddings.shape[0], input_points.shape[0]),
+                f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively.",
                 " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
@@ -1536,7 +1377,7 @@ class SamModel(SamPreTrainedModel):
             input_masks=input_masks,
         )
 
-        low_res_masks, iou_predictions, mask_decoder_attentions = self.mask_decoder(
+        low_res_masks, iou_predictions = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
@@ -1544,25 +1385,14 @@ class SamModel(SamPreTrainedModel):
             multimask_output=multimask_output,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
-            output_attentions=output_attentions,
         )
-
-        if not return_dict:
-            output = (iou_predictions, low_res_masks)
-            if output_hidden_states:
-                output = output + (vision_hidden_states,)
-
-            if output_attentions:
-                output = output + (vision_attentions, mask_decoder_attentions)
-            return output
 
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
             vision_hidden_states=vision_hidden_states,
             vision_attentions=vision_attentions,
-            mask_decoder_attentions=mask_decoder_attentions,
         )
 
 
-__all__ = ["SamModel", "SamPreTrainedModel"]
+__all__ = ["SamVisionModel", "SamModel", "SamPreTrainedModel"]

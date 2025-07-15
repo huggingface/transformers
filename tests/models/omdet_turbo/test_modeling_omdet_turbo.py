@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -463,7 +462,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -629,6 +629,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                         or "decoder.channel_projection_layers" in name
                         or "query_position_head" in name
                         or "decoder.encoder_vision_features" in name
+                        or "language_backbone.text_projection" in name
                     ):
                         continue
                     self.assertIn(
@@ -701,8 +702,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:3, :3], expected_class_logits, atol=1e-1))
-        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.decoder_class_logits[:3, :3], expected_class_logits, rtol=1e-1, atol=1e-1)
+        torch.testing.assert_close(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, rtol=1e-3, atol=1e-3)
 
         # verify grounded postprocessing
         results = processor.post_process_grounded_object_detection(
@@ -712,8 +713,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         expected_slice_boxes = torch.tensor([39.8870, 70.3522, 176.7424, 118.0354]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 4)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-2))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
 
         expected_text_labels = ["remote", "cat", "remote", "cat"]
         self.assertListEqual(results["text_labels"], expected_text_labels)
@@ -745,8 +746,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
         ).to(torch_device, dtype=torch.float16)
 
-        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:3, :3], expected_class_logits, atol=1e-1))
-        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.decoder_class_logits[:3, :3], expected_class_logits, rtol=1e-1, atol=1e-1)
+        torch.testing.assert_close(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, rtol=1e-3, atol=1e-3)
 
         # verify grounded postprocessing
         results = processor.post_process_grounded_object_detection(
@@ -758,8 +759,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(results["scores"]), 4)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-2))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-1))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-1, atol=1e-1)
 
         expected_text_labels = ["remote", "cat", "remote", "cat"]
         self.assertListEqual(results["text_labels"], expected_text_labels)
@@ -787,8 +788,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:3, :3], expected_class_logits, atol=1e-1))
-        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.decoder_class_logits[:3, :3], expected_class_logits, rtol=1e-1, atol=1e-1)
+        torch.testing.assert_close(outputs.decoder_coord_logits[:3, :3], expected_coord_logits, rtol=1e-3, atol=1e-3)
 
         # verify grounded postprocessing
         results = processor.post_process_grounded_object_detection(
@@ -798,8 +799,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         expected_slice_boxes = torch.tensor([39.8870, 70.3522, 176.7424, 118.0354]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 4)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-2))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
 
         expected_text_labels = ["remote", "cat", "remote", "cat"]
         self.assertListEqual(results["text_labels"], expected_text_labels)
@@ -831,8 +832,12 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.3742, 0.3337, 0.0666]]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.decoder_class_logits[:, :1, :3], expected_class_logits, atol=1e-1))
-        self.assertTrue(torch.allclose(outputs.decoder_coord_logits[:, :1, :3], expected_coord_logits, atol=1e-3))
+        torch.testing.assert_close(
+            outputs.decoder_class_logits[:, :1, :3], expected_class_logits, rtol=1e-1, atol=1e-1
+        )
+        torch.testing.assert_close(
+            outputs.decoder_coord_logits[:, :1, :3], expected_coord_logits, rtol=1e-3, atol=1e-3
+        )
 
         # verify grounded postprocessing
         results = processor.post_process_grounded_object_detection(
@@ -851,11 +856,11 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
 
         self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 6])
-        self.assertTrue(
-            torch.allclose(torch.stack([result["scores"][0] for result in results]), expected_scores, atol=1e-2)
+        torch.testing.assert_close(
+            torch.stack([result["scores"][0] for result in results]), expected_scores, rtol=1e-2, atol=1e-2
         )
-        self.assertTrue(
-            torch.allclose(torch.stack([result["boxes"][0, :] for result in results]), expected_slice_boxes, atol=1e-2)
+        torch.testing.assert_close(
+            torch.stack([result["boxes"][0, :] for result in results]), expected_slice_boxes, rtol=1e-2, atol=1e-2
         )
 
         expected_text_labels = [
@@ -866,7 +871,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertListEqual([result["text_labels"] for result in results], expected_text_labels)
 
     @require_torch_accelerator
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
         text_labels, task = prepare_text()
@@ -877,7 +882,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(**encoding)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
         encoding = encoding.to(torch_device)
         with torch.no_grad():
@@ -889,8 +894,12 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
         )
 
-        self.assertTrue(torch.allclose(cpu_outputs.decoder_class_logits[:3, :3], expected_class_logits, atol=1e-1))
-        self.assertTrue(torch.allclose(cpu_outputs.decoder_coord_logits[:3, :3], expected_coord_logits, atol=1e-3))
+        torch.testing.assert_close(
+            cpu_outputs.decoder_class_logits[:3, :3], expected_class_logits, rtol=1e-1, atol=1e-1
+        )
+        torch.testing.assert_close(
+            cpu_outputs.decoder_coord_logits[:3, :3], expected_coord_logits, rtol=1e-3, atol=1e-3
+        )
 
         # verify grounded postprocessing
         results_cpu = processor.post_process_grounded_object_detection(
@@ -900,5 +909,5 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             gpu_outputs, text_labels=[text_labels], target_sizes=[image.size[::-1]]
         )[0]
 
-        self.assertTrue(torch.allclose(results_cpu["scores"], result_gpu["scores"].cpu(), atol=1e-2))
-        self.assertTrue(torch.allclose(results_cpu["boxes"][0, :], result_gpu["boxes"][0, :].cpu(), atol=1e-2))
+        torch.testing.assert_close(results_cpu["scores"], result_gpu["scores"].cpu(), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(results_cpu["boxes"][0, :], result_gpu["boxes"][0, :].cpu(), rtol=1e-2, atol=1e-2)

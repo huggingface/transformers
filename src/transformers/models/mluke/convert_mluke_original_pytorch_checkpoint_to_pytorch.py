@@ -33,7 +33,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     config = LukeConfig(use_entity_aware_attention=True, **metadata["model_config"])
 
     # Load in the weights from the checkpoint_path
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["module"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["module"]
 
     # Load the entity vocab file
     entity_vocab = load_original_entity_vocab(entity_vocab_path)
@@ -179,7 +179,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     assert [e for e in multilingual_predicted_entities if e.startswith("en:")][0] == "en:Japan"
 
     # Finally, save our PyTorch model and tokenizer
-    print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
+    print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
 

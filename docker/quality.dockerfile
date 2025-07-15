@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.9-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
 USER root

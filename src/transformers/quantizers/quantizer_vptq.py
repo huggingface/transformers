@@ -68,6 +68,7 @@ class VptqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         """
@@ -76,14 +77,14 @@ class VptqHfQuantizer(HfQuantizer):
         """
         from ..integrations import replace_with_vptq_linear
 
-        modules_to_not_convert = kwargs.get("modules_to_not_convert", []) + (
-            self.quantization_config.modules_to_not_convert or []
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
         replace_with_vptq_linear(
             model,
             quantization_config=self.quantization_config,
-            modules_to_not_convert=modules_to_not_convert,
+            modules_to_not_convert=self.modules_to_not_convert,
         )
         model.config.quantization_config = self.quantization_config
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,7 @@ if is_vision_available():
     from transformers import TextNetImageProcessor
 
 
-class TextNetImageProcessingTester(unittest.TestCase):
+class TextNetImageProcessingTester:
     def __init__(
         self,
         parent,

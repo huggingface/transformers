@@ -18,7 +18,6 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Tuple
 
 import yaml
 from tqdm import tqdm
@@ -107,7 +106,7 @@ class TatoebaConverter:
             print(f"Three letter monolingual code: {code}")
             return [code]
 
-    def resolve_lang_code(self, src, tgt) -> Tuple[str, str]:
+    def resolve_lang_code(self, src, tgt) -> tuple[str, str]:
         src_tags = self.get_tags(src, self.tag2name[src])
         tgt_tags = self.get_tags(tgt, self.tag2name[tgt])
         return src_tags, tgt_tags
@@ -228,7 +227,7 @@ class TatoebaConverter:
         # combine with Tatoeba markdown
         readme_url = f"{TATOEBA_MODELS_URL}/{model_dict['_name']}/README.md"
         extra_markdown = f"""
-### {model_dict['_name']}
+### {model_dict["_name"]}
 
 * source language name: {self.tag2name[a3_src]}
 * target language name: {self.tag2name[a3_tgt]}
@@ -237,12 +236,12 @@ class TatoebaConverter:
 
         content = (
             f"""
-* model: {model_dict['modeltype']}
-* source language code{src_multilingual*'s'}: {', '.join(a2_src_tags)}
-* target language code{tgt_multilingual*'s'}: {', '.join(a2_tgt_tags)}
+* model: {model_dict["modeltype"]}
+* source language code{src_multilingual * "s"}: {", ".join(a2_src_tags)}
+* target language code{tgt_multilingual * "s"}: {", ".join(a2_tgt_tags)}
 * dataset: opus {backtranslated_data}
-* release date: {model_dict['release-date']}
-* pre-processing: {model_dict['pre-processing']}
+* release date: {model_dict["release-date"]}
+* pre-processing: {model_dict["pre-processing"]}
 """
             + multilingual_data
             + tuned

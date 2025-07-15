@@ -14,7 +14,7 @@
 # limitations under the License.
 """LongT5 model configuration"""
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
@@ -54,7 +54,7 @@ class LongT5Config(PretrainedConfig):
         local_radius (`int`, *optional*, defaults to 127)
             Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
         global_block_size (`int`, *optional*, defaults to 16)
-            Lenght of blocks an input sequence is divided into for a global token representation. Used only for
+            Length of blocks an input sequence is divided into for a global token representation. Used only for
             `encoder_attention_type = "transient-global"`.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.

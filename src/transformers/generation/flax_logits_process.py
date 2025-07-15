@@ -39,7 +39,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         scores (`jnp.ndarray` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional logits processor specific kwargs.
 
     Return:
@@ -271,12 +271,12 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxLogitsProcessor`] supressing a list of tokens as soon as the `generate` function starts generating using
+    [`FlaxLogitsProcessor`] suppressing a list of tokens as soon as the `generate` function starts generating using
     `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are not sampled at the
     beginning of the generation.
 
     Args:
-        begin_suppress_tokens (`List[int]`):
+        begin_suppress_tokens (`list[int]`):
             Tokens to not sample.
         begin_index (`int`):
             Index where the tokens are suppressed.

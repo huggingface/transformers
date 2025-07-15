@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,6 +96,7 @@ class Idefics3VisionText2TextModelTester:
         image_token_id=57,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -149,6 +149,7 @@ class Idefics3VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.seq_length
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -191,6 +192,10 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in idefics3 models")
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -327,7 +332,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -365,10 +369,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @pytest.mark.generate
     @require_torch_sdpa
     @slow
@@ -376,6 +376,10 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         reason="Idefics3 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
     )
     def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in Idefics3 models end-to-end")
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token

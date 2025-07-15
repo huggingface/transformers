@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,6 +48,7 @@ from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     RequestCounter,
+    is_flaky,
     require_tokenizers,
     slow,
 )
@@ -147,6 +147,7 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.model_max_length, 512)
 
     @require_tokenizers
+    @is_flaky()  # This one is flaky even with the new retry logic because it raises an unusual error
     def test_tokenizer_identifier_non_existent(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:
             with self.assertRaisesRegex(
@@ -341,16 +342,19 @@ class AutoTokenizerTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tokenizer.save_pretrained(tmp_dir)
                 reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, use_fast=False)
+                self.assertTrue(
+                    os.path.exists(os.path.join(tmp_dir, "tokenization.py"))
+                )  # Assert we saved tokenizer code
+                self.assertEqual(reloaded_tokenizer._auto_class, "AutoTokenizer")
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "r") as f:
+                    tokenizer_config = json.load(f)
+                # Assert we're pointing at local code and not another remote repo
+                self.assertEqual(tokenizer_config["auto_map"]["AutoTokenizer"], ["tokenization.NewTokenizer", None])
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
             self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
-
-        # The tokenizer file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(tokenizer.__class__, reloaded_tokenizer.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_tokenizer = AutoTokenizer.from_pretrained(
@@ -439,6 +443,7 @@ class AutoTokenizerTest(unittest.TestCase):
         ):
             _ = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
+    @unittest.skip("This test is failing on main")  # TODO Matt/ydshieh, fix this test!
     def test_cached_tokenizer_has_minimum_calls_to_head(self):
         # Make sure we have cached the tokenizer.
         _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")

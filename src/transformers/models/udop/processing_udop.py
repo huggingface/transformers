@@ -16,7 +16,7 @@
 Processor class for UDOP.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from transformers import logging
 
@@ -30,8 +30,8 @@ logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
-    word_labels: Optional[Union[List[int], List[List[int]]]]
-    boxes: Union[List[List[int]], List[List[List[int]]]]
+    word_labels: Optional[Union[list[int], list[list[int]]]]
+    boxes: Union[list[list[int]], list[list[list[int]]]]
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -77,8 +77,6 @@ class UdopProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "LayoutLMv3ImageProcessor"
     tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
-    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-    optional_call_args = ["text_pair"]
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -86,13 +84,7 @@ class UdopProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        # The following is to capture `text_pair` argument that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        #
-        *args,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[UdopProcessorKwargs],
@@ -115,7 +107,6 @@ class UdopProcessor(ProcessorMixin):
             UdopProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
 
         boxes = output_kwargs["text_kwargs"].pop("boxes", None)

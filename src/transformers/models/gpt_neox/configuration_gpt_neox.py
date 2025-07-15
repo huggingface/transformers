@@ -99,11 +99,11 @@ class GPTNeoXConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -131,6 +131,18 @@ class GPTNeoXConfig(PretrainedConfig):
 
     model_type = "gpt_neox"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.attention.query_key_value": "colwise",
+        "layers.*.attention.dense": "rowwise",
+        "layers.*.mlp.dense_h_to_4h": "colwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_in": (["input_ids"], ["inputs_embeds"]),
+        "emb_dropout": (["inputs_embeds"], ["hidden_states"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "final_layer_norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -187,7 +199,7 @@ class GPTNeoXConfig(PretrainedConfig):
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
+                "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
 
 

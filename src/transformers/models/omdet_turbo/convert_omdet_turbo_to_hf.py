@@ -268,7 +268,7 @@ def convert_omdet_turbo_checkpoint(args):
             "https://huggingface.co/omlab/OmDet-Turbo_tiny_SWIN_T/resolve/main/ViT-B-16.pt",
         ],
     }
-    # Define default OmDetTurbo configuation
+    # Define default OmDetTurbo configuration
     config = get_omdet_turbo_config(model_name, use_timm_backbone)
 
     # Load original checkpoint

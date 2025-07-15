@@ -19,6 +19,7 @@ jobs:
       runner: mi250
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi250
+      report_repo_id: optimum-amd/transformers_daily_ci
     secrets: inherit
 
   torch-pipeline:
@@ -30,6 +31,7 @@ jobs:
       runner: mi250
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi250
+      report_repo_id: optimum-amd/transformers_daily_ci
     secrets: inherit
 
   example-ci:
@@ -41,6 +43,7 @@ jobs:
       runner: mi250
       docker: huggingface/transformers-pytorch-amd-gpu
       ci_event: Scheduled CI (AMD) - mi250
+      report_repo_id: optimum-amd/transformers_daily_ci
     secrets: inherit
 
   deepspeed-ci:
@@ -52,4 +55,5 @@ jobs:
       runner: mi250
       docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
       ci_event: Scheduled CI (AMD) - mi250
+      report_repo_id: optimum-amd/transformers_daily_ci
     secrets: inherit
