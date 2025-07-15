@@ -110,6 +110,7 @@ class PerceptionLMModelOutputWithPast(LlavaModelOutputWithPast):
         A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
         Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -132,6 +133,7 @@ class PerceptionLMCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
         A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
         Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
