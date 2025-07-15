@@ -129,6 +129,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
         rope_theta: float = 10000.0,
+        partial_rotary_factor: float = 4.0,
         rope_scaling: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
@@ -167,9 +168,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.num_key_value_heads = num_attention_heads
 
         self.rope_theta = rope_theta
-        self.rope_scaling = (
-            rope_scaling if rope_scaling is not None else {"rope_type": "2d", "dim": self.hidden_size // 4}
-        )
+        self.rope_scaling = rope_scaling if rope_scaling is not None else {"rope_type": "default"}
+        self.partial_rotary_factor = partial_rotary_factor
         rope_config_validation(self)
 
         self.initializer_range = initializer_range

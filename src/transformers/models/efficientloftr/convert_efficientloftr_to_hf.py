@@ -139,7 +139,7 @@ def write_model(
     # EfficientLoFTR config
     # ------------------------------------------------------------
 
-    config = EfficientLoFTRConfig(rope_scaling={"rope_type": "2d", "dim": 64})
+    config = EfficientLoFTRConfig()
     config.architectures = ["EfficientLoFTRForKeypointMatching"]
     config.save_pretrained(model_path)
     print("Model config saved successfully...")
