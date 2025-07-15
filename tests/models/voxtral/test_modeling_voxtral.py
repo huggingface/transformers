@@ -384,6 +384,46 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         # fmt: on
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
+    @slow 
+    def test_small_multi_turn_text_and_audio(self):
+        conversations = [
+            [
+                {
+                    "role": "user", 
+                    "content": [
+                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"},
+                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3"},
+                        {"type": "text", "text": "Describe briefly what you can hear."},
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": "The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav"},
+                        {"type": "text", "text": "Ok, now compare this new audio with the previous one."}
+                    ]
+                }
+            ]
+        ]
+
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
+
+        inputs = self.processor.apply_chat_template(conversations)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        EXPECTED_OUTPUT = [
+            "Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says \"sweet\" in response, leading to a playful exchange. The speaker then realizes the joke and says \"your tattoo says dude, your tattoo says sweet, got it?\" The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation in contrast to the serious and reflective tone of the pr..."
+        ]
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+
     @slow
     def test_transcribe_mode_audio_input(self):
         model = VoxtralForConditionalGeneration.from_pretrained(
