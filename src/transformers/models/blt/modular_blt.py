@@ -314,9 +314,7 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optiona
     return padded
 
 
-# ==============================================================================
 # INHERITED COMPONENTS (minimal changes from Mllama)
-# ==============================================================================
 
 
 class BLTMLP(MllamaTextMLP):
@@ -356,9 +354,9 @@ class BLTRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# ==============================================================================
+
 # INHERITED BUT CUSTOMIZED COMPONENTS
-# ==============================================================================
+
 
 
 class BLTPreTrainedModel(MllamaPreTrainedModel):
@@ -567,9 +565,7 @@ class BLTSelfAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# ==============================================================================
 # BLT-SPECIFIC COMPONENTS (no Mllama equivalent)
-# ==============================================================================
 
 
 class BLTLocalEncoder(nn.Module):
