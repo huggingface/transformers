@@ -31,6 +31,22 @@ class Ernie4_5TokenizerFast(LlamaTokenizerFast):
     add_prefix_space = False
     slow_tokenizer_class = Ernie4_5Tokenizer
 
+    # overwriting to be compatible with the original ernie tokenizers
+    SPECIAL_TOKENS_ATTRIBUTES = [
+        "bos_token",
+        "eos_token",
+        "unk_token",
+        "sep_token",
+        "pad_token",
+        "cls_token",
+        "mask_token",
+        "sys_start_token",
+        "sys_end_token",
+        "header_start_token",
+        "header_end_token",
+        "additional_special_tokens",
+    ]
+
     def __init__(
         self,
         vocab_file=None,
@@ -42,6 +58,10 @@ class Ernie4_5TokenizerFast(LlamaTokenizerFast):
         cls_token="<|begin_of_sentence|>",
         sep_token="<|end_of_sentence|>",
         mask_token="<mask:1>",
+        sys_start_token="<mask:4>",
+        sys_end_token="<mask:5>",
+        header_start_token="<mask:6>",
+        header_end_token="<mask:7>",
         add_bos_token=False,
         add_eos_token=False,
         chat_template=DEFAULT_CHAT_TEMPLATE,
@@ -61,6 +81,10 @@ class Ernie4_5TokenizerFast(LlamaTokenizerFast):
             cls_token=cls_token,
             sep_token=sep_token,
             mask_token=mask_token,
+            sys_start_token=sys_start_token,
+            sys_end_token=sys_end_token,
+            header_start_token=header_start_token,
+            header_end_token=header_end_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             chat_template=chat_template,

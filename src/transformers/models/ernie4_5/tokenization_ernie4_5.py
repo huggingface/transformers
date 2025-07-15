@@ -33,6 +33,22 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
     padding_side = "left"
     add_prefix_space = False
 
+    # overwriting to be compatible with the original ernie tokenizers
+    SPECIAL_TOKENS_ATTRIBUTES = [
+        "bos_token",
+        "eos_token",
+        "unk_token",
+        "sep_token",
+        "pad_token",
+        "cls_token",
+        "mask_token",
+        "sys_start_token",
+        "sys_end_token",
+        "header_start_token",
+        "header_end_token",
+        "additional_special_tokens",
+    ]
+
     def __init__(
         self,
         vocab_file,
@@ -43,6 +59,10 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
         cls_token="<|begin_of_sentence|>",
         sep_token="<|end_of_sentence|>",
         mask_token="<mask:1>",
+        sys_start_token="<mask:4>",
+        sys_end_token="<mask:5>",
+        header_start_token="<mask:6>",
+        header_end_token="<mask:7>",
         add_bos_token=False,
         add_eos_token=False,
         chat_template=DEFAULT_CHAT_TEMPLATE,
@@ -53,11 +73,16 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
         legacy=False,
         **kwargs,
     ):
-        cls_token = AddedToken(cls_token, normalized=False, special=True) if isinstance(cls_token, str) else cls_token
-        sep_token = AddedToken(sep_token, normalized=False, special=True) if isinstance(sep_token, str) else sep_token
-        mask_token = (
-            AddedToken(mask_token, normalized=False, special=True) if isinstance(mask_token, str) else mask_token
-        )
+        def convert_to_added_token(token):
+            return AddedToken(token, normalized=False, special=True) if isinstance(token, str) else token
+
+        cls_token = convert_to_added_token(cls_token)
+        sep_token = convert_to_added_token(sep_token)
+        mask_token = convert_to_added_token(mask_token)
+        sys_start_token = convert_to_added_token(sys_start_token)
+        sys_end_token = convert_to_added_token(sys_end_token)
+        header_start_token = convert_to_added_token(header_start_token)
+        header_end_token = convert_to_added_token(header_end_token)
 
         super().__init__(
             vocab_file,
@@ -68,6 +93,10 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
             cls_token=cls_token,
             sep_token=sep_token,
             mask_token=mask_token,
+            sys_start_token=sys_start_token,
+            sys_end_token=sys_end_token,
+            header_start_token=header_start_token,
+            header_end_token=header_end_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             chat_template=chat_template,
