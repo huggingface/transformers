@@ -283,7 +283,8 @@ def eager_attention_forward(
         attn_weights = attn_weights * softcap
     if attention_mask is not None:
         if multi_head_attention:
-            causal_mask = attention_mask[:, :, None, :, : key.shape[-2]]
+            # TODO Need to unflatten the head dimensions here
+            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
         else:
             causal_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -294,7 +295,7 @@ def eager_attention_forward(
         attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2).transpose(1, 2)
         attn_weights = attn_weights.flatten(1, 2)
     else:
-        attn_output = (attn_weights @ value.transpose(-1, -2)).transpose(1, 2)
+        attn_output = (attn_weights @ value).transpose(1, 2)
 
     return attn_output, attn_weights
 
