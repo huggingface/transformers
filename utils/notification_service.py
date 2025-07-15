@@ -1508,13 +1508,7 @@ if __name__ == "__main__":
             )
 
             current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
-            prev_artifacts = sorted(
-                [
-                    d
-                    for d in os.listdir(output_dir)
-                    if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")
-                ]
-            )
+            prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])  # fmt: skip
 
             current_artifacts_set = {}
             for d in current_artifacts:
