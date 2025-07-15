@@ -1384,11 +1384,10 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
                     input_labels=[[[1, 1]]],
                     original_size=inputs.original_sizes[0],
                 )
-                _, video_res_mask = self.model.infer_on_video_frame_with_new_inputs(
+                video_res_mask = self.model.infer_on_video_frame_with_new_inputs(
                     inference_state=inference_state,
                     frame=inputs.pixel_values[0],
                     obj_ids=1,
-                    consolidate_at_video_res=False,
                 )
                 video_res_masks.append(video_res_mask)
             else:
