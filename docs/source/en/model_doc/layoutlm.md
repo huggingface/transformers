@@ -16,12 +16,17 @@ rendered properly in your Markdown viewer.
 
 # LayoutLM
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+</div>
+
 <a id='Overview'></a>
 
 ## Overview
 
 The LayoutLM model was proposed in the paper [LayoutLM: Pre-training of Text and Layout for Document Image
-Understanding](https://arxiv.org/abs/1912.13318) by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, and
+Understanding](https://huggingface.co/papers/1912.13318) by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, and
 Ming Zhou. It's a simple but effective pretraining method of text and layout for document image understanding and
 information extraction tasks, such as form understanding and receipt understanding. It obtains state-of-the-art results
 on several downstream tasks:

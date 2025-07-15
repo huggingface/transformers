@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import json
 import os
 import warnings
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
 import requests
@@ -29,8 +28,6 @@ from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -45,10 +42,13 @@ if is_vision_available():
     from PIL import Image
 
 
+ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
+
+
 logger = logging.get_logger(__name__)
 
 
-# TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils
+# TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils_fast
 # We override the class string here, but logic is the same.
 class BatchFeature(BaseBatchFeature):
     r"""
@@ -95,7 +95,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[ImageProcessorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -103,7 +103,7 @@ class ImageProcessingMixin(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ):
+    ) -> ImageProcessorType:
         r"""
         Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor.
 
@@ -127,7 +127,7 @@ class ImageProcessingMixin(PushToHubMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
@@ -141,7 +141,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
@@ -153,7 +153,7 @@ class ImageProcessingMixin(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
@@ -219,7 +219,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -271,7 +271,7 @@ class ImageProcessingMixin(PushToHubMixin):
     @classmethod
     def get_image_processor_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         image processor of type [`~image_processor_utils.ImageProcessingMixin`] using `from_dict`.
@@ -282,9 +282,11 @@ class ImageProcessingMixin(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            image_processor_filename (`str`, *optional*, defaults to `"config.json"`):
+                The name of the file in the model directory to use for the image processor config.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
+            `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -295,6 +297,7 @@ class ImageProcessingMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+        image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -321,7 +324,7 @@ class ImageProcessingMixin(PushToHubMixin):
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
+            image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -329,7 +332,7 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = pretrained_model_name_or_path
             resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
-            image_processor_file = IMAGE_PROCESSOR_NAME
+            image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_image_processor_file = cached_file(
@@ -345,27 +348,27 @@ class ImageProcessingMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                 )
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {IMAGE_PROCESSOR_NAME} file"
+                    f" directory containing a {image_processor_filename} file"
                 )
 
         try:
             # Load image_processor dict
-            with open(resolved_image_processor_file, "r", encoding="utf-8") as reader:
+            with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
 
         except json.JSONDecodeError:
-            raise EnvironmentError(
+            raise OSError(
                 f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
             )
 
@@ -376,28 +379,19 @@ class ImageProcessingMixin(PushToHubMixin):
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
 
-        if not is_local:
-            if "auto_map" in image_processor_dict:
-                image_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    image_processor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in image_processor_dict:
-                image_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    image_processor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
         return image_processor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Instantiates a type of [`~image_processing_utils.ImageProcessingMixin`] from a Python dictionary of parameters.
 
         Args:
-            image_processor_dict (`Dict[str, Any]`):
+            image_processor_dict (`dict[str, Any]`):
                 Dictionary that will be used to instantiate the image processor object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the
                 [`~image_processing_utils.ImageProcessingMixin.to_dict`] method.
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Additional parameters from which to initialize the image processor object.
 
         Returns:
@@ -432,12 +426,12 @@ class ImageProcessingMixin(PushToHubMixin):
         else:
             return image_processor
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
         """
         output = copy.deepcopy(self.__dict__)
         output["image_processor_type"] = self.__class__.__name__
@@ -458,7 +452,7 @@ class ImageProcessingMixin(PushToHubMixin):
             A image processor of type [`~image_processing_utils.ImageProcessingMixin`]: The image_processor object
             instantiated from that JSON file.
         """
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         image_processor_dict = json.loads(text)
         return cls(**image_processor_dict)
@@ -504,11 +498,7 @@ class ImageProcessingMixin(PushToHubMixin):
         Register this class with a given auto class. This should only be used for custom image processors as the ones
         in the library are already mapped with `AutoImageProcessor `.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoImageProcessor "`):
@@ -524,7 +514,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
+    def fetch_images(self, image_url_or_urls: Union[str, list[str]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 
@@ -544,7 +534,7 @@ class ImageProcessingMixin(PushToHubMixin):
             response.raise_for_status()
             return Image.open(BytesIO(response.content))
         else:
-            raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
 
 ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)

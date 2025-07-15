@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for LayoutLMv2."""
 
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -28,10 +28,17 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_pytesseract_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -92,6 +99,7 @@ def apply_tesseract(
     return words, normalized_boxes
 
 
+@requires(backends=("vision",))
 class LayoutLMv2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LayoutLMv2 image processor.
@@ -100,7 +108,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to `(size["height"], size["width"])`. Can be
             overridden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
@@ -121,7 +129,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
@@ -138,24 +146,12 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
         self.tesseract_config = tesseract_config
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "apply_ocr",
-            "ocr_lang",
-            "tesseract_config",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -167,7 +163,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -200,19 +196,19 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
-        apply_ocr: bool = None,
+        apply_ocr: Optional[bool] = None,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -222,7 +218,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Desired size of the output image after resizing.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image` resampling
@@ -256,8 +252,6 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
 
         images = make_list_of_images(images)
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -304,3 +298,6 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             data["words"] = words_batch
             data["boxes"] = boxes_batch
         return data
+
+
+__all__ = ["LayoutLMv2ImageProcessor"]

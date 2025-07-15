@@ -163,7 +163,7 @@ def convert_yolos_checkpoint(
     config = get_yolos_config(yolos_name)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # load 🤗 model
     model = YolosForObjectDetection(config)

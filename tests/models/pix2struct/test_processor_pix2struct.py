@@ -15,16 +15,15 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import (
         AutoProcessor,
         Pix2StructImageProcessor,
@@ -36,16 +35,21 @@ if is_vision_available():
 
 @require_vision
 @require_torch
-class Pix2StructProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Pix2StructProcessor
+    text_input_name = "decoder_input_ids"
+    images_input_name = "flattened_patches"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Pix2StructImageProcessor()
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         processor = Pix2StructProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -53,30 +57,21 @@ class Pix2StructProcessorTest(unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """
-        This function prepares a list of random PIL images of the same fixed size.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Pix2StructProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = Pix2StructProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = Pix2StructProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = Pix2StructProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
@@ -104,7 +99,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
 
         encoded_processor = processor(text=input_str)
 
@@ -119,7 +114,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -138,7 +133,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -176,7 +171,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -190,3 +185,148 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
+
+    @require_torch
+    @require_vision
+    def test_image_processor_defaults_preserved_by_image_kwargs(self):
+        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+        self.assertEqual(len(inputs["flattened_patches"][0][0]), 194)
+
+    @require_torch
+    @require_vision
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        # Rewrite as pix2struct processor return "flattened_patches" and not "pixel_values"
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", max_patches=4096)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, max_patches=1024)
+        self.assertEqual(len(inputs["flattened_patches"][0]), 1024)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs(self):
+        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            max_patches=1024,
+            padding="max_length",
+            max_length=76,
+        )
+
+        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
+        self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
+    def test_unstructured_kwargs_batched(self):
+        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            max_patches=1024,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
+
+        self.assertEqual(len(inputs["decoder_input_ids"][0]), 5)
+
+    @require_torch
+    @require_vision
+    def test_structured_kwargs_nested(self):
+        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"max_patches": 1024},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
+
+        self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
+    def test_structured_kwargs_nested_from_dict(self):
+        # Rewrite as pix2struct processor return "decoder_input_ids" and not "input_ids"
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"max_patches": 1024},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
+
+        self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)

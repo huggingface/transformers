@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Optional
 
 import flax
 import flax.linen as nn
@@ -116,7 +116,7 @@ BEIT_INPUTS_DOCSTRING = r"""
 """
 
 
-def relative_position_index_init(window_size: Tuple[int, int]) -> jnp.ndarray:
+def relative_position_index_init(window_size: tuple[int, int]) -> jnp.ndarray:
     """
     get pair-wise relative position index for each token inside the window
     """
@@ -240,7 +240,7 @@ class FlaxBeitEmbeddings(nn.Module):
 
 class FlaxBeitRelativePositionBias(nn.Module):
     config: BeitConfig
-    window_size: Tuple[int, int]
+    window_size: tuple[int, int]
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -263,7 +263,7 @@ class FlaxBeitRelativePositionBias(nn.Module):
 
 class FlaxBeitSelfAttention(nn.Module):
     config: BeitConfig
-    window_size: Tuple[int, int]
+    window_size: tuple[int, int]
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -271,7 +271,7 @@ class FlaxBeitSelfAttention(nn.Module):
             self.config, "embedding_size"
         ):
             raise ValueError(
-                f"The hidden size {self.config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {self.config.hidden_size} is not a multiple of the number of attention "
                 f"heads {self.config.num_attention_heads}."
             )
 
@@ -366,7 +366,7 @@ class FlaxBeitSelfOutput(nn.Module):
 
 class FlaxBeitAttention(nn.Module):
     config: BeitConfig
-    window_size: Tuple[int, int]
+    window_size: tuple[int, int]
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -430,7 +430,7 @@ class FlaxBeitOutput(nn.Module):
 
 class FlaxBeitLayer(nn.Module):
     config: BeitConfig
-    window_size: Tuple[int, int]
+    window_size: tuple[int, int]
     drop_path_rate: float
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -491,8 +491,8 @@ class FlaxBeitLayer(nn.Module):
 
 class FlaxBeitLayerCollection(nn.Module):
     config: BeitConfig
-    window_size: Tuple[int, int]
-    drop_path_rates: List[float]
+    window_size: tuple[int, int]
+    drop_path_rates: list[float]
     relative_position_bias: Callable[[], jnp.ndarray]
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -546,7 +546,7 @@ class FlaxBeitLayerCollection(nn.Module):
 
 class FlaxBeitEncoder(nn.Module):
     config: BeitConfig
-    window_size: Tuple[int, int]
+    window_size: tuple[int, int]
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -609,7 +609,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
             input_shape = (1, config.image_size, config.image_size, config.num_channels)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
@@ -634,7 +634,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
         self,
         pixel_values,
         bool_masked_pos=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -946,3 +946,11 @@ overwrite_call_docstring(FlaxBeitForImageClassification, FLAX_BEIT_CLASSIF_DOCST
 append_replace_return_docstrings(
     FlaxBeitForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=BeitConfig
 )
+
+
+__all__ = [
+    "FlaxBeitForImageClassification",
+    "FlaxBeitForMaskedImageModeling",
+    "FlaxBeitModel",
+    "FlaxBeitPreTrainedModel",
+]

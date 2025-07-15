@@ -125,9 +125,9 @@ the processor.
 ```python
 from transformers import SamModel, SamProcessor
 import torch
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+device, _, _ = get_backend()
 model = SamModel.from_pretrained("facebook/sam-vit-base").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```

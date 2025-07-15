@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ import pytest
 from datasets import load_dataset
 
 from transformers import UniSpeechSatConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -424,6 +423,9 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -633,6 +635,9 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -802,13 +807,11 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class UniSpeechSatModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -817,7 +820,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
@@ -847,7 +850,9 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+        torch.testing.assert_close(
+            outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3
+        )
 
     def test_inference_encoder_large(self):
         model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-large")
@@ -873,7 +878,9 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+        torch.testing.assert_close(
+            outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3
+        )
 
     def test_inference_diarization(self):
         model = UniSpeechSatForAudioFrameClassification.from_pretrained("microsoft/unispeech-sat-base-plus-sd").to(
@@ -902,7 +909,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 270)
         self.assertEqual(labels[0, :, 1].sum(), 647)
-        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+        torch.testing.assert_close(outputs.logits[:, :4], expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_verification(self):
         model = UniSpeechSatForXVector.from_pretrained("microsoft/unispeech-sat-base-plus-sv").to(torch_device)

@@ -1,0 +1,5 @@
+gpustat==1.1.1
+psutil==6.0.0
+psycopg2==2.9.9
+torch>=2.4.0
+hf_transfer

@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import warnings
+from collections.abc import Iterable
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 from packaging.version import Version, parse
@@ -85,9 +86,9 @@ def export_pytorch(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
     device: str = "cpu",
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
@@ -106,7 +107,7 @@ def export_pytorch(
             The device on which the ONNX model will be exported. Either `cpu` or `cuda`.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        `tuple[list[str], list[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
 
@@ -118,7 +119,7 @@ def export_pytorch(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     if issubclass(type(model), PreTrainedModel):
@@ -145,11 +146,11 @@ def export_pytorch(
                 model.to(device)
                 model_inputs_device = {}
                 for k, v in model_inputs.items():
-                    if isinstance(v, Tuple):
+                    if isinstance(v, tuple):
                         model_inputs_device[k] = tuple(
                             x.to(device) if isinstance(x, torch.Tensor) else None for x in v
                         )
-                    elif isinstance(v, List):
+                    elif isinstance(v, list):
                         model_inputs_device[k] = [
                             tuple(x.to(device) if isinstance(x, torch.Tensor) else None for x in t) for t in v
                         ]
@@ -188,8 +189,8 @@ def export_tensorflow(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
-) -> Tuple[List[str], List[str]]:
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
+) -> tuple[list[str], list[str]]:
     """
     Export a TensorFlow model to an ONNX Intermediate Representation (IR)
 
@@ -206,7 +207,7 @@ def export_tensorflow(
             Directory to store the exported ONNX model.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        `tuple[list[str], list[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
     import onnx
@@ -221,7 +222,7 @@ def export_tensorflow(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     model.config.return_dict = True
@@ -254,9 +255,9 @@ def export(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
     device: str = "cpu",
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
 
@@ -276,7 +277,7 @@ def export(
             export on CUDA devices.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        `tuple[list[str], list[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
     if not (is_torch_available() or is_tf_available()):
@@ -296,7 +297,7 @@ def export(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     if is_torch_available():
@@ -319,9 +320,9 @@ def validate_model_outputs(
     preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     onnx_model: Path,
-    onnx_named_outputs: List[str],
+    onnx_named_outputs: list[str],
     atol: float,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
@@ -335,7 +336,7 @@ def validate_model_outputs(
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
         preprocessor = tokenizer
 
     # generate inputs with a different batch_size and seq_len that was used for conversion to properly test
@@ -439,7 +440,7 @@ def validate_model_outputs(
 
 def ensure_model_and_config_inputs_match(
     model: Union["PreTrainedModel", "TFPreTrainedModel"], model_inputs: Iterable[str]
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
 
     :param model_inputs: :param config_inputs: :return:

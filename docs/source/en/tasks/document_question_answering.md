@@ -420,7 +420,7 @@ Finally, bring everything together, and call [`~Trainer.train`]:
 ...     data_collator=data_collator,
 ...     train_dataset=encoded_train_dataset,
 ...     eval_dataset=encoded_test_dataset,
-...     tokenizer=processor,
+...     processing_class=processor,
 ... )
 
 >>> trainer.train()

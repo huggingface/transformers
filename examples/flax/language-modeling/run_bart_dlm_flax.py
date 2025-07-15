@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import flax
 import jax
@@ -266,7 +265,7 @@ class FlaxDataCollatorForBartDenoisingLM:
     Data collator used for BART denoising language modeling. The code is largely copied from
     `<https://github.com/morganmcg1/rotobart/blob/main/data_collator.py#L223>`__.
     For more information on how BART denoising language modeling works, one can take a look
-    at the `official paper <https://arxiv.org/pdf/1910.13461.pdf>`__
+    at the `official paper <https://huggingface.co/papers/1910.13461>`__
     or the `official code for preprocessing <https://github.com/facebookresearch/fairseq/blob/main/fairseq/data/denoising_dataset.py>`__ .
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
@@ -290,11 +289,11 @@ class FlaxDataCollatorForBartDenoisingLM:
     def __post_init__(self):
         if self.tokenizer.mask_token is None or self.tokenizer.eos_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token or eos token token which is necessary for denoising"
+                "This tokenizer does not have a mask token or eos token which is necessary for denoising"
                 " language modeling. "
             )
 
-    def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
+    def __call__(self, examples: list[dict[str, list[int]]]) -> BatchEncoding:
         # convert list to dict and tensorize input
         batch = BatchEncoding(
             {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}

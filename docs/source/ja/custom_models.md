@@ -39,7 +39,7 @@ class ResnetConfig(PretrainedConfig):
     def __init__(
         self,
         block_type="bottleneck",
-        layers: List[int] = [3, 4, 6, 3],
+        layers: list[int] = [3, 4, 6, 3],
         num_classes: int = 1000,
         input_channels: int = 3,
         cardinality: int = 1,
@@ -161,7 +161,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
     def forward(self, tensor, labels=None):
         logits = self.model(tensor)
         if labels is not None:
-            loss = torch.nn.cross_entropy(logits, labels)
+            loss = torch.nn.functional.cross_entropy(logits, labels)
             return {"loss": loss, "logits": logits}
         return {"logits": logits}
 ```

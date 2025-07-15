@@ -97,11 +97,11 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
         for file in files:
             print(file)
-            loaded_state_dict = torch.load(os.path.join(input_base_path, file), map_location="cpu")
+            loaded_state_dict = torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
             model_state_dict.update(loaded_state_dict)
     else:
         print("Model does not seem to be sharded")
-        model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
+        model_state_dict = torch.load(input_base_path, map_location="cpu", weights_only=True)["model_state_dict"]
         model_state_dict.pop("freqs_cis")
 
     state_dict = {}
@@ -184,7 +184,7 @@ def main():
         "--model_size",
         default="9B",
         choices=["9B", "27B", "tokenizer_only"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Gemma22 official release. For more details on Gemma2, checkout the original repo: https://huggingface.co/google/gemma-7b",
+        help="'f' models correspond to the finetuned versions, and are specific to the Gemma22 official release. For more details on Gemma2, check out the original repo: https://huggingface.co/google/gemma-7b",
     )
     parser.add_argument(
         "--output_dir",

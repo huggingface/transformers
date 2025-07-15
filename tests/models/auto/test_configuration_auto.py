@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,13 +103,6 @@ class AutoConfigTest(unittest.TestCase):
         ):
             _ = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_configuration_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/no-config-test-repo does not appear to have a file named config.json.",
-        ):
-            _ = AutoConfig.from_pretrained("hf-internal-testing/no-config-test-repo")
-
     def test_from_pretrained_dynamic_config(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
@@ -122,10 +114,17 @@ class AutoConfigTest(unittest.TestCase):
         config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
+        # Test the dynamic module is loaded only once.
+        reloaded_config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+        self.assertIs(config.__class__, reloaded_config.__class__)
+
         # Test config can be reloaded.
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
             reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "configuration.py")))  # Assert we saved config code
+            # Assert we're pointing at local code and not another remote repo
+            self.assertEqual(reloaded_config.auto_map["AutoConfig"], "configuration.NewModelConfig")
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
     def test_from_pretrained_dynamic_config_conflict(self):

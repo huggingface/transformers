@@ -12,10 +12,14 @@ specific language governing permissions and limitations under the License.
 
 # Pyramid Vision Transformer (PVT)
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The PVT model was proposed in
-[Pyramid Vision Transformer: A Versatile Backbone for Dense Prediction without Convolutions](https://arxiv.org/abs/2102.12122)
+[Pyramid Vision Transformer: A Versatile Backbone for Dense Prediction without Convolutions](https://huggingface.co/papers/2102.12122)
 by Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao. The PVT is a type of
 vision transformer that utilizes a pyramid structure to make it an effective backbone for dense prediction tasks. Specifically
 it allows for more fine-grained inputs (4 x 4 pixels per patch) to be used, while simultaneously shrinking the sequence length
@@ -58,6 +62,11 @@ This model was contributed by [Xrenya](https://huggingface.co/Xrenya). The origi
 ## PvtImageProcessor
 
 [[autodoc]] PvtImageProcessor
+    - preprocess
+
+## PvtImageProcessorFast
+
+[[autodoc]] PvtImageProcessorFast
     - preprocess
 
 ## PvtForImageClassification

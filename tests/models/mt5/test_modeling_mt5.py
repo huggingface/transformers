@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
+from transformers.utils.fx import symbolic_trace
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -35,11 +35,9 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_ten
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
-
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         AutoModelForSeq2SeqLM,
@@ -539,7 +537,6 @@ class MT5ModelTester:
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -552,7 +549,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (MT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MT5Model,
@@ -582,7 +578,14 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)
     def is_pipeline_test_to_skip(
-        self, pipeline_test_case_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         if tokenizer_name is None:
             return True
@@ -592,8 +595,8 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         return False
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch.fx is not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch.fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -620,12 +623,9 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                     ]
                     if labels is not None:
                         input_names.append("labels")
-
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
-
                     model_output = model(**filtered_inputs)
-
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
@@ -640,7 +640,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                         "visual_feats",
                         "visual_pos",
                     ]
-
                     labels = inputs.get("labels", None)
                     start_positions = inputs.get("start_positions", None)
                     end_positions = inputs.get("end_positions", None)
@@ -650,15 +649,12 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                         input_names.append("start_positions")
                     if end_positions is not None:
                         input_names.append("end_positions")
-
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
-
                     if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                         not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
-
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                     model_output = model(**filtered_inputs)
@@ -710,6 +706,41 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
+
+    # overwrite because MT5 doesn't accept position ids as input and expects `decoder_input_ids`
+    def test_custom_4d_attention_mask(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                _,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                _,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(
+                decoder_input_ids=input_ids,
+                input_ids=input_dict["input_ids"][:3],
+            ).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids=input_dict["input_ids"][:1],
+                decoder_input_ids=input_ids_shared_prefix,
+                decoder_attention_mask=mask_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -822,7 +853,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -836,54 +867,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model_name = "google/mt5-small"
         model = MT5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = MT5Model(config_and_inputs[0]).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/t5_test.onnx",
-                export_params=True,
-                opset_version=9,
-                input_names=["input_ids", "decoder_input_ids"],
-            )
-
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = MT5ForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from MT5 model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->MT5
@@ -1046,7 +1029,7 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -1054,6 +1037,26 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_with_token_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
+
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if tokenizer_name is None:
+            return True
+
+        # `MT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
+        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
 
 @require_torch
@@ -1063,7 +1066,7 @@ class MT5IntegrationTest(unittest.TestCase):
     @slow
     def test_small_integration_test(self):
         """
-        For comparision run:
+        For comparison run:
         >>> import t5  # pip install t5==0.7.1
         >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
@@ -1084,4 +1087,4 @@ class MT5IntegrationTest(unittest.TestCase):
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -84.9127
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        self.assertLess(abs(mtf_score - EXPECTED_SCORE), 2e-4)

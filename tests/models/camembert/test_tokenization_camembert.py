@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 
 import tempfile
 import unittest
+from tempfile import TemporaryDirectory
 
 from transformers import AddedToken, CamembertTokenizer, CamembertTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
@@ -38,12 +38,13 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = CamembertTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @unittest.skip(
         "Token maps are not equal because someone set the probability of ('<unk>NOTUSED', -100), so it's never encoded for fast"
@@ -72,8 +73,9 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_bpe_tokenizers(self):
         tokenizer = CamembertTokenizer(SAMPLE_BPE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
-        rust_tokenizer = CamembertTokenizerFast.from_pretrained(self.tmpdirname)
+        with TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            rust_tokenizer = CamembertTokenizerFast.from_pretrained(tmpdirname)
 
         sequence = "I was born in 92000, and this is falsé."
 
@@ -147,14 +149,14 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue(all(item in tokenizer.added_tokens_decoder.items() for item in expected.items()))
             return tokenizer
 
-        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
+        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                tokenizer = self.get_tokenizer(pretrained_name, eos_token=new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
-                    self.assertEqual(tokenizer._eos_token, new_eos)
+                    self.assertEqual(tokenizer._special_tokens_map["eos_token"], new_eos)
                     self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
 
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
@@ -191,10 +193,8 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
-                            pretrained_name, eos_token=new_eos, from_slow=True
-                        )
-                        self.assertEqual(tokenizer_fast._eos_token, new_eos)
+                        tokenizer_fast = self.get_rust_tokenizer(pretrained_name, eos_token=new_eos, from_slow=True)
+                        self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
                         with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):

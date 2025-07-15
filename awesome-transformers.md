@@ -15,7 +15,7 @@ to add it.
 
 Keywords: Open-source, LLaMa, GPT-J, instruction, assistant
 
-## [recommenders](https://github.com/microsoft/recommenders)
+## [recommenders](https://github.com/recommenders-team/recommenders)
 
 This repository contains examples and best practices for building recommendation systems, provided as Jupyter notebooks. It goes over several aspects required to build efficient recommendation systems: data preparation, modeling, evaluation, model selection & optimization, as well as operationalization
 
@@ -29,7 +29,7 @@ Keywords: inpainting, SD, Stable Diffusion
 
 ## [flair](https://github.com/flairNLP/flair)
 
-FLAIR is a powerful PyTorch NLP framework, convering several important tasks: NER, sentiment-analysis, part-of-speech tagging, text and document embeddings, among other things.
+FLAIR is a powerful PyTorch NLP framework, covering several important tasks: NER, sentiment-analysis, part-of-speech tagging, text and document embeddings, among other things.
 
 Keywords: NLP, text embedding, document embedding, biomedical, NER, PoS, sentiment-analysis
 
@@ -39,15 +39,15 @@ MindsDB is a low-code ML platform, which automates and integrates several ML fra
 
 Keywords: Database, low-code, AI table
 
-## [langchain](https://github.com/hwchase17/langchain)
+## [langchain](https://github.com/langchain-ai/langchain)
 
-[langchain](https://github.com/hwchase17/langchain) is aimed at assisting in the development of apps merging both LLMs and other sources of knowledge. The library allows chaining calls to applications, creating a sequence across many tools.
+[langchain](https://github.com/langchain-ai/langchain) is aimed at assisting in the development of apps merging both LLMs and other sources of knowledge. The library allows chaining calls to applications, creating a sequence across many tools.
 
 Keywords: LLMs, Large Language Models, Agents, Chains
 
-## [LlamaIndex](https://github.com/jerryjliu/llama_index)
+## [LlamaIndex](https://github.com/run-llama/llama_index)
 
-[LlamaIndex](https://github.com/jerryjliu/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retreival mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
+[LlamaIndex](https://github.com/run-llama/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retrieval mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
 
 Keywords: LLMs, Large Language Models, Data Retrieval, Indices, Knowledge Augmentation 
 
@@ -146,9 +146,9 @@ Keywords: Framework, simplicity, NLP
 
 Keywords: LLM, Agents, HF Hub
 
-## [transformers.js](https://xenova.github.io/transformers.js/)
+## [transformers.js](https://github.com/huggingface/transformers.js/)
 
-[transformers.js](https://xenova.github.io/transformers.js/) is a JavaScript library targeted at running models from transformers directly within the browser.
+[transformers.js](https://github.com/huggingface/transformers.js/) is a JavaScript library targeted at running models from transformers directly within the browser.
 
 Keywords: Transformers, JavaScript, browser
 
@@ -288,7 +288,7 @@ Keywords: Music understanding, Music generation
 
 ## [dalle-flow](https://github.com/jina-ai/dalle-flow)
 
-DALL·E Flow is an interactive workflow for generating high-definition images from a text prompt. Itt leverages DALL·E-Mega, GLID-3 XL, and Stable Diffusion to generate image candidates, and then calls CLIP-as-service to rank the candidates w.r.t. the prompt.
+DALL·E Flow is an interactive workflow for generating high-definition images from a text prompt. It leverages DALL·E-Mega, GLID-3 XL, and Stable Diffusion to generate image candidates, and then calls CLIP-as-service to rank the candidates w.r.t. the prompt.
 The preferred candidate is fed to GLID-3 XL for diffusion, which often enriches the texture and background. Finally, the candidate is upscaled to 1024x1024 via SwinIR.
 
 Keywords: High-definition image generation, Stable Diffusion, DALL-E Mega, GLID-3 XL, CLIP, SwinIR
@@ -437,7 +437,7 @@ Keywords: DALL-E, Russian
 
 Keywords: Knowledge Extraction, Knowledge Graphs
 
-## [Nebuly](https://github.com/nebuly-ai/nebuly)
+## [Nebuly](https://github.com/nebuly-ai/optimate)
 
 Nebuly is the next-generation platform to monitor and optimize your AI costs in one place. The platform connects to all your AI cost sources (compute, API providers, AI software licenses, etc) and centralizes them in one place to give you full visibility on a model basis. The platform also provides optimization recommendations and a co-pilot model that can guide during the optimization process. The platform builds on top of the open-source tools allowing you to optimize the different steps of your AI stack to squeeze out the best possible cost performances.
 
@@ -526,7 +526,7 @@ Keywords: Model deployment, CLoud, Mobile, Edge
 
 ## [underthesea](https://github.com/undertheseanlp/underthesea)
 
-[underthesea](https://github.com/undertheseanlp/underthesea) is a Vietnamese NLP toolkit. Underthesea is a suite of open source Python modules data sets and tutorials supporting research and development in Vietnamese Natural Language Processing. We provides extremely easy API to quickly apply pretrained NLP models to your Vietnamese text, such as word segmentation, part-of-speech tagging (PoS), named entity recognition (NER), text classification and dependency parsing.
+[underthesea](https://github.com/undertheseanlp/underthesea) is a Vietnamese NLP toolkit. Underthesea is a suite of open source Python modules data sets and tutorials supporting research and development in Vietnamese Natural Language Processing. We provide extremely easy API to quickly apply pretrained NLP models to your Vietnamese text, such as word segmentation, part-of-speech tagging (PoS), named entity recognition (NER), text classification and dependency parsing.
 
 Keywords: Vietnamese, NLP
 

@@ -68,7 +68,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
         for element in html_code.descendants:
             if isinstance(element, bs4.element.NavigableString):
-                if type(element.parent) != bs4.element.Tag:
+                if type(element.parent) is not bs4.element.Tag:
                     continue
 
                 text_in_this_tag = html.unescape(element).strip()
@@ -101,7 +101,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         Main method to prepare for the model one or several HTML strings.
 
         Args:
-            html_strings (`str`, `List[str]`):
+            html_strings (`str`, `list[str]`):
                 The HTML string or batch of HTML strings from which to extract nodes and corresponding xpaths.
 
         Returns:
@@ -155,7 +155,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
         if not valid_strings:
             raise ValueError(
-                "HTML strings must of type `str`, `List[str]` (batch of examples), "
+                "HTML strings must of type `str`, `list[str]` (batch of examples), "
                 f"but is of type {type(html_strings)}."
             )
 
@@ -181,3 +181,6 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         encoded_inputs = BatchFeature(data=data, tensor_type=None)
 
         return encoded_inputs
+
+
+__all__ = ["MarkupLMFeatureExtractor"]

@@ -66,3 +66,11 @@ Examples of use can be found in the [example scripts](../examples) or [example n
     - numpy_mask_tokens
     - tf_mask_tokens
     - torch_mask_tokens
+
+## DataCollatorWithFlattening
+
+[[autodoc]] data.data_collator.DataCollatorWithFlattening
+
+# DataCollatorForMultipleChoice
+
+[[autodoc]] data.data_collator.DataCollatorForMultipleChoice

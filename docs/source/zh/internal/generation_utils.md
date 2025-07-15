@@ -133,9 +133,6 @@ generation_output[:2]
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
@@ -149,9 +146,6 @@ generation_output[:2]
     - __call__
 
 [[autodoc]] LogitsProcessorList
-    - __call__
-
-[[autodoc]] LogitsWarper
     - __call__
 
 [[autodoc]] MinLengthLogitsProcessor

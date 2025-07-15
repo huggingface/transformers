@@ -15,11 +15,7 @@
 """CLVP model configuration"""
 
 import os
-from typing import TYPE_CHECKING, Union
-
-
-if TYPE_CHECKING:
-    pass
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -91,6 +87,7 @@ class ClvpEncoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "clvp_encoder"
+    base_config_key = ["text_config", "speech_config"]
 
     def __init__(
         self,
@@ -134,16 +131,16 @@ class ClvpEncoderConfig(PretrainedConfig):
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], config_type: str = "text_config", **kwargs
-    ) -> "PretrainedConfig":
+    ):
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # make sure to have the config_type be either "text_config" or "speech_config"
         # this is to make sure that we can load only text or speech configs from the nested ClvpConfig.
-        if config_type not in ["text_config", "speech_config"]:
+        if config_type not in cls.base_config_key:
             raise ValueError(
-                f"We can only load either 'text_config' or 'speech_config' but you are trying to load" f"{config_type}"
+                f"We can only load either 'text_config' or 'speech_config' but you are trying to load{config_type}"
             )
 
         # get the text config dict if we are loading from ClvpConfig
@@ -253,6 +250,7 @@ class ClvpDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "clvp_decoder"
+    base_config_key = "decoder_config"
 
     def __init__(
         self,
@@ -314,24 +312,6 @@ class ClvpDecoderConfig(PretrainedConfig):
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the speech config dict if we are loading from ClvpConfig
-        if config_dict.get("model_type") == "clvp":
-            config_dict = config_dict["decoder_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class ClvpConfig(PretrainedConfig):
     r"""
@@ -386,7 +366,11 @@ class ClvpConfig(PretrainedConfig):
     ```"""
 
     model_type = "clvp"
-    is_composition = True
+    sub_configs = {
+        "text_config": ClvpEncoderConfig,
+        "speech_config": ClvpEncoderConfig,
+        "decoder_config": ClvpDecoderConfig,
+    }
 
     def __init__(
         self,
@@ -450,3 +434,6 @@ class ClvpConfig(PretrainedConfig):
             decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["ClvpConfig", "ClvpDecoderConfig", "ClvpEncoderConfig"]

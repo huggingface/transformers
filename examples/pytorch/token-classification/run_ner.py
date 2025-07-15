@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.43.0.dev0")
+check_min_version("4.54.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
@@ -366,7 +365,7 @@ def main():
     )
 
     tokenizer_name_or_path = model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
-    if config.model_type in {"bloom", "gpt2", "roberta"}:
+    if config.model_type in {"bloom", "gpt2", "roberta", "deberta"}:
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name_or_path,
             cache_dir=model_args.cache_dir,
@@ -400,7 +399,7 @@ def main():
     # Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models at"
+            "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
             " this requirement"
         )
@@ -417,7 +416,7 @@ def main():
                 label_to_id = {l: i for i, l in enumerate(label_list)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
                 f"model labels: {sorted(model.config.label2id.keys())}, dataset labels:"
                 f" {sorted(label_list)}.\nIgnoring the model labels as a result.",
             )
@@ -530,6 +529,9 @@ def main():
 
     def compute_metrics(p):
         predictions, labels = p
+        if not training_args.eval_do_concat_batches:
+            predictions = np.hstack(predictions)
+            labels = np.hstack(labels)
         predictions = np.argmax(predictions, axis=2)
 
         # Remove ignored index (special tokens)
@@ -567,7 +569,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )

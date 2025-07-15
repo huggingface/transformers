@@ -70,7 +70,7 @@ def convert_hifigan_checkpoint(
 
     model = SpeechT5HifiGan(config)
 
-    orig_checkpoint = torch.load(checkpoint_path)
+    orig_checkpoint = torch.load(checkpoint_path, weights_only=True)
     load_weights(orig_checkpoint["model"]["generator"], model, config)
 
     stats = np.load(stats_path)

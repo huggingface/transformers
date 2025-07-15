@@ -40,6 +40,10 @@ for text generation, [`~generation.GenerationMixin`] (for the PyTorch models),
     - push_to_hub
     - all
 
+Custom models should also include a `_supports_assign_param_buffer`, which determines if superfast init can apply
+on the particular model. Signs that your model needs this are if `test_save_and_load_from_pretrained` fails. If so,
+set this to `False`.
+
 ## ModuleUtilsMixin
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin

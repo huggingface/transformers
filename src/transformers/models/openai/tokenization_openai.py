@@ -18,7 +18,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
@@ -43,7 +43,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -363,7 +363,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -391,3 +391,6 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+
+__all__ = ["OpenAIGPTTokenizer"]

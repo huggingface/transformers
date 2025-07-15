@@ -166,7 +166,7 @@ A diferencia de otros collators de datos, este tiene que aplicarle un método de
 ...     processor: AutoProcessor
 ...     padding: Union[bool, str] = "longest"
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         # particiona las entradas y las etiquetas ya que tienen que tener longitudes distintas y
 ...         # requieren métodos de padding diferentes
 ...         input_features = [{"input_values": feature["input_values"][0]} for feature in features]
@@ -276,7 +276,7 @@ En este punto, solo quedan tres pasos:
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor.feature_extractor,
+...     processing_class=processor.feature_extractor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

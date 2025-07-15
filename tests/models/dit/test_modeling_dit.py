@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,4 +57,4 @@ class DiTIntegrationTest(unittest.TestCase):
             device=torch_device,
             dtype=torch.float,
         )
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

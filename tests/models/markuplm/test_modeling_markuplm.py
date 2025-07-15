@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -301,9 +300,16 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        # ValueError: Nodes must be of type `List[str]` (single pretokenized example), or `List[List[str]]`
+        # ValueError: Nodes must be of type `list[str]` (single pretokenized example), or `list[list[str]]`
         # (batch of pretokenized examples).
         return True
 
@@ -381,4 +387,4 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
             [[0.0675, -0.0052, 0.5001], [-0.2281, 0.0802, 0.2192], [-0.0583, -0.3311, 0.1185]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

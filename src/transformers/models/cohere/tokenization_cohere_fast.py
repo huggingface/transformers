@@ -16,17 +16,14 @@
 # This file is based on the tokenization_llama_fast.py file in transformers
 
 import pickle
-from typing import Dict, List, Literal, Union
+from typing import Literal, Union
 
 from tokenizers import processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ...utils.versions import require_version
 
-
-require_version("tokenizers>=0.13.3")
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
@@ -198,8 +195,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         if eos is None and self.add_eos_token:
             raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -228,194 +225,12 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
-    @property
-    def default_chat_template(self):
-        """
-        Cohere Tokenizer uses <|START_OF_TURN_TOKEN|> and <|END_OF_TURN_TOKEN|> to indicate each turn in a chat.
-        Additioanlly, to indicate the source of the message, <|USER_TOKEN|>, <|CHATBOT_TOKEN|> and <|SYSTEM_TOKEN|>
-        for user, assitant and system messages respectively.
-
-        The output should look something like:
-        <|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{ preamble }}<|END_OF_TURN_TOKEN|><BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>{{ How are you? }}<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{ I am doing well! }}<|END_OF_TURN_TOKEN|>
-
-        Use add_generation_prompt to add a prompt for the model to generate a response:
-        >>> from transformers import AutoTokenizer
-        >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-        >>> messages = [{"role": "user", "content": "Hello, how are you?"}]
-        >>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        '<BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'
-
-        """
-        default_template = (
-            "{{ bos_token }}"
-            "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
-            "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true %}"
-            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
-            "{% else %}"
-            "{% set loop_messages = messages %}"
-            "{% set system_message = false %}"
-            "{% endif %}"
-            "{% if system_message != false %}"  # Start with system message
-            "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' + system_message + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% endif %}"
-            "{% for message in loop_messages %}"  # Loop over all non-system messages
-            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
-            "{% endif %}"
-            "{% set content = message['content'] %}"
-            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
-            "{{ '<|START_OF_TURN_TOKEN|><|USER_TOKEN|>' + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% elif message['role'] == 'assistant' %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'  + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>' }}"
-            "{% endif %}"
-        )
-        default_template = default_template.replace(
-            "USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false"
-        )
-        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-        default_template = default_template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
-
-        tool_use_template = (
-            "{{ bos_token }}"
-            "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
-            "{% set system_message = messages[0]['content'] %}"
-            "{% else %}"
-            "{% set loop_messages = messages %}"
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
-            "{% endif %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' }}"
-            "{{ '# Safety Preamble' }}"
-            "{{ '\nThe instructions in this section override those in the task description and style guide sections. Don\\'t answer questions that are harmful or immoral.' }}"
-            "{{ '\n\n# System Preamble' }}"
-            "{{ '\n## Basic Rules' }}"
-            "{{ '\nYou are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user\\'s requests, you cite your sources in your answers, according to those instructions.' }}"
-            "{{ '\n\n# User Preamble' }}"
-            "{{ '\n' + system_message }}"
-            "{{'\n\n## Available Tools\nHere is a list of tools that you have available to you:\n\n'}}"
-            "{% for tool in tools %}"
-            "{% if loop.index0 != 0 %}"
-            "{{ '\n\n'}}"
-            "{% endif %}"
-            "{{'```python\ndef ' + tool.name + '('}}"
-            "{% for param_name, param_fields in tool.parameter_definitions.items() %}"
-            "{% if loop.index0 != 0 %}"
-            "{{ ', '}}"
-            "{% endif %}"
-            "{{param_name}}: "
-            "{% if not param_fields.required %}"
-            "{{'Optional[' + param_fields.type + '] = None'}}"
-            "{% else %}"
-            "{{ param_fields.type }}"
-            "{% endif %}"
-            "{% endfor %}"
-            '{{ \') -> List[Dict]:\n    """\'}}'
-            "{{ tool.description }}"
-            "{% if tool.parameter_definitions|length != 0 %}"
-            "{{ '\n\n    Args:\n        '}}"
-            "{% for param_name, param_fields in tool.parameter_definitions.items() %}"
-            "{% if loop.index0 != 0 %}"
-            "{{ '\n        ' }}"
-            "{% endif %}"
-            "{{ param_name + ' ('}}"
-            "{% if not param_fields.required %}"
-            "{{'Optional[' + param_fields.type + ']'}}"
-            "{% else %}"
-            "{{ param_fields.type }}"
-            "{% endif %}"
-            "{{ '): ' + param_fields.description }}"
-            "{% endfor %}"
-            "{% endif %}"
-            '{{ \'\n    """\n    pass\n```\' }}'
-            "{% endfor %}"
-            "{{ '<|END_OF_TURN_TOKEN|>'}}"
-            "{% for message in loop_messages %}"
-            "{% set content = message['content'] %}"
-            "{% if message['role'] == 'user' %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|USER_TOKEN|>' + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% elif message['role'] == 'system' %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% elif message['role'] == 'assistant' %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'  + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{{'<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Write \\'Action:\\' followed by a json-formatted list of actions that you want to perform in order to produce a good response to the user\\'s last input. You can use any of the supplied tools any number of times, but you should aim to execute the minimum number of necessary actions for the input. You should use the `directly-answer` tool if calling the other tools is unnecessary. The list of actions you want to call should be formatted as a list of json objects, for example:\n```json\n[\n    {\n        \"tool_name\": title of the tool in the specification,\n        \"parameters\": a dict of parameters to input into the tool as they are defined in the specs, or {} if it takes no parameters\n    }\n]```<|END_OF_TURN_TOKEN|>'}}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>' }}"
-            "{% endif %}"
-        )
-        default_tool_message = DEFAULT_RAG_PREAMBLE.replace("\n", "\\n").replace("'", "\\'")
-        tool_use_template = tool_use_template.replace("DEFAULT_SYSTEM_MESSAGE", default_tool_message)
-
-        rag_template = (
-            "{{ bos_token }}"
-            "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
-            "{% set system_message = messages[0]['content'] %}"
-            "{% else %}"
-            "{% set loop_messages = messages %}"
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
-            "{% endif %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' }}"
-            "{{ '# Safety Preamble' }}"
-            "{{ '\nThe instructions in this section override those in the task description and style guide sections. Don\\'t answer questions that are harmful or immoral.' }}"
-            "{{ '\n\n# System Preamble' }}"
-            "{{ '\n## Basic Rules' }}"
-            "{{ '\nYou are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user\\'s requests, you cite your sources in your answers, according to those instructions.' }}"
-            "{{ '\n\n# User Preamble' }}"
-            "{{ '\n' + system_message }}"
-            "{{ '<|END_OF_TURN_TOKEN|>'}}"
-            "{% for message in loop_messages %}"  # Loop over all non-system messages
-            "{% set content = message['content'] %}"
-            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
-            "{{ '<|START_OF_TURN_TOKEN|><|USER_TOKEN|>' + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% elif message['role'] == 'system' %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% elif message['role'] == 'assistant' %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'  + content.strip() + '<|END_OF_TURN_TOKEN|>' }}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>'}}"
-            "{{ '<results>' }}"
-            "{% for document in documents %}"  # Loop over all non-system messages
-            "{{ '\nDocument: ' }}"
-            "{{ loop.index0 }}\n"
-            "{% for key, value in document.items() %}"
-            "{{ key }}: {{value}}\n"
-            "{% endfor %}"
-            "{% endfor %}"
-            "{{ '</results>'}}"
-            "{{ '<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>' }}"
-            "{{ 'Carefully perform the following instructions, in order, starting each with a new line.\n' }}"
-            "{{ 'Firstly, Decide which of the retrieved documents are relevant to the user\\'s last input by writing \\'Relevant Documents:\\' followed by comma-separated list of document numbers. If none are relevant, you should instead write \\'None\\'.\n' }}"
-            "{{ 'Secondly, Decide which of the retrieved documents contain facts that should be cited in a good answer to the user\\'s last input by writing \\'Cited Documents:\\' followed a comma-separated list of document numbers. If you dont want to cite any of them, you should instead write \\'None\\'.\n' }}"
-            "{% if citation_mode=='accurate' %}"
-            "{{ 'Thirdly, Write \\'Answer:\\' followed by a response to the user\\'s last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.\n' }}"
-            "{% endif %}"
-            "{{ 'Finally, Write \\'Grounded answer:\\' followed by a response to the user\\'s last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.' }}"
-            "{{ '<|END_OF_TURN_TOKEN|>' }}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>' }}"
-            "{% endif %}"
-        )
-        default_rag_message = DEFAULT_RAG_PREAMBLE.replace("\n", "\\n").replace("'", "\\'")
-        rag_template = rag_template.replace("DEFAULT_SYSTEM_MESSAGE", default_rag_message)
-
-        return {"default": default_template, "tool_use": tool_use_template, "rag": rag_template}
-
     def apply_tool_use_template(
         self,
-        conversation: Union[List[Dict[str, str]]],
-        tools: List[Dict],
+        conversation: Union[list[dict[str, str]]],
+        tools: list[dict],
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, list[int]]:
         """Create a Command-R tool-use prompt.
 
         Once rendered, the prompt instructs the model to generate a list of actions to perform on a set of user supplied tools
@@ -429,16 +244,16 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `tool_use_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]]]): A list of dicts
+            conversation (Union[list[dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (List[Dict]): a list of tools to render into the prompt for the model to choose from.
+            tools (list[Dict]): a list of tools to render into the prompt for the model to choose from.
                 See an example at the bottom of the docstring.
                 The format should be:
                    * name (str): The name of the tool to be called. Valid names contain only the characters a-z,
                         A-Z, 0-9, _ and must not begin with a digit.
                    * description (str): The description of what the tool does, the model uses the description to
                         choose when and how to call the function.
-                   * parameter_definitions (List[Dict]): The input parameters of the tool. Accepts a dictionary
+                   * parameter_definitions (list[Dict]): The input parameters of the tool. Accepts a dictionary
                         where the key is the name of the parameter and the value is the parameter spec.
                         Valid parameter names contain only the characters a-z, A-Z, 0-9, _ and must not begin with a digit.
                         Parameter specs are as follows:
@@ -472,7 +287,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: A rendered prompt string.
             or if tokenize=True:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `list[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
 
         Examples:
@@ -521,7 +336,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Here is a list of tools that you have available to you:
 
         \\`\\`\\`python
-        def internet_search(query: str) -> List[Dict]:
+        def internet_search(query: str) -> list[Dict]:
             \"\"\"Returns a list of relevant document snippets for a textual query retrieved from the internet
 
             Args:
@@ -531,7 +346,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         \\`\\`\\`
 
         \\`\\`\\`python
-        def directly_answer() -> List[Dict]:
+        def directly_answer() -> list[Dict]:
             \"\"\"Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
             \"\"\"
             pass
@@ -567,11 +382,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_grounded_generation_template(
         self,
-        conversation: Union[List[Dict[str, str]]],
-        documents: List[Dict],
+        conversation: Union[list[dict[str, str]]],
+        documents: list[dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, list[int]]:
         """Create a Command-R grounded generation (aka RAG) prompt.
 
         Once rendered, the prompt instructs the model to generate a response with citations in, based on supplied documents.
@@ -585,10 +400,10 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `grounded_generation_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]]]): A list of dicts
+            conversation (Union[list[dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
-                generation on. A document is a semistructured dict, wiht a string to string mapping. Common fields are
+            documents (list[dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
+                generation on. A document is a semistructured dict, with a string to string mapping. Common fields are
                 `url`, `title`, `snippet` etc but should be descriptive of the key. They will get rendered into the prompt.
             citation_mode: either "accurate" (prompt the model to generate an answer first, then rewrite it with citation
                 spans in) or "fast", where the prompt instructs the model to generate an answer with citations in directly.
@@ -620,7 +435,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: A rendered prompt string.
             or if tokenize=True:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `list[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
 
         Examples:
@@ -692,3 +507,6 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
+
+
+__all__ = ["CohereTokenizerFast"]

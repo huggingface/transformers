@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
+from transformers.utils.fx import symbolic_trace
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -35,12 +35,9 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_ten
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
-
-
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         AutoTokenizer,
@@ -228,43 +225,6 @@ class UMT5ModelTester:
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
         self.parent.assertEqual(len(decoder_past[0]), 4)
 
-    def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = UMT5Model(config=config).get_decoder().to(torch_device).eval()
-        # first forward pass
-        outputs = model(input_ids, use_cache=True)
-        outputs_use_cache_conf = model(input_ids)
-        outputs_no_past = model(input_ids, use_cache=False)
-
-        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
-        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-
-        output, past_key_values = outputs.to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     def create_and_check_model_fp16_forward(
         self,
         config,
@@ -294,7 +254,6 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (UMT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": UMT5Model,
@@ -322,16 +281,23 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
         return False
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx is not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -479,76 +445,64 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with torch.no_grad():
                 model(**inputs)[0]
 
+    # overwrite because T5 doesn't accept position ids as input and expects `decoder_input_ids`
+    def test_custom_4d_attention_mask(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                _,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                _,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(
+                decoder_input_ids=input_ids,
+                input_ids=input_dict["input_ids"][:3],
+            ).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids=input_dict["input_ids"][:1],
+                decoder_input_ids=input_ids_shared_prefix,
+                decoder_attention_mask=mask_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
     def test_with_sequence_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
-    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = UMT5Model(config_and_inputs[0]).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/t5_test.onnx",
-                export_params=True,
-                opset_version=9,
-                input_names=["input_ids", "decoder_input_ids"],
-            )
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        model = UMT5ForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1]["input_ids"],
-                num_beams=1,
-                max_length=3,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -714,7 +668,7 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -722,6 +676,26 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_with_token_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
+
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if tokenizer_name is None:
+            return True
+
+        # `UMT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
+        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
 
 @require_torch
@@ -734,7 +708,7 @@ class Umt5IntegrationTest(unittest.TestCase):
     )
     def test_small_integration_test(self):
         """
-        For comparison run the kaggle notbook available here : https://www.kaggle.com/arthurzucker/umt5-inference
+        For comparison run the kaggle notebook available here : https://www.kaggle.com/arthurzucker/umt5-inference
         """
 
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)

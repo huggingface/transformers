@@ -38,7 +38,7 @@ class IdeficsVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        embed_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer. (elsewhere referred to as `hidden_size`)
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
@@ -50,12 +50,12 @@ class IdeficsVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             Number of image channels.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -64,11 +64,9 @@ class IdeficsVisionConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
             testing).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
-    model_type = "idefics"
+    model_type = "idefics_vision"
     attribute_map = {
         "hidden_size": "embed_dim",
     }
@@ -119,7 +117,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
     Args:
         use_resampler (`bool`, *optional*, defaults to `False`):
             Whether or not to use the resampler
-        resampler_n_latents (`int`, *optional*, defaults to ):
+        resampler_n_latents (`int`, *optional*, defaults to 64):
             Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         resampler_depth (`int`, *optional*, defaults to 6):
             Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
@@ -131,7 +129,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
             Whether or not to use qk layer norms in perceiver
     """
 
-    model_type = "idefics"
+    model_type = "idefics_perciever"
 
     def __init__(
         self,
@@ -165,7 +163,7 @@ class IdeficsConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        additional_vocab_size (`int`, *optional`, defaults to 0):
+        additional_vocab_size (`int`, *optional*, defaults to 0):
             Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
             are always trainable whereas regular vocab tokens can be frozen or not.
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -235,7 +233,7 @@ class IdeficsConfig(PretrainedConfig):
     ```"""
 
     model_type = "idefics"
-    is_composition = False
+    sub_configs = {"perceiver_config": IdeficsPerceiverConfig, "vision_config": IdeficsVisionConfig}
 
     def __init__(
         self,
@@ -322,3 +320,6 @@ class IdeficsConfig(PretrainedConfig):
         # updates the config object with `kwargs` from from_pretrained, so during the instantiation
         # of this object many attributes have default values and haven't yet been overridden.
         # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
+
+
+__all__ = ["IdeficsConfig"]

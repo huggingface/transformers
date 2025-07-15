@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ViTMatte."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -31,10 +31,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -54,10 +53,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
@@ -74,8 +73,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = True,
         size_divisibility: int = 32,
         **kwargs,
@@ -88,20 +87,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.size_divisibility = size_divisibility
-        self._valid_processor_keys = [
-            "images",
-            "trimaps",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "size_divisibility",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def pad_image(
         self,
@@ -144,6 +129,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -151,14 +137,13 @@ class VitMatteImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         size_divisibility: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -175,9 +160,9 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image.
@@ -213,8 +198,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         images = make_list_of_images(images)
         trimaps = make_list_of_images(trimaps, expected_ndims=2)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(trimaps):
             raise ValueError(
                 "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -240,7 +223,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
         trimaps = [to_numpy_array(trimap) for trimap in trimaps]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -267,8 +250,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
             ]
 
         # concatenate images and trimaps
+        axis = -1 if input_data_format == ChannelDimension.LAST else 0
         images = [
-            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1) for image, trimap in zip(images, trimaps)
+            np.concatenate([image, np.expand_dims(trimap, axis=axis)], axis=axis)
+            for image, trimap in zip(images, trimaps)
         ]
 
         if do_pad:
@@ -284,3 +269,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["VitMatteImageProcessor"]

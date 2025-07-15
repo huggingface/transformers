@@ -13,57 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-
-_import_structure = {
-    "configuration_align": [
-        "AlignConfig",
-        "AlignTextConfig",
-        "AlignVisionConfig",
-    ],
-    "processing_align": ["AlignProcessor"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_align"] = [
-        "AlignModel",
-        "AlignPreTrainedModel",
-        "AlignTextModel",
-        "AlignVisionModel",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_align import (
-        AlignConfig,
-        AlignTextConfig,
-        AlignVisionConfig,
-    )
-    from .processing_align import AlignProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_align import (
-            AlignModel,
-            AlignPreTrainedModel,
-            AlignTextModel,
-            AlignVisionModel,
-        )
-
+    from .configuration_align import *
+    from .modeling_align import *
+    from .processing_align import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

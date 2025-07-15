@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -169,6 +168,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VitDetModelTester(self)
@@ -288,6 +288,31 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="VitDet does not have standalone checkpoints since it used as backbone in other models")
     def test_model_from_pretrained(self):
         pass
+
+    def test_non_square_image(self):
+        non_square_image_size = (32, 40)
+        patch_size = (2, 2)
+        config = self.model_tester.get_config()
+        config.image_size = non_square_image_size
+        config.patch_size = patch_size
+
+        model = VitDetModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        batch_size = self.model_tester.batch_size
+        # Create a dummy input tensor with non-square spatial dimensions.
+        pixel_values = floats_tensor(
+            [batch_size, config.num_channels, non_square_image_size[0], non_square_image_size[1]]
+        )
+
+        result = model(pixel_values)
+
+        expected_height = non_square_image_size[0] / patch_size[0]
+        expected_width = non_square_image_size[1] / patch_size[1]
+        expected_shape = (batch_size, config.hidden_size, expected_height, expected_width)
+
+        self.assertEqual(result.last_hidden_state.shape, expected_shape)
 
 
 @require_torch

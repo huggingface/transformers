@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import os
 import tempfile
 import unittest
 
-from transformers.modelcard import ModelCard
+from transformers.modelcard import ModelCard, TrainingSummary
 
 
 class ModelCardTester(unittest.TestCase):
@@ -34,13 +33,13 @@ class ModelCardTester(unittest.TestCase):
             "metrics": "BLEU and ROUGE-1",
             "evaluation_data": {
                 "Datasets": {"BLEU": "My-great-dataset-v1", "ROUGE-1": "My-short-dataset-v2.1"},
-                "Preprocessing": "See details on https://arxiv.org/pdf/1810.03993.pdf",
+                "Preprocessing": "See details on https://huggingface.co/papers/1810.03993",
             },
             "training_data": {
                 "Dataset": "English Wikipedia dump dated 2018-12-01",
                 "Preprocessing": (
                     "Using SentencePiece vocabulary of size 52k tokens. See details on"
-                    " https://arxiv.org/pdf/1810.03993.pdf"
+                    " https://huggingface.co/papers/1810.03993"
                 ),
             },
             "quantitative_analyses": {"BLEU": 55.1, "ROUGE-1": 76},
@@ -82,3 +81,8 @@ class ModelCardTester(unittest.TestCase):
             model_card_second = ModelCard.from_pretrained(tmpdirname)
 
         self.assertEqual(model_card_second.to_dict(), model_card_first.to_dict())
+
+    def test_model_summary_modelcard_base_metadata(self):
+        metadata = TrainingSummary("Model name").create_metadata()
+        self.assertTrue("library_name" in metadata)
+        self.assertTrue(metadata["library_name"] == "transformers")

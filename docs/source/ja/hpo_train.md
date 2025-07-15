@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 これらを使用する前に、ハイパーパラメーター検索バックエンドをインストールする必要があります。
 ```bash
-pip install optuna/sigopt/wandb/ray[tune] 
+pip install optuna/sigopt/wandb/ray[tune]
 ```
 
 ## How to enable Hyperparameter search in example
@@ -56,7 +56,7 @@ Optunaに関しては、[object_parameter](https://optuna.readthedocs.io/en/stab
 ...     }
 ```
 
-Optunaは、多目的のハイパーパラメータ最適化（HPO）を提供しています。 `hyperparameter_search` で `direction` を渡し、複数の目的関数値を返すための独自の `compute_objective` を定義することができます。 Pareto Front（`List[BestRun]`）は `hyperparameter_search` で返され、[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py) のテストケース `TrainerHyperParameterMultiObjectOptunaIntegrationTest` を参照する必要があります。これは以下のようになります。
+Optunaは、多目的のハイパーパラメータ最適化（HPO）を提供しています。 `hyperparameter_search` で `direction` を渡し、複数の目的関数値を返すための独自の `compute_objective` を定義することができます。 Pareto Front（`list[BestRun]`）は `hyperparameter_search` で返され、[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py) のテストケース `TrainerHyperParameterMultiObjectOptunaIntegrationTest` を参照する必要があります。これは以下のようになります。
 
 
 ```py
@@ -119,7 +119,7 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 ...     train_dataset=small_train_dataset,
 ...     eval_dataset=small_eval_dataset,
 ...     compute_metrics=compute_metrics,
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     model_init=model_init,
 ...     data_collator=data_collator,
 ... )
@@ -142,9 +142,3 @@ Wandbについては、[object_parameter](https://docs.wandb.ai/guides/sweeps/co
 
 ## Hyperparameter search For DDP finetune
 現在、DDP（Distributed Data Parallel）のためのハイパーパラメーター検索は、Optuna と SigOpt に対して有効になっています。ランクゼロプロセスのみが検索トライアルを生成し、他のランクに引数を渡します。
-
-
-
-
-
-

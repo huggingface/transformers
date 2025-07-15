@@ -229,7 +229,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     else:
         raise ValueError(f"Model name {model_name} not supported")
     checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename=filename)
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # rename keys
     rename_keys = create_rename_keys(config)

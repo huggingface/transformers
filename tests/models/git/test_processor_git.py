@@ -15,23 +15,25 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoProcessor, BertTokenizer, CLIPImageProcessor, GitProcessor, PreTrainedTokenizerFast
 
 
 @require_vision
-class GitProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = GitProcessor
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor()
         tokenizer = BertTokenizer.from_pretrained(
@@ -40,7 +42,7 @@ class GitProcessorTest(unittest.TestCase):
 
         processor = GitProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -48,30 +50,21 @@ class GitProcessorTest(unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = GitProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = GitProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = GitProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = GitProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)

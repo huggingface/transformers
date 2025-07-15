@@ -13,15 +13,16 @@
 # limitations under the License.
 import logging
 import math
+from collections.abc import Iterable, Sequence
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 
 from .tensor_utils import tensor_tree_map, tree_map
 
 
-def _fetch_dims(tree: Union[dict, list, tuple, torch.Tensor]) -> List[Tuple[int, ...]]:
+def _fetch_dims(tree: Union[dict, list, tuple, torch.Tensor]) -> list[tuple[int, ...]]:
     shapes = []
     if isinstance(tree, dict):
         for v in tree.values():
@@ -32,13 +33,13 @@ def _fetch_dims(tree: Union[dict, list, tuple, torch.Tensor]) -> List[Tuple[int,
     elif isinstance(tree, torch.Tensor):
         shapes.append(tree.shape)
     else:
-        raise ValueError("Not supported")
+        raise TypeError("Not supported")
 
     return shapes
 
 
 @torch.jit.ignore
-def _flat_idx_to_idx(flat_idx: int, dims: Tuple[int, ...]) -> Tuple[int, ...]:
+def _flat_idx_to_idx(flat_idx: int, dims: tuple[int, ...]) -> tuple[int, ...]:
     idx = []
     for d in reversed(dims):
         idx.append(flat_idx % d)
@@ -54,7 +55,7 @@ def _get_minimal_slice_set(
     dims: Sequence[int],
     start_edges: Optional[Sequence[bool]] = None,
     end_edges: Optional[Sequence[bool]] = None,
-) -> List[Tuple[slice, ...]]:
+) -> list[tuple[slice, ...]]:
     """
     Produces an ordered sequence of tensor slices that, when used in sequence on a tensor with shape dims, yields
     tensors that contain every leaf in the contiguous range [start, end]. Care is taken to yield a short sequence of
@@ -66,7 +67,7 @@ def _get_minimal_slice_set(
     # start_edges and end_edges both indicate whether, starting from any given
     # dimension, the start/end index is at the top/bottom edge of the
     # corresponding tensor, modeled as a tree
-    def reduce_edge_list(l: List[bool]) -> None:
+    def reduce_edge_list(l: list[bool]) -> None:
         tally = True
         for i in range(len(l)):
             reversed_idx = -1 * (i + 1)
@@ -87,8 +88,8 @@ def _get_minimal_slice_set(
     elif len(start) == 1:
         return [(slice(start[0], end[0] + 1),)]
 
-    slices: List[Tuple[slice, ...]] = []
-    path_list: List[slice] = []
+    slices: list[tuple[slice, ...]] = []
+    path_list: list[slice] = []
 
     # Dimensions common to start and end can be selected directly
     for s, e in zip(start, end):
@@ -97,14 +98,14 @@ def _get_minimal_slice_set(
         else:
             break
 
-    path: Tuple[slice, ...] = tuple(path_list)
+    path: tuple[slice, ...] = tuple(path_list)
     divergence_idx = len(path)
 
     # start == end, and we're done
     if divergence_idx == len(dims):
         return [path]
 
-    def upper() -> Tuple[Tuple[slice, ...], ...]:
+    def upper() -> tuple[tuple[slice, ...], ...]:
         assert start_edges is not None
         assert end_edges is not None
 
@@ -120,7 +121,7 @@ def _get_minimal_slice_set(
             )
         )
 
-    def lower() -> Tuple[Tuple[slice, ...], ...]:
+    def lower() -> tuple[tuple[slice, ...], ...]:
         assert start_edges is not None
         assert end_edges is not None
 
@@ -193,7 +194,7 @@ def _chunk_slice(t: torch.Tensor, flat_start: int, flat_end: int, no_batch_dims:
 
 def chunk_layer(
     layer: Callable,
-    inputs: Dict[str, Any],
+    inputs: dict[str, Any],
     chunk_size: int,
     no_batch_dims: int,
     low_mem: bool = False,
@@ -239,7 +240,7 @@ def chunk_layer(
             t = t.expand(orig_batch_dims + t.shape[no_batch_dims:])
         return t
 
-    prepped_inputs: Dict[str, Any] = tensor_tree_map(_prep_inputs, inputs)
+    prepped_inputs: dict[str, Any] = tensor_tree_map(_prep_inputs, inputs)
     prepped_outputs = None
     if _out is not None:
         prepped_outputs = tensor_tree_map(lambda t: t.view([-1] + list(t.shape[no_batch_dims:])), _out)
@@ -267,7 +268,7 @@ def chunk_layer(
                 no_batch_dims=len(orig_batch_dims),
             )
 
-        chunks: Dict[str, Any] = tensor_tree_map(select_chunk, prepped_inputs)
+        chunks: dict[str, Any] = tensor_tree_map(select_chunk, prepped_inputs)
 
         # Run the layer on the chunk
         output_chunk = layer(**chunks)
@@ -302,7 +303,7 @@ def chunk_layer(
             else:
                 out[i : i + chunk_size] = output_chunk
         else:
-            raise ValueError("Not supported")
+            raise TypeError("Not supported")
 
         i += chunk_size
 
@@ -328,7 +329,7 @@ class ChunkSizeTuner:
         if min_chunk_size >= self.max_chunk_size:
             return min_chunk_size
 
-        candidates: List[int] = [2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)]
+        candidates: list[int] = [2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)]
         candidates = [c for c in candidates if c > min_chunk_size]
         candidates = [min_chunk_size] + candidates
         candidates[-1] += 4
@@ -356,7 +357,7 @@ class ChunkSizeTuner:
     def _compare_arg_caches(self, ac1: Iterable, ac2: Iterable) -> bool:
         consistent = True
         for a1, a2 in zip(ac1, ac2):
-            assert type(ac1) == type(ac2)
+            assert type(ac1) is type(ac2)
             if isinstance(ac1, (list, tuple)):
                 consistent &= self._compare_arg_caches(a1, a2)
             elif isinstance(ac1, dict):

@@ -18,13 +18,14 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging, requires_backends
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,7 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
+@requires(backends=("sentencepiece",))
 class CodeLlamaTokenizer(PreTrainedTokenizer):
     """
     Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
@@ -106,7 +108,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             Whether to add an end of sequence token at the end of sequences.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to clean up the tokenization spaces.
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
@@ -127,7 +129,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         eot_token="▁<EOT>",
         fill_token="<FILL_ME>",
         suffix_first=False,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
@@ -246,7 +248,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def tokenize(self, prefix, suffix=None, suffix_first=False, **kwargs) -> List[int]:
+    def tokenize(self, prefix, suffix=None, suffix_first=False, **kwargs) -> list[int]:
         # add a prefix space to `prefix`
         if self.fill_token is not None and self.fill_token in prefix and suffix is None:
             prefix, suffix = prefix.split(self.fill_token)
@@ -326,7 +328,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         return out_string
 
     # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -367,22 +369,22 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -405,8 +407,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
         sequence pair mask has the following format:
@@ -419,13 +421,13 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None, only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of ids.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
@@ -437,61 +439,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    @property
-    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
-        Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
-        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
-        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
-        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
-        to fine-tune a model with more flexible role ordering!
-
-        The output should look something like:
-
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-
-        The reference for this chat template is [this code
-        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
-        in the original repository.
-        """
-        template = (
-            "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
-            "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
-            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
-            "{% else %}"
-            "{% set loop_messages = messages %}"
-            "{% set system_message = false %}"
-            "{% endif %}"
-            "{% for message in loop_messages %}"  # Loop over all non-system messages
-            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
-            "{% endif %}"
-            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
-            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
-            "{% else %}"
-            "{% set content = message['content'] %}"
-            "{% endif %}"
-            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
-            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
-            "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
-            "{% elif message['role'] == 'assistant' %}"
-            "{{ ' '  + content.strip() + ' ' + eos_token }}"
-            "{% endif %}"
-            "{% endfor %}"
-        )
-        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
-        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
-
-        return template
-
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -502,3 +449,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         self.__dict__ = d
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
+
+
+__all__ = ["CodeLlamaTokenizer"]

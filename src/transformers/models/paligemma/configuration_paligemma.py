@@ -13,11 +13,9 @@
 # limitations under the License.
 """PaliGemmamodel configuration"""
 
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -39,8 +37,6 @@ class PaliGemmaConfig(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 256000):
             The image token index to encode the image prompt.
         vocab_size (`int`, *optional*, defaults to 257152):
@@ -73,22 +69,23 @@ class PaliGemmaConfig(PretrainedConfig):
     ```"""
 
     model_type = "paligemma"
-    is_composition = False
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=256000,
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self._vocab_size = vocab_size
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
@@ -110,14 +107,11 @@ class PaliGemmaConfig(PretrainedConfig):
                 vocab_size=257152,
                 vision_use_head=False,
             )
-        self.vocab_size = self.vocab_size
 
         self.text_config = text_config
-
         if isinstance(self.text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["gemma"](
                 hidden_size=2048,
@@ -132,19 +126,5 @@ class PaliGemmaConfig(PretrainedConfig):
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)
 
-    @property
-    def vocab_size(self):
-        warnings.warn(
-            "The `vocab_size` attribute is deprecated and will be removed in v4.44, Please use `text_config.vocab_size` instead.",
-            FutureWarning,
-        )
-        return self._vocab_size
 
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self._vocab_size = value
-
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_vocab_size", None)
-        return output
+__all__ = ["PaliGemmaConfig"]

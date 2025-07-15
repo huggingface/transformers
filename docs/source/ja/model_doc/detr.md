@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DETR モデルは、[Transformers を使用したエンドツーエンドのオブジェクト検出](https://arxiv.org/abs/2005.12872) で提案されました。
+DETR モデルは、[Transformers を使用したエンドツーエンドのオブジェクト検出](https://huggingface.co/papers/2005.12872) で提案されました。
 Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov and Sergey Zagoruyko ルイコ。 DETR
 畳み込みバックボーンと、その後にエンドツーエンドでトレーニングできるエンコーダー/デコーダー Transformer で構成されます。
 物体の検出。 Faster-R-CNN や Mask-R-CNN などのモデルの複雑さの多くが大幅に簡素化されます。
@@ -149,7 +149,7 @@ DETR モデルをインスタンス化するには 3 つの方法があります
 | **Description** |画像内のオブジェクトの周囲の境界ボックスとクラス ラベルを予測する | 画像内のオブジェクト (つまりインスタンス) の周囲のマスクを予測する | 画像内のオブジェクト (インスタンス) と「もの」 (木や道路などの背景) の両方の周囲のマスクを予測します |
 | **Model** | [`~transformers.DetrForObjectDetection`] | [`~transformers.DetrForSegmentation`] | [`~transformers.DetrForSegmentation`] |
 | **Example dataset** | COCO detection | COCO detection, COCO panoptic | COCO panoptic  |                                                                        |
-| **Format of annotations to provide to**  [`~transformers.DetrImageProcessor`] | {'image_id': `int`, 'annotations': `List[Dict]`} each Dict being a COCO object annotation  | {'image_id': `int`, 'annotations': `List[Dict]`}  (in case of COCO detection) or {'file_name': `str`, 'image_id': `int`, 'segments_info': `List[Dict]`} (in case of COCO panoptic) | {'file_name': `str`, 'image_id': `int`, 'segments_info': `List[Dict]`} and masks_path (path to directory containing PNG files of the masks) |
+| **Format of annotations to provide to**  [`~transformers.DetrImageProcessor`] | {'image_id': `int`, 'annotations': `list[Dict]`} each Dict being a COCO object annotation  | {'image_id': `int`, 'annotations': `list[Dict]`}  (in case of COCO detection) or {'file_name': `str`, 'image_id': `int`, 'segments_info': `list[Dict]`} (in case of COCO panoptic) | {'file_name': `str`, 'image_id': `int`, 'segments_info': `list[Dict]`} and masks_path (path to directory containing PNG files of the masks) |
 | **Postprocessing** (i.e. converting the output of the model to Pascal VOC format) | [`~transformers.DetrImageProcessor.post_process`] | [`~transformers.DetrImageProcessor.post_process_segmentation`] | [`~transformers.DetrImageProcessor.post_process_segmentation`], [`~transformers.DetrImageProcessor.post_process_panoptic`] |
 | **evaluators** | `CocoEvaluator` with `iou_types="bbox"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"` | `CocoEvaluator` with `iou_tupes="bbox"` or `"segm"`, `PanopticEvaluator` |
 
@@ -178,6 +178,15 @@ DETR の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 ## DetrImageProcessor
 
 [[autodoc]] DetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
+
+## DetrImageProcessorFast
+
+[[autodoc]] DetrImageProcessorFast
     - preprocess
     - post_process_object_detection
     - post_process_semantic_segmentation

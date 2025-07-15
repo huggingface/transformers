@@ -207,7 +207,7 @@ def should_ignore(name, ignore_keys):
 def recursively_load_weights(orig_dict, hf_model, model_name):
     unused_weights = []
 
-    if model_name == "encodec_24khz" or "encodec_32khz":
+    if model_name in ["encodec_24khz", "encodec_32khz"]:
         MAPPING = MAPPING_24K
     elif model_name == "encodec_48khz":
         MAPPING = MAPPING_48K
@@ -325,7 +325,7 @@ def convert_checkpoint(
     )
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
-    original_checkpoint = torch.load(checkpoint_path)
+    original_checkpoint = torch.load(checkpoint_path, weights_only=True)
     if "best_state" in original_checkpoint:
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]

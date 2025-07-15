@@ -17,17 +17,13 @@ rendered properly in your Markdown viewer.
 # XLNet
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=xlnet">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/xlnet-base-cased">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
+The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://huggingface.co/papers/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
 Quoc V. Le. XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method to learn
 bidirectional contexts by maximizing the expected likelihood over all permutations of the input sequence factorization
 order.
@@ -166,7 +162,7 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] TFXLNetForSequenceClassification
     - call
 
-## TFLNetForMultipleChoice
+## TFXLNetForMultipleChoice
 
 [[autodoc]] TFXLNetForMultipleChoice
     - call

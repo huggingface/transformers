@@ -16,7 +16,7 @@
 Feature extractor class for Wav2Vec2
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -36,11 +36,11 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (`int`, defaults to 1):
+        feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        padding_value (`float`, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
@@ -79,8 +79,8 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
     @staticmethod
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
+    ) -> list[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
@@ -101,7 +101,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -115,7 +115,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -166,7 +166,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
         """
 
         if sampling_rate is not None:
@@ -178,7 +178,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -238,3 +238,6 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["Wav2Vec2FeatureExtractor"]

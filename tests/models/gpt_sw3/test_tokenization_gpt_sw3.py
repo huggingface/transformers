@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Hugging Face inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,13 +32,14 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     test_sentencepiece_ignore_case = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>")
 
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "This is a test"
@@ -131,6 +131,15 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer.chat_template = (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+            "Bot:"
+        )
         # This is in English, but it's just here to make sure the chat control tokens are being added properly
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,14 @@
 
 import unittest
 
-from transformers.testing_utils import require_detectron2, require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_detectron2,
+    require_non_xpu,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -251,6 +257,7 @@ class LayoutLMv2ModelTester:
         return config, inputs_dict
 
 
+@require_non_xpu
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -327,7 +334,8 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -489,7 +497,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList intead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():
@@ -551,7 +559,7 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.1087, 0.0727, -0.3075], [0.0799, -0.0427, -0.0751], [-0.0367, 0.0480, -0.1358]], device=torch_device
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
         # verify the pooled output
         expected_shape = torch.Size((2, model.config.hidden_size))

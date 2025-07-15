@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 class DepthAnythingConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DepthAnythingModel`]. It is used to instantiate an DepthAnything
+    This is the configuration class to store the configuration of a [`DepthAnythingModel`]. It is used to instantiate a DepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DepthAnything
     [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
@@ -36,7 +36,7 @@ class DepthAnythingConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):
@@ -57,9 +57,9 @@ class DepthAnythingConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         reassemble_hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the reassemble layers.
-        reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
             The hidden sizes to project to for the feature maps of the backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 64):
             The number of channels before fusion.
@@ -67,6 +67,11 @@ class DepthAnythingConfig(PretrainedConfig):
             The index of the features to use in the depth estimation head.
         head_hidden_size (`int`, *optional*, defaults to 32):
             The number of output channels in the second convolution of the depth estimation head.
+        depth_estimation_type (`str`, *optional*, defaults to `"relative"`):
+            The type of depth estimation to use. Can be one of `["relative", "metric"]`.
+        max_depth (`float`, *optional*):
+            The maximum depth to use for the "metric" depth estimation head. 20 should be used for indoor models
+            and 80 for outdoor models. For "relative" depth estimation, this value is ignored.
 
     Example:
 
@@ -100,6 +105,8 @@ class DepthAnythingConfig(PretrainedConfig):
         fusion_hidden_size=64,
         head_in_index=-1,
         head_hidden_size=32,
+        depth_estimation_type="relative",
+        max_depth=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -139,11 +146,15 @@ class DepthAnythingConfig(PretrainedConfig):
         self.fusion_hidden_size = fusion_hidden_size
         self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size
+        if depth_estimation_type not in ["relative", "metric"]:
+            raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
+        self.depth_estimation_type = depth_estimation_type
+        self.max_depth = max_depth if max_depth else 1
 
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
 
@@ -152,3 +163,6 @@ class DepthAnythingConfig(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
+
+
+__all__ = ["DepthAnythingConfig"]

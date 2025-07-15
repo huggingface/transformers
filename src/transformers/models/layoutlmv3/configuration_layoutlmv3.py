@@ -15,7 +15,8 @@
 """LayoutLMv3 model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 from packaging import version
 
@@ -288,3 +289,6 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         )
 
         return inputs
+
+
+__all__ = ["LayoutLMv3Config", "LayoutLMv3OnnxConfig"]
