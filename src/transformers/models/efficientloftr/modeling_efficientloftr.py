@@ -683,7 +683,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientloftr"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": EfficientLoFTRRepVGGBlock,
