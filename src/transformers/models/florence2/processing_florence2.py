@@ -22,7 +22,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
@@ -149,8 +148,8 @@ class Florence2Processor(ProcessorMixin):
         Returns:
             `BatchFeature`: Encoded inputs.
         """
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
+        if images is None and text is None:
+            raise ValueError("You have to specify at least one of `images` or `text`.")
 
         output_kwargs = self._merge_kwargs(
             Florence2ProcessorKwargs,

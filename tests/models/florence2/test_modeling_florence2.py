@@ -372,7 +372,6 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
 
         inputs.to(device=torch_device, dtype=torch.float16)
-        print(inputs)
         predictions = model.generate(**inputs, max_new_tokens=100)
 
         EXPECTED_PREDICTION_IDS = [

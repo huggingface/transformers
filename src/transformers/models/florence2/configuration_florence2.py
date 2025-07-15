@@ -198,12 +198,9 @@ class Florence2Config(PretrainedConfig):
             logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
             vision_config = Florence2VisionConfig()
 
+        self.is_encoder_decoder = True
         self.text_config = text_config
         self.vision_config = vision_config
-
-        self.vocab_size = self.text_config.vocab_size
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
-        self.projection_dim = self.vision_config.projection_dim
 
 
 __all__ = ["Florence2Config", "Florence2VisionConfig"]

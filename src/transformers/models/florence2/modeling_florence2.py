@@ -107,11 +107,11 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
     """
 
     def __init__(self, embed_dim: int = 512, max_seq_len: int = 1024) -> None:
-        super(Florence2VisionPositionalEmbeddingCosine1D, self).__init__()
+        super().__init__()
         self.embed_dim = embed_dim
         self.max_seq_len = max_seq_len
         pos_idx_to_embed = torch.empty((self.max_seq_len, self.embed_dim))
-        sine, cosine = Florence2VisionPositionalEmbeddingCosine1D.get_sinusoid_embeddings(
+        sine, cosine = self.get_sinusoid_embeddings(
             max_positions=self.max_seq_len,
             embed_dim=self.embed_dim,
         )
@@ -238,21 +238,28 @@ class Florence2VisionChannelAttention(nn.Module):
         self.is_causal = False
 
     def forward(self, hidden_states: torch.Tensor):
-        B, N, C = hidden_states.shape
+        batch_size, num_tokens, hidden_size = hidden_states.shape
 
         # Reshape for grouped channel attention
-        qkv = self.qkv(hidden_states).reshape(B, N, 3, self.groups, C // self.groups)
+        qkv = self.qkv(hidden_states).reshape(batch_size, num_tokens, 3, self.groups, hidden_size // self.groups)
         qkv = qkv.permute(2, 0, 3, 4, 1)
         query, key, value = qkv.unbind(0)
 
+        scale = num_tokens**-0.5
         # Channel-to-channel attention within groups:
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        hidden_states, _ = attention_interface(self, query, key, value, attention_mask=None, scaling=N**-0.5)
+        hidden_states, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            scaling=scale,
+        )
         hidden_states = hidden_states.permute(0, 3, 2, 1)
-        hidden_states = hidden_states.reshape(B, N, C)
+        hidden_states = hidden_states.reshape(batch_size, num_tokens, hidden_size)
 
         # Final projection
         hidden_states = self.proj(hidden_states)
@@ -304,7 +311,7 @@ class Florence2VisionChannelBlock(nn.Module):
         self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
-        B, C, H, W = hidden_states.shape
+        batch_size, embed_dim, height, width = hidden_states.shape
 
         # First channel block: Depthwise Conv + Channel Attention
         hidden_states = self.conv1(hidden_states) + hidden_states
@@ -315,7 +322,7 @@ class Florence2VisionChannelBlock(nn.Module):
         hidden_states = self.norm1(hidden_states)
         hidden_states = self.channel_attn(hidden_states)
         hidden_states = residual + self.drop_path1(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
+        hidden_states = hidden_states.transpose(1, 2).view(batch_size, embed_dim, height, width)
 
         # Second channel block: Depthwise Conv + FFN
         hidden_states = self.conv2(hidden_states) + hidden_states
@@ -326,24 +333,26 @@ class Florence2VisionChannelBlock(nn.Module):
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + self.drop_path2(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
+        hidden_states = hidden_states.transpose(1, 2).view(batch_size, embed_dim, height, width)
 
         return hidden_states
 
 
 def window_partition(hidden_states: torch.Tensor, window_size: int):
     """Split input tensor into non-overlapping windows"""
-    B, H, W, C = hidden_states.shape
-    hidden_states = hidden_states.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    batch_size, height, width, embed_dim = hidden_states.shape
+    hidden_states = hidden_states.view(
+        batch_size, height // window_size, window_size, width // window_size, window_size, embed_dim
+    )
+    windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, embed_dim)
     return windows
 
 
-def window_reverse(windows: torch.Tensor, window_size: int, H: int, W: int):
+def window_reverse(windows: torch.Tensor, window_size: int, height: int, width: int):
     """Merge windows back into original spatial layout"""
-    C = windows.shape[-1]
-    hidden_states = windows.view(-1, H // window_size, W // window_size, window_size, window_size, C)
-    hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, H, W, C)
+    embed_dim = windows.shape[-1]
+    hidden_states = windows.view(-1, height // window_size, width // window_size, window_size, window_size, embed_dim)
+    hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, embed_dim)
     return hidden_states
 
 
@@ -369,42 +378,49 @@ class Florence2VisionWindowAttention(nn.Module):
         self.is_causal = False
 
     def forward(self, hidden_states: torch.Tensor):
-        B, H, W, C = hidden_states.shape
+        batch_size, height, width, embed_dim = hidden_states.shape
 
-        # Calculate padding needed to make H,W divisible by window_size
-        pad_l = pad_t = 0
-        pad_r = (self.window_size - W % self.window_size) % self.window_size
-        pad_b = (self.window_size - H % self.window_size) % self.window_size
+        pad_left = pad_top = 0
+        pad_right = (self.window_size - width % self.window_size) % self.window_size
+        pad_bottom = (self.window_size - height % self.window_size) % self.window_size
         # Pad the input if necessary
-        hidden_states = F.pad(hidden_states, (0, 0, pad_l, pad_r, pad_t, pad_b))
-        _, Hp, Wp, _ = hidden_states.shape
+        hidden_states = F.pad(hidden_states, (0, 0, pad_left, pad_right, pad_top, pad_bottom))
+        _, padded_height, padded_width, _ = hidden_states.shape
 
-        # Partition input into non-overlapping windows
-        window_contexts = window_partition(hidden_states, self.window_size)
-        window_contexts = window_contexts.view(-1, self.window_size * self.window_size, C)
+        # Partition input into non-overlapping windows (for local spatial attention in DaViT)
+        windowed_hidden_states = window_partition(hidden_states, self.window_size)
+        windowed_hidden_states = windowed_hidden_states.view(-1, self.window_size * self.window_size, embed_dim)
 
         # Generate Q, K, V for each window
-        B_, N, C = window_contexts.shape
-        qkv = self.qkv(window_contexts).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        num_windows_per_batch, num_tokens_per_window, embed_dim = windowed_hidden_states.shape
+        qkv = self.qkv(windowed_hidden_states).reshape(
+            num_windows_per_batch, num_tokens_per_window, 3, self.num_heads, embed_dim // self.num_heads
+        )
+        qkv = qkv.permute(2, 0, 3, 1, 4)
         query, key, value = qkv.unbind(0)
 
-        # Apply attention within each window
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        window_contexts, _ = attention_interface(self, query, key, value, attention_mask=None, scaling=self.scale)
-        window_contexts = window_contexts.view(B_, N, C)
+        windowed_hidden_states, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            scaling=self.scale,
+        )
+        windowed_hidden_states = windowed_hidden_states.view(num_windows_per_batch, num_tokens_per_window, embed_dim)
         # Apply output projection
-        window_contexts = self.proj(window_contexts)
+        windowed_hidden_states = self.proj(windowed_hidden_states)
 
         # Merge windows back to original spatial layout
-        window_contexts = window_contexts.view(-1, self.window_size, self.window_size, C)
-        hidden_states = window_reverse(window_contexts, self.window_size, Hp, Wp)
+        windowed_hidden_states = windowed_hidden_states.view(-1, self.window_size, self.window_size, embed_dim)
+        hidden_states = window_reverse(windowed_hidden_states, self.window_size, padded_height, padded_width)
 
-        # Remove padding and reshape to flat sequence
-        hidden_states = hidden_states[:, :H, :W, :].contiguous()
-        hidden_states = hidden_states.view(B, H * W, C)
+        hidden_states = hidden_states[:, :height, :width, :].contiguous()
+        hidden_states = hidden_states.view(batch_size, height * width, embed_dim)
 
         return hidden_states
 
@@ -452,7 +468,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
-        B, C, H, W = hidden_states.shape
+        batch_size, embed_dim, height, width = hidden_states.shape
 
         # First spatial mixing block: Conv + Window Attention
         hidden_states = self.conv1(hidden_states) + hidden_states
@@ -461,10 +477,10 @@ class Florence2VisionSpatialBlock(nn.Module):
 
         # Spatial Window-based self-attention mechanism
         hidden_states = self.norm1(hidden_states)
-        hidden_states = hidden_states.view(B, H, W, C)
+        hidden_states = hidden_states.view(batch_size, height, width, embed_dim)
         hidden_states = self.window_attn(hidden_states)
         hidden_states = residual + self.drop_path1(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
+        hidden_states = hidden_states.transpose(1, 2).view(batch_size, embed_dim, height, width)
 
         # Second spatial mixing block: Conv + FFN
         hidden_states = self.conv2(hidden_states) + hidden_states
@@ -475,7 +491,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + self.drop_path2(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
+        hidden_states = hidden_states.transpose(1, 2).view(batch_size, embed_dim, height, width)
 
         return hidden_states
 
@@ -806,7 +822,7 @@ class Florence2Model(Florence2PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
             )
 
         if decoder_input_ids is None:
@@ -827,7 +843,7 @@ class Florence2Model(Florence2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
+            cache_position=True,
             **kwargs,
         )
 
@@ -850,12 +866,6 @@ class Florence2Model(Florence2PreTrainedModel):
     """
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^vision_projector": "model.vision_projector",
-        "^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = [
         "model.language_model.shared.weight",
         "model.language_model.encoder.embed_tokens.weight",
@@ -889,19 +899,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
-    # Make modules available throught conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def vision_projector(self):
-        return self.model.vision_projector
 
     @can_return_tuple
     @auto_docstring
