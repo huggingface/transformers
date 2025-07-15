@@ -1320,7 +1320,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
     def test_hybrid_chunked_cache(self):
         """
-        Test HybridChunkedCache special cases that it handles:
+        Test HybridChunkedCache with both static and sliding layers and special cases:
             1. a pre-fill longer than the sliding window
             2. a single-token decoding step (normal generation)
             3. a multi-token decoding step after the window is already full
@@ -1342,12 +1342,10 @@ class SyntheticCacheTest(unittest.TestCase):
         config.num_hidden_layers = 2
         config.layer_types = ["full_attention", "sliding_attention"]
         config.sliding_window = 2
-        max_cache_len = 4  # window == max_cache_len for sliding layer
+        max_cache_len = 4
         chunked_cache = HybridChunkedCache(config=config, max_batch_size=1, max_cache_len=max_cache_len)
 
-        # ------------------------------------------------------------------ #
-        # 1) PREFILL (3 tokens > window)
-        # ------------------------------------------------------------------ #
+        # 1) PREFILL (3 tokens > sliding_window)
         prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
         prefill_sliding = torch.tensor([10.0, 20.0, 30.0])[None, None, :, None]
 
@@ -1370,9 +1368,7 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertEqual(res_sliding[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0])
         self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [20.0, 30.0])
 
-        # ------------------------------------------------------------------ #
         # 2) ONE-TOKEN UPDATE (normal decode)
-        # ------------------------------------------------------------------ #
         new_static = torch.tensor(5.0)[None, None, None, None]
         new_sliding = torch.tensor(50.0)[None, None, None, None]
 
@@ -1389,16 +1385,12 @@ class SyntheticCacheTest(unittest.TestCase):
             cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
-        # Static grew by one
         self.assertEqual(chunked_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 5.0])
-        # Sliding window slid by exactly 1
         self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [30.0, 50.0])
         self.assertEqual(res_one[0][0, 0, :, 0].tolist(), [30.0, 50.0])
 
-        # ------------------------------------------------------------------ #
         # 3) TWO-TOKEN UPDATE after window is full
-        # ------------------------------------------------------------------ #
-        new_sliding_2 = torch.tensor([60.0, 70.0])[None, None, :, None]  # shape (1,1,2,1)
+        new_sliding_2 = torch.tensor([60.0, 70.0])[None, None, :, None]
         res_two = chunked_cache.update(
             key_states=new_sliding_2,
             value_states=new_sliding_2,
@@ -1410,3 +1402,49 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [60.0, 70.0])
         # Returned tensor contains previous last token + new ones
         self.assertEqual(res_two[0][0, 0, :, 0].tolist(), [50.0, 60.0, 70.0])
+
+    def test_hybrid_chunked_cache_extra_cases(self):
+        """
+        Covers the new cases that appear on prefill chunking:
+        1) Not full multi-token update (cache_position[0] + update_len <= max_cache_len)
+        2) Multi-token update crossing the window (cache_position[0] < max_cache_len  and  cache_position[0] + update_len > max_cache_len)
+
+        Single sliding layer, max_cache_len = 3.
+
+        Step 0 (prefill 2 tokens, update_len < max_cache_len
+            cache = [10, 20,  0]         returned [10, 20, 0]
+
+        Step 1 (add 2 tokens, p = 2, update_len = 2,  p + update_len = 4 > max_cache_len)
+            cache = [20, 30, 40]         returned [10, 20, 30, 40]
+        """
+
+        config = copy.deepcopy(self.config)
+        config.num_hidden_layers = 1
+        config.layer_types = ["sliding_attention"]
+        config.sliding_window = 3
+        cache = HybridChunkedCache(config, max_batch_size=1, max_cache_len=3)
+
+        # Step 0 : multi-token prefill
+        first_chunk = torch.tensor([10.0, 20.0])[None, None, :, None]  # L = 2
+        returned_0 = cache.update(
+            key_states=first_chunk,
+            value_states=first_chunk,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(2)},  # p = 0,1
+        )
+
+        # internal cache should have first two tokens and a zero pad
+        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [10.0, 20.0, 0.0])
+        self.assertEqual(returned_0[0][0, 0, :, 0].tolist(), [10.0, 20.0, 0.0])
+
+        # Step 1 : multi-token update crossing the window boundary
+        second_chunk = torch.tensor([30.0, 40.0])[None, None, :, None]  # L = 2
+        returned_1 = cache.update(
+            key_states=second_chunk,
+            value_states=second_chunk,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([2, 3])},  # p = 2
+        )
+
+        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])
+        self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0])
