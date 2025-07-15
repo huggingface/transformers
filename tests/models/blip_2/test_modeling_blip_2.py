@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_sdpa,
     require_vision,
@@ -799,9 +800,7 @@ class Blip2ModelTester:
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
-        self.encoder_seq_length = (
-            self.text_model_tester.encoder_seq_length + num_query_tokens
-        )  # need enc seq_length for gen tests
+        self.encoder_seq_length = self.text_model_tester.encoder_seq_length
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
         self.image_token_index = image_token_index

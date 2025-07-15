@@ -99,7 +99,10 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
 
         processor = InstructBlipVideoProcessor(
-            tokenizer=tokenizer, video_processor=video_processor, qformer_tokenizer=qformer_tokenizer
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            qformer_tokenizer=qformer_tokenizer,
+            **processor_kwargs,
         )
 
         image_input = self.prepare_image_inputs()
@@ -139,7 +142,10 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
 
         processor = InstructBlipVideoProcessor(
-            tokenizer=tokenizer, video_processor=video_processor, qformer_tokenizer=qformer_tokenizer
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            qformer_tokenizer=qformer_tokenizer,
+            **processor_kwargs,
         )
 
         input_str = "lower newer"
@@ -163,7 +169,10 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
 
         processor = InstructBlipVideoProcessor(
-            tokenizer=tokenizer, video_processor=video_processor, qformer_tokenizer=qformer_tokenizer
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            qformer_tokenizer=qformer_tokenizer,
+            **processor_kwargs,
         )
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
@@ -180,7 +189,10 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
 
         processor = InstructBlipVideoProcessor(
-            tokenizer=tokenizer, video_processor=video_processor, qformer_tokenizer=qformer_tokenizer
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            qformer_tokenizer=qformer_tokenizer,
+            **processor_kwargs,
         )
 
         input_str = "lower newer"

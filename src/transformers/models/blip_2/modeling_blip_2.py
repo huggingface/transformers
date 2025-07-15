@@ -1555,16 +1555,25 @@ class Blip2Model(Blip2PreTrainedModel):
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
-        language_model_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
+
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds], dim=1)
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        expected_device = language_model_attention_mask.device
-        attention_mask = torch.cat([language_model_attention_mask, attention_mask.to(expected_device)], dim=1)
+
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
+            special_image_mask, language_model_inputs
+        )
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
@@ -2042,11 +2051,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         language_model_inputs, vision_outputs, query_outputs = self.get_image_features(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
         )
-
         vision_outputs = vision_outputs.to_tuple() if not return_dict else vision_outputs
         query_outputs = query_outputs.to_tuple() if not return_dict else query_outputs
-
-        language_model_inputs = self.language_projection(query_output)
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -2062,9 +2068,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        special_image_mask = (
-            special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
-        )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
             special_image_mask, language_model_inputs
@@ -2197,18 +2201,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        special_image_mask = (
-            special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
-        )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
-        inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
-            special_image_mask, language_model_inputs
-        )
+        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            if input_ids is not None:
-                input_ids = input_ids.to(language_model_inputs.device)
             inputs["input_ids"] = input_ids
 
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
@@ -2343,7 +2341,9 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             if self.config.image_token_index is not None:
                 input_ids = input_ids[:, self.config.num_query_tokens :]
             else:
-                query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device)
+                query_attention_mask = torch.ones(
+                    query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device
+                )
                 attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
 
             query_embeds = self.embeddings(
