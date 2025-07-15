@@ -31,6 +31,7 @@ You can find the original I-JEPA checkpoints under the [AI at Meta](https://hugg
 > This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
 
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg">
 
 
 > Click on the I-JEPA models in the right sidebar for more examples of how to apply I-JEPA to different image representation and classification tasks.
@@ -92,10 +93,8 @@ print(similarity)
 
 ## Quantization
 
-The following example demonstrates how to quantize I-JEPA models using bitsandbytes for 4-bit and 8-bit quantization to reduce model size and memory usage while maintaining performance. More quantization methods are discussed [here](https://huggingface.co/docs/transformers/v4.53.2/quantization/overview).
-
-<hfoptions>
-<hfoption id="Quantization">
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```py
 import torch
@@ -109,26 +108,39 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-model = AutoModel.from_pretrained(
-    "facebook/ijepa_vith14_1k",
-    quantization_config=quantization_config,
-    torch_dtype=torch.bfloat16,
-    device_map="auto"
-)
+url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
+image_1 = Image.open(requests.get(url_1, stream=True).raw)
+image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")
+model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", quantization_config=quantization_config, torch_dtype="auto", attn_implementation="sdpa")
 
-dataset = load_dataset("huggingface/cats-image")
-image = dataset["test"][0]["image"]
-inputs = processor(image, return_tensors="pt")
 
-with torch.no_grad():
+def infer(image):
+    inputs = processor(image, return_tensors="pt")
     outputs = model(**inputs)
-    features = outputs.last_hidden_state.mean(dim=1)
+    return outputs.last_hidden_state.mean(dim=1)
 
-print(f"Features shape: {features.shape}")
-print(f"Memory usage: {model.get_memory_footprint() / 1e9:.2f} GB")
+
+embed_1 = infer(image_1)
+embed_2 = infer(image_2)
+
+similarity = cosine_similarity(embed_1, embed_2)
+print(similarity)
 ```
 
-</hfoption>
-</hfoptions>
+## IJepaConfig
+
+[[autodoc]] IJepaConfig
+
+## IJepaModel
+
+[[autodoc]] IJepaModel
+    - forward
+
+## IJepaForImageClassification
+
+[[autodoc]] IJepaForImageClassification
+    - forward
+
