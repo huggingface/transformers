@@ -2344,7 +2344,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Apply it to all submodels as well
         for submodule in self.modules():
-            if isinstance(submodule, PreTrainedModel):
+            # self is returned by modules() -> we need to skip it of course
+            if submodule is not self and isinstance(submodule, PreTrainedModel):
                 sub_implementation = attn_implementation
                 if isinstance(attn_implementation, dict):
                     for subconfig_key in self.config.sub_configs:
