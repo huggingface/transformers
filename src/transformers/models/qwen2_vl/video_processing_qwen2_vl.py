@@ -121,13 +121,13 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
     def sample_frames(
         self,
-        video: "torch.Tensor",
-        frame_factor: int,
+        temporal_patch_size: int,
         min_frames: int,
         max_frames: int,
-        metadata: Optional[Union[VideoMetadata, dict]] = None,
+        metadata: Optional[VideoMetadata] = None,
         num_frames: Optional[int] = None,
         fps: Optional[Union[int, float]] = None,
+        **kwargs,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
@@ -135,9 +135,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         and `fps` are mutually exclusive.
 
         Args:
-            video (`torch.Tensor`):
-                Video that need to be sampled.
-            frame_factor (`int`):
+            temporal_patch_size (`int`):
                 The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
             min_frames (`int`):
                 The minimum number of frames that can be sampled.
@@ -159,21 +157,21 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
-        total_num_frames = video.shape[0]
+        total_num_frames = metadata["total_num_frames"]
 
         # If num_frames is not given but fps is, calculate num_frames from fps
         if num_frames is not None:
-            num_frames = round(num_frames / frame_factor) * frame_factor
+            num_frames = round(num_frames / temporal_patch_size) * temporal_patch_size
         elif fps is not None:
-            if metadata is None:
+            if metadata is None or getattr(metadata, "fps", None) is None:
                 raise ValueError(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
-            max_frames = math.floor(min(max_frames, total_num_frames) / frame_factor) * frame_factor
+            max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
             num_frames = total_num_frames / metadata["fps"] * fps
             num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
-            num_frames = math.floor(num_frames / frame_factor) * frame_factor
+            num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
 
         if num_frames > total_num_frames:
             raise ValueError(
@@ -185,14 +183,12 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         else:
             indices = torch.arange(0, total_num_frames).int()
-        video = video[indices].contiguous()
 
-        return video
+        return indices
 
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -200,7 +196,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        do_sample_frames: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         min_pixels: Optional[int] = None,
@@ -208,34 +203,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
-        num_frames: Optional[int] = None,
-        min_frames: Optional[int] = None,
-        max_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
-        if do_sample_frames:
-            # Sample video frames
-            videos = [
-                self.sample_frames(
-                    video,
-                    frame_factor=temporal_patch_size,
-                    min_frames=min_frames,
-                    max_frames=max_frames,
-                    metadata=metadata,
-                    num_frames=num_frames,
-                    fps=fps,
-                )
-                for video, metadata in zip(videos, video_metadata)
-            ]
-
-        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
-        # moving the whole video incurs high GPU mem usage for long videos
-        if device is not None:
-            videos = [video.to(device) for video in videos]
-
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}

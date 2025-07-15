@@ -526,6 +526,7 @@ def validate_preprocess_arguments(
     do_resize: Optional[bool] = None,
     size: Optional[dict[str, int]] = None,
     resample: Optional["PILImageResampling"] = None,
+    interpolation: Optional["InterpolationMode"] = None,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
@@ -550,8 +551,13 @@ def validate_preprocess_arguments(
     if do_center_crop and crop_size is None:
         raise ValueError("`crop_size` must be specified if `do_center_crop` is `True`.")
 
-    if do_resize and (size is None or resample is None):
-        raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
+    if interpolation is not None and resample is not None:
+        raise ValueError(
+            "Only one of `interpolation` and `resample` should be specified, depending on image processor type."
+        )
+
+    if not (do_resize and size is not None and (resample is not None or interpolation is not None)):
+        raise ValueError("`size` and `resample/interpolation` must be specified if `do_resize` is `True`.")
 
 
 # In the future we can add a TF implementation here when we have TF models.

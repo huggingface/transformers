@@ -33,9 +33,8 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, is_vision_available, load_image
+from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata, load_video
 
 
 if is_vision_available():
@@ -247,8 +246,6 @@ class VideosKwargs(TypedDict, total=False):
             Whether to center crop the video.
         do_sample_frames (`bool`, *optional*):
             Whether to sample frames from the video before processing or to process the whole video.
-        video_metadata (`VideoMetadata`, *optional*):
-            Metadata of the video containing information about total duration, fps and total number of frames.
         num_frames (`int`, *optional*):
             Maximum number of frames to sample when `do_sample_frames=True`.
         fps (`int` or `float`, *optional*):
@@ -279,9 +276,9 @@ class VideosKwargs(TypedDict, total=False):
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional[str]
     do_sample_frames: Optional[bool]
-    video_metadata: Optional[Union[VideoMetadata, dict]]
     fps: Optional[Union[int, float]]
     num_frames: Optional[int]
+    return_metadata: Optional[bool]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -427,23 +424,11 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
 
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
-    video_load_backend (`str`, *optional*, defaults to `"pyav"`):
-        The backend to use when loading the video which will be used only when there are videos in the conversation.
-        Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
-        that supports all types of sources to load from.
-    sample_indices_fn (`Callable`, *optional*):
-            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
-            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
-            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
-            The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
-            indices at which the video should be sampled. For example:
-
-            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
-                # add you sampling logic here ...
-                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
+    load_audio_from_video (`bool`, *optional*):
+            Whether to use the audio track of input video. If `True` the audio track will be loaded and passed to the
+            processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    video_load_backend: Optional[str] = "pyav"
     sampling_rate: Optional[int] = 16_000
     load_audio_from_video: Optional[bool] = False
 
@@ -1414,6 +1399,11 @@ class ProcessorMixin(PushToHubMixin):
         return unused_kwargs, valid_kwargs
 
     @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
+    @deprecate_kwarg(
+        "video_load_backend",
+        version="4.58",
+        additional_message=". This function will use `torchcodec` by default, or `torchvision` if `torchcodec` is not installed.",
+    )
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
@@ -1490,6 +1480,9 @@ class ProcessorMixin(PushToHubMixin):
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
 
+        # pop unused and deprecated kwarg
+        kwargs.pop("video_load_backend", None)
+
         # Pass unprocessed custom kwargs
         processed_kwargs["template_kwargs"].update(kwargs)
 
@@ -1506,70 +1499,47 @@ class ProcessorMixin(PushToHubMixin):
         return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
+        def get_modality_fname(content_field, modality):
+            content_type = content_field.get("type")
+            if content_type == modality:
+                for key in ["url", "path", "base64"]:
+                    if key in content_field:
+                        return content_field[key]
+
         if tokenize:
             batch_images, batch_videos = [], []
             batch_audios = []
-            batch_video_metadata = []
             for conversation in conversations:
-                images, videos = [], []
-                video_metadata = []
+                image_fnames, video_fnames = [], []
+                audio_fnames = []
                 for message in conversation:
-                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
-                    audio_fnames = [
-                        content[key]
-                        for content in message["content"]
-                        for key in ["audio", "url", "path"]
-                        if key in content and content["type"] == "audio"
-                    ]
-                    image_fnames = [
-                        vision_info[key]
-                        for vision_info in visuals
-                        for key in ["image", "url", "path", "base64"]
-                        if key in vision_info and vision_info["type"] == "image"
-                    ]
-                    video_fnames = [
-                        vision_info[key]
-                        for vision_info in visuals
-                        for key in ["video", "url", "path"]
-                        if key in vision_info and vision_info["type"] == "video"
-                    ]
+                    for content in message["content"]:
+                        content_type = content.get("type")
+                        for key in ["url", "path", "base64"]:
+                            if key in content:
+                                if content_type == "image":
+                                    image_fnames.append(get_modality_fname(content, "image"))
+                                elif content_type == "video":
+                                    video_fnames.append(get_modality_fname(content, "video"))
+                                elif content_type == "audio":
+                                    audio_fnames.append(get_modality_fname(content, "audio"))
 
-                    for fname in image_fnames:
-                        images.append(load_image(fname))
-
-                    # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not mm_load_kwargs["load_audio_from_video"]:
-                        for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
-                    else:
-                        for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
-
+                # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
+                if not mm_load_kwargs["load_audio_from_video"]:
+                    for fname in audio_fnames:
+                        batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                else:
                     for fname in video_fnames:
-                        if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
-                            video = [np.array(load_image(image_fname)) for image_fname in fname]
-                            # create a 4D video because `load_video` always returns a 4D array
-                            video = np.stack(video)
-                            metadata = None
-                            logger.warning(
-                                "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
-                                "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
-                            )
-                        else:
-                            video, metadata = load_video(
-                                fname,
-                                backend=mm_load_kwargs["video_load_backend"],
-                            )
-                        videos.append(video)
-                        video_metadata.append(metadata)
+                        batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
-                if images:
-                    batch_images.append(images)
-                if videos:
-                    batch_videos.append(videos)
-                    batch_video_metadata.append(video_metadata)
+                if image_fnames:
+                    batch_images.append(image_fnames)
+                    image_fnames = []
+                if video_fnames:
+                    batch_videos.append(video_fnames)
+                    video_fnames = []
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -1602,7 +1572,6 @@ class ProcessorMixin(PushToHubMixin):
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
-                video_metadata=batch_video_metadata,
                 **kwargs,
             )
             if return_dict:
