@@ -16,24 +16,24 @@ Audio processing functions to extract features from audio waveforms. This code i
 and remove unnecessary dependencies.
 """
 
-import os
+import base64
 import io
+import os
 import warnings
 from io import BytesIO
 from typing import Optional, Union
 
 import numpy as np
 import requests
-import base64
-from urllib.parse import urlparse
 
 from .utils import (
     is_librosa_available,
-    is_soundfile_available,
     is_numpy_array,
+    is_soundfile_available,
     is_torch_tensor,
     requires_backends,
 )
+
 
 if is_soundfile_available():
     import soundfile as sf
@@ -75,21 +75,22 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     return audio
 
 
-def load_audio_base64(audio: str, timeout=None, force_mono=False):
+def load_audio_bytes(audio: str, timeout=None, force_mono=False, use_base64=True):
     """
-    Load audio from either a local file path or URL and convert to base64
-    
+    Load audio from either a local file path or URL and convert to base64 or return as BytesIO.
+
     Args:
         audio (str): Either a local file path or a URL to an audio file
         timeout (int): Timeout for URL requests in seconds
         force_mono (bool): Whether to convert stereo audio to mono
-    
+        use_base64 (bool): If True, return base64 string. If False, return io.BytesIO object
+
     Returns:
-        str: Base64 encoded audio data, or None if failed
+        str or io.BytesIO: Base64 encoded audio data or BytesIO object, or None if failed
     """
     try:
         audio_bytes = None
-        
+
         if audio.startswith("http://") or audio.startswith("https://"):
             response = requests.get(audio, timeout=timeout)
             response.raise_for_status()
@@ -101,38 +102,39 @@ def load_audio_base64(audio: str, timeout=None, force_mono=False):
         else:
             print(f"File not found: {audio}")
             return None
-            
+
         # Process audio if force_mono is True
         if force_mono and audio_bytes:
             if not is_soundfile_available():
-                raise ImportError("soundfile is required for `load_audio_base64` with `force_mono=True`. Install it with 'pip install soundfile'")
-            
+                raise ImportError(
+                    "soundfile is required for `load_audio_base64` with `force_mono=True`. Install it with 'pip install soundfile'"
+                )
+
             # Read audio using soundfile to check channels and convert if needed
             with io.BytesIO(audio_bytes) as audio_file:
                 with sf.SoundFile(audio_file) as f:
                     # Read the entire audio data
                     audio_array = f.read(dtype="float32")
                     sampling_rate = f.samplerate
-                    
+
                     # Convert stereo to mono if needed
                     if audio_array.ndim != 1:
                         audio_array = audio_array.mean(axis=1)
-                    
+
                     # Write back to bytes
                     output_buffer = io.BytesIO()
-                    sf.write(output_buffer, audio_array, sampling_rate, format='WAV')
+                    sf.write(output_buffer, audio_array, sampling_rate, format="WAV")
                     audio_bytes = output_buffer.getvalue()
-        
-        # Convert to base64
-        base64_string = base64.b64encode(audio_bytes).decode('utf-8')
-        return base64_string
-        
-    except requests.exceptions.RequestException as e:
-        print(f"Error downloading audio from URL: {e}")
-        return None
-    except IOError as e:
-        print(f"Error reading file: {e}")
-        return None
+
+        # Return based on use_base64 flag
+        if use_base64:
+            # Convert to base64
+            base64_string = base64.b64encode(audio_bytes).decode("utf-8")
+            return base64_string
+        else:
+            # Return as BytesIO object
+            return io.BytesIO(audio_bytes)
+
     except Exception as e:
         print(f"Error loading audio: {e}")
         return None
