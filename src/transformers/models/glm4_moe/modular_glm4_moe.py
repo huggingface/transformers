@@ -45,7 +45,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
     load_balancing_loss_func,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP, Qwen2MoeRMSNorm
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeMLP, Qwen3MoeRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -356,7 +356,7 @@ class Glm4MoeAttention(Glm4Attention):
         return attn_output, attn_weights
 
 
-class Glm4MoeMLP(Qwen2MoeMLP):
+class Glm4MoeMLP(Qwen3MoeMLP):
     pass
 
 
@@ -408,21 +408,10 @@ class Glm4MoeTopkRouter(nn.Module):
 
 
 class Glm4MoeSparseMoeBlock(DeepseekV3MoE):
-    def __init__(self, config):
-        super().__init__(config)
-        self.experts = nn.ModuleList(
-            [
-                Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        self.gate = Glm4MoeTopkRouter(config)
-        self.shared_experts = Glm4MoeMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
+    pass
 
 
-class Glm4MoeRMSNorm(Qwen2MoeRMSNorm):
+class Glm4MoeRMSNorm(Qwen3MoeRMSNorm):
     pass
 
 
@@ -702,7 +691,7 @@ class Glm4MoeForQuestionAnswering(LlamaForQuestionAnswering):
 
 __all__ = [
     "Glm4MoeConfig",
-    "Glm4MoePreTrainedModel",  # noqa: F822
+    "Glm4MoePreTrainedModel",
     "Glm4MoeModel",
     "Glm4MoeForCausalLM",
     "Glm4MoeForSequenceClassification",

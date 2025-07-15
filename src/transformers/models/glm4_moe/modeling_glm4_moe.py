@@ -28,6 +28,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -213,20 +214,20 @@ class Glm4MoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Modified from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Glm4Moe
 class Glm4MoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Glm4MoeTopkRouter(nn.Module):
@@ -331,6 +332,7 @@ class Glm4MoeSparseMoeBlock(nn.Module):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Glm4MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
