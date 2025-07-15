@@ -23,7 +23,7 @@ REPO_ROOT = Path().cwd()
 
 COMMON_TEST_FILES: list[tuple[Path, str]] = [
     (REPO_ROOT / "tests/test_modeling_common.py", "common"),
-    (REPO_ROOT / "tests/generation/test_utils.py", "generation"),
+    (REPO_ROOT / "tests/generation/test_utils.py", "GenerationMixin"),
 ]
 
 MODELS_DIR = REPO_ROOT / "tests/models"
@@ -186,10 +186,12 @@ def main() -> None:
 
     if test_method_name:
         data = summarize_single_test(test_method_name, model_names, model_overrides)
-        save_json(data, output_dir / f"scan_{test_method_name}.json")
+        json_path = output_dir / f"scan_{test_method_name}.json"
     else:
         data = summarize_all_tests(tests_with_origin, model_names, model_overrides)
-        save_json(data, output_dir / "all_tests_scan_result.json")
+        json_path = output_dir / "all_tests_scan_result.json"
+    save_json(data, json_path)
+    print(f"\n📄 JSON saved to {json_path.resolve()}")
 
 
 if __name__ == "__main__":
