@@ -14,7 +14,6 @@
 # limitations under the License.
 """BLT model configuration"""
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -116,7 +115,6 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-
 class BLTGlobalTransformerConfig(PretrainedConfig):
     """
     Configuration class for the BLT Global Transformer component.
@@ -153,7 +151,6 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
-
 
 
 class BLTPatcherConfig(PretrainedConfig):

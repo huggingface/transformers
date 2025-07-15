@@ -17,6 +17,7 @@ import unittest
 
 import pytest
 from parameterized import parameterized
+
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
@@ -31,9 +32,9 @@ from transformers.testing_utils import (
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
-    ids_tensor,
-    _test_eager_matches_sdpa_inference,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    _test_eager_matches_sdpa_inference,
+    ids_tensor,
 )
 
 
