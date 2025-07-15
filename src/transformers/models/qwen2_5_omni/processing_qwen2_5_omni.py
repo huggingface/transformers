@@ -31,7 +31,7 @@ from ...video_utils import VideoInput, make_batched_videos
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]] = None
+    fps: Optional[list[int]] = None
     use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
@@ -93,8 +93,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
+    image_processor_class = "Qwen2VLImageProcessor"
+    video_processor_class = "Qwen2VLVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
@@ -255,8 +255,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                         video_token_indices = np.broadcast_to(
                             video_token_indices, (video_token_indices.shape[0], height, width)
                         ).reshape(-1)
-                  
-       video_token_indices = (
+                        video_token_indices = (
                             video_token_indices * next(video_second_per_grid) * position_id_per_seconds
                         )
 
