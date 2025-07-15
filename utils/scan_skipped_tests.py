@@ -19,6 +19,7 @@ import json
 import re
 from pathlib import Path
 
+
 REPO_ROOT = Path().cwd()
 
 COMMON_TEST_FILES: list[tuple[Path, str]] = [
