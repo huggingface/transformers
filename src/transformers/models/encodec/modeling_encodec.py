@@ -511,9 +511,9 @@ class EncodecModel(EncodecPreTrainedModel):
         if self.config.chunk_length_s is not None and duration > 1e-5 + self.config.chunk_length_s:
             raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}")
 
+        input_values = input_values * padding_mask
         scale = None
         if self.config.normalize:
-            input_values = input_values * padding_mask
             mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
             scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
