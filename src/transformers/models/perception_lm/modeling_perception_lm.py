@@ -131,7 +131,10 @@ class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -158,7 +161,10 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -233,35 +239,9 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
         """
-        Forward pass of the PerceptionLM model.
-
         Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Input image tensor of shape `(batch_size, num_tiles, channels, height, width)`.
             pixel_values_videos (`torch.FloatTensor`, *optional*):
                 Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-            past_key_values (`list[torch.FloatTensor]`, *optional*):
-                Precomputed key and value hidden states for fast autoregressive generation.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-            use_cache (`bool`, *optional*):
-                Whether or not to use past key values to speed up decoding.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            cache_position (`torch.LongTensor`, *optional*):
-                Position indices for caching.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-                Number of logits to keep.
-            **lm_kwargs:
-                Additional keyword arguments for the language model.
 
         Returns:
             [`PerceptionLMModelOutputWithPast`] or `tuple`:
@@ -383,37 +363,9 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         """
-        Forward pass for the PerceptionLMForConditionalGeneration model.
-
         Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Input image tensor of shape `(batch_size, num_tiles, channels, height, width)`.
             pixel_values_videos (`torch.FloatTensor`, *optional*):
                 Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-            past_key_values (`list[torch.FloatTensor]`, *optional*):
-                Precomputed key and value hidden states for fast autoregressive generation.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-            labels (`torch.LongTensor`, *optional*):
-                Labels for computing the language modeling loss.
-            use_cache (`bool`, *optional*):
-                Whether or not to use past key values to speed up decoding.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            cache_position (`torch.LongTensor`, *optional*):
-                Position indices for caching.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-                Number of logits to keep.
-            **lm_kwargs:
-                Additional keyword arguments for the language model.
 
         Returns:
             [`PerceptionLMCausalLMOutputWithPast`] or `tuple`:
