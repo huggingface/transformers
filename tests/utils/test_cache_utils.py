@@ -45,20 +45,24 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        Cache,
         ClvpForCausalLM,
-        DynamicCache,
         Gemma2Config,
         GenerationConfig,
-        HybridCache,
         LlamaConfig,
-        QuantizedCache,
-        SlidingWindowCache,
-        StaticCache,
         convert_and_export_with_cache,
         pipeline,
     )
-    from transformers.cache_utils import HQQQuantizedCacheProcessor, QuantoQuantizedCacheProcessor
+    from transformers.cache_utils import (
+        Cache,
+        DynamicCache,
+        HQQQuantizedCacheProcessor,
+        HybridCache,
+        HybridChunkedCache,
+        QuantizedCache,
+        QuantoQuantizedCacheProcessor,
+        SlidingWindowCache,
+        StaticCache,
+    )
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
@@ -912,7 +916,7 @@ class SyntheticCacheTest(unittest.TestCase):
             head_dim=1,
             hidden_size=1,
             sliding_window=self.window_size,
-            sliding_window_pattern=2,  # Default pattern for hybrid sliding
+            layer_types=["full_attention"] * 1,  # Static cache by default
         )
 
     def test_static_cache_out_of_bounds(self):
@@ -979,7 +983,9 @@ class SyntheticCacheTest(unittest.TestCase):
         result:        [3.0, 4.0, 5.0, 6.0] (keeps last window_size tokens)
         """
         # Scenario 1: Update within window, no slide yet
-        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        config = copy.deepcopy(self.config)
+        config.layer_types = ["sliding_attention"] * config.num_hidden_layers
+        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
@@ -1000,7 +1006,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 2: Update causing slide
-        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
@@ -1021,7 +1027,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 3: Long prompt handling
-        sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         sliding_cache.update(
             key_states=long_prefill,
@@ -1036,7 +1042,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
     def test_hybrid_cache_static_mode(self):
-        """Test HybridCache in static mode with hardcoded assertions.
+        """Test HybridCache with only 1 static layer.
 
         Scenario 1: Static layer behavior
         prefill:       [1.0, 2.0, 0.0, 0.0]
@@ -1046,7 +1052,7 @@ class SyntheticCacheTest(unittest.TestCase):
         update pos 3:  [1.0, 2.0, 3.0, 4.0]
         """
         config = copy.deepcopy(self.config)
-        config.sliding_window_pattern = 1  # Layer 0 is static (1 % 1 == 0)
+        config.layer_types = ["full_attention"] * config.num_hidden_layers
 
         # Scenario 1
         hybrid_cache_static_mode = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
@@ -1100,8 +1106,10 @@ class SyntheticCacheTest(unittest.TestCase):
         input:         [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
         result:        [3.0, 4.0, 5.0, 6.0] (keeps last window_size tokens)
         """
+        config = copy.deepcopy(self.config)
+        config.layer_types = ["sliding_attention"] * config.num_hidden_layers
         # Scenario 1: Update within window, no slide yet
-        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
@@ -1122,7 +1130,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 2: Update causing first slide
-        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
@@ -1156,7 +1164,7 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 4: Long prompt handling
-        hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=long_prefill,
@@ -1212,3 +1220,193 @@ class SyntheticCacheTest(unittest.TestCase):
             [10.0, 20.0, 30.0, 40.0],
             "DynamicCache Scenario 2 layer 1 failed",
         )
+
+    def test_hybrid_cache(self):
+        """
+        Test HybridCache with a mix of static and sliding layers,
+        with prefill size bigger than sliding window.
+
+        prefill:
+        static: [1.0, 2.0, 3.0]
+        sliding: [10.0, 20.0, 30.0]
+            (stores only [20.0, 30.0])
+
+        update pos 4:
+        static: [1.0, 2.0, 3.0, 5.0]
+        sliding: [30.0, 50.0]
+        """
+        config = copy.deepcopy(self.config)
+        config.num_hidden_layers = 2
+        config.layer_types = ["full_attention", "sliding_attention"]
+        config.sliding_window = 2
+        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+
+        # Prefill both layers up to cache capacity
+        prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
+        # Sliding window is 2, so it should return full [10.0, 20.0, 30.0], but store only [20.0, 30.0]
+        prefill_sliding = torch.tensor([10.0, 20.0, 30.0])[None, None, :, None]
+
+        # Update static layer (layer 0)
+        res_static = hybrid_cache.update(
+            key_states=prefill_static,
+            value_states=prefill_static,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(3)},
+        )
+
+        # Update sliding layer (layer 1)
+        res_sliding = hybrid_cache.update(
+            key_states=prefill_sliding,
+            value_states=prefill_sliding,
+            layer_idx=1,
+            cache_kwargs={"cache_position": torch.arange(3), "sliding_window": self.window_size},
+        )
+
+        # Verify initial states
+        self.assertEqual(
+            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 0.0],
+            "Initial static layer state is wrong",
+        )
+        self.assertEqual(
+            res_static[0][0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 0.0],
+            "Static layer did not return the correct value.",
+        )
+        self.assertEqual(
+            hybrid_cache.layers[1].keys[0, 0, :, 0].tolist(),
+            [20.0, 30.0],
+            "Initial sliding layer state is wrong",
+        )
+        self.assertEqual(
+            res_sliding[0][0, 0, :, 0].tolist(),
+            [10.0, 20.0, 30.0],
+            "Sliding layer did not return the correct value.",
+        )
+
+        # Update at position 4
+        new_key_static = torch.tensor(5.0)[None, None, None, None]
+        new_key_sliding = torch.tensor(50.0)[None, None, None, None]
+
+        # Update static layer (layer 0)
+        hybrid_cache.update(
+            key_states=new_key_static,
+            value_states=new_key_static,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([3])},
+        )
+
+        # Update sliding layer (layer 1)
+        hybrid_cache.update(
+            key_states=new_key_sliding,
+            value_states=new_key_sliding,
+            layer_idx=1,
+            cache_kwargs={"cache_position": torch.tensor([3])},
+        )
+
+        # The static layer does not slide, so it should have updated the element at position 3
+        self.assertEqual(
+            hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 5.0],
+            "Static layer did not update as expected.",
+        )
+
+        # The sliding layer should have shifted, discarding the first element and adding the new one at the end
+        self.assertEqual(
+            hybrid_cache.layers[1].keys[0, 0, :, 0].tolist(),
+            [30.0, 50.0],
+            "Sliding layer did not slide as expected.",
+        )
+
+    def test_hybrid_chunked_cache(self):
+        """
+        Test HybridChunkedCache special cases that it handles:
+            1. a pre-fill longer than the sliding window
+            2. a single-token decoding step (normal generation)
+            3. a multi-token decoding step after the window is already full
+
+        Sliding-window size: 2
+        Static layer is full-attention.
+        ─────────────────────────────────────────────
+        Prefill:
+            static   : [1, 2, 3]
+            sliding  : [10, 20, 30]   (cache keeps [20, 30])
+        +1 token:
+            static   : [1, 2, 3, 5]
+            sliding  : [30, 50]       (returned [30, 50])
+        +2 tokens:
+            sliding  : [60, 70]       (returned [50, 60, 70])
+        """
+
+        config = copy.deepcopy(self.config)
+        config.num_hidden_layers = 2
+        config.layer_types = ["full_attention", "sliding_attention"]
+        config.sliding_window = 2
+        max_cache_len = 4  # window == max_cache_len for sliding layer
+        chunked_cache = HybridChunkedCache(config=config, max_batch_size=1, max_cache_len=max_cache_len)
+
+        # ------------------------------------------------------------------ #
+        # 1) PREFILL (3 tokens > window)
+        # ------------------------------------------------------------------ #
+        prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
+        prefill_sliding = torch.tensor([10.0, 20.0, 30.0])[None, None, :, None]
+
+        res_static = chunked_cache.update(
+            key_states=prefill_static,
+            value_states=prefill_static,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(3)},
+        )
+        res_sliding = chunked_cache.update(
+            key_states=prefill_sliding,
+            value_states=prefill_sliding,
+            layer_idx=1,
+            cache_kwargs={"cache_position": torch.arange(3)},
+        )
+
+        # Static layer keeps everything
+        self.assertEqual(res_static[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
+        # Sliding layer returned full prompt but stored the tail
+        self.assertEqual(res_sliding[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0])
+        self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [20.0, 30.0])
+
+        # ------------------------------------------------------------------ #
+        # 2) ONE-TOKEN UPDATE (normal decode)
+        # ------------------------------------------------------------------ #
+        new_static = torch.tensor(5.0)[None, None, None, None]
+        new_sliding = torch.tensor(50.0)[None, None, None, None]
+
+        chunked_cache.update(
+            key_states=new_static,
+            value_states=new_static,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([3])},
+        )
+        res_one = chunked_cache.update(
+            key_states=new_sliding,
+            value_states=new_sliding,
+            layer_idx=1,
+            cache_kwargs={"cache_position": torch.tensor([3])},
+        )
+
+        # Static grew by one
+        self.assertEqual(chunked_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 5.0])
+        # Sliding window slid by exactly 1
+        self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [30.0, 50.0])
+        self.assertEqual(res_one[0][0, 0, :, 0].tolist(), [30.0, 50.0])
+
+        # ------------------------------------------------------------------ #
+        # 3) TWO-TOKEN UPDATE after window is full
+        # ------------------------------------------------------------------ #
+        new_sliding_2 = torch.tensor([60.0, 70.0])[None, None, :, None]  # shape (1,1,2,1)
+        res_two = chunked_cache.update(
+            key_states=new_sliding_2,
+            value_states=new_sliding_2,
+            layer_idx=1,
+            cache_kwargs={"cache_position": torch.tensor([4, 5])},  # arbitrary positions; ignored in full mode
+        )
+
+        # Cache now keeps the latest two tokens
+        self.assertEqual(chunked_cache.layers[1].keys[0, 0, :, 0].tolist(), [60.0, 70.0])
+        # Returned tensor contains previous last token + new ones
+        self.assertEqual(res_two[0][0, 0, :, 0].tolist(), [50.0, 60.0, 70.0])

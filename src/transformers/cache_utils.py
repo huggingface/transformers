@@ -339,7 +339,7 @@ class SlidingWindowLayer(StaticLayer):
             new_v = value_states[:, :, -self.max_cache_len :, :]
             self.keys.copy_(new_k)
             self.values.copy_(new_v)
-            return self.keys, self.values
+            return key_states, value_states
 
         # Sliding window logic for generation phase or prefill < window
         slicing = torch.arange(self.max_cache_len, device=value_states.device)
@@ -377,16 +377,12 @@ class SlidingWindowLayer(StaticLayer):
         return local_mask_kv_length, local_mask_kv_offset
 
 
-class ChunkedAttentionLayer(StaticLayer):
-    """
-    A static cache layer that implements chunked attention caching.
-    Inherits from StaticLayer but uses chunked attention update logic.
-    """
+class ChunkedSlidingLayer(SlidingWindowLayer):
+    """An extended SlidingWindowLayer that supports prefill chunking."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cumulative_length = 0
-        self.is_sliding = True
 
     def update(
         self,
@@ -396,7 +392,7 @@ class ChunkedAttentionLayer(StaticLayer):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         if cache_position is None:
-            raise ValueError("`cache_position` must be provided for ChunkedAttentionLayer.")
+            raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
 
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
@@ -979,6 +975,11 @@ class Cache:
         ):
             layer_classes = [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
         self.layer_classes = layer_classes or [DynamicLayer]
+        hybrid_chunked = kwargs.pop("hybrid_chunked", "llama4" in getattr(config, "model_type", ""))
+        if hybrid_chunked:
+            self.layer_classes = [
+                ChunkedSlidingLayer if cls == SlidingWindowLayer else cls for cls in self.layer_classes
+            ]
 
         processor_kwargs, kwargs = parse_processor_args(processor_class, kwargs)
         self.layer_init_args = parse_layer_args_from_model_config(config, *args, **kwargs)
@@ -1042,7 +1043,7 @@ class Cache:
             args = self.layer_init_args.copy()
             if self.layer_init_args.get("layer_device_map", None) is not None:
                 args["device"] = args.pop("layer_device_map")[layer_idx]
-            new_layer = self.layer_classes[layer_idx % len(self.layer_classes)](**args)
+            new_layer = self.layer_classes[len(self.layers) % len(self.layer_classes)](**args)
             self.layers.append(new_layer)
 
     @apply_processors
@@ -1098,7 +1099,7 @@ class Cache:
         warnings.warn(
             "`cache.key_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].keys` instead."
         )
-        return KeyValuesWrapper(self.layers, "key")
+        return KeyValuesWrapper(self.layers, "keys")
 
     @property
     def value_cache(self) -> "KeyValuesWrapper":
@@ -1106,7 +1107,7 @@ class Cache:
         warnings.warn(
             "`cache.value_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].values` instead."
         )
-        return KeyValuesWrapper(self.layers, "value")
+        return KeyValuesWrapper(self.layers, "values")
 
     ### Wrappers for layer operations and properties ###
 
@@ -1586,6 +1587,7 @@ class HybridChunkedCache(Cache):
     def __init__(self, config: PretrainedConfig, *args, **kwargs):
         # Ugly hack for BC: if layer_types is not set, fallback to StaticCache. Otherwise, Cache init will use config.layer_types
         layer_classes = [StaticLayer] if not hasattr(config, "layer_types") else None
+        kwargs["hybrid_chunked"] = True
         super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
 
 
@@ -1889,7 +1891,7 @@ def parse_layer_args_from_model_config(
 LAYER_CLASS_MAP: dict[str, type["CacheLayerMixin"]] = {
     "full_attention": StaticLayer,
     "sliding_attention": SlidingWindowLayer,
-    "chunked_attention": ChunkedAttentionLayer,
+    "chunked_attention": SlidingWindowLayer,
 }
 PROCESSOR_CLASS_MAP: dict[str, type["CacheProcessor"]] = {
     "offloaded": OffloadedCacheProcessor,
@@ -1906,28 +1908,28 @@ class KeyValuesWrapper:
     This allows for BC access and writing, e.g., cache.key_cache[idx] = ...
     Deprecated in favor of Cache.layers[idx].keys/values. TODO: remove in v4.56.0"""
 
-    def __init__(self, layers, cache_type="key"):
+    def __init__(self, layers, cache_type="keys"):
         self.layers = layers
         self.cache_type = cache_type
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            return [getattr(layer, f"{self.cache_type}_cache") for layer in self.layers[idx]]
-        return getattr(self.layers[idx], f"{self.cache_type}_cache")
+            return [getattr(layer, self.cache_type) for layer in self.layers[idx]]
+        return getattr(self.layers[idx], self.cache_type)
 
     def __setitem__(self, idx, value):
         if isinstance(idx, slice):
             for layer, val in zip(self.layers[idx], value):
-                setattr(layer, f"{self.cache_type}_cache", val)
+                setattr(layer, self.cache_type, val)
         else:
-            setattr(self.layers[idx], f"{self.cache_type}_cache", value)
+            setattr(self.layers[idx], self.cache_type, value)
 
     def __len__(self):
         return len(self.layers)
 
     def __iter__(self):
         for layer in self.layers:
-            yield getattr(layer, f"{self.cache_type}_cache")
+            yield getattr(layer, self.cache_type)
 
     def __bool__(self):
         return bool(self.layers)
