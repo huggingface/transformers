@@ -33,10 +33,6 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are able to understand the visual content that the user provides, "
     "and assist the user with a variety of tasks using natural language.\n\n"
 )
-'<|im_start|>'
-'<|im_end|>'
-'<|vision_start|>'
-'<|vision_end|>'
 
 class BagelTextKwargs(TextKwargs, total=False):
     generation_mode: str
