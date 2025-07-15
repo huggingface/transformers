@@ -32,9 +32,7 @@ def get_common_tests(file_path: Path) -> list[str]:
         raise FileNotFoundError(f"Common tests file not found at {file_path}")
     content = file_path.read_text(encoding="utf-8")
     # find all function definitions starting with 'test_'
-    return sorted(
-        set(re.findall(r"^\s*def\s+(test_[a-zA-Z0-9_]+)", content, re.MULTILINE))
-    )
+    return sorted(set(re.findall(r"^\s*def\s+(test_[a-zA-Z0-9_]+)", content, re.MULTILINE)))
 
 
 def get_models_and_test_files(models_dir: Path) -> tuple[list[str], list[Path]]:
@@ -114,8 +112,7 @@ def summarize_single_test(
 
     print(f"\n== {test_name} ==")
     print(f"Ran on    : {len(models_ran)}/{total_models} models")
-    print(f"Skipped on: {len(models_skipped)}/{total_models} models "
-          f"({skipped_proportion:.1%})")
+    print(f"Skipped on: {len(models_skipped)}/{total_models} models ({skipped_proportion:.1%})")
     if models_skipped:
         for reason in reasons_for_skipping[:10]:
             print(f" - {reason}")
@@ -175,8 +172,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--test_method_name",
-        help="Specific test method to scan. "
-             "If provided, only that method is analysed and reported.",
+        help="Specific test method to scan. If provided, only that method is analysed and reported.",
     )
     args = parser.parse_args()
 
@@ -184,11 +180,7 @@ def main() -> None:
     test_method_name = args.test_method_name
 
     try:
-        common_tests = (
-            [test_method_name]
-            if test_method_name
-            else get_common_tests(COMMON_TESTS_FILE)
-        )
+        common_tests = [test_method_name] if test_method_name else get_common_tests(COMMON_TESTS_FILE)
         all_models, model_files = get_models_and_test_files(MODELS_DIR)
     except FileNotFoundError as e:
         print(f"❌ Error: {e}")
