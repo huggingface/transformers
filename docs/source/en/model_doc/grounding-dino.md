@@ -60,7 +60,8 @@ Here's how to use the model for zero-shot object detection:
 >>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(image_url, stream=True).raw)
 >>> # Check for cats and remote controls
->>> text_labels = [["a cat", "a remote control"]]
+>>> # VERY important: text queries need to be lowercased + end with a dot
+>>> text_labels = "a cat. a remote control."
 
 >>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
 >>> with torch.no_grad():
@@ -79,8 +80,9 @@ Here's how to use the model for zero-shot object detection:
 >>> for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
 ...     box = [round(x, 2) for x in box.tolist()]
 ...     print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
-Detected a cat with confidence 0.468 at location [344.78, 22.9, 637.3, 373.62]
-Detected a cat with confidence 0.426 at location [11.74, 51.55, 316.51, 473.22]
+Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.27]
+Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.43]
+Detected a remote control with confidence 0.476 at location [38.58, 70.01, 176.78, 118.18]
 ```
 
 ## Grounded SAM
