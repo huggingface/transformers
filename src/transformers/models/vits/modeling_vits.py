@@ -1240,9 +1240,8 @@ class VitsPreTrainedModel(PreTrainedModel):
         elif isinstance(module, VitsAttention):
             if self.config.window_size:
                 head_dim = self.config.hidden_size // self.config.num_attention_heads
-                scaling = head_dim**-0.5
-                module.emb_rel_k.copy_(torch.randn(1, self.config.window_size * 2 + 1, head_dim) * scaling)
-                module.emb_rel_v.copy_(torch.randn(1, self.config.window_size * 2 + 1, head_dim) * scaling)
+                nn.init.normal_(module.emb_rel_k, std=head_dim**-0.5)
+                nn.init.normal_(module.emb_rel_v, std=head_dim**-0.5)
         elif isinstance(module, VitsElementwiseAffine):
             module.translate.data.zero_()
             module.log_scale.data.zero_()

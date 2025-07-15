@@ -564,7 +564,10 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
         Initialize weights
         """
         if isinstance(module, PatchTSTPositionalEncoding):
-            num_patches = PatchTSTPatchify(self.config).num_patches
+            # get the number of patches
+            num_patches = (
+                max(self.config.context_length, self.config.patch_length) - self.config.patch_length
+            ) // self.config.patch_stride + 1
             # initialize cls_token
             if self.config.use_cls_token:
                 nn.init.normal_(module.cls_token, std=0.02)

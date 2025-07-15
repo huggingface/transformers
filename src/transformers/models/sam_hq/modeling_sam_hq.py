@@ -501,7 +501,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
                 module.rel_pos_w.data.zero_()
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
-                nn.init.normal_(module.pos_embed, mean=0.0, std=std)
+                module.pos_embed.data.zero_()
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):

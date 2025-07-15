@@ -1008,11 +1008,11 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             nn.init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
 

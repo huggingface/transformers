@@ -939,9 +939,9 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_factor
         if isinstance(module, BridgeTowerVisionTransformer):
-            proj_std = (module.transformer.hidden_size**-0.5) * ((2 * module.transformer.num_hidden_layers) ** -0.5)
-            attn_std = module.transformer.hidden_size**-0.5
-            fc_std = (2 * module.transformer.hidden_size) ** -0.5
+            proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
+            attn_std = self.config.hidden_size**-0.5
+            fc_std = (2 * self.config.hidden_size) ** -0.5
             for block in module.transformer.resblocks:
                 nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
                 block.attn.in_proj_bias.data.zero_()

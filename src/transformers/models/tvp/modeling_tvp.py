@@ -569,42 +569,18 @@ class TvpPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, TvpModel):
-            module.text_prompt.copy_(torch.randn([1, 10, self.config.hidden_size]))
+            nn.init.normal_(module.text_prompt)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
         if hasattr(module, "pad_up"):
-            module.pad_up.copy_(
-                torch.randn([1, self.config.num_frames, 3, self.config.visual_prompt_size, self.config.max_img_size])
-            )
+            nn.init.normal_(module.pad_up)
         if hasattr(module, "pad_down"):
-            module.pad_down.copy_(
-                torch.randn([1, self.config.num_frames, 3, self.config.visual_prompt_size, self.config.max_img_size])
-            )
+            nn.init.normal_(module.pad_down)
         if hasattr(module, "pad_left"):
-            module.pad_left.copy_(
-                torch.randn(
-                    [
-                        1,
-                        self.config.num_frames,
-                        3,
-                        self.config.max_img_size - self.config.visual_prompt_size * 2,
-                        self.config.visual_prompt_size,
-                    ]
-                )
-            )
+            nn.init.normal_(module.pad_left)
         if hasattr(module, "pad_right"):
-            module.pad_right.copy_(
-                torch.randn(
-                    [
-                        1,
-                        self.config.num_frames,
-                        3,
-                        self.config.max_img_size - self.config.visual_prompt_size * 2,
-                        self.config.visual_prompt_size,
-                    ]
-                )
-            )
+            nn.init.normal_(module.pad_right)
 
 
 class TvpFrameDownPadPrompter(nn.Module):
