@@ -104,7 +104,7 @@ class FalconRotaryEmbedding(nn.Module):
     def __init__(self, config: FalconConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -225,10 +225,6 @@ class FalconAttention(nn.Module):
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
-
-        # TODO (raushan): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
-        if config.rotary:
-            self.rotary_emb = FalconRotaryEmbedding(config=self.config)
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -362,10 +358,7 @@ class FalconAttention(nn.Module):
 
             attn_output = self.dense(attn_output)
 
-            if output_attentions:
-                return attn_output, layer_past, attention_scores
-            else:
-                return attn_output, layer_past
+            return attn_output, attention_scores
 
         else:
             if self._use_sdpa and not output_attentions and head_mask is None:
@@ -380,6 +373,7 @@ class FalconAttention(nn.Module):
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
                     is_causal=is_causal,
                 )
+                attention_probs = None
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
@@ -416,10 +410,7 @@ class FalconAttention(nn.Module):
 
                 attn_output = self.dense(attn_output)
 
-            if output_attentions:
-                return attn_output, layer_past, attention_probs
-            else:
-                return attn_output, layer_past
+            return attn_output, attention_probs
 
 
 class FalconFlashAttention2(FalconAttention):
@@ -528,7 +519,7 @@ class FalconFlashAttention2(FalconAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, layer_past, attn_weights
+        return attn_output, attn_weights
 
 
 class FalconMLP(nn.Module):
@@ -603,7 +594,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             attention_layernorm_out = self.input_layernorm(hidden_states)
 
         # Self attention.
-        attn_outputs = self.self_attention(
+        attention_output, attn_weights = self.self_attention(
             attention_layernorm_out,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -615,8 +606,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-
-        attention_output = attn_outputs[0]
 
         if not self.config.new_decoder_architecture:
             if self.config.parallel_attn:
@@ -634,8 +623,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         ):
             mlp_layernorm_out = attention_layernorm_out
 
-        outputs = attn_outputs[1:]
-
         # MLP.
         mlp_output = self.mlp(mlp_layernorm_out)
 
@@ -644,12 +631,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
 
         output = dropout_add(mlp_output, residual, self.config.hidden_dropout, training=self.training)
 
-        if use_cache:
-            outputs = (output,) + outputs
-        else:
-            outputs = (output,) + outputs[1:]
-
-        return outputs  # hidden_states, past_kv, attentions
+        return output, attn_weights
 
 
 @auto_docstring
@@ -658,7 +640,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconDecoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
@@ -776,19 +758,12 @@ class FalconModel(FalconPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                )
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         alibi = None
@@ -826,7 +801,6 @@ class FalconModel(FalconPreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -848,11 +822,8 @@ class FalconModel(FalconPreTrainedModel):
             )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
@@ -860,18 +831,14 @@ class FalconModel(FalconPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )

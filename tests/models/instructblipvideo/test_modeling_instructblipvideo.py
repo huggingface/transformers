@@ -187,9 +187,9 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -514,6 +514,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -535,9 +541,8 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         pass
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
