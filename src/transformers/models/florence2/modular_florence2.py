@@ -261,10 +261,10 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         return torch.sin(emb), torch.cos(emb)
 
     def forward(self, seq_embeds: torch.Tensor) -> torch.Tensor:
-        len_seq = seq_embeds.size(-2)
+        len_seq = seq_embeds.size(1)
         if len_seq > self.max_seq_len:
             raise ValueError(f"Maximum sequence length {self.max_seq_len}, got {len_seq}")
-        pos_embeds = self.pos_idx_to_embed[0 : seq_embeds.size(-2), :]
+        pos_embeds = self.pos_idx_to_embed[0:len_seq, :]
         return pos_embeds
 
 
@@ -719,7 +719,7 @@ class Florence2VisionProjector(nn.Module):
     def forward(self, image_features):
         position_features = image_features + self.image_position_embed(image_features)
         position_features = position_features.flatten(2).transpose(1, 2)
-        temporal_features = self.visual_temporal_embed(position_features[:, :, 0])
+        temporal_features = self.visual_temporal_embed(position_features[:, :1, :])
         temporal_features = temporal_features.unsqueeze(1)
         visual_token_features = position_features + temporal_features
         visual_token_features = visual_token_features.unsqueeze(1)
