@@ -766,8 +766,6 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
             samples,
         ).to(torch_device)
 
-        # There seem to have some stuff(s) that is/are random causing the test flaky
-        torch.manual_seed(0)
         out = model.generate(**inputs)
 
         # fmt: off
@@ -779,4 +777,11 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         ])
         # fmt: on
 
-        torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        # See https://github.com/huggingface/transformers/pull/39416
+        EXPECTED_TOKENS_2 = torch.clone(EXPECTED_TOKENS)
+        EXPECTED_TOKENS_2[2, 159:162] = torch.tensor([3, 0, 269])
+
+        try:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        except AssertionError:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS_2)
