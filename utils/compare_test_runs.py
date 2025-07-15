@@ -1,11 +1,11 @@
-import os
 import re
+
 
 def normalize_test_line(line):
     line = line.strip()
 
     # Normalize SKIPPED/XFAIL/etc with path:line and reason
-    match = re.match(r'^(SKIPPED|XFAIL|XPASS|EXPECTEDFAIL)\s+\[?\d*\]?\s*(\S+:\d+)', line)
+    match = re.match(r"^(SKIPPED|XFAIL|XPASS|EXPECTEDFAIL)\s+\[?\d*\]?\s*(\S+:\d+)", line)
     if match:
         status, location = match.groups()
         return f"{status} {location}"
@@ -15,6 +15,7 @@ def normalize_test_line(line):
         return re.split(r"\s+-\s+", line)[0].strip()
 
     return line
+
 
 def parse_summary_file(file_path):
     test_set = set()
@@ -30,6 +31,7 @@ def parse_summary_file(file_path):
                     normalized = normalize_test_line(stripped)
                     test_set.add(normalized)
     return test_set
+
 
 def compare_job_sets(job_set1, job_set2):
     all_job_names = sorted(set(job_set1) | set(job_set2))
@@ -48,16 +50,17 @@ def compare_job_sets(job_set1, job_set2):
         if added or removed:
             report_lines.append(f"=== Diff for job: {job_name} ===")
             if removed:
-                report_lines.append(f"--- Absent in current run:")
+                report_lines.append("--- Absent in current run:")
                 for test in sorted(removed):
                     report_lines.append(f"    - {test}")
             if added:
-                report_lines.append(f"+++ Appeared in current run:")
+                report_lines.append("+++ Appeared in current run:")
                 for test in sorted(added):
                     report_lines.append(f"    + {test}")
             report_lines.append("")  # blank line
 
     return "\n".join(report_lines) if report_lines else "No differences found."
+
 
 # Example usage:
 # job_set_1 = {
