@@ -234,8 +234,7 @@ class RetrievAugLMOutput(ModelOutput):
 class RagPreTrainedModel(PreTrainedModel):
     config_class = RagConfig
     base_model_prefix = "rag"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     @classmethod

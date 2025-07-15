@@ -283,8 +283,7 @@ class GraniteSpeechCTCEncoder(nn.Module):
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechConfig
 
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):

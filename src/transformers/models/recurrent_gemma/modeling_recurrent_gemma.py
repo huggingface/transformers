@@ -509,7 +509,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False  # we can't compare with eager for now
 
     def _init_weights(self, module):

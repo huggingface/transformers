@@ -846,7 +846,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     # TODO: If anyone is up to it to make sure tests pass etc
     # Flash attention has problems due to not preparing masks the same way as eager/sdpa
     # SDPA has more flaky logits which requires more time to look into tests
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
