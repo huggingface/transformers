@@ -22,7 +22,7 @@ from typing import Any, Callable, Optional, Union, overload
 
 import numpy as np
 
-from transformers.audio_utils import load_audio_bytes
+from transformers.audio_utils import load_audio_base64
 from transformers.tokenization_utils_base import (
     LARGE_INTEGER,
     VERY_LARGE_INTEGER,
@@ -1481,15 +1481,15 @@ class MistralCommonTokenizer(PushToHubMixin):
                     maybe_path: Optional[str] = content.get("path")
                     maybe_base64: Optional[str] = content.get("base64")
                     if maybe_url or maybe_path:
-                        audio_content = load_audio_bytes(maybe_url or maybe_path, force_mono=True)
+                        audio_data = load_audio_base64(maybe_url or maybe_path, force_mono=True, return_dict=True)
                     elif maybe_base64:
                         if not maybe_base64.startswith("data:audio"):
                             # TODO: @eustlb check if this is correct
                             maybe_base64 = "data:audio/unk;base64," + maybe_base64
-                        audio_content = maybe_base64
+                        audio_data = maybe_base64
                     else:
                         raise ValueError("Audio content must be specified.")
-                    normalized_content.append({"type": "input_audio", "input_audio": {"data": audio_content}})
+                    normalized_content.append({"type": "input_audio", "input_audio": audio_data})
                 else:
                     normalized_content.append(content)
             message["content"] = normalized_content
@@ -1761,7 +1761,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer case
-        if kwargs and not kwargs.keys() == {"_from_auto"}:
+        if kwargs and not kwargs.keys() == {"_from_auto", "trust_remote_code"}:
             raise ValueError(
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.from_pretrained`."
             )

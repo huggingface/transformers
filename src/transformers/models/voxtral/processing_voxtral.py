@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import io
+import base64
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
@@ -28,7 +29,7 @@ if is_soundfile_available():
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import TranscriptionRequest
 
-from ...audio_utils import AudioInput, load_audio_bytes, make_list_of_audio
+from ...audio_utils import AudioInput, load_audio_into_buffer, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -53,7 +54,11 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
             "pad_to_multiple_of": 480000,
             "max_source_positions": 3000,
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "common_kwargs": {
+            "return_tensors": "pt",
+            "return_dict": True,
+            "tokenize": True,
+        },
     }
 
 
@@ -176,9 +181,6 @@ class VoxtralProcessor(ProcessorMixin):
             is_batched = False
             conversations = [conversation]
 
-        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
-        return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
-
         # Check for any overlapping keys between mm_load_kwargs and kwargs
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
         if any(key in kwargs for key in mm_load_kwargs):
@@ -201,6 +203,8 @@ class VoxtralProcessor(ProcessorMixin):
 
         tokenizer_kwargs = {**processed_kwargs["template_kwargs"], **text_kwargs}
         tokenizer_kwargs["return_tensors"] = None  # let's not return tensors here
+        tokenize = tokenizer_kwargs.pop("tokenize", False)
+        return_dict = tokenizer_kwargs.pop("return_dict", False)
 
         encoded_instruct_inputs = self.tokenizer.apply_chat_template(
             conversations,
@@ -260,7 +264,10 @@ class VoxtralProcessor(ProcessorMixin):
         """
 
         if isinstance(text, str):
+            is_batched = False
             text = [text]
+        else:
+            is_batched = True
 
         if any(self.audio_token in t for t in text):
             raise ValueError(
@@ -283,6 +290,7 @@ class VoxtralProcessor(ProcessorMixin):
         self,
         language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
+        model_id: str = "model",
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         # TODO: @eustlb, add docstring
@@ -291,9 +299,16 @@ class VoxtralProcessor(ProcessorMixin):
             **kwargs,
         )
         text_kwargs = output_kwargs["text_kwargs"]
-        # TODO: @eustlb, handle add_special_token, tokenize=False
         audio_kwargs = output_kwargs["audio_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
+
+        return_dict = common_kwargs.pop("return_dict", False)
+        tokenize = common_kwargs.pop("tokenize", False)
+
+        # make sure to remove from text_kwargs and audio_kwargs
+        for k in {"return_dict", "tokenize"}:
+            text_kwargs.pop(k, None)
+            audio_kwargs.pop(k, None)
 
         return_tensors = common_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
@@ -301,9 +316,9 @@ class VoxtralProcessor(ProcessorMixin):
 
         # validate audio input
         if isinstance(audio, str):
-            audio = [audio]
+            audio = [load_audio_into_buffer(audio, force_mono=True)]
         elif all(isinstance(el, str) for el in audio):
-            audio = [load_audio_bytes(el, force_mono=True, use_base64=False) for el in audio]
+            audio = [load_audio_into_buffer(el, force_mono=True) for el in audio]
         else:
             audio = make_list_of_audio(audio)
             # mono conversion
@@ -321,13 +336,11 @@ class VoxtralProcessor(ProcessorMixin):
             )
 
         input_ids = []
+        texts = []
         audio_arrays = []
         for audio_el, language_el in zip(audio, language):
-            # load the audio into a BytesIO object
-            audio_el = load_audio_bytes(audio_el, force_mono=True, use_base64=False)
-
             openai_transcription_request = {
-                "model": "model",
+                "model": model_id,
                 "file": audio_el,
                 "language": language_el,
             }
@@ -336,21 +349,29 @@ class VoxtralProcessor(ProcessorMixin):
             tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(transcription_request)
 
             input_ids.append(tokenized_transcription_request.tokens)
+            texts.append(tokenized_transcription_request.text)
             audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
 
-        # text are already tokenized but we need to pad etc, logic is taken from MistralCommonTokenizer.apply_chat_template
-        encoding = self.tokenizer(
-            input_ids,
-            add_special_tokens=False,
-            **text_kwargs,
-        )
-        data = dict(encoding)
+        if tokenize:
+            if return_dict:
+                # text are already tokenized but we need to pad etc
+                encoding = self.tokenizer(
+                    input_ids,
+                    add_special_tokens=False,
+                    **text_kwargs,
+                )
+                data = dict(encoding)
 
-        # extract the input features
-        max_source_positions = audio_kwargs.pop("max_source_positions")
-        data["input_features"] = self._retreive_input_features(audio_arrays, max_source_positions, **audio_kwargs)
+                # extract the input features
+                max_source_positions = audio_kwargs.pop("max_source_positions")
+                data["input_features"] = self._retreive_input_features(audio_arrays, max_source_positions, **audio_kwargs)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+                return BatchFeature(data=data, tensor_type=return_tensors)
+
+        if not is_batched:
+            return texts[0]
+
+        return texts
 
     def batch_decode(self, *args, **kwargs):
         """
