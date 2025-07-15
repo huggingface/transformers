@@ -275,7 +275,7 @@ def eager_attention_forward(
         query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
         attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key) * scaling
     else:
-        attn_weights = torch.einsum("bhjd, bhsd -> bhjs", query, key) * scaling
+        attn_weights = (query @ key.transpose(-1, -2)) * scaling
 
     if softcap is not None:
         attn_weights = attn_weights / softcap
@@ -294,7 +294,7 @@ def eager_attention_forward(
         attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2).transpose(1, 2)
         attn_weights = attn_weights.flatten(1, 2)
     else:
-        attn_output = torch.einsum("bhjs, bhsd -> bhjd", attn_weights, value).transpose(1, 2)
+        attn_output = (attn_weights @ value.transpose(-1, -2)).transpose(1, 2)
 
     return attn_output, attn_weights
 
