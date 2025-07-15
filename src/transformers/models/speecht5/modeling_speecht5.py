@@ -1237,7 +1237,7 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
         if hasattr(module, "masked_spec_embed"):
-            module.masked_spec_embed.copy_(torch.Tensor(self.config.hidden_size).uniform_())
+            nn.init.uniform_(module.masked_spec_embed)
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
