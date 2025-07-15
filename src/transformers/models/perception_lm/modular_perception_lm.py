@@ -195,9 +195,8 @@ class PerceptionLMModel(LlavaModel):
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
         """
-        Args:
-            pixel_values_videos (`torch.FloatTensor`, *optional*):
-                Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
 
         Returns:
             [`PerceptionLMModelOutputWithPast`] or `tuple`:
@@ -317,9 +316,8 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
         """
-        Args:
-            pixel_values_videos (`torch.FloatTensor`, *optional*):
-                Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
 
         Returns:
             [`PerceptionLMCausalLMOutputWithPast`] or `tuple`:

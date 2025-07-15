@@ -354,7 +354,7 @@ class GPTBigCodeBlock(nn.Module):
         hidden_states = self.ln_2(hidden_states)
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = residual + feed_forward_hidden_states
-        return (hidden_states,) + outputs[1:]
+        return (hidden_states,) + outputs
 
 
 @auto_docstring

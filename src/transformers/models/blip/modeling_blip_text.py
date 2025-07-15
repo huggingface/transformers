@@ -446,7 +446,7 @@ class BlipTextEncoder(nn.Module):
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.is_decoder else None
+        all_cross_attentions = () if output_attentions and encoder_hidden_states is not None else None
 
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
@@ -469,7 +469,8 @@ class BlipTextEncoder(nn.Module):
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+                if encoder_hidden_states is not None:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

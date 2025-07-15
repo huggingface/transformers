@@ -41,7 +41,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
