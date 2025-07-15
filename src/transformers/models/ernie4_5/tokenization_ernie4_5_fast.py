@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for Ernie 4.5"""
 
-from ...utils import is_sentencepiece_available
+from ...utils import is_sentencepiece_available, logging
 from ..llama import LlamaTokenizerFast
 
 
@@ -23,11 +23,14 @@ else:
     Ernie4_5Tokenizer = None
 
 
+logger = logging.get_logger(__name__)
+
+
 DEFAULT_CHAT_TEMPLATE = '{%- if not add_generation_prompt is defined -%}\n    {%- set add_generation_prompt = true -%}\n{%- endif -%}\n{%- if not cls_token is defined -%}\n    {%- set cls_token = "<|begin_of_sentence|>" -%}\n{%- endif -%}\n{%- if not sep_token is defined -%}\n    {%- set sep_token = "<|end_of_sentence|>" -%}\n{%- endif -%}\n{{- cls_token -}}\n{%- for message in messages -%}\n    {%- if message["role"] == "user" -%}\n        {{- "User: " + message["content"] + "\n" -}}\n    {%- elif message["role"] == "assistant" -%}\n        {{- "Assistant: " + message["content"] + sep_token -}}\n    {%- elif message["role"] == "system" -%}\n        {{- message["content"] + "\n" -}}\n    {%- endif -%}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- "Assistant: " -}}\n{%- endif -%}'
 
 
 class Ernie4_5TokenizerFast(LlamaTokenizerFast):
-    legacy = False
+    legacy = True
     add_prefix_space = False
     slow_tokenizer_class = Ernie4_5Tokenizer
 
@@ -68,9 +71,16 @@ class Ernie4_5TokenizerFast(LlamaTokenizerFast):
         clean_up_tokenization_spaces=False,
         spaces_between_special_tokens=False,
         add_prefix_space=False,
-        legacy=False,
+        legacy=True,
         **kwargs,
     ):
+        # observed during `test_special_token_special_word`, also in llama tests (when exchanging tokenizers there)
+        if add_prefix_space:
+            logger.warning_once(
+                "The Ernie 4.5 Tokenizer does not support `add_prefix_space` so it may lead to unexpected behavior between "
+                "the slow and fast tokenizer versions."
+            )
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,

@@ -24,12 +24,13 @@ from ..llama import LlamaTokenizer
 logger = logging.get_logger(__name__)
 
 
+SPIECE_UNDERLINE = "▁"
 DEFAULT_CHAT_TEMPLATE = '{%- if not add_generation_prompt is defined -%}\n    {%- set add_generation_prompt = true -%}\n{%- endif -%}\n{%- if not cls_token is defined -%}\n    {%- set cls_token = "<|begin_of_sentence|>" -%}\n{%- endif -%}\n{%- if not sep_token is defined -%}\n    {%- set sep_token = "<|end_of_sentence|>" -%}\n{%- endif -%}\n{{- cls_token -}}\n{%- for message in messages -%}\n    {%- if message["role"] == "user" -%}\n        {{- "User: " + message["content"] + "\n" -}}\n    {%- elif message["role"] == "assistant" -%}\n        {{- "Assistant: " + message["content"] + sep_token -}}\n    {%- elif message["role"] == "system" -%}\n        {{- message["content"] + "\n" -}}\n    {%- endif -%}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- "Assistant: " -}}\n{%- endif -%}'
 
 
 @requires(backends=("sentencepiece",))
 class Ernie4_5Tokenizer(LlamaTokenizer):
-    legacy = False
+    legacy = True
     padding_side = "left"
     add_prefix_space = False
 
@@ -70,9 +71,16 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
         clean_up_tokenization_spaces=False,
         spaces_between_special_tokens=False,
         add_prefix_space=False,
-        legacy=False,
+        legacy=True,
         **kwargs,
     ):
+        # observed during `test_special_token_special_word`, also in llama tests (when exchanging tokenizers there)
+        if add_prefix_space:
+            logger.warning_once(
+                "The Ernie 4.5 Tokenizer does not support `add_prefix_space` so it may lead to unexpected behavior between "
+                "the slow and fast tokenizer versions."
+            )
+
         def convert_to_added_token(token):
             return AddedToken(token, normalized=False, special=True) if isinstance(token, str) else token
 
@@ -108,6 +116,24 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
             **kwargs,
         )
 
+    def convert_tokens_to_string(self, tokens):
+        """
+        Converts a sequence of tokens (string) in a single string.
+
+        Overwritten to fix wrong behavior around adding spaces during decoding.
+        """
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string
+
     def _decode(
         self,
         token_ids: Union[int, list[int]],
@@ -135,8 +161,7 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
         for token in filtered_tokens:
             if skip_special_tokens and token in self.all_special_tokens:
                 continue
-            else:
-                current_sub_text.append(token)
+            current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
 
@@ -155,5 +180,6 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
             return clean_text
         else:
             return text
+
 
 __all__ = ["Ernie4_5Tokenizer"]
