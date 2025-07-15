@@ -81,7 +81,9 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = x.shape
 
         i_position_indices = torch.ones(height, width, device=x.device).cumsum(0).float().unsqueeze(-1)
@@ -218,26 +220,16 @@ class EfficientLoFTRAggregationLayer(nn.Module):
         kv_aggregation_kernel_size = config.kv_aggregation_kernel_size
         kv_aggregation_stride = config.kv_aggregation_stride
 
-        if q_aggregation_kernel_size != 1:
-            self.q_aggregation = nn.Conv2d(
-                hidden_size,
-                hidden_size,
-                kernel_size=q_aggregation_kernel_size,
-                padding=0,
-                stride=q_aggregation_stride,
-                bias=False,
-                groups=hidden_size,
-            )
-        else:
-            self.q_aggregation = nn.Identity()
-
-        if kv_aggregation_kernel_size != 1:
-            self.kv_aggregation = torch.nn.MaxPool2d(
-                kernel_size=kv_aggregation_kernel_size, stride=kv_aggregation_stride
-            )
-        else:
-            self.kv_aggregation = nn.Identity()
-
+        self.q_aggregation = nn.Conv2d(
+            hidden_size,
+            hidden_size,
+            kernel_size=q_aggregation_kernel_size,
+            padding=0,
+            stride=q_aggregation_stride,
+            bias=False,
+            groups=hidden_size,
+        )
+        self.kv_aggregation = torch.nn.MaxPool2d(kernel_size=kv_aggregation_kernel_size, stride=kv_aggregation_stride)
         self.norm = nn.LayerNorm(hidden_size)
 
     def forward(
@@ -493,10 +485,9 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         # (batch_size, seq_len, embed_dim) -> (batch_size, embed_dim, h, w) with seq_len = h * w
         message = message.permute(0, 2, 1)
         message = message.reshape(batch_size, embed_dim, aggregated_h, aggregated_w)
-        if self.q_aggregation_kernel_size != 1:
-            message = torch.nn.functional.interpolate(
-                message, scale_factor=self.q_aggregation_kernel_size, mode="bilinear", align_corners=False
-            )
+        message = torch.nn.functional.interpolate(
+            message, scale_factor=self.q_aggregation_kernel_size, mode="bilinear", align_corners=False
+        )
         intermediate_states = torch.cat([hidden_states, message], dim=1)
         intermediate_states = intermediate_states.permute(0, 2, 3, 1)
         output_states = self.mlp(intermediate_states)
