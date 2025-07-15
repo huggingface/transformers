@@ -306,6 +306,47 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         
         EXPECTED_OUTPUT = ["Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going"]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+    
+    @slow
+    def test_small_single_turn_text_and_multiple_audios_batched(self):
+        # TODO: @eustlb, add a reproducer!!!
+        conversations = [
+            [
+                {
+                    "role": "user", 
+                    "content": [
+                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"},
+                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3"},
+                        {"type": "text", "text": "Who's speaking in the speach and what city's weather is being discussed?"},
+                    ]
+                }
+            ],
+            [
+               {
+                    "role": "user", 
+                    "content": [
+                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg"},
+                        {"type": "text", "text": "What can you tell me about this audio?"},
+                    ]
+                } 
+            ]
+        ]
+
+        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+        
+        inputs = self.processor.apply_chat_template(conversations)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+
+        # fmt: off
+        EXPECTED_OUTPUT = [
+            "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona.",
+            'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is likely the Seattle Mariners, as the commentator refers to them as the "Mariners" and mentions the American League.\n- **Emotional Reaction**: The commentator expresses disbelief and excitement, using phrases like "I don\'t believe it" and "my, oh my."\n- **Game Outcome**: The game is still ongoing, as the commentator mentions that the Mariners are "going to play" for the championship.\n\nThe audio captures the thrill and excitement of a pivotal moment in a baseball game.'
+        ]
+        # fmt: on
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
     def test_transcribe_mode_audio_input(self):
