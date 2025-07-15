@@ -288,19 +288,20 @@ python utils/scan_skipped_tests.py --output_dir path/to/output
 
 ```
 🔬 Parsing 331 model test files once each...
-📝 Aggregating results for 93 common tests...
-  (93/93) test_training_gradient_checkpointing_use_reentrant_falseched_shapes_existkfa_kwargs
+📝 Aggregating 224 tests...
+  (224/224) test_update_candidate_strategy_with_matches_1es_3d_is_nonecodet_schedule_fa_kwargs
 ✅ Scan complete.
 
 📄 JSON saved to /home/pablo/git/transformers/all_tests_scan_result.json
 
 ```
 
-And it will generate `all_tests_scan_result.json` file that you can inspect. The JSON is indexed by method name, and each entry follows this schema:
+And it will generate `all_tests_scan_result.json` file that you can inspect. The JSON is indexed by method name, and each entry follows this schema, indicating the origin as well (from `common`or `GenerationMixin`.)
 
 ```json
 {
   "<method_name>": {
+    "origin": "<test suite>"
     "models_ran": ["<model_name>", ...],
     "models_skipped": ["<model_name>", ...],
     "skipped_proportion": <float>,
@@ -339,8 +340,9 @@ $ python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds
 🔬 Parsing 331 model test files once each...
 
 == test_inputs_embeds ==
-Ran on    : 199/323 models
-Skipped on: 124/323 models (38.4%)
+
+Ran    : 199/323
+Skipped : 124/323 (38.4%)
  - aimv2: Aimv2 does not use inputs_embeds
  - align: Inputs_embeds is tested in individual model tests
  - altclip: Inputs_embeds is tested in individual model tests
