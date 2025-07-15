@@ -68,8 +68,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
