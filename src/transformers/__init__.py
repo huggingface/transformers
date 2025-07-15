@@ -34,6 +34,7 @@ from .utils import (
     is_g2p_en_available,
     is_keras_nlp_available,
     is_librosa_available,
+    is_mistral_common_available,
     is_pretty_midi_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -309,6 +310,18 @@ else:
         "SLOW_TO_FAST_CONVERTERS",
         "convert_slow_tokenizer",
     ]
+
+try:
+    if not (is_mistral_common_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_mistral_common_objects
+
+    _import_structure["utils.dummy_mistral_common_objects"] = [
+        name for name in dir(dummy_mistral_common_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["tokenization_mistral_common"] = ["MistralCommonTokenizer"]
 
 # Vision-specific objects
 try:

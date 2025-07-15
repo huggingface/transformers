@@ -123,7 +123,7 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.generic import GeneralInterface
+from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -240,6 +240,7 @@ VLMS = [
     "mistral3",
     "mllama",
     "paligemma",
+    "shieldgemma2",
     "qwen2vl",
     "qwen2_5_vl",
     "videollava",
@@ -1925,7 +1926,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         - **is_parallelizable** (`bool`) -- A flag indicating whether this model supports model parallelization.
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
-    """
+        - **can_record_outputs** (dict):"""
 
     config_class = None
     base_model_prefix = ""
@@ -2006,6 +2007,50 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
+    _can_record_outputs = None
+
+    @property
+    @torch._dynamo.allow_in_graph
+    def can_record_outputs(self) -> dict[str, OutputRecorder]:
+        """
+         Maps output names (e.g., "attentions", "hidden_states")
+         to either:
+             - A module class (e.g., `LlamaDecoderLayer`), using default index conventions:
+                 * index=0 for "hidden_states"
+                 * index=1 for "attentions"
+             - Or an `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
+
+         Examples:
+             These two are equivalent:
+
+         ```python
+             _can_record_outputs = {
+                 "attentions": LlamaAttention,
+                 "hidden_states": LlamaDecoderLayer
+             }
+
+             _can_record_outputs = {
+                 "attentions": OutputRecorder(LlamaAttention, index=1),
+                 "hidden_states": OutputRecorder(LlamaDecoderLayer, index=0)
+             }
+        ```
+
+         This means you can record outputs from the same class, by specifying a layer name. Before
+         collecting outputs, we check that they come from this layer.
+
+         If you have cross attention that come from `LlamaAttention` and self attention that also
+         come from `LlamaAttention` but from `self_attn` you can do this:
+
+         ```python
+         class LlamaModel(PreTrainedModel):
+             _can_record_outputs = {
+                 "attentions": OutputRecorder(LlamaAttention, index=1, layer-name="self_attn"),
+                 "cross_attentions": OutputRecorder(LlamaAttention, index=1, layer_name="cross_attn")
+             }
+
+        ```
+        """
+        return self._can_record_outputs or {}
 
     @property
     def dummy_inputs(self) -> dict[str, torch.Tensor]:
@@ -2056,6 +2101,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
 
         self._no_split_modules = self._no_split_modules or []
+        _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
 
     def post_init(self):
         """
@@ -2616,7 +2662,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return config
 
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         """
         Checks the availability of SDPA for a given model.
 
@@ -3790,27 +3836,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                # Sometimes in the state_dict we have non-tensor objects.
-                # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor):
-                    ptrs[id_tensor_storage(tensor)].append(name)
-                else:
+                if not isinstance(tensor, torch.Tensor):
+                    # Sometimes in the state_dict we have non-tensor objects.
+                    # e.g. in bitsandbytes we have some `str` objects in the state_dict
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors
-            if hasattr(self, "hf_device_map"):
-                # if the model has offloaded parameters, we must check using find_tied_parameters()
-                tied_params = find_tied_parameters(self)
-                if tied_params:
-                    tied_names = tied_params[0]
-                    shared_ptrs = {
-                        ptr: names for ptr, names in ptrs.items() if any(name in tied_names for name in names)
-                    }
+                elif tensor.device.type == "meta":
+                    # In offloaded cases, there may be meta tensors in the state_dict.
+                    # For these cases, key by the pointer of the original tensor object
+                    # (state_dict tensors are detached and therefore no longer shared)
+                    tensor = self.get_parameter(name)
+                    ptrs[id(tensor)].append(name)
+
                 else:
-                    shared_ptrs = {}
-            else:
-                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+                    ptrs[id_tensor_storage(tensor)].append(name)
+
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
@@ -3854,7 +3896,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             if len(error_names) > 0:
                 raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching the transformers base configuration. Try saving using `safe_serialization=False` or remove this tensor sharing.",
+                    f"The weights trying to be saved contained shared tensors {error_names} that are mismatching "
+                    "the transformers base configuration. Try saving using `safe_serialization=False`, setting the "
+                    "`_dynamic_tied_weights_keys` attribute for affected modules, or remove this tensor sharing.",
                 )
 
         # Shard the model if it is too big.
@@ -4448,6 +4492,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if device_mesh.ndim == 1:
                     raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
                 device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+
+            if tp_size is None:
+                tp_size = torch.distributed.get_world_size()
 
         if use_auth_token is not None:
             warnings.warn(
