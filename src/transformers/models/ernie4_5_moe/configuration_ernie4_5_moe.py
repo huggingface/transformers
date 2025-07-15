@@ -155,12 +155,18 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
+        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
+        "layers.*.mlp.experts.*.up_proj": "local_colwise",
+        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
+        "layers.*.mlp.shared_experts": "local",
+        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
+        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
+        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
+        "layers.*.mlp.gate_proj": "local_colwise",
+        "layers.*.mlp.up_proj": "local_colwise",
+        "layers.*.mlp.down_proj": "local_rowwise",
+        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
