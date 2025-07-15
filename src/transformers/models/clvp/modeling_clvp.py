@@ -383,10 +383,7 @@ class ClvpSelfAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, past_key_value, attn_weights
+        return attn_output, attn_weights
 
 
 class ClvpGatedLinearUnit(nn.Module):
@@ -462,15 +459,13 @@ class ClvpEncoderLayer(nn.Module):
 
         hidden_states = self.input_rmsnorm(hidden_states)
 
-        attention_outputs = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
         )
-
-        hidden_states = attention_outputs[0]
 
         hidden_states = residual + hidden_states
 
@@ -479,12 +474,7 @@ class ClvpEncoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attention_outputs[-1],)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
 # Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->Clvp
@@ -641,7 +631,6 @@ class ClvpDecoderLayer(nn.Module):
             cache_position=cache_position,
         )
         attn_output = attn_outputs[0]
-        outputs = attn_outputs[1:]
         # residual connection
         hidden_states = attn_output + residual
 
@@ -651,12 +640,7 @@ class ClvpDecoderLayer(nn.Module):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        if use_cache:
-            outputs = (hidden_states,) + outputs
-        else:
-            outputs = (hidden_states,) + outputs[1:]
-
-        return outputs
+        return (hidden_states,) + attn_outputs[1:]
 
 
 class ClvpConditioningEncoder(nn.Module):
@@ -1120,7 +1104,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
@@ -1151,13 +1134,11 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
                 if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
+                    all_cross_attentions = all_cross_attentions + (outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1167,20 +1148,19 @@ class ClvpDecoder(ClvpPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions, all_cross_attentions]
                 if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,

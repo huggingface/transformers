@@ -151,11 +151,7 @@ class MultiHeadAttention(nn.Module):
         attn = output[1]
         original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
         output = self.dense(original_size_attention)
-
-        outputs = (output, layer_past)
-        if output_attentions:
-            outputs = outputs + (attn,)
-        return outputs
+        return output, attn
 
 
 def point_wise_feed_forward_network(d_model_size, dff):
@@ -403,7 +399,6 @@ class CTRLModel(CTRLPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)
 
-        next_decoder_cache = None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, h in enumerate(self.h):
@@ -420,26 +415,24 @@ class CTRLModel(CTRLPreTrainedModel):
                 cache_position=cache_position,
             )
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_attentions += (outputs[2],)
+                all_attentions += (outputs[1],)
 
         hidden_states = self.layernorm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )

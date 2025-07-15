@@ -543,7 +543,7 @@ class ProphetNetAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped
 
 
 class ProphetNetFeedForward(nn.Module):
@@ -784,7 +784,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
 
-        return attn_output, main_attn_probs, predict_attn_probs, past_key_value
+        return attn_output, main_attn_probs, predict_attn_probs
 
     def get_main_relative_pos_embeddings(
         self, hidden_states, attn_weights, position_ids, main_relative_position_buckets
@@ -914,7 +914,7 @@ class ProphetNetEncoderLayer(GradientCheckpointingLayer):
         output_attentions: bool = False,
     ):
         # 1st residual block
-        attention_output, attn_weights, _ = self.self_attn(
+        attention_output, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -972,7 +972,7 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.Tensor] = None,
     ):
         # 1st residual block
-        ngram_attention_output, self_attn_weights, self_attn_weights_ngram, past_key_value = self.self_attn(
+        ngram_attention_output, self_attn_weights, self_attn_weights_ngram = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
@@ -987,7 +987,7 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             # 2nd residual block
-            attention_output, cross_attn_weights, past_key_value = self.cross_attn(
+            attention_output, cross_attn_weights = self.cross_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attn_mask,
@@ -1005,9 +1005,6 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
 
         if output_attentions:
             outputs += (self_attn_weights, self_attn_weights_ngram, cross_attn_weights)
-
-        if use_cache:
-            outputs += (past_key_value,)
 
         return outputs
 
@@ -1311,7 +1308,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         all_main_stream_attns = () if output_attentions else None
         all_ngram_stream_attns = () if output_attentions else None
         all_cross_attns = () if output_attentions and self.config.add_cross_attention else None
-        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -1345,10 +1341,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[4 if output_attentions else 1]
-
             if output_attentions:
                 all_main_stream_attns += (layer_outputs[1],)
                 all_ngram_stream_attns += (layer_outputs[2],)
@@ -1361,9 +1353,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if self.config.ngram > 0:
                 all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         # split last_hidden_state for return
         last_hidden_state = hidden_states[:, :sequence_length]
@@ -1375,7 +1366,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 for v in [
                     last_hidden_state,
                     last_hidden_state_ngram,
-                    next_cache,
+                    past_key_values,
                     all_main_stream_hidden_states,
                     all_ngram_stream_hidden_states,
                     all_main_stream_attns,
@@ -1387,7 +1378,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         return ProphetNetDecoderModelOutput(
             last_hidden_state=last_hidden_state,
             last_hidden_state_ngram=last_hidden_state_ngram,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_main_stream_hidden_states,
             hidden_states_ngram=all_ngram_stream_hidden_states,
             attentions=all_main_stream_attns,

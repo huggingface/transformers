@@ -158,7 +158,7 @@ class CpmAntAttention(nn.Module):
 
         score = self.attention_out(score)
 
-        return score, attn_weights, past_key_values
+        return score, attn_weights
 
 
 class CpmAntSelfAttentionBlock(nn.Module):
@@ -198,7 +198,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
                 (see `past_key_values`).
         """
         outputs = self.layernorm_before_attention(hidden_states)
-        outputs = self.self_attention(
+        outputs, attn_weights = self.self_attention(
             outputs,
             outputs,
             attention_mask,
@@ -209,13 +209,11 @@ class CpmAntSelfAttentionBlock(nn.Module):
             cache_position,
         )
 
-        outputs, attn_weights, current_key_value = outputs
-
         if self.dropout is not None:
             outputs = self.dropout(outputs)
         hidden_states = hidden_states + outputs
 
-        return hidden_states, attn_weights, current_key_value
+        return hidden_states, attn_weights
 
 
 class CpmAntDenseGatedACT(nn.Module):
@@ -323,7 +321,7 @@ class CpmAntTransformerBlock(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
         """
-        hidden_states = self.self_att(
+        hidden_states, attn_weights = self.self_att(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
@@ -333,11 +331,8 @@ class CpmAntTransformerBlock(nn.Module):
             cache_position=cache_position,
         )
 
-        hidden_states, attn_weights, current_key_value = hidden_states
-
         hidden_states = self.ffn(hidden_states)
-
-        return hidden_states, attn_weights, current_key_value
+        return hidden_states, attn_weights
 
 
 class CpmAntEncoder(nn.Module):
@@ -388,10 +383,10 @@ class CpmAntEncoder(nn.Module):
                 attention_mask,
                 position_bias,
                 output_attentions=output_attentions,
-                past_key_values=past_key_values[i] if past_key_values else None,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
             )
-            hidden_states, attn_weights, past_key_values = layer_outputs
+            hidden_states, attn_weights = layer_outputs
             if output_attentions:
                 all_self_attns += (attn_weights,)
 
@@ -400,7 +395,7 @@ class CpmAntEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        return hidden_states, past_key_values, all_hidden_states, all_self_attns
+        return hidden_states, all_hidden_states, all_self_attns
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->CPMAnt
@@ -667,7 +662,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
         position_bias = position_bias[:, :, past_length:, :]
         hidden_states = hidden_states[:, past_length:, :]
 
-        hidden_states, next_decoder_cache, all_hidden_states, all_attentions = self.encoder(
+        hidden_states, all_hidden_states, all_attentions = self.encoder(
             hidden_states,
             attention_mask,
             position_bias,
@@ -692,16 +687,17 @@ class CpmAntModel(CpmAntPreTrainedModel):
                     new_hidden_states += (hidden_state[:, self.prompt_length :, :],)
                 all_hidden_states = new_hidden_states
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )

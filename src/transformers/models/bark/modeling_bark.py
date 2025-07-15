@@ -175,11 +175,7 @@ class BarkSelfAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, past_key_values)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return attn_output, attn_weights
 
 
 class BarkSelfFlashAttention2(BarkSelfAttention):
@@ -253,12 +249,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, cache_position)
-        if output_attentions:
-            attn_weights = None
-            outputs += (attn_weights,)
-
-        return outputs
+        return attn_output, None
 
 
 BARK_ATTENTION_CLASSES = {
@@ -332,12 +323,7 @@ class BarkBlock(GradientCheckpointingLayer):
             self.layernorm_2(intermediary_hidden_states)
         )
 
-        if use_cache:
-            outputs = (intermediary_hidden_states,) + outputs
-        else:
-            outputs = (intermediary_hidden_states,) + outputs[1:]
-
-        return outputs  # hidden_states, ((present), attentions)
+        return (intermediary_hidden_states,) + outputs
 
 
 @auto_docstring
@@ -583,7 +569,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -603,11 +588,8 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
             hidden_states = outputs[0]
 
-            if use_cache:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         hidden_states = self.layernorm_final(hidden_states)
 
@@ -619,19 +601,18 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         logits = self.lm_head(hidden_states)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
-                v for v in [None, logits, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [None, logits, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )

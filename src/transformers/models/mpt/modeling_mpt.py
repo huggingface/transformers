@@ -135,7 +135,7 @@ class MptAttention(nn.Module):
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.out_proj(context_states)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class MptMLP(nn.Module):
@@ -197,7 +197,7 @@ class MptBlock(GradientCheckpointingLayer):
         residual = hidden_states
 
         # Self attention.
-        attn_outputs, attn_weights, past_key_value = self.attn(
+        attn_outputs, attn_weights = self.attn(
             layernorm_output,
             position_bias=position_bias,
             attention_mask=attention_mask,
@@ -214,15 +214,7 @@ class MptBlock(GradientCheckpointingLayer):
 
         # MLP.
         output = self.ffn(layernorm_output, residual)
-        outputs = (output,)
-
-        if use_cache:
-            outputs += (past_key_value,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs  # hidden_states, present, attentions
+        return output, attn_weights
 
 
 @auto_docstring
@@ -371,7 +363,6 @@ class MptModel(MptPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -405,30 +396,26 @@ class MptModel(MptPreTrainedModel):
             )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         # Add last hidden state
         hidden_states = self.norm_f(hidden_states)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )

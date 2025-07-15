@@ -537,9 +537,8 @@ class DecoderLayer(nn.Module):
         return (
             x,
             self_attn_weights,
-            layer_state,
             cross_attn_weights,
-        )  # layer_state = cache for decoding
+        )
 
 
 class FSMTDecoder(nn.Module):
@@ -671,7 +670,6 @@ class FSMTDecoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         # check if head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -691,7 +689,7 @@ class FSMTDecoder(nn.Module):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            x, layer_self_attn, layer_past, layer_cross_attn = decoder_layer(
+            x, layer_self_attn, layer_cross_attn = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -703,9 +701,6 @@ class FSMTDecoder(nn.Module):
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-
-            if use_cache:
-                next_decoder_cache = layer_past
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
@@ -723,17 +718,16 @@ class FSMTDecoder(nn.Module):
 
         x = self.output_projection(x)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
-                v for v in [x, next_cache, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
+                v for v in [x, past_key_values, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=x,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attns,
