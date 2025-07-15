@@ -346,6 +346,33 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, PerceptionLMForConditionalGeneration
+
+        >>> model = PerceptionLMForConditionalGeneration.from_pretrained("perception_lm-hf/perception_lm-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("perception_lm-hf/perception_lm-1.5-7b-hf")
+
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

@@ -497,6 +497,12 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, LlavaNextVideoModelOutputWithPast]:
+        r"""
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
