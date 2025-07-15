@@ -119,7 +119,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         """
         if not hasattr(self.timm_model, "set_grad_checkpointing"):
             return False
-        
+
         try:
             self.timm_model.set_grad_checkpointing(enable=True)
             self.timm_model.set_grad_checkpointing(enable=False)
