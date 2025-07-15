@@ -15,10 +15,6 @@
 
 import tempfile
 import unittest
-from io import BytesIO
-from urllib.request import urlopen
-
-import librosa
 
 from transformers import (
     AutoProcessor,
@@ -215,45 +211,57 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         # TODO: @eustlb, add a reproducer!!!
         conversation = [
             {
-                "role": "user", 
+                "role": "user",
                 "content": [
-                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav"},
-                ]
+                    {
+                        "type": "audio",
+                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
+                ],
             }
         ]
 
-        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
-    
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
+
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
         outputs = model.generate(**inputs, do_sample=False)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
-        
-        EXPECTED_OUTPUT = ['The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos.']
+
+        EXPECTED_OUTPUT = [
+            "The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos."
+        ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
-    
+
     @slow
     def test_small_single_turn_text_and_audio(self):
         # TODO: @eustlb, add a reproducer!!!
         conversation = [
             {
-                "role": "user", 
+                "role": "user",
                 "content": [
-                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"},
+                    {
+                        "type": "audio",
+                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3",
+                    },
                     {"type": "text", "text": "What can you tell me about this audio?"},
-                ]
+                ],
             }
         ]
 
-        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
-    
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
+
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
         outputs = model.generate(**inputs, do_sample=False)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
-        
+
         EXPECTED_OUTPUT = [
             "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He expresses gratitude for the conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He concludes by expressing optimism about the country's future and his commitment to serving as a citizen."
         ]
@@ -264,24 +272,34 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         # TODO: @eustlb, add a reproducer!!!
         conversation = [
             {
-                "role": "user", 
+                "role": "user",
                 "content": [
-                {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/mary_had_lamb.ogg"},
-                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg"},
+                    {
+                        "type": "audio",
+                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/mary_had_lamb.ogg",
+                    },
+                    {
+                        "type": "audio",
+                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg",
+                    },
                     {"type": "text", "text": "What sport and what nursery rhyme are referenced?"},
-                ]
+                ],
             }
         ]
 
-        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
-    
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
+
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
-        
-        EXPECTED_OUTPUT = ['What sport and what nursery rhyme are referenced?The audio references both baseball and a nursery rhyme. The baseball reference is about a home run hit by Edgar Martinez, and the nursery rhyme is "Mary Had a Little Lamb."']
+
+        EXPECTED_OUTPUT = [
+            'What sport and what nursery rhyme are referenced?The audio references both baseball and a nursery rhyme. The baseball reference is about a home run hit by Edgar Martinez, and the nursery rhyme is "Mary Had a Little Lamb."'
+        ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
@@ -289,51 +307,69 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         # TODO: @eustlb, add a reproducer!!!
         conversation = [
             {
-                "role": "user", 
+                "role": "user",
                 "content": [
                     {"type": "text", "text": "Hello, how are you doing today?"},
-                ]
+                ],
             }
         ]
 
-        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
-    
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
+
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
         outputs = model.generate(**inputs, do_sample=False)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
-        
-        EXPECTED_OUTPUT = ["Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going"]
+
+        EXPECTED_OUTPUT = [
+            "Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going"
+        ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
-    
+
     @slow
     def test_small_single_turn_text_and_multiple_audios_batched(self):
         # TODO: @eustlb, add a reproducer!!!
         conversations = [
             [
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": [
-                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"},
-                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3"},
-                        {"type": "text", "text": "Who's speaking in the speach and what city's weather is being discussed?"},
-                    ]
+                        {
+                            "type": "audio",
+                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3",
+                        },
+                        {
+                            "type": "audio",
+                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                        },
+                        {
+                            "type": "text",
+                            "text": "Who's speaking in the speach and what city's weather is being discussed?",
+                        },
+                    ],
                 }
             ],
             [
-               {
-                    "role": "user", 
+                {
+                    "role": "user",
                     "content": [
-                        {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg"},
+                        {
+                            "type": "audio",
+                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg",
+                        },
                         {"type": "text", "text": "What can you tell me about this audio?"},
-                    ]
-                } 
-            ]
+                    ],
+                }
+            ],
         ]
 
-        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
-        
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
+
         inputs = self.processor.apply_chat_template(conversations)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
@@ -350,10 +386,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_transcribe_mode_audio_input(self):
-        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+        model = VoxtralForConditionalGeneration.from_pretrained(
+            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+        )
         inputs = self.processor.apply_transcrition_request(
-            language="en",
-            audio="https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"
+            language="en", audio="https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
         outputs = model.generate(**inputs, do_sample=False)

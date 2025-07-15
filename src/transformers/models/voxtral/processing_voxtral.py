@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import io
-import base64
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
@@ -257,10 +256,7 @@ class VoxtralProcessor(ProcessorMixin):
               `None`).
         """
         if isinstance(text, str):
-            is_batched = False
             text = [text]
-        else:
-            is_batched = True
 
         if any(self.audio_token in t for t in text):
             raise ValueError(
@@ -369,12 +365,11 @@ class VoxtralProcessor(ProcessorMixin):
 
                 # extract the input features
                 max_source_positions = audio_kwargs.pop("max_source_positions")
-                data["input_features"] = self._retreive_input_features(audio_arrays, max_source_positions, **audio_kwargs)
+                data["input_features"] = self._retreive_input_features(
+                    audio_arrays, max_source_positions, **audio_kwargs
+                )
 
                 return BatchFeature(data=data, tensor_type=return_tensors)
-
-        if not is_batched:
-            return texts[0]
 
         return texts
 

@@ -43,10 +43,10 @@ if is_mistral_common_available():
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.protocol.instruct.validator import ValidationMode
     from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, TokenizerVersion
+    from mistral_common.tokens.tokenizers.image import MultiModalVersion
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.tekken import Tekkenizer
     from mistral_common.tokens.tokenizers.utils import download_tokenizer_from_hf_hub
-    from mistral_common.tokens.tokenizers.image import MultiModalVersion
 
 
 if is_torch_available():
@@ -1800,7 +1800,9 @@ class MistralCommonTokenizer(PushToHubMixin):
                     tokenizer_file = "tekken.json"
                 else:
                     tokenizer_file = sorted(valid_tokenizer_files)[-1]
-                logger.warning(f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}.")
+                logger.warning(
+                    f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}."
+                )
             else:
                 tokenizer_file = valid_tokenizer_files[0]
 

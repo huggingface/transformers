@@ -459,7 +459,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         self.vocab_size = config.text_config.vocab_size
         self.audio_tower = AutoModel.from_config(config.audio_config)  # Usually a `VoxtralEncoder` instance
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        # TODO: @eustlb, check why this is done (taken from Qwen2Audio)
+        # TODO: @eustlb, check if really needed
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
@@ -522,7 +522,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None:
-            # TODO: @eustlb, handle better input_features given and inputs_embeds too?
             audio_embeds = self.get_audio_embeds(input_features)
 
             # replace text-audio token placeholders with audio embeddings
@@ -541,8 +540,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             return_dict=True,
             **kwargs,
         )
-
-        # TODO: @eustlb, do we wan't to return audio embeds?
         return outputs
 
     def prepare_inputs_for_generation(self, *args, **kwargs):

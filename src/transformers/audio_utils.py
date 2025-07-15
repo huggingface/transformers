@@ -99,7 +99,7 @@ def load_audio_base64(audio: str, timeout=None, force_mono=False, return_dict=Fa
         else:
             print(f"File not found: {audio}")
             return None
-        
+
         if audio_bytes:
             with io.BytesIO(audio_bytes) as audio_file:
                 with sf.SoundFile(audio_file) as f:
@@ -107,18 +107,18 @@ def load_audio_base64(audio: str, timeout=None, force_mono=False, return_dict=Fa
                     audio_array = f.read(dtype="float32")
                     sampling_rate = f.samplerate
                     audio_format = f.format
-            
+
             # convert to mono if needed
             if force_mono and audio_array.ndim != 1:
                 audio_array = audio_array.mean(axis=1)
-            
+
             # Create new BytesIO object and write audio data to it
             with io.BytesIO() as output_file:
                 sf.write(output_file, audio_array, sampling_rate, format=audio_format.upper())
                 output_file.seek(0)
                 # Read the data while the file is still open
                 audio_base64 = base64.b64encode(output_file.read()).decode("utf-8")
-            
+
             if return_dict:
                 return {
                     "data": audio_base64,
@@ -126,7 +126,7 @@ def load_audio_base64(audio: str, timeout=None, force_mono=False, return_dict=Fa
                 }
             else:
                 return audio_base64
-                
+
     except Exception as e:
         raise ValueError(f"Error loading audio: {e}")
 
@@ -154,7 +154,7 @@ def load_audio_into_buffer(audio: str, timeout=None, force_mono=False):
         else:
             print(f"File not found: {audio}")
             return None
-        
+
         if audio_bytes:
             with io.BytesIO(audio_bytes) as audio_file:
                 with sf.SoundFile(audio_file) as f:
@@ -162,17 +162,17 @@ def load_audio_into_buffer(audio: str, timeout=None, force_mono=False):
                     audio_array = f.read(dtype="float32")
                     sampling_rate = f.samplerate
                     audio_format = f.format
-            
+
             # convert to mono if needed
             if force_mono and audio_array.ndim != 1:
                 audio_array = audio_array.mean(axis=1)
-            
+
             # Create new BytesIO object and write audio data to it
             buffer = io.BytesIO()
             sf.write(buffer, audio_array, sampling_rate, format=audio_format.upper())
             buffer.seek(0)
             return buffer
-                
+
     except Exception as e:
         raise ValueError(f"Error loading audio: {e}")
 

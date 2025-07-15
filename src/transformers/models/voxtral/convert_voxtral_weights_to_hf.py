@@ -13,8 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# TODO: @eustlb, should the copyright include Mistral?
-
 import argparse
 import gc
 import json
@@ -25,19 +23,14 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
-    AutoTokenizer,
     MistralCommonTokenizer,
     VoxtralConfig,
     VoxtralForConditionalGeneration,
     VoxtralProcessor,
     WhisperFeatureExtractor,
 )
-from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.whisper.modeling_whisper import sinusoids
 from transformers.utils.hub import cached_file
-
-
-# TODO: @eustlb, I don't really like the audio_tower name
 
 
 # fmt: off
@@ -238,9 +231,7 @@ def write_model(
     print("Model reloaded successfully.")
 
 
-def write_processor(
-    input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str
-):
+def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str):
     tokenizer = MistralCommonTokenizer.from_pretrained(input_path_or_repo)
     feature_extractor = WhisperFeatureExtractor.from_pretrained(feature_extractor_path_or_repo)
 
@@ -305,14 +296,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # write_model(
-    #     "mistralai/voxtral-mini",
-    #     "consolidated.safetensors",
-    #     "params.json",
-    #     "/scratch/voxtral-mini-converted",
-    # )
-    write_processor(
-        "mistralai/voxtral-mini",
-        "openai/whisper-large-v3",
-        "/scratch/voxtral-mini-converted",
-    )
+    main()
