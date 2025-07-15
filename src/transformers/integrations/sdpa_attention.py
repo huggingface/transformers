@@ -1,8 +1,9 @@
 from typing import Optional
 
 import torch
+from packaging import version
 
-from ..utils import logging
+from ..utils import get_torch_version, logging
 
 
 logger = logging.get_logger(__name__)
@@ -38,7 +39,11 @@ def sdpa_attention_forward(
         )
     sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups"):
-        if isinstance(key, torch.fx.Proxy):
+        if (
+            version.parse(get_torch_version()) < version.parse("2.1")
+            or attention_mask is not None
+            or isinstance(key, torch.fx.Proxy)
+        ):
             # fx.trace symbolic tracing failure if set `enable_gqa` in sdpa
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
