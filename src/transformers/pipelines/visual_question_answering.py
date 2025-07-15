@@ -57,6 +57,11 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=visual-question-answering).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     _pipeline_calls_generate = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(

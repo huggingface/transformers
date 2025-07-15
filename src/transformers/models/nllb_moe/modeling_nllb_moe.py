@@ -32,6 +32,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -502,7 +503,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Attention with Wav2Vec2->NllbMoe,key_value_states->encoder_hidden_states
+# Copied from transformers.models.musicgen.modeling_musicgen.MusicgenAttention with Musicgen->NllbMoe,key_value_states->encoder_hidden_states
 class NllbMoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -625,7 +626,7 @@ class NllbMoeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class NllbMoeEncoderLayer(nn.Module):
+class NllbMoeEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
         self.embed_dim = config.d_model
@@ -707,7 +708,7 @@ class NllbMoeEncoderLayer(nn.Module):
         return outputs
 
 
-class NllbMoeDecoderLayer(nn.Module):
+class NllbMoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
         self.embed_dim = config.d_model
@@ -852,7 +853,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     # TODO: If anyone is up to it to make sure tests pass etc
     # Flash attention has problems due to not preparing masks the same way as eager/sdpa
     # SDPA has more flaky logits which requires more time to look into tests
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
@@ -1018,22 +1019,13 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                        output_router_logits=output_router_logits,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -1296,37 +1288,18 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 past_key_value = past_key_values[idx] if past_key_values is not None else None
 
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    if use_cache:
-                        logger.warning_once(
-                            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                        )
-                        use_cache = False
-                    layer_outputs = self._gradient_checkpointing_func(
-                        decoder_layer.forward,
-                        hidden_states,
-                        attention_mask,
-                        encoder_hidden_states,
-                        encoder_attention_mask,
-                        layer_head_mask,
-                        cross_attn_layer_head_mask,
-                        None,  # past_key_value is always None with gradient checkpointing
-                        use_cache,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = decoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        encoder_hidden_states=encoder_hidden_states,
-                        encoder_attention_mask=encoder_attention_mask,
-                        layer_head_mask=layer_head_mask,
-                        cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                        past_key_value=past_key_value,
-                        use_cache=use_cache,
-                        output_attentions=output_attentions,
-                        output_router_logits=output_router_logits,
-                    )
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                    encoder_attention_mask=encoder_attention_mask,
+                    layer_head_mask=layer_head_mask,
+                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                    past_key_value=past_key_value,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
+                )
 
                 hidden_states = layer_outputs[0]
 

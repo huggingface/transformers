@@ -28,6 +28,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -207,7 +208,7 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5NoLayerNormConvLayer(nn.Module):
+class SpeechT5NoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -229,7 +230,7 @@ class SpeechT5NoLayerNormConvLayer(nn.Module):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5LayerNormConvLayer(nn.Module):
+class SpeechT5LayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -257,7 +258,7 @@ class SpeechT5LayerNormConvLayer(nn.Module):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5GroupNormConvLayer(nn.Module):
+class SpeechT5GroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -487,13 +488,7 @@ class SpeechT5FeatureEncoder(nn.Module):
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -1032,7 +1027,7 @@ class SpeechT5FeedForward(nn.Module):
         return hidden_states
 
 
-class SpeechT5EncoderLayer(nn.Module):
+class SpeechT5EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SpeechT5Config):
         super().__init__()
         self.attention = SpeechT5Attention(
@@ -1093,7 +1088,7 @@ class SpeechT5EncoderLayer(nn.Module):
         return outputs
 
 
-class SpeechT5DecoderLayer(nn.Module):
+class SpeechT5DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SpeechT5Config):
         super().__init__()
         self.self_attn = SpeechT5Attention(
@@ -1338,23 +1333,13 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        position_bias,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        position_bias=position_bias,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_bias=position_bias,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -1636,33 +1621,17 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -2187,8 +2156,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2228,7 +2198,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         >>> from datasets import load_dataset
 
         >>> dataset = load_dataset(
-        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
         ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
@@ -2872,9 +2842,10 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into
+            a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
             Float values of input mel spectrogram.
 
@@ -2909,7 +2880,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> import torch
 
         >>> dataset = load_dataset(
-        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
         ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
@@ -2997,10 +2968,11 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Float values of input raw speech waveform.
 
-                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `list[float]` or
-                a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
-                into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into a tensor
-                of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
+                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `list[float]`,
+                a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`)
+                or the soundfile library (`pip install soundfile`).
+                To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding and
+                conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

@@ -76,7 +76,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         video: "torch.Tensor",
         metadata: Optional[Union[VideoMetadata, dict]] = None,
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         initial_shift: Optional[Union[bool, float, int]] = None,
     ):
         """
@@ -91,7 +91,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
             initial_shift (`bool`, `float` or `int`, defaults to `self.initial_shift`):
                 The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
@@ -143,10 +143,11 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_sample_frames: Optional[bool] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         initial_shift: Optional[Union[bool, float, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
     ) -> BatchFeature:
         if do_sample_frames:
             # Sample video frames
@@ -154,6 +155,11 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 self.sample_frames(video, metadata, fps=fps, num_frames=num_frames, initial_shift=initial_shift)
                 for video, metadata in zip(videos, video_metadata)
             ]
+
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
 
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

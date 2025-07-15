@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
@@ -35,21 +36,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class TvpVideoGroundingOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Temporal-Distance IoU loss for video grounding.
-        logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
-            input texts.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Temporal-Distance IoU loss for video grounding.
+    logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
+        input texts.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -455,7 +452,7 @@ class TvpOutputLayer(nn.Module):
         return hidden_states
 
 
-class TvpEncodeLayer(nn.Module):
+class TvpEncodeLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = TvpAttention(config)
@@ -511,16 +508,7 @@ class TvpEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    (head_mask[i] if head_mask is not None else None),
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:

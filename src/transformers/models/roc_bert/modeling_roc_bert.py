@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -488,7 +489,7 @@ class RoCBertOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RoCBert
-class RoCBertLayer(nn.Module):
+class RoCBertLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -614,27 +615,15 @@ class RoCBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -1034,6 +1023,12 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             attack sample pronunciation ids for computing the contrastive loss. Indices should be in `[-100, 0,
             ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        attack_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices for the attack sample. Mask values selected in
+            `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
+        attack_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate different portions of the attack inputs. Indices are selected in `[0, 1]`:
+            `0` corresponds to a sentence A token, `1` corresponds to a sentence B token.
         labels_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             target ids for computing the contrastive loss and masked_lm_loss . Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
@@ -1047,12 +1042,6 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ...,
             config.vocab_size]`
-        attack_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices for the attack sample. Mask values selected in
-            `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
-        attack_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate different portions of the attack inputs. Indices are selected in `[0, 1]`:
-            `0` corresponds to a sentence A token, `1` corresponds to a sentence B token.
         labels_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices for the label sample. Mask values selected in
             `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.

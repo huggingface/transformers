@@ -16,7 +16,6 @@
 
 import math
 import os
-import warnings
 from typing import Any, Optional, Union
 
 import torch
@@ -26,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -401,7 +401,7 @@ class ImageGPTMLP(nn.Module):
         return hidden_states
 
 
-class ImageGPTBlock(nn.Module):
+class ImageGPTBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -596,19 +596,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
 
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -719,29 +706,16 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=layer_past,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            outputs = block(
+                hidden_states,
+                layer_past,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = outputs[0]
             if use_cache is True:
@@ -877,19 +851,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         ...     ax.imshow(img)
         ```"""
 
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -1013,19 +974,6 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
