@@ -91,7 +91,12 @@ def get_last_daily_ci_run_commit(token, workflow_run_id=None, workflow_id=None, 
 
 
 def get_last_daily_ci_artifacts(
-    output_dir, token, workflow_run_id=None, workflow_id=None, commit_sha=None, artifact_names=None,
+    output_dir,
+    token,
+    workflow_run_id=None,
+    workflow_id=None,
+    commit_sha=None,
+    artifact_names=None,
 ):
     """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
     workflow_run_id = get_last_daily_ci_workflow_run_id(
@@ -116,7 +121,12 @@ def get_last_daily_ci_artifacts(
 
 
 def get_last_daily_ci_reports(
-    output_dir, token, workflow_run_id=None, workflow_id=None, commit_sha=None, artifact_names=None,
+    output_dir,
+    token,
+    workflow_run_id=None,
+    workflow_id=None,
+    commit_sha=None,
+    artifact_names=None,
 ):
     """Get the artifacts' content of the last completed workflow run id of the scheduled (daily) CI."""
     downloaded_artifact_names = get_last_daily_ci_artifacts(
@@ -132,20 +142,11 @@ def get_last_daily_ci_reports(
     for artifact_name in downloaded_artifact_names:
         artifact_zip_path = os.path.join(output_dir, f"{artifact_name}.zip")
         if os.path.isfile(artifact_zip_path):
-
             target_dir = os.path.join(output_dir, artifact_name)
             with zipfile.ZipFile(artifact_zip_path) as z:
                 z.extractall(target_dir)
 
             results[artifact_name] = {}
-            # with zipfile.ZipFile(artifact_zip_path) as z:
-            #     for filename in z.namelist():
-            #         if not os.path.isdir(filename):
-            #             # read the file
-            #             with z.open(filename) as f:
-            #                 content = f.read().decode("UTF-8")
-            #                 results[artifact_name][filename] = content
-
             filename = os.listdir(target_dir)
             for filename in filename:
                 file_path = os.path.join(target_dir, filename)

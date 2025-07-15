@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - compare-test-results
+      - compare-test-results-backup
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:

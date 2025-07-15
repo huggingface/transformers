@@ -24,8 +24,8 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 import requests
-from get_ci_error_statistics import get_jobs
 from compare_test_runs import compare_job_sets
+from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
@@ -1497,11 +1497,9 @@ if __name__ == "__main__":
 
     # Only for AMD at this moment.
     # TODO: put this into a method
-    # if is_amd_daily_ci_workflow:
     if is_nvidia_daily_ci_workflow:
         diff_file_url = None
         if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
-
             ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=None,
                 output_dir=output_dir,
@@ -1510,7 +1508,13 @@ if __name__ == "__main__":
             )
 
             current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
-            prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])
+            prev_artifacts = sorted(
+                [
+                    d
+                    for d in os.listdir(output_dir)
+                    if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")
+                ]
+            )
 
             current_artifacts_set = {}
             for d in current_artifacts:
