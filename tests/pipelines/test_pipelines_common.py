@@ -846,6 +846,7 @@ class CustomPipelineTest(unittest.TestCase):
             "automatic-speech-recognition",
             model="hf-internal-testing/fake-custom-wav2vec2",
             feature_extractor="hf-internal-testing/fake-custom-wav2vec2",
+            tokenizer="facebook/wav2vec2-base-960h",  # Test workaround - the pipeline requires a tokenizer
             trust_remote_code=True,
         )
 
