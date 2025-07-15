@@ -17,13 +17,8 @@ import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
-from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_torch_available:
-    pass
 
 
 @require_torch

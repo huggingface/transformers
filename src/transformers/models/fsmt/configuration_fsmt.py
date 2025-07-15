@@ -46,7 +46,7 @@ class FSMTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        langs (`List[str]`):
+        langs (`list[str]`):
             A list with source language and target_language (e.g., ['en', 'ru']).
         src_vocab_size (`int`):
             Vocabulary size of the encoder. Defines the number of different tokens that can be represented by the

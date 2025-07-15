@@ -187,13 +187,13 @@ from torch import nn
 from transformers import Trainer
 
 class CustomTrainer(Trainer):
-    def compute_losss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False num_items_in_batch: Optional[torch.Tensor] = None):
+    def compute_loss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False num_items_in_batch: Optional[torch.Tensor] = None):
         labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
         logits = outputs.get("logits")
         # compute custom loss for 3 labels with different weights
-        reduction = "mean" if num_items_in_batch is not None else "sum"
+        reduction = "sum" if num_items_in_batch is not None else "mean"
         loss_fct = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 3.0], device=model.device, reduction=reduction))
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         if num_items_in_batch is not None:
@@ -490,6 +490,33 @@ training_args = TrainingArguments(
     load_best_model_at_end=True,
     push_to_hub=True,
     use_liger_kernel=True
+)
+```
+
+You can also configure which specific kernels to apply using the `liger_kernel_config` parameter. This dict is passed as keyword arguments to the `_apply_liger_kernel_to_instance` function, allowing fine-grained control over kernel usage. Available options vary by model but typically include: `rope`, `swiglu`, `cross_entropy`, `fused_linear_cross_entropy`, `rms_norm`, etc.
+
+```py
+from transformers import TrainingArguments
+
+# Apply only specific kernels
+training_args = TrainingArguments(
+    output_dir="your-model",
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=2,
+    weight_decay=0.01,
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    load_best_model_at_end=True,
+    push_to_hub=True,
+    use_liger_kernel=True,
+    liger_kernel_config={
+        "rope": True,
+        "cross_entropy": True,
+        "rms_norm": False,  # Don't apply Liger's RMSNorm kernel
+        "swiglu": True,
+    }
 )
 ```
 
