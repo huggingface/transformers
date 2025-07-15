@@ -269,13 +269,30 @@ This utility:
 
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/f7f671f69b88ce4967e19179172c248958d35742/transformers/tests_skipped_visualisation.png)
 
-### Usage
 
-From the root of `transformers` repo, run
+### Usage 
 
-```python
+You can run the skipped test analyzer in two ways:
 
-python utils/scan_skipped_tests.py
+#### Full scan (default)
+
+From the root of `transformers` repo, scans all common test methods and outputs the results to a JSON file (default: `all_tests_scan_result.json`).
+
+```bash
+python utils/scan_skipped_tests.py --output_dir path/to/output
+```
+
+- `--output_dir` (optional): Directory where the JSON results will be saved. Defaults to the current directory.
+
+**Example output:**
+
+```
+🔬 Parsing 331 model test files once each...
+📝 Aggregating results for 93 common tests...
+  (93/93) test_training_gradient_checkpointing_use_reentrant_falseched_shapes_existkfa_kwargs
+✅ Scan complete.
+
+📄 JSON saved to /home/pablo/git/transformers/all_tests_scan_result.json
 
 ```
 
@@ -300,5 +317,42 @@ Which you can visualise as above with e.g. `pandas`
 ```python
 df = pd.read_json('all_tests_scan_result.json').T
 df.sort_values(by=['skipped_proportion'], ascending=False)
+
+```
+
+### Scan a single test method
+
+You can focus on a specific test method using `--test_method_name`:
+
+```bash
+$ python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
+```
+
+- `--test_method_name`: Name of the test method to scan (e.g., `test_inputs_embeds`).
+- `--output_dir` (optional): Directory where the JSON result will be saved.
+
+**Example output:**
+
+```bash
+$ python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds
+
+🔬 Parsing 331 model test files once each...
+
+== test_inputs_embeds ==
+Ran on    : 199/323 models
+Skipped on: 124/323 models (38.4%)
+ - aimv2: Aimv2 does not use inputs_embeds
+ - align: Inputs_embeds is tested in individual model tests
+ - altclip: Inputs_embeds is tested in individual model tests
+ - audio_spectrogram_transformer: AST does not use inputs_embeds
+ - beit: BEiT does not use inputs_embeds
+ - bit: Bit does not use inputs_embeds
+ - blip: Blip does not use inputs_embeds
+ - blip_2: Inputs_embeds is tested in individual model tests
+ - bridgetower: 
+ - canine: CANINE does not have a get_input_embeddings() method.
+ - ...
+
+📄 JSON saved to /home/pablo/git/transformers/scan_test_inputs_embeds.json
 
 ```
