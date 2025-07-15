@@ -37,26 +37,20 @@ from datasets import DatasetDict, load_dataset
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
-from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
+from flax.training.common_utils import (get_metrics, onehot, shard,
+                                        shard_prng_key)
 from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoFeatureExtractor,
-    AutoProcessor,
-    AutoTokenizer,
-    FlaxAutoModelForSpeechSeq2Seq,
-    HfArgumentParser,
-    Seq2SeqTrainingArguments,
-    is_tensorboard_available,
-)
+from transformers import (AutoConfig, AutoFeatureExtractor, AutoProcessor,
+                          AutoTokenizer, FlaxAutoModelForSpeechSeq2Seq,
+                          HfArgumentParser, Seq2SeqTrainingArguments,
+                          is_tensorboard_available)
 from transformers.file_utils import get_full_repo_name
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
 check_min_version("4.52.0")

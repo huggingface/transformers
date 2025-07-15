@@ -6,7 +6,6 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
-
 torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"

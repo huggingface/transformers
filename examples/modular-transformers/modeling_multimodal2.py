@@ -17,8 +17,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, logging, torch_int
-from .configuration_multimodal2 import Multimodal2Config, Multimodal2TextConfig, Multimodal2VisionConfig
-
+from .configuration_multimodal2 import (Multimodal2Config,
+                                        Multimodal2TextConfig,
+                                        Multimodal2VisionConfig)
 
 logger = logging.get_logger(__name__)
 

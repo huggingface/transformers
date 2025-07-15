@@ -13,14 +13,18 @@ import torch.nn as nn
 from packaging import version
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa)
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, BaseModelOutputWithPoolingAndCrossAttentions
+from ...modeling_outputs import (BaseModelOutputWithPastAndCrossAttentions,
+                                 BaseModelOutputWithPoolingAndCrossAttentions)
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (apply_chunking_to_forward,
+                              find_pruneable_heads_and_indices,
+                              prune_linear_layer)
 from ...utils import auto_docstring, get_torch_version, logging
 from .configuration_roberta import RobertaConfig
-
 
 logger = logging.get_logger(__name__)
 

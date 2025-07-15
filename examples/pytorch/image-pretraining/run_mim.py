@@ -21,24 +21,18 @@ from typing import Optional
 import numpy as np
 import torch
 from datasets import load_dataset
-from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from torchvision.transforms import (Compose, Lambda, Normalize,
+                                    RandomHorizontalFlip, RandomResizedCrop,
+                                    ToTensor)
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    IMAGE_PROCESSOR_MAPPING,
-    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-    AutoConfig,
-    AutoImageProcessor,
-    AutoModelForMaskedImageModeling,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-)
+from transformers import (CONFIG_MAPPING, IMAGE_PROCESSOR_MAPPING,
+                          MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING, AutoConfig,
+                          AutoImageProcessor, AutoModelForMaskedImageModeling,
+                          HfArgumentParser, Trainer, TrainingArguments)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 """ Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM).
 Any model supported by the AutoModelForMaskedImageModeling API can be used.

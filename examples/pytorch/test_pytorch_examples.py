@@ -20,15 +20,10 @@ import sys
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
-from transformers.testing_utils import (
-    CaptureLogger,
-    TestCasePlus,
-    backend_device_count,
-    is_torch_fp16_available_on_device,
-    slow,
-    torch_device,
-)
-
+from transformers.testing_utils import (CaptureLogger, TestCasePlus,
+                                        backend_device_count,
+                                        is_torch_fp16_available_on_device,
+                                        slow, torch_device)
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)

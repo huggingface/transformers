@@ -13,14 +13,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (BaseModelOutputWithPast,
+                                 SequenceClassifierOutputWithPast)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import (TransformersKwargs, auto_docstring, can_return_tuple,
+                      logging)
 from ...utils.generic import check_model_inputs
 from .configuration_my_new_model2 import MyNewModel2Config
-
 
 logger = logging.get_logger(__name__)
 

@@ -34,23 +34,14 @@ import torch
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_FOR_MASKED_LM_MAPPING,
-    AutoConfig,
-    AutoModelForMaskedLM,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    is_torch_xla_available,
-    set_seed,
-)
+from transformers import (CONFIG_MAPPING, MODEL_FOR_MASKED_LM_MAPPING,
+                          AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
+                          DataCollatorForLanguageModeling, HfArgumentParser,
+                          Trainer, TrainingArguments, is_torch_xla_available,
+                          set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")

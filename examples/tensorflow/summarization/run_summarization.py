@@ -33,22 +33,14 @@ from datasets import load_dataset
 from filelock import FileLock
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForSeq2Seq,
-    HfArgumentParser,
-    KerasMetricCallback,
-    PushToHubCallback,
-    TFAutoModelForSeq2SeqLM,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoTokenizer, DataCollatorForSeq2Seq,
+                          HfArgumentParser, KerasMetricCallback,
+                          PushToHubCallback, TFAutoModelForSeq2SeqLM,
+                          TFTrainingArguments, create_optimizer, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, is_offline_mode, send_example_telemetry
+from transformers.utils import (check_min_version, is_offline_mode,
+                                send_example_telemetry)
 from transformers.utils.versions import require_version
-
 
 # region Checking dependencies
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

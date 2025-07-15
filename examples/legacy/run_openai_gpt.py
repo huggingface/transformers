@@ -36,17 +36,12 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
+                              TensorDataset)
 from tqdm import tqdm, trange
 
-from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    OpenAIGPTDoubleHeadsModel,
-    OpenAIGPTTokenizer,
-    get_linear_schedule_with_warmup,
-)
-
+from transformers import (CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTDoubleHeadsModel,
+                          OpenAIGPTTokenizer, get_linear_schedule_with_warmup)
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO

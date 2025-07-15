@@ -25,14 +25,8 @@ from unittest import mock
 
 from accelerate.utils import write_basic_config
 
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    run_command,
-    slow,
-    torch_device,
-)
-
+from transformers.testing_utils import (TestCasePlus, backend_device_count,
+                                        run_command, slow, torch_device)
 
 logging.basicConfig(level=logging.DEBUG)
 

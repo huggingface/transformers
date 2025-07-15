@@ -23,33 +23,18 @@ import numpy as np
 import torch
 from datasets import load_dataset
 from PIL import Image
-from torchvision.transforms import (
-    CenterCrop,
-    Compose,
-    Lambda,
-    Normalize,
-    RandomHorizontalFlip,
-    RandomResizedCrop,
-    Resize,
-    ToTensor,
-)
+from torchvision.transforms import (CenterCrop, Compose, Lambda, Normalize,
+                                    RandomHorizontalFlip, RandomResizedCrop,
+                                    Resize, ToTensor)
 
 import transformers
-from transformers import (
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    AutoConfig,
-    AutoImageProcessor,
-    AutoModelForImageClassification,
-    HfArgumentParser,
-    TimmWrapperImageProcessor,
-    Trainer,
-    TrainingArguments,
-    set_seed,
-)
+from transformers import (MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, AutoConfig,
+                          AutoImageProcessor, AutoModelForImageClassification,
+                          HfArgumentParser, TimmWrapperImageProcessor, Trainer,
+                          TrainingArguments, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""
 

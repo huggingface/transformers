@@ -32,18 +32,12 @@ from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from transformers import (
-    SchedulerType,
-    Wav2Vec2Config,
-    Wav2Vec2FeatureExtractor,
-    Wav2Vec2ForPreTraining,
-    get_scheduler,
-    is_wandb_available,
-    set_seed,
-)
-from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
+from transformers import (SchedulerType, Wav2Vec2Config,
+                          Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining,
+                          get_scheduler, is_wandb_available, set_seed)
+from transformers.models.wav2vec2.modeling_wav2vec2 import (
+    _compute_mask_indices, _sample_negative_indices)
 from transformers.utils import send_example_telemetry
-
 
 logger = get_logger(__name__)
 

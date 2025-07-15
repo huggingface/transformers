@@ -24,7 +24,6 @@ from typing import Optional
 import numpy as np
 from tqdm.auto import tqdm
 
-
 logger = logging.getLogger(__name__)
 
 

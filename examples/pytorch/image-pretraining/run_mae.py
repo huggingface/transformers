@@ -20,22 +20,18 @@ from typing import Optional
 
 import torch
 from datasets import load_dataset
-from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from torchvision.transforms import (Compose, Lambda, Normalize,
+                                    RandomHorizontalFlip, RandomResizedCrop,
+                                    ToTensor)
 from torchvision.transforms.functional import InterpolationMode
 
 import transformers
-from transformers import (
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    ViTImageProcessor,
-    ViTMAEConfig,
-    ViTMAEForPreTraining,
-)
+from transformers import (HfArgumentParser, Trainer, TrainingArguments,
+                          ViTImageProcessor, ViTMAEConfig,
+                          ViTMAEForPreTraining)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 """ Pre-training a 🤗 ViT model as an MAE (masked autoencoder), as proposed in https://huggingface.co/papers/2111.06377."""
 

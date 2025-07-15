@@ -29,20 +29,12 @@ import numpy as np
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoModelForMultipleChoice,
-    AutoTokenizer,
-    DataCollatorForMultipleChoice,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    default_data_collator,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoModelForMultipleChoice,
+                          AutoTokenizer, DataCollatorForMultipleChoice,
+                          HfArgumentParser, Trainer, TrainingArguments,
+                          default_data_collator, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")

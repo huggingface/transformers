@@ -3,7 +3,6 @@
 import json
 import subprocess
 
-
 pairs = [
     ["en", "ru"],
     ["ru", "en"],

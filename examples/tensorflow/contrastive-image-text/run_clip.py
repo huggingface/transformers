@@ -33,19 +33,11 @@ from datasets import load_dataset
 from PIL import Image
 
 import transformers
-from transformers import (
-    AutoImageProcessor,
-    AutoTokenizer,
-    HfArgumentParser,
-    PushToHubCallback,
-    TFAutoModel,
-    TFTrainingArguments,
-    TFVisionTextDualEncoderModel,
-    create_optimizer,
-)
+from transformers import (AutoImageProcessor, AutoTokenizer, HfArgumentParser,
+                          PushToHubCallback, TFAutoModel, TFTrainingArguments,
+                          TFVisionTextDualEncoderModel, create_optimizer)
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 logger = logging.getLogger(__name__)
 

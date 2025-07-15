@@ -23,7 +23,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from transformers import AutoModelForCausalLM
 from transformers.loss.loss_utils import ForCausalLMLoss
 
-
 world_size = int(os.environ.get("WORLD_SIZE", "1"))
 cp_mesh = init_device_mesh("cuda", (world_size,))
 rank = torch.distributed.get_node_local_rank()

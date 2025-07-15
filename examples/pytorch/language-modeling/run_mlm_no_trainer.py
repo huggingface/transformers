@@ -41,19 +41,12 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
-    AutoConfig,
-    AutoModelForMaskedLM,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
-    SchedulerType,
-    get_scheduler,
-)
+from transformers import (CONFIG_MAPPING, MODEL_MAPPING, AutoConfig,
+                          AutoModelForMaskedLM, AutoTokenizer,
+                          DataCollatorForLanguageModeling, SchedulerType,
+                          get_scheduler)
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")

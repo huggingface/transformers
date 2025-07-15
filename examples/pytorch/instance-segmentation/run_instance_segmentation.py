@@ -29,19 +29,14 @@ from datasets import load_dataset
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 import transformers
-from transformers import (
-    AutoImageProcessor,
-    AutoModelForUniversalSegmentation,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-)
+from transformers import (AutoImageProcessor,
+                          AutoModelForUniversalSegmentation, HfArgumentParser,
+                          Trainer, TrainingArguments)
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 logger = logging.getLogger(__name__)
 

@@ -31,22 +31,12 @@ import tensorflow as tf
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    CONFIG_NAME,
-    TF2_WEIGHTS_NAME,
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForMultipleChoice,
-    DefaultDataCollator,
-    HfArgumentParser,
-    PushToHubCallback,
-    TFAutoModelForMultipleChoice,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (CONFIG_NAME, TF2_WEIGHTS_NAME, AutoConfig,
+                          AutoTokenizer, DataCollatorForMultipleChoice,
+                          DefaultDataCollator, HfArgumentParser,
+                          PushToHubCallback, TFAutoModelForMultipleChoice,
+                          TFTrainingArguments, create_optimizer, set_seed)
 from transformers.utils import check_min_version, send_example_telemetry
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")

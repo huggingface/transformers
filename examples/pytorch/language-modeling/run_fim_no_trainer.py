@@ -42,21 +42,13 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
-    AutoConfig,
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    SchedulerType,
-    default_data_collator,
-    get_scheduler,
-    is_torch_xla_available,
-)
+from transformers import (CONFIG_MAPPING, MODEL_MAPPING, AutoConfig,
+                          AutoModelForCausalLM, AutoTokenizer, SchedulerType,
+                          default_data_collator, get_scheduler,
+                          is_torch_xla_available)
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.52.0")

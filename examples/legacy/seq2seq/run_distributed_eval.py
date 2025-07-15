@@ -26,19 +26,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from utils import (
-    Seq2SeqDataset,
-    calculate_bleu,
-    calculate_rouge,
-    chunks,
-    lmap,
-    load_json,
-    parse_numeric_n_bool_cl_kwargs,
-    save_json,
-    use_task_specific_params,
-    write_txt_file,
-)
-
+from utils import (Seq2SeqDataset, calculate_bleu, calculate_rouge, chunks,
+                   lmap, load_json, parse_numeric_n_bool_cl_kwargs, save_json,
+                   use_task_specific_params, write_txt_file)
 
 logger = getLogger(__name__)
 

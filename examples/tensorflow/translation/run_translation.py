@@ -31,27 +31,16 @@ import tensorflow as tf
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForSeq2Seq,
-    HfArgumentParser,
-    KerasMetricCallback,
-    M2M100Tokenizer,
-    MBart50Tokenizer,
-    MBart50TokenizerFast,
-    MBartTokenizer,
-    MBartTokenizerFast,
-    PushToHubCallback,
-    TFAutoModelForSeq2SeqLM,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoTokenizer, DataCollatorForSeq2Seq,
+                          HfArgumentParser, KerasMetricCallback,
+                          M2M100Tokenizer, MBart50Tokenizer,
+                          MBart50TokenizerFast, MBartTokenizer,
+                          MBartTokenizerFast, PushToHubCallback,
+                          TFAutoModelForSeq2SeqLM, TFTrainingArguments,
+                          create_optimizer, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # region Dependencies and constants
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

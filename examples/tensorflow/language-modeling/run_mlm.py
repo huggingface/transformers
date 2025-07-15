@@ -38,24 +38,14 @@ from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    CONFIG_NAME,
-    TF2_WEIGHTS_NAME,
-    TF_MODEL_FOR_MASKED_LM_MAPPING,
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
-    HfArgumentParser,
-    PushToHubCallback,
-    TFAutoModelForMaskedLM,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (CONFIG_MAPPING, CONFIG_NAME, TF2_WEIGHTS_NAME,
+                          TF_MODEL_FOR_MASKED_LM_MAPPING, AutoConfig,
+                          AutoTokenizer, DataCollatorForLanguageModeling,
+                          HfArgumentParser, PushToHubCallback,
+                          TFAutoModelForMaskedLM, TFTrainingArguments,
+                          create_optimizer, set_seed)
 from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 logger = logging.getLogger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/language-modeling/requirements.txt")

@@ -32,23 +32,17 @@ import torch
 from datasets import load_dataset
 from PIL import Image
 from torchvision.io import ImageReadMode, read_image
-from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
+from torchvision.transforms import (CenterCrop, ConvertImageDtype, Normalize,
+                                    Resize)
 from torchvision.transforms.functional import InterpolationMode
 
 import transformers
-from transformers import (
-    AutoImageProcessor,
-    AutoModel,
-    AutoTokenizer,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    set_seed,
-)
+from transformers import (AutoImageProcessor, AutoModel, AutoTokenizer,
+                          HfArgumentParser, Trainer, TrainingArguments,
+                          set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 logger = logging.getLogger(__name__)
 

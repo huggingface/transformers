@@ -25,8 +25,8 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from transformers.models.mbart.modeling_mbart import shift_tokens_right
 from transformers.testing_utils import TestCasePlus, slow
-from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
-
+from utils import (FAIRSEQ_AVAILABLE, DistributedSortishSampler,
+                   LegacySeq2SeqDataset, Seq2SeqDataset)
 
 BERT_BASE_CASED = "google-bert/bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"

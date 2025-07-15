@@ -13,8 +13,8 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
-from .configuration_from_uppercase_model import FromUppercaseModelTextConfig, FromUppercaseModelVisionConfig
-
+from .configuration_from_uppercase_model import (
+    FromUppercaseModelTextConfig, FromUppercaseModelVisionConfig)
 
 logger = logging.get_logger(__name__)
 

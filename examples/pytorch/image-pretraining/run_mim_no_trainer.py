@@ -26,23 +26,18 @@ from accelerate.utils import set_seed
 from datasets import load_dataset
 from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from torchvision.transforms import (Compose, Lambda, Normalize,
+                                    RandomHorizontalFlip, RandomResizedCrop,
+                                    ToTensor)
 from tqdm.auto import tqdm
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    IMAGE_PROCESSOR_MAPPING,
-    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-    AutoConfig,
-    AutoImageProcessor,
-    AutoModelForMaskedImageModeling,
-    SchedulerType,
-    get_scheduler,
-)
+from transformers import (CONFIG_MAPPING, IMAGE_PROCESSOR_MAPPING,
+                          MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING, AutoConfig,
+                          AutoImageProcessor, AutoModelForMaskedImageModeling,
+                          SchedulerType, get_scheduler)
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 """ Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM)
 without using HuggingFace Trainer.

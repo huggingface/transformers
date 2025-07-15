@@ -21,18 +21,13 @@ from torch.utils.data import DistributedSampler, RandomSampler
 from transformers import PreTrainedModel, Trainer, logging
 from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
-    Adafactor,
-    get_constant_schedule,
-    get_constant_schedule_with_warmup,
+    Adafactor, get_constant_schedule, get_constant_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
-    get_linear_schedule_with_warmup,
-    get_polynomial_decay_schedule_with_warmup,
-)
+    get_linear_schedule_with_warmup, get_polynomial_decay_schedule_with_warmup)
 from transformers.trainer_pt_utils import get_tpu_sampler
 from transformers.training_args import ParallelMode
 from transformers.utils import is_torch_xla_available
-
 
 logger = logging.get_logger(__name__)
 
