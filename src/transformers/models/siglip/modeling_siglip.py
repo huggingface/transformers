@@ -479,8 +479,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
         "SiglipEncoderLayer",
         "SiglipMultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -664,7 +663,7 @@ class SiglipTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # Assuming "sticky" EOS tokenization, last token is always EOS.
+        # The model uses the last token's hidden state, which may be padding.
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
 
