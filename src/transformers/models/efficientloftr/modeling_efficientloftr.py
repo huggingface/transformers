@@ -448,10 +448,6 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         attention_hidden_states = aggregated_hidden_states.reshape(batch_size, -1, embed_dim)
         encoder_hidden_states = encoder_hidden_states.reshape(batch_size, -1, embed_dim)
 
-        if position_embeddings is not None:
-            position_embeddings = get_positional_embeddings_slice(aggregated_hidden_states, position_embeddings)
-            position_embeddings = tuple(tensor.reshape(batch_size, -1, embed_dim) for tensor in position_embeddings)
-
         # Multi-head attention
         message, _ = self.attention(
             attention_hidden_states,
@@ -745,6 +741,18 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
 
         # 2. Coarse-level LoFTR module
         position_embeddings = self.rotary_emb(coarse_features)
+        position_embeddings_height = (
+            coarse_height - self.config.q_aggregation_kernel_size
+        ) // self.config.q_aggregation_stride + 1
+        position_embeddings_width = (
+            coarse_width - self.config.q_aggregation_kernel_size
+        ) // self.config.q_aggregation_stride + 1
+        position_embeddings = tuple(
+            tensor[:, :position_embeddings_height, :position_embeddings_width, :]
+            .expand(batch_size * 2, -1, -1, -1)
+            .reshape(batch_size * 2, -1, coarse_embed_dim)
+            for tensor in position_embeddings
+        )
         coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
         coarse_features = self.local_feature_transformer(
             coarse_features, position_embeddings=position_embeddings, **kwargs
