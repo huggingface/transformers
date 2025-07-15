@@ -380,57 +380,51 @@ class SlidingWindowLayer(StaticLayer):
 class ChunkedSlidingLayer(SlidingWindowLayer):
     """An extended SlidingWindowLayer that supports prefill chunking."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.cumulative_length = 0
-
     def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
-        if cache_position is None:
+        cache_pos = cache_kwargs.get("cache_position") if cache_kwargs else None
+        if cache_pos is None:
             raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
 
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
+        states_len = key_states.size(-2)
 
-        cumulative_length = self.cumulative_length
-        self.cumulative_length += key_states.shape[-2]
-        is_full = cumulative_length >= self.max_cache_len
+        # Case 1: states are longer than the window
+        if states_len > self.max_cache_len:
+            self.keys.copy_(key_states[:, :, -self.max_cache_len :, :])
+            self.values.copy_(value_states[:, :, -self.max_cache_len :, :])
+            return key_states, value_states  # full prompt returned
 
-        if is_full:
-            full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
-            full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
-            if key_states.shape[-2] == 1:
-                self.keys.copy_(full_key_states)
-                self.values.copy_(full_value_states)
+        # Case 2: already full before the call
+        if cache_pos[0] >= self.max_cache_len:
+            full_k = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
+            full_v = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
+            if states_len == 1:  # fast decode path, return tensors that have been marked as static address
+                self.keys.copy_(full_k)
+                self.values.copy_(full_v)
                 return self.keys, self.values
-        elif not is_full and cumulative_length + key_states.shape[2] > self.max_cache_len:
-            if cumulative_length == 0:
-                full_key_states = key_states
-                full_value_states = value_states
             else:
-                full_key_states = torch.cat((self.keys[:, :, :cumulative_length, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, :cumulative_length, :], value_states), dim=-2)
-        else:
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
-            return self.keys, self.values
+                self.keys.copy_(full_k[:, :, -self.max_cache_len :, :])
+                self.values.copy_(full_v[:, :, -self.max_cache_len :, :])
+                return full_k, full_v
 
-        self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
-        self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
-        return full_key_states, full_value_states
+        # Case 3: will overflow during this call
+        if cache_pos[0] + states_len > self.max_cache_len:
+            full_k = torch.cat((self.keys[:, :, : cache_pos[0], :], key_states), dim=-2)
+            full_v = torch.cat((self.values[:, :, : cache_pos[0], :], value_states), dim=-2)
+            self.keys.copy_(full_k[:, :, -self.max_cache_len :, :])
+            self.values.copy_(full_v[:, :, -self.max_cache_len :, :])
+            return full_k, full_v
 
-    def reset(self) -> None:
-        super().reset()
-        self.cumulative_length = 0
+        # Case 4: still filling
+        self.keys.index_copy_(2, cache_pos, key_states)
+        self.values.index_copy_(2, cache_pos, value_states)
+        return self.keys, self.values
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         query_length = cache_position.shape[0]
