@@ -563,8 +563,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
 
 
 class DogePreTrainedModel(LlamaPreTrainedModel):
-    _supports_flash_attn_3 = False
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_static_cache = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(DogeCDMoE, index=1),
