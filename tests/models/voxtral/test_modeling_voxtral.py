@@ -199,3 +199,145 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCa
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+
+@require_torch
+class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.check_model_name = "/scratch/voxtral-mini-converted"
+        self.dtype = torch.bfloat16
+        self.processor = AutoProcessor.from_pretrained(self.check_model_name)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    def test_small_single_turn_audio_only(self):
+        # TODO: @eustlb, add a reproducer!!!
+        conversation = [
+            {
+                "role": "user", 
+                "content": [
+                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav"},
+                ]
+            }
+        ]
+
+        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+    
+        inputs = self.processor.apply_chat_template(conversation)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+
+        outputs = model.generate(**inputs, do_sample=False)
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        
+        EXPECTED_OUTPUT = ['The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos.']
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+    
+    @slow
+    def test_small_single_turn_text_and_audio(self):
+        # TODO: @eustlb, add a reproducer!!!
+        conversation = [
+            {
+                "role": "user", 
+                "content": [
+                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"},
+                    {"type": "text", "text": "What can you tell me about this audio?"},
+                ]
+            }
+        ]
+
+        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+    
+        inputs = self.processor.apply_chat_template(conversation)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+
+        outputs = model.generate(**inputs, do_sample=False)
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        
+        EXPECTED_OUTPUT = [
+            "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He expresses gratitude for the conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He concludes by expressing optimism about the country's future and his commitment to serving as a citizen."
+        ]
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+
+    @slow
+    def test_small_single_turn_text_and_multiple_audios(self):
+        # TODO: @eustlb, add a reproducer!!!
+        conversation = [
+            {
+                "role": "user", 
+                "content": [
+                {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/mary_had_lamb.ogg"},
+                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg"},
+                    {"type": "text", "text": "What sport and what nursery rhyme are referenced?"},
+                ]
+            }
+        ]
+
+        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+    
+        inputs = self.processor.apply_chat_template(conversation)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        
+        EXPECTED_OUTPUT = ['What sport and what nursery rhyme are referenced?The audio references both baseball and a nursery rhyme. The baseball reference is about a home run hit by Edgar Martinez, and the nursery rhyme is "Mary Had a Little Lamb."']
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+
+    @slow
+    def test_small_single_turn_text_only(self):
+        # TODO: @eustlb, add a reproducer!!!
+        conversation = [
+            {
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": "Hello, how are you doing today?"},
+                ]
+            }
+        ]
+
+        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+    
+        inputs = self.processor.apply_chat_template(conversation)
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+
+        outputs = model.generate(**inputs, do_sample=False)
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        
+        EXPECTED_OUTPUT = ["Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going"]
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+
+    @slow
+    def test_transcribe_mode_audio_input(self):
+        model = VoxtralForConditionalGeneration.from_pretrained(self.check_model_name, torch_dtype=self.dtype, device_map=torch_device)
+        inputs = self.processor.apply_transcrition_request(
+            language="en",
+            audio="https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"
+        )
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+        outputs = model.generate(**inputs, do_sample=False)
+
+        decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+
+        # fmt: off
+        EXPECTED_OUTPUT = [
+            "lang:enThis week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. "
+            "It was an opportunity to say thank you. Whether we've seen eye-to-eye or rarely agreed at all, my conversations with you, the American people, in"
+            " living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept"
+            " me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over"
+            " the course of these eight years, I've seen the goodness, the resilience, and the hope of the American people. I've seen neighbors looking out for"
+            " each other as we rescued our economy from the worst crisis of our lifetimes. I've hugged cancer survivors who finally know the security of "
+            "affordable health care. I've seen communities like Joplin rebuild from disaster, and cities like Boston show the world that no terrorist will ever"
+            " break the American spirit. I've seen the hopeful faces of young graduates and our newest military officers. I've mourned with grieving families"
+            " searching for answers, and I found grace in a Charleston church. I've seen our scientists help a paralyzed man regain his sense of touch, and our"
+            " wounded warriors walk again. I've seen our doctors and volunteers rebuild after earthquakes and stop pandemics in their tracks. I've learned from"
+            " students who are building robots and curing diseases, and who will change the world in ways we can't even imagine. I've seen the youngest of children"
+            " remind us of our obligations to care for our refugees, to work in peace, and above all, to look out for each other. That's what's possible when we"
+            " come together in the slow, hard, sometimes frustrating, but always vital work of self-government. But we can't take our democracy for granted. "
+            "All of us, regardless of party, should throw ourselves into the work of citizenship. Not just when there's an election. Not just when our own narrow"
+            " interest is at stake. But over the full span of a lifetime. If you're tired of arguing with strangers on the Internet, try to talk with one in real"
+            " life. If something needs fixing, lace up your shoes and do some organizing. If you're disappointed by your elected officials, then grab a clipboard,"
+            " get some signatures, and run for office yourself. Our success depends on"
+        ]
+        # fmt: on
+        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
