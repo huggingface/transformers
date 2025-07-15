@@ -2169,7 +2169,7 @@ class Sam2Model(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
 
-    def get_image_wide_positional_embeddings(self):
+    def get_image_wide_positional_embeddings(self) -> torch.Tensor:
         size = self.prompt_encoder.image_embedding_size
         target_device = self.shared_image_embedding.positional_embedding.device
         target_dtype = self.shared_image_embedding.positional_embedding.dtype
@@ -2185,9 +2185,9 @@ class Sam2Model(Sam2PreTrainedModel):
     @torch.no_grad()
     def get_image_embeddings(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> list[torch.Tensor]:
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
@@ -2222,7 +2222,7 @@ class Sam2Model(Sam2PreTrainedModel):
         input_labels: Optional[torch.LongTensor] = None,
         input_boxes: Optional[torch.FloatTensor] = None,
         input_masks: Optional[torch.LongTensor] = None,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
@@ -2252,7 +2252,26 @@ class Sam2Model(Sam2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple[
+        list[torch.Tensor],
+        list[torch.Tensor],
+        Optional[tuple[torch.FloatTensor, ...]],
+        Optional[tuple[torch.FloatTensor, ...]],
+    ]:
+        r"""
+        Extract and preprocess image features using the vision encoder.
+
+        Args:
+            pixel_values (`torch.FloatTensor`):
+                Input pixel values of shape `(batch_size, num_channels, height, width)`.
+
+        Returns:
+            `tuple`: A tuple containing:
+                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
+                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
+                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
+                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        """
         vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(
             pixel_values,
             **kwargs,
@@ -2286,7 +2305,7 @@ class Sam2Model(Sam2PreTrainedModel):
         attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> Sam2ImageSegmentationOutput:
         r"""
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
@@ -2570,15 +2589,29 @@ class Sam2Model(Sam2PreTrainedModel):
         frame_idx: int,
         is_cond: bool,
         consolidate_at_video_res: bool = False,
-    ):
+    ) -> dict[str, torch.Tensor]:
         """
-        Consolidate the per-object temporary outputs in `temp_output_dict_per_obj` on
-        a frame into a single output for all objects, including
-        1) fill any missing objects either from `output_dict_per_obj` (if they exist in
-           `output_dict_per_obj` for this frame) or leave them as placeholder values
-           (if they don't exist in `output_dict_per_obj` for this frame);
-        2) if specified, rerun memory encoder after apply non-overlapping constraints
-           on the object scores.
+        Consolidate per-object temporary outputs into a single unified output for all objects on a given frame.
+
+        This method merges individual object outputs stored in `temp_output_dict_per_obj` and `output_dict_per_obj`
+        into a consolidated output tensor. "Consolidate" here means combining separate per-object mask predictions
+        into a single tensor where each object occupies a different channel/batch dimension, filling missing objects
+        with placeholder values and optionally resizing to video resolution for better editing experience.
+
+        Args:
+            inference_state (`Sam2VideoSessionState`):
+                The inference session state containing per-object outputs and video metadata.
+            frame_idx (`int`):
+                The frame index for which to consolidate outputs.
+            is_cond (`bool`):
+                Whether this is a conditioning frame (True) or non-conditioning frame (False).
+            consolidate_at_video_res (`bool`, *optional*, defaults to `False`):
+                Whether to consolidate outputs at original video resolution rather than model resolution.
+
+        Returns:
+            `dict`: Consolidated output dictionary containing:
+                - pred_masks or pred_masks_video_res: Unified mask tensor with shape `(num_objects, 1, height, width)`.
+                Missing objects are filled with `NO_OBJ_SCORE` placeholder values.
         """
         batch_size = self._get_obj_num(inference_state)
         storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
@@ -2727,7 +2760,20 @@ class Sam2Model(Sam2PreTrainedModel):
 
     @torch.inference_mode()
     def propagate_in_video_preflight(self, inference_state: Sam2VideoSessionState):
-        """Prepare inference_state and consolidate temporary outputs before tracking."""
+        """
+        Prepare inference session and consolidate temporary outputs before video tracking begins.
+
+        This method performs essential pre-tracking operations by consolidating (merging and organizing)
+        per-object temporary outputs from user interactions into the main output storage. "Consolidate" here
+        means moving temporary outputs from `temp_output_dict_per_obj` into `output_dict_per_obj` after
+        running memory encoder on frames that lack memory features, ensuring all objects have proper
+        memory representations for consistent tracking across video frames.
+
+        Args:
+            inference_state (`Sam2VideoSessionState`):
+                The video inference session state containing temporary outputs to be consolidated
+                and prepared for tracking.
+        """
         # Check and make sure that every object has received input points or masks.
         batch_size = self._get_obj_num(inference_state)
         if batch_size == 0:
@@ -2791,7 +2837,7 @@ class Sam2Model(Sam2PreTrainedModel):
         frame: Optional[torch.Tensor] = None,
         frame_idx: Optional[int] = None,
         reverse: bool = False,
-    ):
+    ) -> torch.Tensor:
         """
         Propagate the objects through a streamed video frame.
 
@@ -2910,7 +2956,7 @@ class Sam2Model(Sam2PreTrainedModel):
         inference_state: Sam2VideoSessionState,
         frame_idx: int,
         batch_size: int,
-    ) -> tuple[torch.Tensor, list[torch.Tensor], list[tuple[int, int]]]:
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """Prepare vision features for a frame."""
 
         # Check if features are cached
@@ -2954,7 +3000,7 @@ class Sam2Model(Sam2PreTrainedModel):
         high_res_masks: torch.Tensor,
         object_score_logits: torch.Tensor,
         is_mask_from_pts: bool,
-    ):
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """
         Run the memory encoder on `high_res_masks`. This is usually after applying
         non-overlapping constraints to object scores. Since their scores changed, their
@@ -2978,7 +3024,9 @@ class Sam2Model(Sam2PreTrainedModel):
         maskmem_pos_enc = self._get_maskmem_pos_enc(inference_state, {"maskmem_pos_enc": maskmem_pos_enc})
         return maskmem_features, maskmem_pos_enc
 
-    def _get_maskmem_pos_enc(self, inference_state: Sam2VideoSessionState, current_out: dict[str, Any]):
+    def _get_maskmem_pos_enc(
+        self, inference_state: Sam2VideoSessionState, current_out: dict[str, Any]
+    ) -> Optional[list[torch.Tensor]]:
         """
         `maskmem_pos_enc` is the same across frames and objects, so we cache it as
         a constant in the inference session to reduce session storage size.
@@ -3028,7 +3076,10 @@ class Sam2Model(Sam2PreTrainedModel):
             inference_state, frame_idx, batch_size
         )
         # point and mask should not appear as input simultaneously on the same frame
-        assert point_inputs is None or mask_inputs is None
+        if point_inputs is not None and mask_inputs is not None:
+            raise ValueError(
+                "point_inputs and mask_inputs should not appear as input simultaneously on the same frame"
+            )
         current_out = self.track_step(
             frame_idx=frame_idx,
             is_init_cond_frame=is_init_cond_frame,
@@ -3101,7 +3152,12 @@ class Sam2Model(Sam2PreTrainedModel):
         else:
             return None, None
 
-    def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
+    def _use_mask_as_output(
+        self,
+        backbone_features: torch.Tensor,
+        high_res_features: list[torch.Tensor],
+        mask_inputs: torch.Tensor,
+    ) -> Sam2ImageSegmentationOutput:
         """
         Directly turn binary `mask_inputs` into a output mask logits without using SAM.
         (same input and output shapes as in forward above).
@@ -3154,16 +3210,40 @@ class Sam2Model(Sam2PreTrainedModel):
         num_total_frames: int,
         track_in_reverse_time: bool = False,
         streaming: bool = False,
-    ):
-        """Fuse the current frame's visual feature map with memory from previous frames.
+    ) -> torch.Tensor:
+        """
+        Fuse current frame's visual features with memory from previous frames for enhanced object tracking.
 
-        output_history (Dict):
-            A dictionary containing the history of outputs for conditioning and non-conditioning frames. # TODO refactor
-            Expected structure: {
-                "cond_frame_outputs": {frame_idx: output_dict, ...},
-                "non_cond_frame_outputs": {frame_idx: output_dict, ...}
-            }
-        track_in_reverse_time (bool, optional): If True, tracking is performed in reverse time order. Defaults to False. # TODO make it work
+        This method conditions the current frame's visual features on temporal memory from previous frames,
+        enabling consistent object tracking across video sequences. For initial conditioning frames, it uses
+        no-memory embeddings. For subsequent frames, it retrieves and integrates memory features from both
+        conditioning frames (user interactions) and non-conditioning frames (tracked results) via cross-attention.
+
+        Args:
+            frame_idx (`int`):
+                Index of the current frame being processed.
+            is_initial_conditioning_frame (`bool`):
+                Whether this is an initial conditioning frame with user inputs (True) or a subsequent
+                tracking frame (False).
+            current_vision_features (`list[torch.Tensor]`):
+                List of vision feature tensors for the current frame, with the last element being the
+                highest-level features of shape `(seq_len, batch_size, channels)`.
+            current_vision_positional_embeddings (`list[torch.Tensor]`):
+                List of positional embedding tensors corresponding to the vision features.
+            output_history (`dict[str, dict[int, dict[str, torch.Tensor]]]`):
+                Dictionary containing historical outputs with structure:
+                - "cond_frame_outputs": {frame_idx: output_dict, ...} for conditioning frames
+                - "non_cond_frame_outputs": {frame_idx: output_dict, ...} for non-conditioning frames
+            num_total_frames (`int`):
+                Total number of frames in the video sequence.
+            track_in_reverse_time (`bool`, *optional*, defaults to `False`):
+                Whether tracking is performed in reverse temporal order.
+            streaming (`bool`, *optional*, defaults to `False`):
+                Whether this is streaming inference mode.
+
+        Returns:
+            `torch.Tensor`: Memory-conditioned feature tensor of shape `(batch_size, channels, height, width)`
+                suitable for input to the SAM decoder.
         """
         # Get dimensions from the highest-level (lowest-resolution) feature map
         batch_size = current_vision_features[-1].size(1)
@@ -3356,11 +3436,11 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def _encode_new_memory(
         self,
-        current_vision_feats,
-        pred_masks_high_res,
-        object_score_logits,
-        is_mask_from_pts,
-    ):
+        current_vision_feats: list[torch.Tensor],
+        pred_masks_high_res: torch.Tensor,
+        object_score_logits: torch.Tensor,
+        is_mask_from_pts: bool,
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """Encode the current image and its prediction into a memory feature."""
         batch_size = current_vision_feats[-1].size(1)  # batch size on this frame
         channels = self.hidden_dim
@@ -3400,18 +3480,52 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def _track_step(
         self,
-        frame_idx,
-        is_init_cond_frame,
-        current_vision_feats,
-        current_vision_pos_embeds,
-        point_inputs,
-        mask_inputs,
-        output_dict,
-        num_frames,
-        track_in_reverse,
-        prev_sam_mask_logits,
+        frame_idx: int,
+        is_init_cond_frame: bool,
+        current_vision_feats: list[torch.Tensor],
+        current_vision_pos_embeds: list[torch.Tensor],
+        point_inputs: Optional[dict],
+        mask_inputs: Optional[torch.Tensor],
+        output_dict: dict[str, Any],
+        num_frames: int,
+        track_in_reverse: bool,
+        prev_sam_mask_logits: Optional[torch.Tensor],
         streaming: bool = False,
-    ):
+    ) -> tuple[dict[str, Any], Sam2ImageSegmentationOutput, Optional[list[torch.Tensor]], torch.Tensor]:
+        """
+        Perform a single tracking step, processing vision features and inputs to generate SAM outputs.
+
+        Args:
+            frame_idx (`int`):
+                Index of the current frame.
+            is_init_cond_frame (`bool`):
+                Whether this is an initial conditioning frame.
+            current_vision_feats (`list[torch.Tensor]`):
+                Current frame's vision features.
+            current_vision_pos_embeds (`list[torch.Tensor]`):
+                Current frame's positional embeddings.
+            point_inputs (`dict`, *optional*):
+                Point prompt inputs for the current frame.
+            mask_inputs (`torch.Tensor`, *optional*):
+                Mask prompt inputs for the current frame.
+            output_dict (`dict[str, Any]`):
+                Output dictionary containing previous frame outputs.
+            num_frames (`int`):
+                Total number of frames in the video.
+            track_in_reverse (`bool`):
+                Whether tracking is performed in reverse time order.
+            prev_sam_mask_logits (`torch.Tensor`, *optional*):
+                Previously predicted SAM mask logits.
+            streaming (`bool`, *optional*, defaults to `False`):
+                Whether this is streaming inference.
+
+        Returns:
+            `tuple`: A tuple containing:
+                - current_out (`dict`): Dictionary with current frame outputs including point and mask inputs.
+                - sam_outputs: SAM model outputs for the current frame.
+                - high_res_features: High-resolution features for the SAM head.
+                - pix_feat: Pixel features used in the SAM head.
+        """
         current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
         # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
         if len(current_vision_feats) > 1:
@@ -3460,13 +3574,30 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def _encode_memory_in_output(
         self,
-        current_vision_feats,
-        point_inputs,
-        run_mem_encoder,
-        high_res_masks,
-        object_score_logits,
-        current_out,
-    ):
+        current_vision_feats: list[torch.Tensor],
+        point_inputs: Optional[dict],
+        run_mem_encoder: bool,
+        high_res_masks: torch.Tensor,
+        object_score_logits: torch.Tensor,
+        current_out: dict[str, Any],
+    ) -> None:
+        """
+        Encode memory features into the current output dictionary if memory encoder should be run.
+
+        Args:
+            current_vision_feats (`list[torch.Tensor]`):
+                Current frame's vision features.
+            point_inputs (`dict`, *optional*):
+                Point prompt inputs for the current frame.
+            run_mem_encoder (`bool`):
+                Whether to run the memory encoder.
+            high_res_masks (`torch.Tensor`):
+                High-resolution masks for memory encoding.
+            object_score_logits (`torch.Tensor`):
+                Object score logits.
+            current_out (`dict[str, Any]`):
+                Current output dictionary to update with memory features.
+        """
         if run_mem_encoder and self.num_maskmem > 0:
             high_res_masks_for_mem_enc = high_res_masks
             maskmem_features, maskmem_pos_enc = self._encode_new_memory(
@@ -3483,25 +3614,57 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def track_step(
         self,
-        frame_idx,
-        is_init_cond_frame,
-        current_vision_feats,
-        current_vision_pos_embeds,
-        point_inputs,
-        mask_inputs,
-        output_dict,
-        num_frames,
-        track_in_reverse=False,  # tracking in reverse time order (for demo usage)
-        # Whether to run the memory encoder on the predicted masks. Sometimes we might want
-        # to skip the memory encoder with `run_mem_encoder=False`. For example,
-        # in demo we might call `track_step` multiple times for each user click,
-        # and only encode the memory when the user finalizes their clicks. And in ablation
-        # settings like SAM training on static images, we don't need the memory encoder.
-        run_mem_encoder=True,
-        # The previously predicted SAM mask logits (which can be fed together with new clicks in demo).
-        prev_sam_mask_logits=None,
+        frame_idx: int,
+        is_init_cond_frame: bool,
+        current_vision_feats: list[torch.Tensor],
+        current_vision_pos_embeds: list[torch.Tensor],
+        point_inputs: Optional[dict],
+        mask_inputs: Optional[torch.Tensor],
+        output_dict: dict[str, Any],
+        num_frames: int,
+        track_in_reverse: bool = False,
+        run_mem_encoder: bool = True,
+        prev_sam_mask_logits: Optional[torch.Tensor] = None,
         streaming: bool = False,
-    ):
+    ) -> dict[str, Any]:
+        """
+        Perform a single tracking step for video object segmentation.
+
+        Args:
+            frame_idx (`int`):
+                Index of the current frame.
+            is_init_cond_frame (`bool`):
+                Whether this is an initial conditioning frame with user inputs.
+            current_vision_feats (`list[torch.Tensor]`):
+                Vision features for the current frame.
+            current_vision_pos_embeds (`list[torch.Tensor]`):
+                Positional embeddings for the current frame.
+            point_inputs (`dict`, *optional*):
+                Point prompt inputs for the current frame.
+            mask_inputs (`torch.Tensor`, *optional*):
+                Mask prompt inputs for the current frame.
+            output_dict (`dict[str, Any]`):
+                Dictionary containing outputs from previous frames.
+            num_frames (`int`):
+                Total number of frames in the video.
+            track_in_reverse (`bool`, *optional*, defaults to `False`):
+                Whether to track in reverse time order.
+            run_mem_encoder (`bool`, *optional*, defaults to `True`):
+                Whether to run the memory encoder on predicted masks.
+            prev_sam_mask_logits (`torch.Tensor`, *optional*):
+                Previously predicted SAM mask logits that can be fed with new clicks.
+            streaming (`bool`, *optional*, defaults to `False`):
+                Whether this is streaming inference.
+
+        Returns:
+            `dict`: Dictionary containing the tracking results for the current frame, including:
+                - pred_masks: Predicted low-resolution masks.
+                - pred_masks_high_res: Predicted high-resolution masks.
+                - obj_ptr: Object pointer for memory.
+                - object_score_logits: Object score logits (inference only).
+                - maskmem_features: Memory features for future frames.
+                - maskmem_pos_enc: Memory positional encodings.
+        """
         current_out, sam_outputs, _, _ = self._track_step(
             frame_idx,
             is_init_cond_frame,
@@ -3541,7 +3704,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         return current_out
 
-    def _use_multimask(self, is_init_cond_frame, point_inputs):
+    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: Optional[dict]) -> bool:
         """Whether to use multimask output in the SAM head."""
         num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
@@ -3551,7 +3714,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
         return multimask_output
 
-    def _apply_non_overlapping_constraints(self, pred_masks):
+    def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """
         Apply non-overlapping constraints to the object scores in pred_masks. Here we
         keep only the highest scoring object at each spatial location in pred_masks.
