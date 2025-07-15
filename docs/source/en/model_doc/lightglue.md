@@ -64,7 +64,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 
 ## Notes
 
-- LightGlue is adaptive to the difficulty of the problem: the inference is much faster on image pairs that are intuitively easy to match, for example because of a larger visual overlap or limited appearance change.
+- LightGlue is adaptive to the task difficulty. Inference is much faster on image pairs that are intuitively easy to match, for example, because of a larger visual overlap or limited appearance change.
 
     ```py
     from transformers import AutoImageProcessor, AutoModel
@@ -88,7 +88,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     ```
 
 - The model outputs matching indices, keypoints, and confidence scores for each match, similar to SuperGlue but with improved efficiency.
-- For better visualization and analysis, use the `post_process_keypoint_matching` method from the `LightGlueImageProcessor` to get matches in a more readable format.
+- For better visualization and analysis, use the [`LightGlueImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
 
     ```py
     # Process outputs for visualization
@@ -103,7 +103,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
             print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
     ```
 
-- You can visualize the matches between the images using the built-in plotting functionality:
+- Visualize the matches between the images using the built-in plotting functionality.
 
     ```py
     # Easy visualization using the built-in plotting method
