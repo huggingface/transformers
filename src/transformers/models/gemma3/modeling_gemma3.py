@@ -274,6 +274,8 @@ def eager_attention_forward(
     if multi_head_attention := key.shape[1] != query.shape[1]:
         query_states = query.view(query.shape[0], key.shape[1], -1, *query.shape[2:])
         attn_weights = torch.einsum("bkgjd, bksd -> bkgjs", query_states, key) * scaling
+        # Compute with broadcasting instead of einsum:
+        # attn_weights = query_states @ key.unsqueeze(2).transpose(-1, -2) * scaling
     else:
         attn_weights = (query @ key.transpose(-1, -2)) * scaling
 
@@ -293,6 +295,8 @@ def eager_attention_forward(
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     if multi_head_attention:
         attn_output = torch.einsum("bkgjs, bksd -> bkgjd", attn_weights, value).flatten(1, 2).transpose(1, 2)
+        # Compute with broadcasting instead of einsum:
+        # attn_output = (attn_weights @ value.unsqueeze(2)).flatten(1, 2).transpose(1, 2)
         attn_weights = attn_weights.flatten(1, 2)
     else:
         attn_output = (attn_weights @ value).transpose(1, 2)
