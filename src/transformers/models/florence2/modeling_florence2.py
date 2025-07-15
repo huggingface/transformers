@@ -1022,6 +1022,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         model_input_name: Optional[str],
         generation_config,
     ) -> dict[str, Any]:
+        # override to handle merging image and text embeddings before passing to language encoder
         inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         attention_mask = model_kwargs.pop("attention_mask", None)
         pixel_values = model_kwargs.pop("pixel_values", None)

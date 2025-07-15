@@ -869,33 +869,6 @@ class Florence2Model(Florence2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
-
-        >>> model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-large")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
-
-        >>> prompt = "<CAPTION>"
-        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=100)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "A green car parked in front of a yellow building."
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1124,6 +1097,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         model_input_name: Optional[str],
         generation_config,
     ) -> dict[str, Any]:
+        # override to handle merging image and text embeddings before passing to language encoder
         inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         attention_mask = model_kwargs.pop("attention_mask", None)
         pixel_values = model_kwargs.pop("pixel_values", None)
