@@ -42,45 +42,46 @@ def get_models_and_test_files(models_dir: Path) -> tuple[list[str], list[Path]]:
         raise FileNotFoundError(f"Models directory not found at {models_dir}")
 
     test_files = sorted(models_dir.rglob("test_modeling_*.py"))
-
     model_names = sorted({f.parent.name for f in test_files})
     return model_names, test_files
 
 
-def analyze_test_override(test_fn: str, file_content: str) -> tuple[str, str] | None:
-    """
-    Analyzes if a test is overridden and if it's skipped by checking for decorators.
+def _extract_reason_from_decorators(decorators: str) -> str:
+    """Extracts the reason string from a decorator block, if any."""
+    reason_match = re.search(r'reason\s*=\s*["\'](.*?)["\']', decorators)
+    if reason_match:
+        return reason_match.group(1)
+    # fallback for formats like @skip("reason") or @skipIf(..., "reason")
+    reason_match = re.search(r'\((?:.*?,\s*)?["\'](.*?)["\']\)', decorators)
+    if reason_match:
+        return reason_match.group(1)
+    # if nothing matched, take the last decorator line
+    return decorators.strip().split("\n")[-1].strip()
 
-    Returns a tuple of (status, reason), e.g., ("SKIPPED", "Test is too slow"),
-    or None if the test is not explicitly defined in the file content.
+
+def extract_test_info(file_content: str) -> dict[str, tuple[str, str]]:
     """
-    # Pattern to find a function definition and capture any preceding decorator lines
+    Parses a test file once and returns a mapping of test functions to their
+    status and skip reason, e.g. {'test_forward': ('SKIPPED', 'too slow')}.
+    """
+    result: dict[str, tuple[str, str]] = {}
     pattern = re.compile(
-        r"((?:^\s*@.*?\n)*?)^\s*def\s+" + re.escape(test_fn) + r"\b",
+        r"((?:^\s*@.*?\n)*?)^\s*def\s+(test_[a-zA-Z0-9_]+)\b",
         re.MULTILINE,
     )
-    match = pattern.search(file_content)
 
-    if not match:
-        return None  # test is not mentioned, so it's inherited (implicitly run).
-
-    decorators = match.group(1) or ""
-    if "skip" in decorators:
-        reason_match = re.search(r'reason\s*=\s*["\'](.*?)["\']', decorators)
-        if reason_match:
-            reason = reason_match.group(1)
-        else:
-            # fallback for formats like @skip("reason") or @skipIf(..., "reason")
-            reason_match = re.search(r'\((?:.*?,\s*)?["\'](.*?)["\']\)', decorators)
-            reason = reason_match.group(1) if reason_match else decorators.strip().split("\n")[-1]
-
-        return "SKIPPED", reason
-
-    return "RAN", ""
+    for decorators, test_fn in pattern.findall(file_content):
+        status = "RAN"
+        reason = ""
+        if "skip" in decorators:
+            status = "SKIPPED"
+            reason = _extract_reason_from_decorators(decorators)
+        result[test_fn] = (status, reason)
+    return result
 
 
 def main():
-    """Scans tests, analyzes overrides, and generates a JSON report."""
+    """Scans tests, analyzes overrides in a single pass per file, and generates a JSON report."""
     try:
         common_tests = get_common_tests(COMMON_TESTS_FILE)
         all_models, model_files = get_models_and_test_files(MODELS_DIR)
@@ -88,41 +89,53 @@ def main():
         print(f"❌ Error: {e}")
         return
 
-    final_results = {}
-    print(f"🔬 Scanning {len(common_tests)} common tests across {len(all_models)} models...")
+    # cache overrides per model (merged across all its files)
+    model_overrides: dict[str, dict[str, tuple[str, str]]] = {m: {} for m in all_models}
 
-    for i, test_fn in enumerate(common_tests):
-        print(f"  ({i + 1}/{len(common_tests)}) Processing: {test_fn}", end="\r")
+    print(f"🔬 Parsing {len(model_files)} model test files once each...")
+    for file_path in model_files:
+        model_name = file_path.parent.name
+        content = file_path.read_text(encoding="utf-8")
+        overrides = extract_test_info(content)
+        # merge with existing overrides for the model
+        model_overrides[model_name].update(overrides)
 
-        models_that_ran = all_models.copy()
-        models_that_skipped = []
-        reasons_for_skipping = []
+    final_results: dict[str, dict[str, object]] = {}
+    total_models = len(all_models)
 
-        for file_path in model_files:
-            model_name = file_path.parent.name
-            content = file_path.read_text(encoding="utf-8")
-            result = analyze_test_override(test_fn, content)
+    print(f"📝 Aggregating results for {len(common_tests)} common tests...")
+    for i, test_fn in enumerate(common_tests, start=1):
+        print(f"  ({i}/{len(common_tests)}) {test_fn}", end="\r")
 
-            if result and result[0] == "SKIPPED":
-                status, reason_text = result
-                if model_name in models_that_ran:
-                    models_that_ran.remove(model_name)
-                models_that_skipped.append(model_name)
-                reasons_for_skipping.append(f"{model_name}: {reason_text}")
+        models_ran: list[str] = []
+        models_skipped: list[str] = []
+        reasons_for_skipping: list[str] = []
 
-        # compute statistics for the current test
-        total_models = len(all_models)
-        skipped_proportion = len(models_that_skipped) / total_models if total_models > 0 else 0.0
+        for model_name in all_models:
+            overrides = model_overrides.get(model_name, {})
+            if test_fn in overrides:
+                status, reason_text = overrides[test_fn]
+                if status == "SKIPPED":
+                    models_skipped.append(model_name)
+                    reasons_for_skipping.append(f"{model_name}: {reason_text}")
+                else:  # explicitly overridden and executed
+                    models_ran.append(model_name)
+            else:
+                # not overridden => inherited from common tests and executed
+                models_ran.append(model_name)
+
+        skipped_proportion = len(models_skipped) / total_models if total_models else 0.0
 
         final_results[test_fn] = {
-            "models_ran": sorted(models_that_ran),
-            "models_skipped": sorted(models_that_skipped),
+            "models_ran": sorted(models_ran),
+            "models_skipped": sorted(models_skipped),
             "skipped_proportion": round(skipped_proportion, 4),
             "reasons_skipped": sorted(reasons_for_skipping),
         }
 
     print("\n✅ Scan complete.")
 
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(final_results, f, indent=2)
 
