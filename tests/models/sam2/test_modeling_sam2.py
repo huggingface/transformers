@@ -1365,6 +1365,63 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
 
+    def test_inference_propagate_on_streamed_video(self):
+        raw_video = prepare_video()
+        inputs = self.processor(images=raw_video, device=torch_device, return_tensors="pt")
+        processed_frames = inputs.pixel_values
+
+        inference_state = self.processor.init_video_session(inference_device=torch_device)
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+        video_res_masks = []
+        max_frame_num_to_track = 3
+        for frame_idx, processed_frame in enumerate(processed_frames):
+            if frame_idx >= max_frame_num_to_track:
+                break
+            if frame_idx == 0:
+                inference_state = self.processor.process_new_points_or_box_for_video_frame(
+                    inference_state,
+                    frame_idx=0,
+                    obj_ids=ann_obj_id,
+                    input_points=[[[[210, 350], [250, 220]]]],
+                    input_labels=[[[1, 1]]],
+                    original_size=inputs.original_sizes[0],
+                )
+                _, video_res_mask = self.model.infer_on_video_frame_with_new_inputs(
+                    inference_state=inference_state,
+                    frame=processed_frame,
+                    obj_ids=ann_obj_id,
+                    consolidate_at_video_res=False,
+                )
+                video_res_masks.append(video_res_mask)
+            else:
+                video_res_mask = self.model.propagate_in_frame(inference_state, frame=processed_frame)
+                video_res_masks.append(video_res_mask)
+
+        video_res_masks = torch.stack(video_res_masks, dim=0)
+        self.assertEqual(
+            video_res_masks.shape, (max_frame_num_to_track, 1, 1, raw_video.shape[-3], raw_video.shape[-2])
+        )
+        torch.testing.assert_close(
+            video_res_masks[0, 0, 0, :3, :3],
+            torch.tensor(
+                [[-11.1491, -11.1491, -11.4204], [-11.6524, -11.6524, -11.8057], [-12.7825, -12.7825, -12.6707]],
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        torch.testing.assert_close(
+            video_res_masks[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-11.1491, -11.1491], [-11.6524, -11.6524]]]],
+                    [[[[-15.3764, -15.3764], [-16.0280, -16.0280]]]],
+                    [[[[-15.4271, -15.4271], [-16.3561, -16.3561]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
     def test_dummy_pipeline_generation(self):
         generator = pipeline("mask-generation", model="../sam2_hf_implem/sam2.1_tiny_hf", device=torch_device)
         raw_image = prepare_image()

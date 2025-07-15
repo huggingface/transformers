@@ -96,7 +96,7 @@ class Sam2VideoSessionState:
 
         Args:
             video (`torch.FloatTensor`):
-                The video tensor.
+                The processed video tensor.
             video_height (`int`):
                 The height of the video.
             video_width (`int`):
@@ -113,14 +113,13 @@ class Sam2VideoSessionState:
                 The torch dtype to use for the video.
         """
         self.images = video
-        self.num_frames = video.shape[0]
+        self.num_frames = video.shape[0] if video is not None else None
         self.inference_device = inference_device
         self.video_storage_device = video_storage_device
         self.inference_state_device = inference_state_device
         self.async_loading_frames = async_loading_frames
         self.video_height = video_height
         self.video_width = video_width
-        self.device = video.device
         self.cached_features = {}
         self.point_inputs_per_obj = {}
         self.mask_inputs_per_obj = {}
@@ -132,6 +131,7 @@ class Sam2VideoSessionState:
         self.temp_output_dict_per_obj = {}
         self.frames_tracked_per_obj = {}
         self.torch_dtype = torch_dtype
+        self.new_inputs_added = False
 
         if self.async_loading_frames:
             logger.warning("Async loading of frames is not supported yet. This will be implemented in the future.")
@@ -150,6 +150,21 @@ class Sam2VideoSessionState:
         self.output_dict_per_obj.clear()
         self.temp_output_dict_per_obj.clear()
         self.frames_tracked_per_obj.clear()
+
+    def add_new_frame(self, pixel_values: torch.Tensor) -> int:
+        """
+        Adds a new frame to the inference state.
+        """
+        pixel_values = pixel_values.to(self.video_storage_device)
+        if pixel_values.dim() == 3:
+            pixel_values = pixel_values.unsqueeze(0)
+        if self.images is None:
+            self.images = pixel_values
+        else:
+            self.images = torch.cat([self.images, pixel_values], dim=0)
+        self.num_frames = self.images.shape[0]
+        frame_idx = self.num_frames - 1
+        return frame_idx
 
     def _obj_id_to_idx(self, obj_id: int) -> int:
         """
@@ -2739,16 +2754,32 @@ class Sam2Model(Sam2PreTrainedModel):
     def infer_on_video_frame_with_new_inputs(
         self,
         inference_state: Sam2VideoSessionState,
-        frame_idx: int,
         obj_ids: Union[list[int], int],
+        frame_idx: Optional[int] = None,
+        frame: Optional[torch.Tensor] = None,
         consolidate_at_video_res: bool = True,
         **kwargs,
     ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """
         Add new conditioning inputs to a video frame and run inference.
+        Args:
+            inference_state (`Sam2VideoSessionState`):
+                The inference state for the video session.
+            obj_ids (`list[int]` or `int`):
+                The object ID(s) to associate with the new inputs.
+            frame_idx (`int`, *optional*):
+                The index of the frame on which to run inference. No need to provide when infering
+                on a new streamed frame.
+            frame (`torch.Tensor`, *optional*):
+                The frame to process. Provide when streaming.
+            consolidate_at_video_res (`bool`, *optional*, defaults to `True`):
+                Whether to consolidate the output at the original video resolution
         """
         # Only batch size 1 is supported (single frame inference)
         batch_size = 1
+        inference_state.new_inputs_added = True
+        if frame is not None:
+            frame_idx = inference_state.add_new_frame(frame)
 
         if isinstance(obj_ids, int):
             obj_ids = [obj_ids]
@@ -2776,6 +2807,7 @@ class Sam2Model(Sam2PreTrainedModel):
                 output_dict=inference_state.output_dict_per_obj[obj_idx],
                 run_mem_encoder=False,
                 reverse=reverse,
+                streaming=frame is not None,
             )
 
             # Update the output dictionary
@@ -2795,6 +2827,10 @@ class Sam2Model(Sam2PreTrainedModel):
             any_res_masks, video_res_masks = self._get_orig_video_res_output(
                 inference_state, consolidated_out[consolidated_mask_key]
             )
+
+        if frame is not None:
+            # In streaming mode, automatically run preflight to not manuallyrepeat propagate_in_frame on the first frame
+            self.propagate_in_video_preflight(inference_state)
 
         if consolidate_at_video_res:
             return video_res_masks
@@ -2858,6 +2894,79 @@ class Sam2Model(Sam2PreTrainedModel):
             for frame_idx in obj_output_dict["cond_frame_outputs"]:
                 obj_output_dict["non_cond_frame_outputs"].pop(frame_idx, None)
 
+        inference_state.new_inputs_added = False
+
+    @torch.inference_mode()
+    def propagate_in_frame(
+        self,
+        inference_state: Sam2VideoSessionState,
+        frame: Optional[torch.Tensor] = None,
+        frame_idx: Optional[int] = None,
+        reverse: bool = False,
+    ):
+        """
+        Propagate the objects through a streamed video frame.
+
+        Args:
+            inference_state (`Sam2VideoSessionState`):
+                The inference state for the video session.
+            frame (`torch.Tensor`, *optional*):
+                The frame to process. Provide when streaming.
+            frame_idx (`int`, *optional*):
+                The index of the frame on which to run inference. No need to provide when infering
+                on a new streamed frame.
+            reverse (`bool`, *optional*, defaults to `False`):
+                Whether to propagate in reverse. Not used when streaming.
+        """
+        if inference_state.new_inputs_added:
+            self.propagate_in_video_preflight(inference_state)
+        elif frame is not None and self._get_obj_num(inference_state) == 0:
+            raise ValueError("No objects are provided for tracking; please add inputs first.")
+
+        if frame is not None:
+            frame_idx = inference_state.add_new_frame(frame)
+
+        batch_size = self._get_obj_num(inference_state)
+        pred_masks_per_obj = [None] * batch_size
+        for obj_idx in range(batch_size):
+            # We skip those frames already in consolidated outputs (these are frames
+            # that received input clicks or mask). Note that we cannot directly run
+            # batched forward on them via `_run_single_frame_inference` because the
+            # number of clicks on each object might be different.
+            if frame_idx in inference_state.output_dict_per_obj[obj_idx]["cond_frame_outputs"]:
+                storage_key = "cond_frame_outputs"
+                current_out = inference_state.output_dict_per_obj[obj_idx][storage_key][frame_idx]
+                device = inference_state.inference_device
+                pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
+            else:
+                storage_key = "non_cond_frame_outputs"
+                current_out, pred_masks = self._run_single_frame_inference(
+                    inference_state=inference_state,
+                    output_dict=inference_state.output_dict_per_obj[obj_idx],
+                    frame_idx=frame_idx,
+                    batch_size=1,  # run on the slice of a single object
+                    is_init_cond_frame=False,
+                    point_inputs=None,
+                    mask_inputs=None,
+                    reverse=reverse,
+                    run_mem_encoder=True,
+                    streaming=frame is not None,
+                )
+                inference_state.output_dict_per_obj[obj_idx][storage_key][frame_idx] = current_out
+
+            inference_state.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
+            pred_masks_per_obj[obj_idx] = pred_masks
+
+        # Resize the output mask to the original video resolution (we directly use
+        # the mask scores on GPU for output to avoid any CPU conversion in between)
+        if len(pred_masks_per_obj) > 1:
+            all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
+        else:
+            all_pred_masks = pred_masks_per_obj[0]
+        _, video_res_masks = self._get_orig_video_res_output(inference_state, all_pred_masks)
+
+        return video_res_masks
+
     @torch.inference_mode()
     def propagate_in_video(
         self,
@@ -2867,7 +2976,7 @@ class Sam2Model(Sam2PreTrainedModel):
         reverse: bool = False,
     ) -> Iterator[tuple[int, int, torch.Tensor]]:
         """
-        Propagate the objects through the video frames.
+        Propagate the objects through the video frames. Used for async inference.
         Yields (frame_idx, mask) for each frame and object.
 
         Args:
@@ -2881,9 +2990,7 @@ class Sam2Model(Sam2PreTrainedModel):
                 Whether to propagate in reverse.
         """
         self.propagate_in_video_preflight(inference_state)
-
         num_frames = inference_state.num_frames
-        batch_size = self._get_obj_num(inference_state)
 
         # set start index, end index, and processing order
         if start_frame_idx is None:
@@ -2907,43 +3014,7 @@ class Sam2Model(Sam2PreTrainedModel):
             processing_order = range(start_frame_idx, end_frame_idx + 1)
 
         for frame_idx in tqdm(processing_order, desc="propagate in video"):
-            pred_masks_per_obj = [None] * batch_size
-            for obj_idx in range(batch_size):
-                obj_output_dict = inference_state.output_dict_per_obj[obj_idx]
-                # We skip those frames already in consolidated outputs (these are frames
-                # that received input clicks or mask). Note that we cannot directly run
-                # batched forward on them via `_run_single_frame_inference` because the
-                # number of clicks on each object might be different.
-                if frame_idx in obj_output_dict["cond_frame_outputs"]:
-                    storage_key = "cond_frame_outputs"
-                    current_out = obj_output_dict[storage_key][frame_idx]
-                    device = inference_state.inference_device
-                    pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
-                else:
-                    storage_key = "non_cond_frame_outputs"
-                    current_out, pred_masks = self._run_single_frame_inference(
-                        inference_state=inference_state,
-                        output_dict=obj_output_dict,
-                        frame_idx=frame_idx,
-                        batch_size=1,  # run on the slice of a single object
-                        is_init_cond_frame=False,
-                        point_inputs=None,
-                        mask_inputs=None,
-                        reverse=reverse,
-                        run_mem_encoder=True,
-                    )
-                    obj_output_dict[storage_key][frame_idx] = current_out
-
-                inference_state.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
-                pred_masks_per_obj[obj_idx] = pred_masks
-
-            # Resize the output mask to the original video resolution (we directly use
-            # the mask scores on GPU for output to avoid any CPU conversion in between)
-            if len(pred_masks_per_obj) > 1:
-                all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
-            else:
-                all_pred_masks = pred_masks_per_obj[0]
-            _, video_res_masks = self._get_orig_video_res_output(inference_state, all_pred_masks)
+            video_res_masks = self.propagate_in_frame(inference_state, frame_idx=frame_idx)
             yield frame_idx, video_res_masks
 
     def _prepare_vision_features(
@@ -3060,6 +3131,7 @@ class Sam2Model(Sam2PreTrainedModel):
         reverse: bool,
         run_mem_encoder: bool,
         prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        streaming: bool = False,
     ) -> tuple[dict[str, Any], torch.Tensor]:
         """Run tracking on a single frame based on current inputs and previous memory."""
         # Retrieve correct image features
@@ -3081,6 +3153,7 @@ class Sam2Model(Sam2PreTrainedModel):
             track_in_reverse=reverse,
             run_mem_encoder=run_mem_encoder,
             prev_sam_mask_logits=prev_sam_mask_logits,
+            streaming=streaming,
         )
 
         # optionally offload the output to CPU memory to save GPU space
@@ -3192,6 +3265,7 @@ class Sam2Model(Sam2PreTrainedModel):
         output_history: dict[str, dict[int, dict[str, torch.Tensor]]],
         num_total_frames: int,
         track_in_reverse_time: bool = False,
+        streaming: bool = False,
     ):
         """Fuse the current frame's visual feature map with memory from previous frames.
 
@@ -3288,7 +3362,10 @@ class Sam2Model(Sam2PreTrainedModel):
                 memory_positional_embeddings_to_concatenate.append(combined_memory_pos_embed)
 
             # Construct the list of past object pointers to be used in attention
-            max_object_pointers_to_use = min(num_total_frames, self.max_object_pointers_in_encoder)
+            if streaming:
+                max_object_pointers_to_use = self.max_object_pointers_in_encoder
+            else:
+                max_object_pointers_to_use = min(num_total_frames, self.max_object_pointers_in_encoder)
             temporal_diff_and_pointers = []
 
             # Add object pointers from selected conditioning frames
@@ -3310,7 +3387,9 @@ class Sam2Model(Sam2PreTrainedModel):
             # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
             for t_diff_offset in range(1, max_object_pointers_to_use):
                 ref_frame_idx = frame_idx + t_diff_offset if track_in_reverse_time else frame_idx - t_diff_offset
-                if ref_frame_idx < 0 or (num_total_frames is not None and ref_frame_idx >= num_total_frames):
+                if ref_frame_idx < 0 or (
+                    not streaming and num_total_frames is not None and ref_frame_idx >= num_total_frames
+                ):
                     break  # Stop if frame index is out of bounds
 
                 out_data = output_history["non_cond_frame_outputs"].get(ref_frame_idx, None)
@@ -3443,6 +3522,7 @@ class Sam2Model(Sam2PreTrainedModel):
         num_frames,
         track_in_reverse,
         prev_sam_mask_logits,
+        streaming: bool = False,
     ):
         current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
         # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
@@ -3468,6 +3548,7 @@ class Sam2Model(Sam2PreTrainedModel):
                 output_history=output_dict,
                 num_total_frames=num_frames,
                 track_in_reverse_time=track_in_reverse,
+                streaming=streaming,
             )
             # apply SAM-style segmentation head
             # here we might feed previously predicted low-res SAM mask logits into the SAM mask decoder,
@@ -3531,6 +3612,7 @@ class Sam2Model(Sam2PreTrainedModel):
         run_mem_encoder=True,
         # The previously predicted SAM mask logits (which can be fed together with new clicks in demo).
         prev_sam_mask_logits=None,
+        streaming: bool = False,
     ):
         current_out, sam_outputs, _, _ = self._track_step(
             frame_idx,
@@ -3543,6 +3625,7 @@ class Sam2Model(Sam2PreTrainedModel):
             num_frames,
             track_in_reverse,
             prev_sam_mask_logits,
+            streaming,
         )
 
         low_res_masks = sam_outputs.low_res_masks

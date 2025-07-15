@@ -494,7 +494,7 @@ class Sam2Processor(ProcessorMixin):
 
     def init_video_session(
         self,
-        video: VideoInput,
+        video: Optional[VideoInput] = None,
         inference_device: Union[str, "torch.device"] = "cpu",
         inference_state_device: Union[str, "torch.device"] = None,
         processing_device: Union[str, "torch.device"] = None,
@@ -505,8 +505,8 @@ class Sam2Processor(ProcessorMixin):
         Initializes a video session for inference.
 
         Args:
-            video (`VideoInput`):
-                The video to process.
+            video (`VideoInput`, *optional*):
+                The video to process. No need to provide when streaming.
             inference_device (`str` or `torch.device`, *optional*, defaults to "cpu"):
                 The device to use for inference.
             inference_state_device (`str` or `torch.device`, *optional*):
@@ -521,17 +521,24 @@ class Sam2Processor(ProcessorMixin):
         video_storage_device = video_storage_device if video_storage_device is not None else inference_device
         inference_state_device = inference_state_device if inference_state_device is not None else inference_device
         processing_device = processing_device if processing_device is not None else inference_device
-        processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt").to(
-            torch_dtype
-        )
-        if video_storage_device != inference_device:
-            processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(video_storage_device)
-        elif processing_device != inference_device:
-            processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(inference_device)
+        pixel_values_video = None
+        video_height = None
+        video_width = None
+        if video is not None:
+            processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt").to(
+                torch_dtype
+            )
+            if video_storage_device != inference_device:
+                processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(video_storage_device)
+            elif processing_device != inference_device:
+                processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(inference_device)
+            pixel_values_video = processed_video.pixel_values_videos[0]
+            video_height = processed_video.original_sizes[0][0]
+            video_width = processed_video.original_sizes[0][1]
         inference_state = Sam2VideoSessionState(
-            processed_video.pixel_values_videos[0],
-            video_height=processed_video.original_sizes[0][0],
-            video_width=processed_video.original_sizes[0][1],
+            video=pixel_values_video,
+            video_height=video_height,
+            video_width=video_width,
             inference_device=inference_device,
             video_storage_device=video_storage_device,
             inference_state_device=inference_state_device,
@@ -549,6 +556,7 @@ class Sam2Processor(ProcessorMixin):
         ] = None,
         input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
+        original_size: Optional[tuple[int, int]] = None,
         clear_old_inputs: bool = True,
     ) -> Sam2VideoSessionState:
         """
@@ -568,6 +576,8 @@ class Sam2Processor(ProcessorMixin):
                 The labels for the points.
             input_boxes (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `torch.Tensor`, *optional*):
                 The bounding boxes to add to the frame.
+            original_size (`tuple[int, int]`, *optional*):
+                The original size of the video. Provide when streaming.
             clear_old_inputs (`bool`, *optional*, defaults to `True`):
                 Whether to clear old inputs for the object.
         """
@@ -582,6 +592,12 @@ class Sam2Processor(ProcessorMixin):
             raise ValueError("at least one of points or box must be provided as input")
 
         device = inference_state.inference_device
+        if original_size is not None:
+            inference_state.video_height = original_size[0]
+            inference_state.video_width = original_size[1]
+        elif inference_state.video_height is None or inference_state.video_width is None:
+            raise ValueError("original_size must be provided when adding inputs on a streamed frame")
+
         original_sizes = [[inference_state.video_height, inference_state.video_width]]
 
         encoded_inputs = self(
