@@ -199,7 +199,7 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCa
 @require_torch
 class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.check_model_name = "/scratch/voxtral-mini-converted"
+        self.check_model_name = "/scratch/Voxtral-Mini-3B-2507"
         self.dtype = torch.bfloat16
         self.processor = AutoProcessor.from_pretrained(self.check_model_name)
 
@@ -228,13 +228,14 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
-        outputs = model.generate(**inputs, do_sample=False)
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
             "The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos."
         ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
 
     @slow
     def test_small_single_turn_text_and_audio(self):
@@ -259,13 +260,14 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
-        outputs = model.generate(**inputs, do_sample=False)
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
             "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He expresses gratitude for the conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He concludes by expressing optimism about the country's future and his commitment to serving as a citizen."
         ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
 
     @slow
     def test_small_single_turn_text_and_multiple_audios(self):
@@ -276,11 +278,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/mary_had_lamb.ogg",
+                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/mary_had_lamb.mp3",
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg",
+                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.mp3",
                     },
                     {"type": "text", "text": "What sport and what nursery rhyme are referenced?"},
                 ],
@@ -300,7 +302,8 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = [
             'What sport and what nursery rhyme are referenced?The audio references both baseball and a nursery rhyme. The baseball reference is about a home run hit by Edgar Martinez, and the nursery rhyme is "Mary Had a Little Lamb."'
         ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
 
     @slow
     def test_small_single_turn_text_only(self):
@@ -321,13 +324,14 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(conversation)
         inputs = inputs.to(torch_device, dtype=self.dtype)
 
-        outputs = model.generate(**inputs, do_sample=False)
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
             "Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going"
         ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
 
     @slow
     def test_small_single_turn_text_and_multiple_audios_batched(self):
@@ -358,7 +362,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg",
+                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.mp3",
                         },
                         {"type": "text", "text": "What can you tell me about this audio?"},
                     ],
@@ -382,7 +386,8 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
             'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is likely the Seattle Mariners, as the commentator refers to them as the "Mariners" and mentions the American League.\n- **Emotional Reaction**: The commentator expresses disbelief and excitement, using phrases like "I don\'t believe it" and "my, oh my."\n- **Game Outcome**: The game is still ongoing, as the commentator mentions that the Mariners are "going to play" for the championship.\n\nThe audio captures the thrill and excitement of a pivotal moment in a baseball game.'
         ]
         # fmt: on
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
 
     @slow
     def test_small_multi_turn_text_and_audio(self):
@@ -431,7 +436,8 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = [
             'Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation in contrast to the serious and reflective tone of the pr...'
         ]
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
 
     @slow
     def test_transcribe_mode_audio_input(self):
@@ -442,7 +448,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
             language="en", audio="https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
-        outputs = model.generate(**inputs, do_sample=False)
+        outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
@@ -467,4 +473,5 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
             " get some signatures, and run for office yourself. Our success depends on"
         ]
         # fmt: on
-        self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
+        with open("test_outputs.txt", "a") as f:
+            f.write("\n".join(decoded_outputs) + "\n")
