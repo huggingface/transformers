@@ -124,7 +124,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             self.timm_model.set_grad_checkpointing(enable=True)
             self.timm_model.set_grad_checkpointing(enable=False)
             return True
-        except AssertionError:
+        except Exception:
             return False
 
     def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
