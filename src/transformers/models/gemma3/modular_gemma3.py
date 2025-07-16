@@ -586,7 +586,7 @@ class Gemma3TextModel(Gemma2Model):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
+            logger.warning(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False

@@ -415,7 +415,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
+            logger.warning(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
@@ -571,7 +571,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         ```"""
 
         if self.training and self.config._attn_implementation != "eager":
-            logger.warning_once(
+            logger.warning(
                 "It is strongly recommended to train Gemma2 models with the `eager` attention implementation "
                 f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
             )
@@ -693,7 +693,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
-            logger.warning_once(
+            logger.warning(
                 f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                 "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
             )
