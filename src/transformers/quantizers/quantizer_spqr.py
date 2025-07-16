@@ -83,7 +83,7 @@ class SpQRHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self):
         return False
 
     def is_serializable(self, safe_serialization=None):
