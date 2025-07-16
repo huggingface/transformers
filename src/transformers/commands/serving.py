@@ -94,10 +94,12 @@ if serve_dependencies_available:
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
+        OpenAI's CompletionCreateParamsStreaming with additional fields for the generation config (as a json string)
+        and the request ID to re-use the previous KV cache.
         """
 
         generation_config: Optional[str]
+        request_id: Optional[str]
 
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
