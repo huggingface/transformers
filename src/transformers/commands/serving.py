@@ -304,6 +304,7 @@ class ServeArguments:
         },
     )
 
+    # TODO
     # Testing
     # As of 2025-07-11, testing on https://github.com/openai/openai-responses-starter-app/, validation on the
     # Response input is failing. The app works well without validation. Enable at some point in the future.
@@ -367,7 +368,7 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_messages = None
         self.last_kv_cache = None
 
-    def validate_request(
+    def _validate_request(
         self,
         request: dict,
         schema: "_TypedDictMeta",  # noqa: F821
@@ -415,6 +416,22 @@ class ServeCommand(BaseTransformersCLICommand):
                 raise HTTPException(
                     status_code=422, detail=f"Unused fields in the request: {unused_fields_in_request}"
                 )
+
+    def validate_response_request(self, request: dict):
+        self._validate_request(
+            request=request,
+            schema=TransformersResponseCreateParamsStreaming,
+            validator=response_validator,
+            unused_fields=UNUSED_RESPONSE_FIELDS,
+        )
+
+    def validate_chat_completion_request(self, request: dict):
+        self._validate_request(
+            request=request,
+            schema=TransformersCompletionCreateParamsStreaming,
+            validator=completion_validator,
+            unused_fields=UNUSED_CHAT_COMPLETION_FIELDS,
+        )
 
     def build_chat_completion_chunk(
         self,
@@ -497,12 +514,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         @app.post("/v1/chat/completions")
         def chat_completion(request: dict):
-            self.validate_request(
-                request=request,
-                schema=TransformersCompletionCreateParamsStreaming,
-                validator=completion_validator,
-                unused_fields=UNUSED_CHAT_COMPLETION_FIELDS,
-            )
+            self.validate_chat_completion_request(request=request)
 
             if self.use_continuous_batching:
                 output = self.continuous_batching_chat_completion(request)
@@ -512,12 +524,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         @app.post("/v1/responses")
         def responses(request: dict):
-            self.validate_request(
-                request=request,
-                schema=TransformersResponseCreateParamsStreaming,
-                validator=response_validator,
-                unused_fields=UNUSED_RESPONSE_FIELDS,
-            )
+            self.validate_response_request(request=request)
 
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
