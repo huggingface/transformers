@@ -17,7 +17,7 @@ Processor class for Qwen2Audio.
 """
 
 import warnings
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -60,7 +60,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    valid_kwargs = ["chat_template", "audio_token", "audio_bos_token", "audio_eos_token"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
@@ -84,8 +83,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
     @deprecate_kwarg("audios", version="4.54.0", new_name="audio")
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio: Union[np.ndarray, List[np.ndarray]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, list[np.ndarray]] = None,
         audios=None,  # kept for BC
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
@@ -97,11 +96,11 @@ class Qwen2AudioProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `List[np.ndarray]`):
+            audio (`np.ndarray`, `list[np.ndarray]`):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
         """
 
@@ -249,7 +248,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     "{{ message['content'] }}<|im_end|>\n"
                 "{% else %}"
                     "{% for content in message['content'] %}"
-                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' %}"
+                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' or content['type'] == 'audio' %}"
                             "{% set audio_count.value = audio_count.value + 1 %}"
                             "Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n"
                         "{% elif 'text' in content %}"

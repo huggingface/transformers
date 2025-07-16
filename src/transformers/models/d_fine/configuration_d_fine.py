@@ -28,12 +28,12 @@ logger = logging.get_logger(__name__)
 
 
 # TODO: Attribute map assignment logic should be fixed in modular
-# as well as super() call parsing becuase otherwise we cannot re-write args after initialization
+# as well as super() call parsing because otherwise we cannot re-write args after initialization
 class DFineConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine_x_coco"](https://huggingface.co/ustc-community/dfine_x_coco").
+    defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine-xlarge-coco"](https://huggingface.co/ustc-community/dfine-xlarge-coco").
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -67,7 +67,7 @@ class DFineConfig(PretrainedConfig):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
             Multi level features input for encoder.
-        feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
+        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
         encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
@@ -79,7 +79,7 @@ class DFineConfig(PretrainedConfig):
             The ratio for all dropout layers.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
+        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
         positional_encoding_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
@@ -89,7 +89,7 @@ class DFineConfig(PretrainedConfig):
         activation_function (`str`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`Tuple[int, int]`, *optional*):
+        eval_size (`tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride.
         normalize_before (`bool`, *optional*, defaults to `False`):
@@ -126,7 +126,7 @@ class DFineConfig(PretrainedConfig):
             Scale or magnitude of noise to be added to the bounding boxes.
         learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`Tuple[int, int]`, *optional*):
+        anchor_image_size (`tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
         with_box_refine (`bool`, *optional*, defaults to `True`):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes

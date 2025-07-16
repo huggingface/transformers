@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-Swin2SR 모델은 Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte가 제안한 논문 [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://arxiv.org/abs/2209.11345)에서 소개되었습니다.
+Swin2SR 모델은 Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte가 제안한 논문 [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://huggingface.co/papers/2209.11345)에서 소개되었습니다.
 Swin2SR은 [SwinIR](https://github.com/JingyunLiang/SwinIR/) 모델을 개선하고자 [Swin Transformer v2](swinv2) 레이어를 도입함으로써, 훈련 불안정성, 사전 훈련과 미세 조정 간의 해상도 차이, 그리고 데이터 의존성 문제를 완화시킵니다.
 
 논문의 초록은 다음과 같습니다:
@@ -28,7 +28,7 @@ Swin2SR은 [SwinIR](https://github.com/JingyunLiang/SwinIR/) 모델을 개선하
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/swin2sr_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Swin2SR 아키텍처. <a href="https://arxiv.org/abs/2209.11345">원본 논문</a>에서 발췌.</small>
+<small> Swin2SR 아키텍처. <a href="https://huggingface.co/papers/2209.11345">원본 논문</a>에서 발췌.</small>
 
 이 모델은 [nielsr](https://huggingface.co/nielsr)가 기여하였습니다.
 원본 코드는 [여기](https://github.com/mv-lab/swin2sr)에서 확인할 수 있습니다.

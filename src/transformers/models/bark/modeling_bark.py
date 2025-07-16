@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -31,11 +31,11 @@ from ...generation.logits_process import (
 )
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_accelerate_available,
     is_torch_accelerator_available,
     logging,
@@ -60,10 +60,6 @@ if is_flash_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "suno/bark-small"
-_CONFIG_FOR_DOC = "BarkConfig"
 
 
 class BarkSelfAttention(nn.Module):
@@ -286,18 +282,6 @@ BARK_ATTENTION_CLASSES = {
 }
 
 
-class BarkLayerNorm(nn.Module):
-    """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False."""
-
-    def __init__(self, hidden_size, bias=True):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(torch.zeros(hidden_size)) if bias else None
-
-    def forward(self, input):
-        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, eps=1e-5)
-
-
 class BarkMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -314,16 +298,15 @@ class BarkMLP(nn.Module):
         return hidden_states
 
 
-class BarkBlock(nn.Module):
+class BarkBlock(GradientCheckpointingLayer):
     def __init__(self, config, is_causal=False):
         super().__init__()
 
         if is_causal:
-            # if causal, uses handmade LayerNorm, so that the layerNorm bias is optional
-            # this handmade layerNorm is used to stick with Bark choice of leaving optional bias in
-            # AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
-            self.layernorm_1 = BarkLayerNorm(config.hidden_size, bias=config.bias)
-            self.layernorm_2 = BarkLayerNorm(config.hidden_size, bias=config.bias)
+            # if causal, the layerNorm bias is optional to stick with Bark choice of leaving optional bias
+            # in AutoRegressive models (corresponding to the "Text" and the "Coarse" modules)
+            self.layernorm_1 = nn.LayerNorm(config.hidden_size, bias=config.bias)
+            self.layernorm_2 = nn.LayerNorm(config.hidden_size, bias=config.bias)
         else:
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
@@ -368,15 +351,11 @@ class BarkBlock(nn.Module):
         return outputs  # hidden_states, ((present), attentions)
 
 
+@auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BarkConfig
     supports_gradient_checkpointing = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -418,134 +397,6 @@ class BarkPreTrainedModel(PreTrainedModel):
         return get_parameter_device(self)
 
 
-BARK_MODEL_START_DOCSTRING = """
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`{config}`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-BARK_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`BarkConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-BARK_FINE_INPUTS_DOCSTRING = r"""
-    Args:
-        codebook_idx (`int`):
-            Index of the codebook that will be predicted.
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, number_of_codebooks)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it. Initially, indices of the first two codebooks are obtained from the `coarse` sub-model. The rest is
-            predicted recursively by attending the previously predicted channels. The model predicts on windows of
-            length 1024.
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): NOT IMPLEMENTED YET.
-        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. If
-            `past_key_values` is used, optionally only the last `input_embeds` have to be input (see
-            `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
-            associated vectors than the model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it. Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `input_ids` of shape `(batch_size, sequence_length)`.
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
-            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
-            is used in priority instead of `input_ids`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config_class = BarkSubModelConfig
@@ -563,7 +414,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
-        self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
+        self.layernorm_final = nn.LayerNorm(config.hidden_size, bias=config.bias)
 
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
         self.gradient_checkpointing = False
@@ -639,11 +490,11 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             "attention_mask": attention_mask,
         }
 
-    @add_start_docstrings_to_model_forward(BARK_CAUSAL_MODEL_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -653,7 +504,14 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
+        r"""
+        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
+            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
+            is used in priority instead of `input_ids`.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -736,25 +594,14 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(
-                    hidden_states,
-                    past_key_values=past_layer_key_values,
-                    attention_mask=attention_mask,
-                    head_mask=head_mask[i],
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            outputs = block(
+                hidden_states,
+                past_key_values=past_layer_key_values,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = outputs[0]
 
@@ -789,8 +636,8 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
+        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> tuple[tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -803,10 +650,11 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """Bark semantic (or text) model. It shares the same architecture as the coarse model.
-    It is a GPT-2 like autoregressive model with a language modeling head on top.""",
-    BARK_MODEL_START_DOCSTRING.format(config="BarkSemanticConfig"),
+@auto_docstring(
+    custom_intro="""
+    Bark semantic (or text) model. It shares the same architecture as the coarse model.
+    It is a GPT-2 like autoregressive model with a language modeling head on top.
+    """
 )
 class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
@@ -816,7 +664,7 @@ class BarkSemanticModel(BarkCausalModel):
         self,
         input_ids: torch.Tensor,
         semantic_generation_config: BarkSemanticGenerationConfig = None,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.LongTensor:
@@ -830,7 +678,7 @@ class BarkSemanticModel(BarkCausalModel):
                 long as the longest generation among the batch.
             semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
             attention_mask (`Optional[torch.Tensor]`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -912,11 +760,12 @@ class BarkSemanticModel(BarkCausalModel):
         return semantic_output
 
 
-@add_start_docstrings(
-    """Bark coarse acoustics model.
+@auto_docstring(
+    custom_intro="""
+    Bark coarse acoustics model.
     It shares the same architecture as the semantic (or text) model. It is a GPT-2 like autoregressive model with a
-    language modeling head on top.""",
-    BARK_MODEL_START_DOCSTRING.format(config="BarkCoarseConfig"),
+    language modeling head on top.
+    """
 )
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
@@ -929,7 +778,7 @@ class BarkCoarseModel(BarkCausalModel):
         batch_size: int,
         semantic_generation_config: int,
         codebook_size: int,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
     ):
         """
         Preprocess the optional `Bark` speaker prompts before `self.generate`.
@@ -945,7 +794,7 @@ class BarkCoarseModel(BarkCausalModel):
                 Generation config indicating how to generate the semantic tokens.
             codebook_size (`int`):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
         Returns: Returns:
             `tuple(torch.FloatTensor)`:
@@ -1002,10 +851,10 @@ class BarkCoarseModel(BarkCausalModel):
         semantic_generation_config: BarkSemanticGenerationConfig = None,
         coarse_generation_config: BarkCoarseGenerationConfig = None,
         codebook_size: int = 1024,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         return_output_lengths: Optional[bool] = None,
         **kwargs,
-    ) -> Union[torch.LongTensor, Tuple[torch.LongTensor, torch.LongTensor]]:
+    ) -> Union[torch.LongTensor, tuple[torch.LongTensor, torch.LongTensor]]:
         """
         Generates coarse acoustics tokens from input text semantic tokens and an additional optional `Bark` speaker
         prompt.
@@ -1019,7 +868,7 @@ class BarkCoarseModel(BarkCausalModel):
                 Generation config indicating how to generate the coarse tokens.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
             return_output_lengths (`bool`, *optional*):
                 Whether or not to return the output lengths. Useful when batching.
@@ -1133,10 +982,11 @@ class BarkCoarseModel(BarkCausalModel):
         return coarse_output
 
 
-@add_start_docstrings(
-    """Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and
-    language modeling heads, one for each codebook.""",
-    BARK_MODEL_START_DOCSTRING.format(config="BarkFineConfig"),
+@auto_docstring(
+    custom_intro="""
+    Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and
+    language modeling heads, one for each codebook.
+    """
 )
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
@@ -1293,7 +1143,7 @@ class BarkFineModel(BarkPreTrainedModel):
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
-    @add_start_docstrings_to_model_forward(BARK_FINE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         codebook_idx: int,  # an additional idx corresponding to the id of the codebook that will be predicted
@@ -1306,7 +1156,18 @@ class BarkFineModel(BarkPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
+        r"""
+        codebook_idx (`int`):
+            Index of the codebook that will be predicted.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            NOT IMPLEMENTED YET.
+        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. If
+            `past_key_values` is used, optionally only the last `input_embeds` have to be input (see
+            `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
+            associated vectors than the model's internal embedding lookup matrix.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1404,6 +1265,7 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         coarse_output: torch.Tensor,
@@ -1411,7 +1273,7 @@ class BarkFineModel(BarkPreTrainedModel):
         coarse_generation_config: BarkCoarseGenerationConfig = None,
         fine_generation_config: BarkFineGenerationConfig = None,
         codebook_size: int = 1024,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1429,7 +1291,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 Generation config indicating how to generate the fine tokens.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
         Returns:
             torch.LongTensor: Output fine acoustics tokens.
@@ -1541,8 +1403,8 @@ class BarkFineModel(BarkPreTrainedModel):
         return fine_input
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The full Bark model, a text-to-speech model composed of 4 sub-models:
     - [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that
       takes
@@ -1557,8 +1419,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
     It should be noted that each of the first three modules can support conditional speaker embeddings to condition the
     output sound according to specific predefined voice.
-    """,
-    BARK_START_DOCSTRING,
+    """
 )
 class BarkModel(BarkPreTrainedModel):
     config_class = BarkConfig
@@ -1680,7 +1541,7 @@ class BarkModel(BarkPreTrainedModel):
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         return_output_lengths: Optional[bool] = None,
         **kwargs,
     ) -> torch.LongTensor:
@@ -1691,7 +1552,7 @@ class BarkModel(BarkPreTrainedModel):
             input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
             kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
 
@@ -1821,42 +1682,6 @@ class BarkModel(BarkPreTrainedModel):
             return audio, output_lengths
 
         return audio
-
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
-        """
-        `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
-        sub-configurations. We override the original method to make sure that Bark sub-models are using Flash Attention
-        if necessary.
-
-        If you don't know about Flash Attention, check out the official repository of flash attention:
-        https://github.com/Dao-AILab/flash-attention
-
-        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
-        specific section of the documentation to learn more about it:
-        https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
-
-        The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
-        half precision and not ran on CPU.
-
-        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flash_attention_2" so that the model
-        can initialize the correct attention module
-        """
-        config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
-
-        config.semantic_config._attn_implementation = config._attn_implementation
-        config.coarse_acoustics_config._attn_implementation = config._attn_implementation
-        config.fine_acoustics_config._attn_implementation = config._attn_implementation
-        return config
 
 
 __all__ = [

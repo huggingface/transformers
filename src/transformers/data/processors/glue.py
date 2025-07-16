@@ -19,7 +19,7 @@ import os
 import warnings
 from dataclasses import asdict
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import is_tf_available, logging
@@ -39,7 +39,7 @@ DEPRECATION_WARNING = (
 
 
 def glue_convert_examples_to_features(
-    examples: Union[List[InputExample], "tf.data.Dataset"],
+    examples: Union[list[InputExample], "tf.data.Dataset"],
     tokenizer: PreTrainedTokenizer,
     max_length: Optional[int] = None,
     task=None,
@@ -107,7 +107,7 @@ if is_tf_available():
 
 
 def _glue_convert_examples_to_features(
-    examples: List[InputExample],
+    examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
     max_length: Optional[int] = None,
     task=None,

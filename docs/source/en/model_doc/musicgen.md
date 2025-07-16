@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MusicGen model was proposed in the paper [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284)
+The MusicGen model was proposed in the paper [Simple and Controllable Music Generation](https://huggingface.co/papers/2306.05284)
 by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
 
 MusicGen is a single stage auto-regressive Transformer model capable of generating high-quality music samples conditioned
@@ -61,6 +61,9 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 python src/transformers/models/musicgen/convert_musicgen_transformers.py \
     --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
 ```
+
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Generation
 

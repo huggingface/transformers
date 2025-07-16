@@ -97,7 +97,7 @@ def translate_gt(gt: torch.Tensor, max_num_bins: int, reg_scale: int, up: torch.
         up (Tensor): Controls the upper bounds of the Weighting Function.
 
     Returns:
-        Tuple[Tensor, Tensor, Tensor]:
+        tuple[Tensor, Tensor, Tensor]:
             - indices (Tensor): Index of the left bin closest to each GT value, shape (N, ).
             - weight_right (Tensor): Weight assigned to the right bin, shape (N, ).
             - weight_left (Tensor): Weight assigned to the left bin, shape (N, ).
@@ -152,8 +152,8 @@ def bbox2distance(points, bbox, max_num_bins, reg_scale, up, eps=0.1):
         points (Tensor): (n, 4) [x, y, w, h], where (x, y) is the center.
         bbox (Tensor): (n, 4) bounding boxes in "xyxy" format.
         max_num_bins (float): Maximum bin value.
-        reg_scale (float): Controling curvarture of W(n).
-        up (Tensor): Controling upper bounds of W(n).
+        reg_scale (float): Controlling curvarture of W(n).
+        up (Tensor): Controlling upper bounds of W(n).
         eps (float): Small value to ensure target < max_num_bins.
 
     Returns:
@@ -184,7 +184,7 @@ class DFineLoss(RTDetrLoss):
         weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in DFineConf as
             `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`, `weight_loss_fgl`, `weight_loss_ddf`
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
             Parameter alpha used to compute the focal loss.

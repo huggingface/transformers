@@ -57,7 +57,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
-input_ids = tokenzier("Hello, I'm a language model". return_tensors="pt").to("cuda")
+input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -72,6 +72,12 @@ echo -e "Hello, I'm a language model" | transformers run --task text-generation 
 
 </hfoption>
 </hfoptions>
+
+One can also serve the model using vLLM with the `transformers backend`.
+
+```
+vllm serve openai-community/gpt2 --model-imp transformers
+```
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
