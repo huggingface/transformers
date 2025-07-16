@@ -28,7 +28,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...generation.utils import GenerationMixin
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -131,19 +131,21 @@ class BLTRotaryEmbedding(nn.Module):
 class BLTPreTrainedModel(PreTrainedModel):
     """BLT PreTrainedModel inheriting from Mllama but with BLT-specific init."""
 
-    config_class = BLTConfig
+    config: BLTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BLTTransformerLayer", "BLTLocalEncoder", "BLTLocalDecoder", "BLTGlobalTransformer"]
-    _supports_cache_class = False
+
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
-    _supports_quantized_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+
+    config_class = BLTConfig
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = False
+    _supports_cache_class = False
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1505,7 +1507,7 @@ class BLTPatcher(BLTPreTrainedModel):
     """
 )
 class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
-    config_class = BLTConfig
+    config: BLTConfig
     _supports_static_cache = True  # only the LLM without cross attn can do compile
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]

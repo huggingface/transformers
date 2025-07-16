@@ -1047,10 +1047,10 @@ class BLTPatcher(BLTPreTrainedModel):
 
 
 class BLTForCausalLM(MllamaForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
-    config_class = BLTConfig
-    base_model_prefix = "model"
+    config: BLTConfig
     supports_gradient_checkpointing = True
+    base_model_prefix = "model"
+    _tied_weights_keys = ["lm_head.weight"]
     _no_split_modules = ["BLTTransformerLayer", "BLTLocalEncoder", "BLTLocalDecoder", "BLTGlobalTransformer"]
 
     def __init__(self, config):
