@@ -451,7 +451,7 @@ class PegasusDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class PegasusPreTrainedModel(PreTrainedModel):
-    config_class = PegasusConfig
+    config: PegasusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

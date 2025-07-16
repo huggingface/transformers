@@ -173,7 +173,7 @@ class InternVLVisionAttention(nn.Module):
 
 @auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
-    config_class = InternVLVisionConfig
+    config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -516,7 +516,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 
 @auto_docstring
 class InternVLPreTrainedModel(PreTrainedModel):
-    config_class = InternVLConfig
+    config: InternVLConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"

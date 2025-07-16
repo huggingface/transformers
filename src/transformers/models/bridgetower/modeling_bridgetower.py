@@ -943,7 +943,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
 
 @auto_docstring
 class BridgeTowerPreTrainedModel(PreTrainedModel):
-    config_class = BridgeTowerConfig
+    config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
@@ -977,7 +977,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
-    config_class = BridgeTowerVisionConfig
+    config: BridgeTowerVisionConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1006,7 +1006,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     """
 )
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
-    config_class = BridgeTowerTextConfig
+    config: BridgeTowerTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
         r"""

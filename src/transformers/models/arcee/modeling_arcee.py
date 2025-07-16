@@ -308,7 +308,7 @@ class ArceeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class ArceePreTrainedModel(PreTrainedModel):
-    config_class = ArceeConfig
+    config: ArceeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ArceeDecoderLayer"]

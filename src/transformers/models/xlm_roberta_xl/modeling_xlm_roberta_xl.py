@@ -686,7 +686,7 @@ class XLMRobertaXLPooler(nn.Module):
 
 @auto_docstring
 class XLMRobertaXLPreTrainedModel(PreTrainedModel):
-    config_class = XLMRobertaXLConfig
+    config: XLMRobertaXLConfig
     base_model_prefix = "roberta"
     _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
     _supports_sdpa = True

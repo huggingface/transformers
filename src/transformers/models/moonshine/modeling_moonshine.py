@@ -454,7 +454,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MoonshinePreTrainedModel(PreTrainedModel):
-    config_class = MoonshineConfig
+    config: MoonshineConfig
     base_model_prefix = "model"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

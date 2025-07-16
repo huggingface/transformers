@@ -417,7 +417,7 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class TrOCRPreTrainedModel(PreTrainedModel):
-    config_class = TrOCRConfig
+    config: TrOCRConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TrOCRDecoderLayer"]

@@ -738,7 +738,7 @@ class EsmPooler(nn.Module):
 
 @auto_docstring
 class EsmPreTrainedModel(PreTrainedModel):
-    config_class = EsmConfig
+    config: EsmConfig
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]

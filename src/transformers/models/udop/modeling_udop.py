@@ -251,7 +251,7 @@ class UdopPatchEmbeddings(nn.Module):
 
 @auto_docstring
 class UdopPreTrainedModel(PreTrainedModel):
-    config_class = UdopConfig
+    config: UdopConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
 

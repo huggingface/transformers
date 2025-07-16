@@ -692,7 +692,7 @@ class XLMRobertaPooler(nn.Module):
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->XLMRoberta
 class XLMRobertaPreTrainedModel(PreTrainedModel):
-    config_class = XLMRobertaConfig
+    config: XLMRobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _no_split_modules = ["XLMRobertaEmbeddings", "XLMRobertaSelfAttention", "XLMRobertaSdpaSelfAttention"]

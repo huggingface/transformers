@@ -232,7 +232,7 @@ class RetrievAugLMOutput(ModelOutput):
 )
 @auto_docstring
 class RagPreTrainedModel(PreTrainedModel):
-    config_class = RagConfig
+    config: RagConfig
     base_model_prefix = "rag"
     _supports_flash_attn = True
     _supports_sdpa = True

@@ -281,7 +281,7 @@ class GraniteSpeechCTCEncoder(nn.Module):
 
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
-    config_class = GraniteSpeechConfig
+    config: GraniteSpeechConfig
 
     _supports_flash_attn = True
     _supports_sdpa = True
