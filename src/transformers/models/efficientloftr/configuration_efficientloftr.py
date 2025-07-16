@@ -32,8 +32,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
             The hidden size of the features in the blocks of each stage
         stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):
             The number of blocks in each stages
-        stage_hidden_expansion (`List`, *optional*, defaults to [1, 1, 1, 1]):
-            The rate of expansion of hidden size in each stage
+        stage_out_channels (`List`, *optional*, defaults to [64, 64, 128, 256]):
+            The number of channels in each stage
         stage_stride (`List`, *optional*, defaults to [2, 1, 2, 2]):
             The stride used in each stage
         hidden_size (`int`, *optional*, defaults to 256):
@@ -112,7 +112,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self,
         stage_block_dims: Optional[list[int]] = None,
         stage_num_blocks: Optional[list[int]] = None,
-        stage_hidden_expansion: Optional[list[float]] = None,
+        stage_out_channels: Optional[list[int]] = None,
         stage_stride: Optional[list[int]] = None,
         hidden_size: int = 256,
         activation_function: str = "relu",
@@ -142,10 +142,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.stage_block_dims = stage_block_dims if stage_block_dims is not None else [64, 64, 128, 256]
         self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
         self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
-        stage_hidden_expansion = stage_hidden_expansion if stage_hidden_expansion is not None else [1, 1, 1, 1]
-        self.stage_out_channels = [
-            self.stage_block_dims[i] * stage_hidden_expansion[i] for i in range(len(self.stage_block_dims))
-        ]
+        self.stage_out_channels = stage_out_channels if stage_out_channels is not None else [64, 64, 128, 256]
         self.stage_in_channels = [1] + self.stage_out_channels[:-1]
 
         self.hidden_size = hidden_size
