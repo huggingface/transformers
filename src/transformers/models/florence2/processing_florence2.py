@@ -16,9 +16,12 @@ import math
 import re
 from typing import Any, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -59,7 +62,9 @@ class Florence2Processor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+    def __init__(
+        self, image_processor=None, tokenizer=None, image_token="<token>", num_additional_image_tokens=0, **kwargs
+    ):
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
             "<OCR_WITH_REGION>": "ocr",
@@ -99,7 +104,11 @@ class Florence2Processor(ProcessorMixin):
             "<REGION_TO_OCR>": "What text is in the region {input}?",
         }
 
+        self.num_image_tokens = image_processor.image_seq_length
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.post_processor = Florence2PostProcessor(tokenizer=tokenizer)
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
@@ -174,8 +183,10 @@ class Florence2Processor(ProcessorMixin):
             **kwargs,
         )
 
-        if images is None:
-            raise ValueError("`images` must be provided.")
+        if images is not None:
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+        else:
+            image_inputs = {}
 
         if text is None:
             logger.warning_once("You are using Florence-2 without a text prefix.")
@@ -183,22 +194,65 @@ class Florence2Processor(ProcessorMixin):
         elif isinstance(text, str):
             text = [text]
 
-        if not isinstance(text, list) or not all(isinstance(t, str) for t in text):
+        if not isinstance(text, list) or not all(isinstance(token, str) for token in text):
             raise ValueError("`text` must be a string or list of strings.")
 
         if isinstance(images, list) and len(images) != len(text):
             raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
-        # Process images
-        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        pixel_values = image_inputs["pixel_values"]
+        prompt_strings = self._construct_prompts(text)
+        # try to expand inputs in processing if we have the necessary parts
+        if image_inputs.get("pixel_values") is not None:
+            # Replace the image token with the expanded image token sequence
+            expanded_image_prompts = []
+            for sample in prompt_strings:
+                sample = (
+                    self.image_token * self.num_image_tokens
+                    + self.tokenizer.bos_token
+                    + sample
+                    + self.tokenizer.eos_token
+                )
+                expanded_image_prompts.append(sample)
+            prompt_strings = expanded_image_prompts
 
         # Construct and tokenize prompts
-        prompt_strings = self._construct_prompts(text)
+        output_kwargs["text_kwargs"].pop("add_special_tokens", None)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(
+            prompt_strings, **output_kwargs["text_kwargs"], add_special_tokens=False, return_tensors=None
+        )
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={"pixel_values": pixel_values, **text_inputs}, tensor_type=return_tensors)
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**image_inputs, **text_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Bart
     def batch_decode(self, *args, **kwargs):

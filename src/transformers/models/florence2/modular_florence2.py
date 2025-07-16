@@ -33,12 +33,14 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torchdynamo_compiling,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..bart.modeling_bart import eager_attention_forward
 from ..beit.modeling_beit import BeitDropPath
 from ..detr.modeling_detr import DetrLearnedPositionEmbedding
+from ..llava.modeling_llava import LlavaPreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -200,6 +202,7 @@ class Florence2Config(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
+        image_token_id=51289,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -219,6 +222,7 @@ class Florence2Config(PretrainedConfig):
         self.is_encoder_decoder = True
         self.text_config = text_config
         self.vision_config = vision_config
+        self.image_token_id = image_token_id
 
 
 class Florence2VisionDropPath(BeitDropPath):
@@ -770,21 +774,10 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 
 
 @auto_docstring
-class Florence2PreTrainedModel(PreTrainedModel):
+class Florence2PreTrainedModel(LlavaPreTrainedModel):
     config_class = Florence2Config
-    main_input_name = "input_ids"
-    base_model_prefix = "florence2"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Embedding, nn.LayerNorm]) -> None:
+    def _init_weights(self, module):
         std = self.config.vision_config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -834,12 +827,6 @@ class Florence2Model(Florence2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.language_model.get_input_embeddings()
 
-    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def get_output_embeddings(self) -> nn.Linear:
-        return self.language_model.get_output_embeddings()
-
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         image_features = self.vision_tower(pixel_values, **kwargs)
@@ -875,21 +862,38 @@ class Florence2Model(Florence2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        image_embeds = None
         if encoder_outputs is None:
+            if (input_ids is None) ^ (inputs_embeds is not None):
+                raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
             if inputs_embeds is None:
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
-            if attention_mask is None:
-                attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
-
             if pixel_values is not None:
-                image_embeds = self.get_image_features(pixel_values)
-                image_attention_mask = torch.ones(
-                    image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device
-                )
-                inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
-                attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
+                image_features = self.get_image_features(pixel_values)
+
+                if input_ids is None:
+                    special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                        torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    )
+                    special_image_mask = special_image_mask.all(-1)
+                else:
+                    special_image_mask = input_ids == self.config.image_token_id
+
+                n_image_tokens = (special_image_mask).sum()
+                special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
+                if (
+                    not is_torchdynamo_compiling()
+                    and inputs_embeds[special_image_mask].numel() != image_features.numel()
+                ):
+                    n_image_features = image_features.shape[0] * image_features.shape[1]
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
+
+                image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             encoder_outputs = self.language_model.encoder(
                 attention_mask=attention_mask,
@@ -931,7 +935,7 @@ class Florence2Model(Florence2PreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_embeds,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
 
@@ -959,17 +963,17 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.model.set_input_embeddings(value)
-
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
-    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
-        self.model.set_output_embeddings(new_embeddings)
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self) -> nn.Linear:
-        return self.model.get_output_embeddings()
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
@@ -1099,27 +1103,34 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
         inputs_embeds = model_kwargs.pop("inputs_embeds", None)
-        attention_mask = model_kwargs.pop("attention_mask", None)
         pixel_values = model_kwargs.pop("pixel_values", None)
 
         if inputs_embeds is None:
-            if inputs_tensor is not None:
-                inputs_embeds = self.get_input_embeddings()(inputs_tensor)
-            else:
-                raise ValueError("Either input_ids or inputs_embeds must be provided")
-
-        if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.size()[:-1], dtype=torch.long, device=inputs_embeds.device)
+            inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
-            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
-            inputs_embeds = torch.cat([image_embeds, inputs_embeds], dim=1)
-            attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
+            image_features = self.get_image_features(pixel_values)
+
+            if inputs_tensor is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = inputs_tensor == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_features = image_features.shape[0] * image_features.shape[1]
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs["attention_mask"] = attention_mask
-
         return super()._prepare_encoder_decoder_kwargs_for_generation(
             None, model_kwargs, model_input_name, generation_config
         )

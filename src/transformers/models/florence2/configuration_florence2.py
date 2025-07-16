@@ -182,6 +182,7 @@ class Florence2Config(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
+        image_token_id=51289,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -201,6 +202,7 @@ class Florence2Config(PretrainedConfig):
         self.is_encoder_decoder = True
         self.text_config = text_config
         self.vision_config = vision_config
+        self.image_token_id = image_token_id
 
 
 __all__ = ["Florence2Config", "Florence2VisionConfig"]

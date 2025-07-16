@@ -15,7 +15,10 @@
 import argparse
 from collections import OrderedDict
 
+import torch
+
 from transformers import (
+    AddedToken,
     AutoConfig,
     AutoModelForCausalLM,
     AutoProcessor,
@@ -337,6 +340,8 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
     config = Florence2Config(text_config=text_config, vision_config=vision_config)
 
     tokenizer = hf_processor.tokenizer
+    tokenizer.extra_special_tokens = {"image_token": "<image>"}
+    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     image_processor = hf_processor.image_processor
     processor = Florence2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
@@ -356,6 +361,28 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
 
     model = Florence2ForConditionalGeneration(config)
     model.load_state_dict(huggingface_weights)
+    output_embeddings = model.get_output_embeddings()
+    input_embeddings = model.get_input_embeddings()
+    model._tie_or_clone_weights(output_embeddings, input_embeddings)
+
+    pre_expansion_embeddings = model.language_model.shared.weight.data
+    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+    n = pre_expansion_embeddings.size()[0]
+    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+    # We add an image token so we resize the model and pad to 64 for performance reasons
+    pad_shape = 64
+    vocab_size = config.text_config.vocab_size
+    model.resize_token_embeddings(vocab_size + 1, pad_shape)
+    model.language_model.shared.weight.data[vocab_size:] = torch.stack(
+        tuple(dist.sample() for _ in range(model.language_model.shared.weight.data[vocab_size:].shape[0])),
+        dim=0,
+    )
+    model.lm_head.weight.data[vocab_size:] = torch.stack(
+        tuple(dist.sample() for _ in range(model.lm_head.weight.data[vocab_size:].shape[0])),
+        dim=0,
+    )
     model.save_pretrained(pytorch_dump_folder)
     processor.save_pretrained(pytorch_dump_folder)
 
