@@ -34,8 +34,7 @@ if is_torch_available():
     import torch
 
 
-# TEST_MODEL_PATH = "facebook/Perception-LM-1B"
-TEST_MODEL_PATH = "shumingh/plm_1b_hf"  # should be replaced by the above once checkpoints are merged
+TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 
 @require_vision
