@@ -21,9 +21,10 @@ import os
 import re
 import sys
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
+from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
@@ -109,7 +110,7 @@ def handle_stacktraces(test_results):
     return stacktraces
 
 
-def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
+def dicts_to_sum(objects: Union[dict[str, dict], list[dict]]):
     if isinstance(objects, dict):
         lists = objects.values()
     else:
@@ -126,9 +127,9 @@ class Message:
         self,
         title: str,
         ci_title: str,
-        model_results: Dict,
-        additional_results: Dict,
-        selected_warnings: Optional[List] = None,
+        model_results: dict,
+        additional_results: dict,
+        selected_warnings: Optional[list] = None,
         prev_ci_artifacts=None,
         other_ci_artifacts=None,
     ):
@@ -203,15 +204,15 @@ class Message:
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
     @property
-    def header(self) -> Dict:
+    def header(self) -> dict:
         return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
 
     @property
-    def ci_title_section(self) -> Dict:
+    def ci_title_section(self) -> dict:
         return {"type": "section", "text": {"type": "mrkdwn", "text": self.ci_title}}
 
     @property
-    def no_failures(self) -> Dict:
+    def no_failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -227,7 +228,7 @@ class Message:
         }
 
     @property
-    def failures(self) -> Dict:
+    def failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -246,7 +247,7 @@ class Message:
         }
 
     @property
-    def warnings(self) -> Dict:
+    def warnings(self) -> dict:
         # If something goes wrong, let's avoid the CI report failing to be sent.
         button_text = "Check warnings (Link not found)"
         # Use the workflow run link
@@ -287,7 +288,7 @@ class Message:
             return f"{'0'.rjust(rjust)} | {str(report['multi']).rjust(rjust)} | "
 
     @property
-    def category_failures(self) -> Dict:
+    def category_failures(self) -> dict:
         if job_name != "run_models_gpu":
             category_failures_report = ""
             return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
@@ -360,7 +361,7 @@ class Message:
         return entries_changed
 
     @property
-    def model_failures(self) -> List[Dict]:
+    def model_failures(self) -> list[dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
@@ -523,7 +524,7 @@ class Message:
         return model_failure_sections
 
     @property
-    def additional_failures(self) -> Dict:
+    def additional_failures(self) -> dict:
         failures = {k: v["failed"] for k, v in self.additional_results.items()}
         errors = {k: v["error"] for k, v in self.additional_results.items()}
 
@@ -671,6 +672,21 @@ class Message:
                         },
                     }
                     blocks.append(block)
+
+        if diff_file_url is not None:
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Test results diff*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check test result diff file"},
+                    "url": diff_file_url,
+                },
+            }
+            blocks.append(block)
 
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
@@ -953,7 +969,7 @@ def retrieve_available_artifacts():
         def add_path(self, path: str, gpu: Optional[str] = None):
             self.paths.append({"name": self.name, "path": path, "gpu": gpu})
 
-    _available_artifacts: Dict[str, Artifact] = {}
+    _available_artifacts: dict[str, Artifact] = {}
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
@@ -1460,13 +1476,14 @@ if __name__ == "__main__":
     prev_ci_artifacts = (None, None)
     other_ci_artifacts = []
 
+    output_dir = os.path.join(os.getcwd(), "previous_reports")
+    os.makedirs(output_dir, exist_ok=True)
+
     for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
         if target_workflow_run_id is None or target_workflow_run_id == "":
             continue
         else:
             artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
             ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=artifact_names,
                 output_dir=output_dir,
@@ -1477,6 +1494,44 @@ if __name__ == "__main__":
                 prev_ci_artifacts = (target_workflow_run_id, ci_artifacts)
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
+
+    # Only for AMD at this moment.
+    # TODO: put this into a method
+    if is_amd_daily_ci_workflow:
+        diff_file_url = None
+        if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
+            ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=None,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id=prev_workflow_run_id,
+            )
+
+            current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+            prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])  # fmt: skip
+
+            current_artifacts_set = {}
+            for d in current_artifacts:
+                current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
+
+            prev_artifacts_set = {}
+            for d in prev_artifacts:
+                prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
+
+            report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
+
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+                fp.write(report)
+
+            # upload
+            commit_info = api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
+                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
+                repo_id=report_repo_id,
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/resolve/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:

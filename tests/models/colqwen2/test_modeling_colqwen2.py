@@ -299,7 +299,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         """
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             load_in_8bit=True,
         ).eval()
 
@@ -331,14 +331,14 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", 7): [
-                    [15.5000, 8.1250, 14.9375],
-                    [9.0625, 17.1250, 10.6875],
-                    [15.9375, 12.1875, 20.2500],
+                    [15.0938, 8.3203, 15.0391],
+                    [9.6328, 16.9062, 10.5312],
+                    [15.6562, 12.2656, 20.2969],
                 ],
                 ("cuda", 8): [
-                    [15.1250, 8.6875, 15.0625],
-                    [9.2500, 17.2500, 10.3750],
-                    [15.9375, 12.3750, 20.2500],
+                    [15.0703, 8.7422, 15.0312],
+                    [9.5078, 16.8906, 10.6250],
+                    [15.6484, 12.3984, 20.4688],
                 ],
             }
         )

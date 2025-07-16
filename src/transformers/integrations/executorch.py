@@ -15,7 +15,7 @@ from typing import Callable, Optional
 
 import torch
 
-from ..cache_utils import DynamicCache, HybridCache, StaticCache
+from ..cache_utils import DynamicCache, EncoderDecoderCache, HybridCache, StaticCache
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
@@ -56,13 +56,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if not hasattr(model.config, "layer_types"):
-            # If `layer_types` is not specified explicitly in the config, there is only 1 type of layers, so
-            # export will use `StaticCache` by default.
-            logging.info("Using `StaticCache` for export as `layer_types` is not specified in the config.")
-            self.model = TorchExportableModuleWithStaticCache(model)
-        else:
+        if hasattr(model.config, "layer_types") and getattr(model.config, "sliding_window", None) is not None:
             self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
+        else:
+            # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
+            # there is only 1 type of layers, so export will use `StaticCache` by default.
+            logging.info(
+                "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
+            )
+            self.model = TorchExportableModuleWithStaticCache(model)
+        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
     def forward(
         self,
@@ -101,10 +107,6 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
-        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-        self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
@@ -400,12 +402,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         if not self.model.config.use_cache:
             raise AssertionError("Model must have caching enabled")
 
-        if (
-            not hasattr(self.model.config, "cache_implementation")
-            or self.model.config.cache_implementation != "hybrid"
-        ):
-            raise AssertionError("Model must use 'hybrid' cache implementation")
-
         # Initialize the HybridCache
         self.cache = HybridCache(
             config=self.model.config,
@@ -552,7 +548,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.lm_head = model.lm_head
         self.config = model.config
 
-        # Initialize static cache
+        # Initialize static cache for decoder and DynamicCache for encoder
         self.static_cache = StaticCache(
             config=self.config,
             max_batch_size=batch_size,
@@ -560,6 +556,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             device="cpu",
             dtype=torch.float32,
         )
+        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
 
         # Register cache buffers to make them exportable
         for i in range(len(self.static_cache.key_cache)):
@@ -571,7 +568,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=self.static_cache,
+            past_key_values=self.cache,
             use_cache=True,
             cache_position=cache_position,
         )

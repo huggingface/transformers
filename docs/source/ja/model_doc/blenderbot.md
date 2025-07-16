@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Blender チャットボット モデルは、[Recipes for building an open-domain chatbot](https://arxiv.org/pdf/2004.13637.pdf) Stephen Roller、Emily Dinan、Naman Goyal、Da Ju、Mary Williamson、yinghan Liu、で提案されました。
+Blender チャットボット モデルは、[Recipes for building an open-domain chatbot](https://huggingface.co/papers/2004.13637) Stephen Roller、Emily Dinan、Naman Goyal、Da Ju、Mary Williamson、yinghan Liu、で提案されました。
 ジン・シュー、マイル・オット、カート・シャスター、エリック・M・スミス、Y-ラン・ブーロー、ジェイソン・ウェストン、2020年4月30日。
 
 論文の要旨は次のとおりです。
@@ -45,7 +45,7 @@ Blender チャットボット モデルは、[Recipes for building an open-domai
 
 ## Implementation Notes
 
-- Blenderbot は、標準の [seq2seq モデル トランスフォーマー](https://arxiv.org/pdf/1706.03762.pdf) ベースのアーキテクチャを使用します。
+- Blenderbot は、標準の [seq2seq モデル トランスフォーマー](https://huggingface.co/papers/1706.03762) ベースのアーキテクチャを使用します。
 - 利用可能なチェックポイントは、[モデル ハブ](https://huggingface.co/models?search=blenderbot) で見つけることができます。
 - これは *デフォルト* Blenderbot モデル クラスです。ただし、次のような小さなチェックポイントもいくつかあります。
   `facebook/blenderbot_small_90M` はアーキテクチャが異なるため、一緒に使用する必要があります。

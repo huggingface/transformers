@@ -318,6 +318,10 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -459,7 +463,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -467,7 +470,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
             attn_implementation="eager",
         ).to(torch_device)
 

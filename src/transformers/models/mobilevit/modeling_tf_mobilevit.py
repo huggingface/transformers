@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -155,7 +155,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
 
 class TFMobileViTInvertedResidual(keras.layers.Layer):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -487,7 +487,7 @@ class TFMobileViTTransformer(keras.layers.Layer):
 
 class TFMobileViTLayer(keras.layers.Layer):
     """
-    MobileViT block: https://arxiv.org/abs/2110.02178
+    MobileViT block: https://huggingface.co/papers/2110.02178
     """
 
     def __init__(
@@ -555,7 +555,7 @@ class TFMobileViTLayer(keras.layers.Layer):
         )
         self.hidden_size = hidden_size
 
-    def unfolding(self, features: tf.Tensor) -> Tuple[tf.Tensor, Dict]:
+    def unfolding(self, features: tf.Tensor) -> tuple[tf.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = tf.cast(patch_width * patch_height, "int32")
 
@@ -599,7 +599,7 @@ class TFMobileViTLayer(keras.layers.Layer):
         }
         return patches, info_dict
 
-    def folding(self, patches: tf.Tensor, info_dict: Dict) -> tf.Tensor:
+    def folding(self, patches: tf.Tensor, info_dict: dict) -> tf.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -833,7 +833,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -960,7 +960,7 @@ MOBILEVIT_START_DOCSTRING = r"""
 
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]`, `dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileViTImageProcessor.__call__`] for details.
 
@@ -1001,7 +1001,7 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
         output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
         return output
 
@@ -1125,7 +1125,7 @@ class TFMobileViTASPPPooling(keras.layers.Layer):
 
 class TFMobileViTASPP(keras.layers.Layer):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
@@ -1208,7 +1208,7 @@ class TFMobileViTASPP(keras.layers.Layer):
 
 class TFMobileViTDeepLabV3(keras.layers.Layer):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:

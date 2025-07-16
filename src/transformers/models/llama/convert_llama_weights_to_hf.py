@@ -17,7 +17,6 @@ import json
 import os
 import tempfile
 import warnings
-from typing import List
 
 import torch
 from tokenizers import AddedToken, processors
@@ -419,7 +418,7 @@ def write_model(
         gc.collect()
 
         print("Loading the checkpoint in a Llama model.")
-        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16)
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
@@ -528,7 +527,7 @@ def main():
     parser.add_argument(
         "--model_size",
         default=None,
-        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
+        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, check out the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
         "--output_dir",
@@ -560,7 +559,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(
