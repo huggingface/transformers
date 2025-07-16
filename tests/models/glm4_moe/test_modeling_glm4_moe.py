@@ -55,7 +55,17 @@ class Glm4MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (Glm4MoeModel, Glm4MoeForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Glm4MoeModel,
+            Glm4MoeForCausalLM,
+            Glm4MoeForSequenceClassification,
+            Glm4MoeForTokenClassification,
+            Glm4MoeForQuestionAnswering,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Glm4MoeModel,
