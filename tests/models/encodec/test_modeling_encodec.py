@@ -854,7 +854,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             raw_audio=audio_array,
             sampling_rate=sampling_rate,
             return_tensors="pt",
-            padding=False,
+            padding=True,
         ).to(torch_device)
 
         # loop over all bandwidths
@@ -862,7 +862,9 @@ class EncodecIntegrationTest(unittest.TestCase):
         for bandwidth in EXPECTED_ENCODER_CODES.keys():
             with torch.no_grad():
                 # Compare encoder outputs with expected values
-                encoded_frames = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
+                encoded_frames = model.encode(
+                    inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
+                )
                 codes = torch.cat([encoded[0] for encoded in encoded_frames["audio_codes"]], dim=-1).unsqueeze(0)
                 torch.testing.assert_close(
                     codes[..., : EXPECTED_ENCODER_CODES[bandwidth].shape[-1]],
@@ -872,7 +874,12 @@ class EncodecIntegrationTest(unittest.TestCase):
                 )
 
                 # Compare decoder outputs with expected values
-                decoded_frames = model.decode(encoded_frames["audio_codes"], encoded_frames["audio_scales"])
+                decoded_frames = model.decode(
+                    encoded_frames["audio_codes"],
+                    encoded_frames["audio_scales"],
+                    inputs["padding_mask"],
+                    last_frame_pad_length=encoded_frames["last_frame_pad_length"],
+                )
                 torch.testing.assert_close(
                     decoded_frames["audio_values"][0][..., : EXPECTED_DECODER_OUTPUTS[bandwidth].shape[-1]],
                     EXPECTED_DECODER_OUTPUTS[bandwidth].to(torch_device),
@@ -885,10 +892,10 @@ class EncodecIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(codec_error, EXPECTED_CODEC_ERROR[bandwidth], rtol=1e-6, atol=1e-6)
 
                 # make sure forward and enc-dec give same result
-                input_values_dec = model(inputs["input_values"], bandwidth=float(bandwidth))
+                full_enc = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
                 torch.testing.assert_close(
-                    input_values_dec["audio_values"],
-                    decoded_frames["audio_values"][..., : audio_array.shape[-1]],
+                    full_enc["audio_values"],
+                    decoded_frames["audio_values"],
                     rtol=1e-6,
                     atol=1e-6,
                 )
@@ -1046,10 +1053,14 @@ class EncodecIntegrationTest(unittest.TestCase):
                     0,    0,    0, 1020,    0,    0]]])
         }
         EXPECTED_ENCODER_SCALES = {
-            "3.0": torch.tensor([0.053648, 0.081477, 0.062641, 0.066849, 0.054615, 0.047145]),
-            "6.0": torch.tensor([0.053648, 0.081477, 0.062641, 0.066849, 0.054615, 0.047145]),
-            "12.0": torch.tensor([0.053648, 0.081477, 0.062641, 0.066849, 0.054615, 0.047145]),
-            "24.0": torch.tensor([0.053648, 0.081477, 0.062641, 0.066849, 0.054615, 0.047145])
+            "3.0": torch.tensor([5.364821e-02, 8.147693e-02, 6.264076e-02, 6.684893e-02, 5.461470e-02,
+        4.484973e-02, 1.000000e-08]),
+            "6.0": torch.tensor([5.364821e-02, 8.147693e-02, 6.264076e-02, 6.684893e-02, 5.461470e-02,
+        4.484973e-02, 1.000000e-08]),
+            "12.0": torch.tensor([5.364821e-02, 8.147693e-02, 6.264076e-02, 6.684893e-02, 5.461470e-02,
+        4.484973e-02, 1.000000e-08]),
+            "24.0": torch.tensor([5.364821e-02, 8.147693e-02, 6.264076e-02, 6.684893e-02, 5.461470e-02,
+        4.484973e-02, 1.000000e-08])
         }
         EXPECTED_DECODER_OUTPUTS = {
             "3.0": torch.tensor([[ 0.003255,  0.002593,  0.003511,  0.003965,  0.002821,  0.002096,
@@ -1070,24 +1081,26 @@ class EncodecIntegrationTest(unittest.TestCase):
                 -0.000930, -0.000821, -0.000646, -0.000516, -0.000504, -0.000552,
                 -0.000687, -0.000855, -0.000867, -0.000671, -0.000595, -0.000801,
                 -0.001121, -0.001288]]),
-            "6.0": torch.tensor([[5.2738e-03, 5.0294e-03, 5.8189e-03, 5.8771e-03, 4.8928e-03, 4.4246e-03,
-                4.3667e-03, 4.3080e-03, 4.2317e-03, 4.3298e-03, 4.2045e-03, 3.9965e-03,
-                3.9874e-03, 3.9730e-03, 3.9087e-03, 3.8795e-03, 3.8814e-03, 3.9017e-03,
-                3.9399e-03, 3.8890e-03, 3.6560e-03, 3.5706e-03, 3.8202e-03, 4.1693e-03,
-                4.5183e-03, 5.0151e-03, 5.5858e-03, 5.9834e-03, 6.0204e-03, 5.7402e-03,
-                5.2751e-03, 4.8554e-03, 4.5242e-03, 4.3580e-03, 4.3808e-03, 4.3854e-03,
-                4.3105e-03, 4.2758e-03, 4.3683e-03, 4.5168e-03, 4.5246e-03, 4.4503e-03,
-                4.3006e-03, 4.1960e-03, 4.2005e-03, 4.2666e-03, 4.3392e-03, 4.3215e-03,
-                4.1732e-03, 3.9987e-03],
-                [1.4533e-04, 6.9295e-04, 1.3768e-03, 1.1704e-03, 5.6116e-04, 2.1399e-04,
-                3.4008e-05, 2.1104e-04, 4.1274e-04, 6.0015e-04, 6.0377e-04, 5.8848e-04,
-                6.2095e-04, 7.1700e-04, 8.6188e-04, 9.6028e-04, 1.0688e-03, 1.2987e-03,
-                1.5038e-03, 1.3870e-03, 1.0010e-03, 8.5283e-04, 1.0077e-03, 1.2723e-03,
-                1.5840e-03, 1.9588e-03, 2.3946e-03, 2.7562e-03, 2.8004e-03, 2.5577e-03,
-                2.1184e-03, 1.7153e-03, 1.4658e-03, 1.4175e-03, 1.4992e-03, 1.5436e-03,
-                1.5640e-03, 1.6401e-03, 1.7258e-03, 1.7850e-03, 1.7584e-03, 1.6791e-03,
-                1.5404e-03, 1.4283e-03, 1.3495e-03, 1.3507e-03, 1.3447e-03, 1.2281e-03,
-                1.0514e-03, 8.9988e-04]]),
+            "6.0": torch.tensor([[5.273837e-03, 5.029356e-03, 5.818919e-03, 5.877095e-03, 4.892784e-03,
+                4.424623e-03, 4.366699e-03, 4.308038e-03, 4.231700e-03, 4.329772e-03,
+                4.204455e-03, 3.996513e-03, 3.987412e-03, 3.972975e-03, 3.908725e-03,
+                3.879502e-03, 3.881384e-03, 3.901682e-03, 3.939928e-03, 3.889010e-03,
+                3.655977e-03, 3.570635e-03, 3.820161e-03, 4.169275e-03, 4.518270e-03,
+                5.015073e-03, 5.585828e-03, 5.983434e-03, 6.020361e-03, 5.740213e-03,
+                5.275079e-03, 4.855449e-03, 4.524189e-03, 4.358025e-03, 4.380845e-03,
+                4.385425e-03, 4.310483e-03, 4.275807e-03, 4.368290e-03, 4.516815e-03,
+                4.524615e-03, 4.450295e-03, 4.300606e-03, 4.195956e-03, 4.200535e-03,
+                4.266551e-03, 4.339241e-03, 4.321544e-03, 4.173155e-03, 3.998725e-03],
+                [1.453261e-04, 6.929478e-04, 1.376755e-03, 1.170405e-03, 5.611599e-04,
+                2.139929e-04, 3.400779e-05, 2.110353e-04, 4.127354e-04, 6.001534e-04,
+                6.037725e-04, 5.884786e-04, 6.209539e-04, 7.169978e-04, 8.618810e-04,
+                9.602793e-04, 1.068815e-03, 1.298671e-03, 1.503815e-03, 1.386970e-03,
+                1.000985e-03, 8.528330e-04, 1.007717e-03, 1.272305e-03, 1.584020e-03,
+                1.958798e-03, 2.394634e-03, 2.756161e-03, 2.800428e-03, 2.557749e-03,
+                2.118449e-03, 1.715322e-03, 1.465794e-03, 1.417461e-03, 1.499242e-03,
+                1.543587e-03, 1.563998e-03, 1.640117e-03, 1.725809e-03, 1.785000e-03,
+                1.758363e-03, 1.679130e-03, 1.540396e-03, 1.428279e-03, 1.349456e-03,
+                1.350701e-03, 1.344747e-03, 1.228058e-03, 1.051439e-03, 8.998821e-04]]),
             "12.0": torch.tensor([[ 0.001343,  0.001114,  0.002068,  0.002333,  0.001609,  0.001302,
                 0.001195,  0.001101,  0.001100,  0.001212,  0.001112,  0.000941,
                 0.000908,  0.000859,  0.000806,  0.000821,  0.000870,  0.000996,
@@ -1106,32 +1119,38 @@ class EncodecIntegrationTest(unittest.TestCase):
                 -0.000500, -0.000460, -0.000416, -0.000402, -0.000497, -0.000626,
                 -0.000770, -0.000871, -0.000864, -0.000743, -0.000676, -0.000764,
                 -0.000963, -0.001103]]),
-            "24.0": torch.tensor([[ 1.0106e-03,  7.8131e-04,  1.7919e-03,  2.0985e-03,  1.4433e-03,
-                1.1316e-03,  9.5723e-04,  7.7571e-04,  5.9849e-04,  5.8440e-04,
-                4.9920e-04,  3.6429e-04,  3.0819e-04,  2.1490e-04,  1.3068e-04,
-                9.9791e-05,  1.1655e-04,  1.7788e-04,  2.1106e-04,  1.0125e-04,
-                -1.9024e-04, -3.5293e-04, -2.0621e-04,  1.2395e-04,  5.7034e-04,
-                1.1692e-03,  1.8045e-03,  2.2124e-03,  2.1612e-03,  1.7347e-03,
-                1.1718e-03,  7.1663e-04,  4.2588e-04,  3.6268e-04,  5.0713e-04,
-                6.5658e-04,  7.1229e-04,  7.4017e-04,  8.0604e-04,  8.9429e-04,
-                8.6061e-04,  7.2865e-04,  5.6906e-04,  4.7790e-04,  5.1112e-04,
-                6.2985e-04,  7.3238e-04,  7.3908e-04,  6.1076e-04,  4.4600e-04],
-                [-3.5711e-03, -3.1934e-03, -2.3893e-03, -2.2726e-03, -2.5252e-03,
-                -2.7823e-03, -3.1810e-03, -3.2433e-03, -3.2049e-03, -3.1060e-03,
-                -3.0546e-03, -3.0025e-03, -2.9444e-03, -2.8600e-03, -2.7216e-03,
-                -2.6047e-03, -2.4788e-03, -2.2164e-03, -1.9603e-03, -1.9871e-03,
-                -2.2667e-03, -2.3834e-03, -2.2423e-03, -1.9288e-03, -1.4916e-03,
-                -9.5793e-04, -4.2381e-04, -4.7743e-05, -1.4620e-05, -2.9229e-04,
-                -7.5162e-04, -1.1564e-03, -1.3933e-03, -1.4099e-03, -1.2698e-03,
-                -1.1160e-03, -1.0149e-03, -9.4615e-04, -8.8984e-04, -8.6771e-04,
-                -9.7174e-04, -1.1305e-03, -1.2744e-03, -1.3494e-03, -1.3469e-03,
-                -1.2863e-03, -1.2579e-03, -1.3094e-03, -1.4606e-03, -1.6107e-03]])
+            "24.0": torch.tensor([[ 1.010626e-03,  7.813113e-04,  1.791859e-03,  2.098512e-03,
+                1.443315e-03,  1.131619e-03,  9.572321e-04,  7.757131e-04,
+                5.984887e-04,  5.843973e-04,  4.991977e-04,  3.642855e-04,
+                3.081888e-04,  2.148986e-04,  1.306767e-04,  9.979090e-05,
+                1.165471e-04,  1.778778e-04,  2.110642e-04,  1.012480e-04,
+                -1.902406e-04, -3.529328e-04, -2.062108e-04,  1.239474e-04,
+                5.703444e-04,  1.169234e-03,  1.804531e-03,  2.212374e-03,
+                2.161223e-03,  1.734669e-03,  1.171784e-03,  7.166255e-04,
+                4.258847e-04,  3.626751e-04,  5.071349e-04,  6.565793e-04,
+                7.122927e-04,  7.401685e-04,  8.060430e-04,  8.942910e-04,
+                8.606060e-04,  7.286463e-04,  5.690599e-04,  4.778978e-04,
+                5.111226e-04,  6.298538e-04,  7.323848e-04,  7.390758e-04,
+                6.107587e-04,  4.459959e-04],
+                [-3.571097e-03, -3.193419e-03, -2.389309e-03, -2.272637e-03,
+                -2.525185e-03, -2.782251e-03, -3.181019e-03, -3.243267e-03,
+                -3.204876e-03, -3.106045e-03, -3.054639e-03, -3.002484e-03,
+                -2.944369e-03, -2.860032e-03, -2.721580e-03, -2.604716e-03,
+                -2.478817e-03, -2.216445e-03, -1.960302e-03, -1.987081e-03,
+                -2.266678e-03, -2.383426e-03, -2.242301e-03, -1.928755e-03,
+                -1.491635e-03, -9.579324e-04, -4.238072e-04, -4.774341e-05,
+                -1.462011e-05, -2.922945e-04, -7.516183e-04, -1.156422e-03,
+                -1.393303e-03, -1.409855e-03, -1.269845e-03, -1.115955e-03,
+                -1.014855e-03, -9.461480e-04, -8.898404e-04, -8.677132e-04,
+                -9.717353e-04, -1.130508e-03, -1.274382e-03, -1.349356e-03,
+                -1.346857e-03, -1.286301e-03, -1.257888e-03, -1.309370e-03,
+                -1.460626e-03, -1.610748e-03]])
         }
         EXPECTED_CODEC_ERROR = {
-            "3.0": 0.0008492441847920418,
-            "6.0": 0.0006712255417369306,
-            "12.0": 0.0005332105210982263,
-            "24.0": 0.00044873839942738414,
+            "3.0": 0.00084255903493613,
+            "6.0": 0.0006662720115855336,
+            "12.0": 0.0005296851741150022,
+            "24.0": 0.0004447767569217831,
         }
         # fmt: on
 
@@ -1151,7 +1170,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             raw_audio=audio_array,
             sampling_rate=sampling_rate,
             return_tensors="pt",
-            padding=False,  # False as original EnCodec doesn't pad to multiple of hop length
+            padding=True,
         ).to(torch_device)
 
         # loop over all bandwidths
@@ -1159,7 +1178,9 @@ class EncodecIntegrationTest(unittest.TestCase):
         for bandwidth in EXPECTED_ENCODER_CODES.keys():
             with torch.no_grad():
                 # Compare encoder outputs with expected values
-                encoded_frames = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
+                encoded_frames = model.encode(
+                    inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
+                )
                 codes = torch.cat([encoded[0] for encoded in encoded_frames["audio_codes"]], dim=-1).unsqueeze(0)
                 torch.testing.assert_close(
                     codes[..., : EXPECTED_ENCODER_CODES[bandwidth].shape[-1]],
@@ -1171,7 +1192,12 @@ class EncodecIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(scales, EXPECTED_ENCODER_SCALES[bandwidth], rtol=1e-6, atol=1e-6)
 
                 # Compare decoder outputs with expected values
-                decoded_frames = model.decode(encoded_frames["audio_codes"], encoded_frames["audio_scales"])
+                decoded_frames = model.decode(
+                    encoded_frames["audio_codes"],
+                    encoded_frames["audio_scales"],
+                    inputs["padding_mask"],
+                    last_frame_pad_length=encoded_frames["last_frame_pad_length"],
+                )
                 torch.testing.assert_close(
                     decoded_frames["audio_values"][0][..., : EXPECTED_DECODER_OUTPUTS[bandwidth].shape[-1]],
                     EXPECTED_DECODER_OUTPUTS[bandwidth].to(torch_device),
@@ -1184,10 +1210,10 @@ class EncodecIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(codec_error, EXPECTED_CODEC_ERROR[bandwidth], rtol=1e-6, atol=1e-6)
 
                 # make sure forward and enc-dec give same result
-                input_values_dec = model(inputs["input_values"], bandwidth=float(bandwidth))
+                input_values_dec = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
                 torch.testing.assert_close(
                     input_values_dec["audio_values"],
-                    decoded_frames["audio_values"][..., : audio_array.shape[-1]],
+                    decoded_frames["audio_values"],
                     rtol=1e-6,
                     atol=1e-6,
                 )
@@ -1680,7 +1706,8 @@ class EncodecIntegrationTest(unittest.TestCase):
                 encoded_frames = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
                 )
-                codes = torch.cat(encoded_frames["audio_codes"], dim=-1)
+                codes = encoded_frames["audio_codes"].permute(1, 2, 0, 3)
+                codes = codes.reshape(codes.size(0), codes.size(1), -1)
                 torch.testing.assert_close(
                     codes[..., : EXPECTED_ENCODER_CODES[bandwidth].shape[-1]],
                     EXPECTED_ENCODER_CODES[bandwidth].to(torch_device),
@@ -1690,7 +1717,10 @@ class EncodecIntegrationTest(unittest.TestCase):
 
                 # Compare decoder outputs with expected values
                 decoded_frames = model.decode(
-                    encoded_frames["audio_codes"], encoded_frames["audio_scales"], inputs["padding_mask"]
+                    encoded_frames["audio_codes"],
+                    encoded_frames["audio_scales"],
+                    inputs["padding_mask"],
+                    last_frame_pad_length=encoded_frames["last_frame_pad_length"],
                 )
                 torch.testing.assert_close(
                     decoded_frames["audio_values"][..., : EXPECTED_DECODER_OUTPUTS[bandwidth].shape[-1]],
@@ -1704,7 +1734,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(codec_error, EXPECTED_CODEC_ERROR[bandwidth], rtol=1e-6, atol=1e-6)
 
                 # make sure forward and enc-dec give same result
-                input_values_dec = model(inputs["input_values"], bandwidth=float(bandwidth))
+                input_values_dec = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
                 torch.testing.assert_close(
                     input_values_dec["audio_values"], decoded_frames["audio_values"], rtol=1e-6, atol=1e-6
                 )
@@ -2076,7 +2106,8 @@ class EncodecIntegrationTest(unittest.TestCase):
                 encoded_frames = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
                 )
-                codes = torch.cat(encoded_frames["audio_codes"], dim=-1)
+                codes = encoded_frames["audio_codes"].permute(1, 2, 0, 3)
+                codes = codes.reshape(codes.size(0), codes.size(1), -1)
                 torch.testing.assert_close(
                     codes[..., : EXPECTED_ENCODER_CODES[bandwidth].shape[-1]],
                     EXPECTED_ENCODER_CODES[bandwidth].to(torch_device),
@@ -2090,7 +2121,10 @@ class EncodecIntegrationTest(unittest.TestCase):
 
                 # Compare decoder outputs with expected values
                 decoded_frames = model.decode(
-                    encoded_frames["audio_codes"], encoded_frames["audio_scales"], inputs["padding_mask"]
+                    encoded_frames["audio_codes"],
+                    encoded_frames["audio_scales"],
+                    inputs["padding_mask"],
+                    last_frame_pad_length=encoded_frames["last_frame_pad_length"],
                 )
                 torch.testing.assert_close(
                     decoded_frames["audio_values"][..., : EXPECTED_DECODER_OUTPUTS[bandwidth].shape[-1]],
@@ -2104,7 +2138,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(codec_error, EXPECTED_CODEC_ERROR[bandwidth], rtol=1e-6, atol=1e-6)
 
                 # make sure forward and enc-dec give same result
-                input_values_dec = model(inputs["input_values"], bandwidth=float(bandwidth))
+                input_values_dec = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
                 torch.testing.assert_close(
                     input_values_dec["audio_values"], decoded_frames["audio_values"], rtol=1e-6, atol=1e-6
                 )

@@ -40,8 +40,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class EncodecOutput(ModelOutput):
     r"""
-    audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-        Discret code embeddings computed using `model.encode`.
+    audio_codes (`torch.LongTensor`  of shape `(nb_chunks, batch_size, nb_quantizers, chunk_length)`, *optional*):
+        Discrete code embeddings computed using `model.encode`.
     audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Encodec.
     """
@@ -54,14 +54,18 @@ class EncodecOutput(ModelOutput):
 @auto_docstring
 class EncodecEncoderOutput(ModelOutput):
     r"""
-    audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+    audio_codes (`torch.LongTensor`  of shape `(nb_chunks, batch_size, num_quantizers, chunk_length)`, *optional*):
         Discrete code embeddings computed using `model.encode`.
-    audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+    audio_scales (list of length `nb_chunks` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
+    last_frame_pad_length (list of single `int`, *optional*):
+        The length of the padding in the last frame, if any. This is used to ensure that the encoded frames
+        can be outputted as a tensor.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
     audio_scales: Optional[torch.FloatTensor] = None
+    last_frame_pad_length: Optional[int] = None
 
 
 @dataclass
@@ -498,7 +502,7 @@ class EncodecModel(EncodecPreTrainedModel):
         return self.decoder
 
     def _encode_frame(
-        self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
+        self, input_values: torch.Tensor, bandwidth: float
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
@@ -510,7 +514,6 @@ class EncodecModel(EncodecPreTrainedModel):
         if self.config.chunk_length_s is not None and duration > 1e-5 + self.config.chunk_length_s:
             raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}")
 
-        input_values = input_values * padding_mask
         scale = None
         if self.config.normalize:
             mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
@@ -529,7 +532,7 @@ class EncodecModel(EncodecPreTrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
+    ) -> Union[tuple[torch.Tensor, Optional[torch.Tensor], int], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -544,9 +547,10 @@ class EncodecModel(EncodecPreTrainedModel):
                 as bandwidth == 6.0
 
         Returns:
-            A list of frames containing the discrete encoded codes for the input audio waveform, along with rescaling
-            factors for each chunk when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
-            `codebook` of shape `[batch_size, num_codebooks, frames]`.
+            EncodecEncoderOutput dict or a tuple containing:
+            - audio_codes (`torch.Tensor` of shape `(nb_chunks, batch_size, num_channels, chunk_length)`),
+            - audio_scales (list of length `nb_chunks` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*),
+            - last_frame_pad_length (list of single `int`, *optional*).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -578,18 +582,24 @@ class EncodecModel(EncodecPreTrainedModel):
         scales = []
         for offset in range(0, input_length, stride):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
-            frame = input_values[:, :, offset : offset + chunk_length]
-            encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)
+            frame = mask * input_values[..., offset : offset + chunk_length]
+            encoded_frame, scale = self._encode_frame(frame, bandwidth)
             encoded_frames.append(encoded_frame)
             scales.append(scale)
 
-        encoded_frames = tuple(encoded_frames)
-        scales = tuple(scales)
+        # pad last frame if necessary
+        last_frame_pad_length = None
+        if encoded_frames and encoded_frames[-1].shape[-1] < encoded_frames[0].shape[-1]:
+            last_frame = encoded_frames[-1]
+            last_frame_pad_length = encoded_frames[0].shape[-1] - last_frame.shape[-1]
+            if last_frame_pad_length > 0:
+                last_frame = nn.functional.pad(last_frame, (0, last_frame_pad_length), value=0)
+                encoded_frames[-1] = last_frame
+        encoded_frames = torch.stack(encoded_frames)
 
         if not return_dict:
-            return (encoded_frames, scales)
-
-        return EncodecEncoderOutput(encoded_frames, scales)
+            return (encoded_frames, scales, [last_frame_pad_length])
+        return EncodecEncoderOutput(encoded_frames, scales, [last_frame_pad_length])
 
     @staticmethod
     def _linear_overlap_add(frames: list[torch.Tensor], stride: int):
@@ -652,6 +662,7 @@ class EncodecModel(EncodecPreTrainedModel):
         audio_scales: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        last_frame_pad_length: Optional[int] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
@@ -660,27 +671,37 @@ class EncodecModel(EncodecPreTrainedModel):
         trimmed.
 
         Args:
-            audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            audio_codes (`torch.LongTensor` of shape `(nb_chunks, batch_size, nb_quantizers, chunk_length)`, *optional*):
                 Discrete code embeddings computed using `model.encode`.
-            audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+            audio_scales (list of length `nb_chunks` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*):
                 Scaling factor for each `audio_codes` input.
-            padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            padding_mask (`torch.Tensor` of shape `(channels, sequence_length)`):
                 Padding mask used to pad the `input_values`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            last_frame_pad_length (list of single `int`, *optional*):
+                List of one integer representing the length of the padding in the last frame, which is removed
+                during decoding.
 
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         chunk_length = self.config.chunk_length
+        last_frame_pad_length = last_frame_pad_length[0] if last_frame_pad_length is not None else None
         if chunk_length is None:
             if len(audio_codes) != 1:
                 raise ValueError(f"Expected one frame, got {len(audio_codes)}")
-            audio_values = self._decode_frame(audio_codes[0], audio_scales[0])
+            frame = audio_codes[0]
+            if last_frame_pad_length is not None:
+                frame = audio_codes[0][..., :-last_frame_pad_length]
+            audio_values = self._decode_frame(frame, audio_scales[0])
         else:
             decoded_frames = []
 
-            for frame, scale in zip(audio_codes, audio_scales):
+            for i, (frame, scale) in enumerate(zip(audio_codes, audio_scales)):
+                if i == len(audio_codes) - 1 and last_frame_pad_length is not None:
+                    # remove padding
+                    frame = frame[..., :-last_frame_pad_length]
                 frames = self._decode_frame(frame, scale)
                 decoded_frames.append(frames)
 
@@ -703,6 +724,7 @@ class EncodecModel(EncodecPreTrainedModel):
         audio_codes: Optional[torch.LongTensor] = None,
         audio_scales: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        last_frame_pad_length: Optional[int] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
@@ -726,10 +748,16 @@ class EncodecModel(EncodecPreTrainedModel):
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
             `bandwidth == 6.0`
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(nb_chunks, batch_size, nb_quantizers, chunk_length)`, *optional*):
+            Discrete code embeddings computed using `model.encode`.
+        audio_scales (list of length `nb_chunks` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*):
             Scaling factor for each `audio_codes` input.
+        return_dict (`bool`, *optional*):
+            Whether to return outputs as a dict.
+        last_frame_pad_length (list of single `int`, *optional*):
+            The length of the padding in the last frame, if any. This is used to ensure that the encoded frames
+            can be outputted as a tensor. This values should be passed during decoding to ensure these padding
+            values are removed from the encoded frames.
 
         Examples:
 
@@ -764,9 +792,17 @@ class EncodecModel(EncodecPreTrainedModel):
             raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
 
         if audio_scales is None and audio_codes is None:
-            audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, False)
+            audio_codes, audio_scales, last_frame_pad_length = self.encode(
+                input_values, padding_mask, bandwidth, False
+            )
 
-        audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
+        audio_values = self.decode(
+            audio_codes,
+            audio_scales,
+            padding_mask,
+            return_dict=return_dict,
+            last_frame_pad_length=last_frame_pad_length,
+        )[0]
         if not return_dict:
             return (audio_codes, audio_values)
 
