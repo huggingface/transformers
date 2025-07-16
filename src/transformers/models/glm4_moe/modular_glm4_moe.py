@@ -529,7 +529,7 @@ class Glm4MoeModel(MixtralModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
