@@ -56,6 +56,11 @@ class Florence2Processor(ProcessorMixin):
             The image processor is a required input.
         tokenizer (`Union[BartTokenizer, BartTokenizerFast]`, *optional*):
             The tokenizer is a required input.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
     """
 
     attributes = ["image_processor", "tokenizer"]

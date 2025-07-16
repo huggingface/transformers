@@ -150,6 +150,8 @@ class Florence2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`AutoConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
+        image_token_index (`int`, *optional*, defaults to 32000):
+            The image token index to encode the image prompt.
 
     Example:
 
