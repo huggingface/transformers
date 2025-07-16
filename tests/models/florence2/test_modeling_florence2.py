@@ -57,6 +57,7 @@ class Florence2VisionText2TextModelTester:
         image_size=8,
         seq_length=13,
         encoder_seq_length=18,
+        image_seq_length=5,
         is_training=True,
         vocab_size=99,
         max_position_embeddings=64,
@@ -71,6 +72,7 @@ class Florence2VisionText2TextModelTester:
         eos_token_id=2,
         bos_token_id=0,
         pad_token_id=1,
+        image_token_id=4,
         depths=[1],
         patch_size=[7],
         patch_stride=[4],
@@ -87,8 +89,6 @@ class Florence2VisionText2TextModelTester:
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
-        self.seq_length = seq_length
-        self.encoder_seq_length = encoder_seq_length
         self.is_training = is_training
         self.num_hidden_layers = decoder_layers
         self.hidden_size = d_model
@@ -107,6 +107,7 @@ class Florence2VisionText2TextModelTester:
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
+        self.image_token_id = image_token_id
 
         # Vision model configs
         self.drop_path_rate = drop_path_rate
@@ -120,6 +121,11 @@ class Florence2VisionText2TextModelTester:
         self.num_groups = num_groups
         self.window_size = window_size
         self.projection_dim = projection_dim
+
+        self.num_channels = 3
+        self.num_image_tokens = 5
+        self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = encoder_seq_length
 
     def get_config(self):
         text_config = {
@@ -157,7 +163,7 @@ class Florence2VisionText2TextModelTester:
             "projection_dim": self.projection_dim,
         }
 
-        return Florence2Config(text_config=text_config, vision_config=vision_config)
+        return Florence2Config(text_config=text_config, vision_config=vision_config, image_token_id=self.image_token_id)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -168,9 +174,9 @@ class Florence2VisionText2TextModelTester:
                 self.image_size,
             ]
         )
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size - 1) + 1
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
         input_ids[:, -1] = self.eos_token_id
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         decoder_attention_mask = decoder_input_ids.ne(self.pad_token_id)
@@ -235,49 +241,6 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

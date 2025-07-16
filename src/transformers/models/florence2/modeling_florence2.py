@@ -851,10 +851,12 @@ class Florence2Model(Florence2PreTrainedModel):
     """
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
+    base_model_prefix = "model"
+
     _tied_weights_keys = [
-        "model.language_model.shared.weight",
         "model.language_model.encoder.embed_tokens.weight",
         "model.language_model.decoder.embed_tokens.weight",
+        "lm_head.weight",
     ]
 
     def __init__(self, config: Florence2Config):
@@ -1037,9 +1039,11 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        return super()._prepare_encoder_decoder_kwargs_for_generation(
+        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
             None, model_kwargs, model_input_name, generation_config
         )
+        model_kwargs.pop("inputs_embeds", None)
+        return model_kwargs
 
 
 __all__ = [

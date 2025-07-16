@@ -15,8 +15,6 @@
 import argparse
 from collections import OrderedDict
 
-import torch
-
 from transformers import (
     AddedToken,
     AutoConfig,
@@ -360,29 +358,11 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
         huggingface_weights[list_of_state_dict[i][1]] = original_weights[list_of_state_dict[i][0]]
 
     model = Florence2ForConditionalGeneration(config)
-    model.load_state_dict(huggingface_weights)
-    output_embeddings = model.get_output_embeddings()
-    input_embeddings = model.get_input_embeddings()
-    model._tie_or_clone_weights(output_embeddings, input_embeddings)
-
-    pre_expansion_embeddings = model.language_model.shared.weight.data
-    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    n = pre_expansion_embeddings.size()[0]
-    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
+    model.load_state_dict(huggingface_weights, strict=True, assign=True)
+    model.tie_weights()
     # We add an image token so we resize the model and pad to 64 for performance reasons
     pad_shape = 64
-    vocab_size = config.text_config.vocab_size
-    model.resize_token_embeddings(vocab_size + 1, pad_shape)
-    model.language_model.shared.weight.data[vocab_size:] = torch.stack(
-        tuple(dist.sample() for _ in range(model.language_model.shared.weight.data[vocab_size:].shape[0])),
-        dim=0,
-    )
-    model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple(dist.sample() for _ in range(model.lm_head.weight.data[vocab_size:].shape[0])),
-        dim=0,
-    )
+    model.resize_token_embeddings(len(tokenizer), pad_shape)
     model.save_pretrained(pytorch_dump_folder)
     processor.save_pretrained(pytorch_dump_folder)
 
