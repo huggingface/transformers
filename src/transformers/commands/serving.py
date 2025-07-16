@@ -23,11 +23,11 @@ from dataclasses import dataclass, field
 from threading import Thread
 from typing import Annotated, Generator, Optional
 
-import numpy as np
 from huggingface_hub import ModelInfo, model_info
 
 from transformers.utils.import_utils import (
     is_fastapi_available,
+    is_librosa_available,
     is_openai_available,
     is_pydantic_available,
     is_uvicorn_available,
@@ -41,7 +41,6 @@ from . import BaseTransformersCLICommand
 
 if is_torch_available():
     import torch
-    from pydub import AudioSegment  # TODO: use librosa instead?
 
     from transformers import (
         AutoModelForCausalLM,
@@ -52,6 +51,9 @@ if is_torch_available():
         GenerationConfig,
         PreTrainedModel,
     )
+
+if is_librosa_available():
+    import librosa
 
 serve_dependencies_available = (
     is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
@@ -768,6 +770,7 @@ class ServeCommand(BaseTransformersCLICommand):
                             yield self.build_chat_completion_chunk(
                                 request_id=_request_id, role=None, finish_reason="tool_calls"
                             )
+
                             continue
                         # Inside a tool call
                         if tool_state.inside_tool_call:
@@ -1084,6 +1087,10 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Generator[str, None, None]`: A generator that yields the transcription result.
         """
+        if not is_librosa_available():
+            raise ImportError(
+                "Missing librosa dependency for audio transcription. Please install with `pip install librosa`"
+            )
 
         model_name = req.get("model")
         if self.audio_model is None:
@@ -1098,17 +1105,12 @@ class ServeCommand(BaseTransformersCLICommand):
         )
         generation_config.max_new_tokens = 256  # TODO: be smarter about this (whisper has a small limit)
 
-        # Read the binary mp3 file
+        # Read the binary audio file using librosa
+        model_sampling_rate = self.audio_processor.feature_extractor.sampling_rate
         audio_file = req["file"]
         audio_bytes = io.BytesIO(audio_file)
-        audio_segment = AudioSegment.from_file(audio_bytes)
-        # Convert to mono and set sample rate to 16kHz (common for speech models)
-        audio_segment = audio_segment.set_frame_rate(16000).set_channels(1)
-        audio_array = np.array(audio_segment.get_array_of_samples(), dtype=np.float32)
-        if audio_array.max() > 0:
-            audio_array = audio_array / audio_array.max()
-
-        audio_inputs = self.audio_processor(audio_array, sampling_rate=16000, return_tensors="pt").to(
+        audio_array, _ = librosa.load(audio_bytes, sr=model_sampling_rate, mono=True)
+        audio_inputs = self.audio_processor(audio_array, sampling_rate=model_sampling_rate, return_tensors="pt").to(
             self.audio_model.device
         )
         audio_inputs = {k: v.to(self.audio_model.device) for k, v in audio_inputs.items()}
