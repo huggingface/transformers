@@ -15,9 +15,9 @@ rendered properly in your Markdown viewer.
 
 # 분산 추론[[distributed-inference]]
 
-모델이 단일 GPU에 맞지 않는 경우, [텐서 병렬화](./perf_train_gpu_many#tensor-parallelism)를 사용한 분산 추론이 도움이 될 수 있습니다. 텐서 병렬화는 모델을 여러 가속기(CUDA GPU, Intel XPU 등)에 분할하고 행렬 곱셈과 같은 계산을 병렬화합니다. 더 큰 모델 크기를 메모리에 맞춰 넣을 수 있게 해주며, 각 가속기가 텐서 슬라이스를 처리할 수 있어 더 빠릅니다.
+모델이 단일 GPU에 올라가지 않는 경우, [텐서 병렬화](./perf_train_gpu_many#tensor-parallelism)를 사용한 분산 추론이 도움이 될 수 있습니다. 텐서 병렬화는 모델을 다중 가속기(CUDA GPU, Intel XPU 등)에 분할하여 행렬 곱셈과 같은 계산을 병렬화합니다. 더 큰 모델을 메모리에 올릴 수 있게 하며, 각 가속기가 텐서 슬라이스를 처리할 수 있어 더 빠릅니다.
 
-그러나 텐서 병렬화는 통신 오버헤드를 추가하므로 빠른 노드 내 통신을 활용하기 위해 여러 가속기가 있는 단일 머신 설정에서 사용해야 합니다. 다중 노드 훈련의 경우, 사용 사례에 따라 파이프라인이나 데이터 병렬화를 사용하는 것이 더 효율적일 수 있습니다.
+그러나 텐서 병렬화는 통신 오버헤드를 추가하므로 빠른 노드 내 통신을 활용하기 위해 다중 가속기가 있는 단일 머신 설정에서 사용해야 합니다. 다중 노드 훈련의 경우, 사용 사례에 따라 파이프라인 병렬화나 데이터 병렬화를 사용하는 것이 더 효율적일 수 있습니다.
 
 > [!TIP]
 > 텐서 병렬화에 대해 더 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)의 텐서 병렬화 섹션을 참조하세요.
@@ -81,10 +81,10 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-`tp_plan`의 각 레이어에 대해 텐서 병렬 계획을 정의하고 [`~PreTrainedModel.from_pretrained`]에 전달하세요. 아래 예시는 열 및 행 분할의 조합을 사용합니다. 다른 지원되는 분할 전략에 대해 알아보려면 [분할 전략](#partitioning-strategies) 섹션을 참조하세요.
+각 레이어에 대한 텐서 병렬 계획을 `tp_plan`에 정의한 후 [`~PreTrainedModel.from_pretrained`]에 전달하세요. 아래 예시는 열 및 행 분할의 조합을 사용합니다. 다른 지원되는 분할 전략에 대해 알아보려면 [분할 전략](#partitioning-strategies) 섹션을 참조하세요.
 
 > [!WARNING]
-> 고유한 분할 계획을 수동으로 지정하려면 모델 아키텍처와 분할 전략이 함께 상호 작용하는 방식에 대한 충분한 이해가 필요합니다. 분할 전략에 대해 확실하지 않다면 결과 모델이 매우 느려지거나 실패하거나 부정확할 수 있습니다. 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)을 참조하세요.
+> 고유한 분할 계획을 수동으로 지정하려면 모델 아키텍처와 분할 전략이 함께 상호 작용하는 방식에 대한 충분한 이해가 필요합니다. 분할 전략을 잘못 설정하면 모델이 매우 느려지거나, 오류가 발생하거나, 부정확한 결과를 낼 수 있습니다. 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)을 참조하세요.
 
 ```py
 from transformers import AutoModelForCausalLM
