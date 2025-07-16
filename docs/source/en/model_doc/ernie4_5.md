@@ -103,3 +103,8 @@ The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
 
 [[autodoc]] Ernie4_5Tokenizer
     - __call__
+
+## Ernie4_5TokenizerFast
+
+[[autodoc]] Ernie4_5TokenizerFast
+    - __call__
