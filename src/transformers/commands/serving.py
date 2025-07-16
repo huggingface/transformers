@@ -1150,6 +1150,7 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Generator[str, None, None]`: A generator that yields the transcription result.
         """
+        # TODO: implement streaming transcription (currently, it's not streaming)
         if not is_librosa_available():
             raise ImportError(
                 "Missing librosa dependency for audio transcription. Please install with `pip install librosa`"
@@ -1179,7 +1180,6 @@ class ServeCommand(BaseTransformersCLICommand):
             "return_dict_in_generate": True,
         }
 
-        # Generate transcription -> TODO: this is not streaming?
         def _generate_transcription():
             generated_ids = audio_model.generate(**audio_inputs, **generation_kwargs)
             transcription_text = audio_processor.batch_decode(generated_ids.sequences, skip_special_tokens=True)[0]
