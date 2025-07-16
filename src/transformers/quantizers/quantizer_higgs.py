@@ -172,7 +172,7 @@ class HiggsHfQuantizer(HfQuantizer):
         return [key for key in missing_keys if not should_update(key)]
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return False
 
     def is_serializable(self, safe_serialization=None):

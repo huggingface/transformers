@@ -309,7 +309,6 @@ class PatchTSMixerAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -684,7 +683,7 @@ class PatchTSMixerLinearHead(nn.Module):
 @auto_docstring
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
-    config_class = PatchTSMixerConfig
+    config: PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False

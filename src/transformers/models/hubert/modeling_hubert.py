@@ -306,7 +306,6 @@ class HubertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -680,12 +679,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
 @auto_docstring
 class HubertPreTrainedModel(PreTrainedModel):
-    config_class = HubertConfig
+    config: HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
