@@ -4841,18 +4841,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
 
-        # We need this additional check for the attn implementation, as `hf_device_map` attribute could not be set prior to
-        # initializing the model
-        if (
-            device_map is not None
-            and ("cpu" in device_map.values() or "disk" in device_map.values())
-            and getattr(config, "_attn_implementation", None) in ("flash_attention_2", "flash_attention_3")
-        ):
-            raise ValueError(
-                "You are attempting to use Flash Attention with a model dispatched on CPU or disk. This is not supported. Please make sure to "
-                "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
-            )
-
         # Finalize model weight initialization
         if from_tf:
             model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
