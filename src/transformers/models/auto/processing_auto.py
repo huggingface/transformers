@@ -64,6 +64,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("colqwen2", "ColQwen2Processor"),
         ("dia", "DiaProcessor"),
         ("emu3", "Emu3Processor"),
+        ("evolla", "EvollaProcessor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
