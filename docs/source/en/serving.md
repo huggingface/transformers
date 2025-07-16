@@ -71,7 +71,7 @@ vllm serve Qwen/Qwen2.5-1.5B-Instruct \
 > This section is experimental and subject to change in future versions
 
 <!-- TODO: LLMs -> models, after we add audio/image input/output support -->
-You can serve LLMs supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers a chat Completions API compatible with the OpenAI SDK, which is the _de facto_ standard for LLM conversations. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
+You can serve LLMs supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers a Chat Completion API or a Response API compatible with the OpenAI SDK, which are the _de facto_ standard for LLM conversations. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
 
 To launch a server, simply use the `transformers serve` CLI command:
 

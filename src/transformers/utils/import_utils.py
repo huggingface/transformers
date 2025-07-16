@@ -515,6 +515,10 @@ def is_uvicorn_available():
     return _uvicorn_available
 
 
+def is_openai_available():
+    return _openai_available
+
+
 def is_pretty_midi_available():
     return _pretty_midi_available
 
@@ -728,10 +732,6 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
-
-
-def is_openai_available():
-    return _openai_available
 
 
 def is_flax_available():
@@ -1917,6 +1917,12 @@ UVICORN_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+OPENAI_IMPORT_ERROR = """
+{0} requires the openai library but it was not found in your environment. You can install it with pip:
+`pip install openai`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
 `pip install pytesseract`. Please note that you may need to restart your runtime after installation.
@@ -2046,6 +2052,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
         ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
+        ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
         ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
     ]
 )
