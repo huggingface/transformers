@@ -194,7 +194,7 @@ class QuantoHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return True
 
     def is_serializable(self, safe_serialization=None):
