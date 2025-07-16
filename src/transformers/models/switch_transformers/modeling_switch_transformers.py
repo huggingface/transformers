@@ -762,7 +762,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
-    config_class = SwitchTransformersConfig
+    config: SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
 

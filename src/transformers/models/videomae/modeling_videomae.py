@@ -462,7 +462,7 @@ class VideoMAEEncoder(nn.Module):
 
 @auto_docstring
 class VideoMAEPreTrainedModel(PreTrainedModel):
-    config_class = VideoMAEConfig
+    config: VideoMAEConfig
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

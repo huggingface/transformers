@@ -513,7 +513,7 @@ class SEWEncoder(nn.Module):
 
 @auto_docstring
 class SEWPreTrainedModel(PreTrainedModel):
-    config_class = SEWConfig
+    config: SEWConfig
     base_model_prefix = "sew"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

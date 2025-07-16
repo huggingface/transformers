@@ -919,7 +919,7 @@ class Swinv2Encoder(nn.Module):
 
 @auto_docstring
 class Swinv2PreTrainedModel(PreTrainedModel):
-    config_class = Swinv2Config
+    config: Swinv2Config
     base_model_prefix = "swinv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

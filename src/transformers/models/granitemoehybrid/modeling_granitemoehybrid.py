@@ -1157,7 +1157,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
-    config_class = GraniteMoeHybridConfig
+    config: GraniteMoeHybridConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]

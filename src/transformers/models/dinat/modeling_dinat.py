@@ -583,7 +583,7 @@ class DinatEncoder(nn.Module):
 
 @auto_docstring
 class DinatPreTrainedModel(PreTrainedModel):
-    config_class = DinatConfig
+    config: DinatConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
 

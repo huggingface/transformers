@@ -409,7 +409,7 @@ class Dots1DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Dots1PreTrainedModel(PreTrainedModel):
-    config_class = Dots1Config
+    config: Dots1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots1DecoderLayer"]

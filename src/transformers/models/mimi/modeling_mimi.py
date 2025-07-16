@@ -1367,7 +1367,7 @@ class MimiSplitResidualVectorQuantizer(nn.Module):
 
 @auto_docstring
 class MimiPreTrainedModel(PreTrainedModel):
-    config_class = MimiConfig
+    config: MimiConfig
     base_model_prefix = "mimi"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

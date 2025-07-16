@@ -817,7 +817,7 @@ class MraOnlyMLMHead(nn.Module):
 @auto_docstring
 # Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 class MraPreTrainedModel(PreTrainedModel):
-    config_class = MraConfig
+    config: MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
 

@@ -873,7 +873,7 @@ class CanineOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class CaninePreTrainedModel(PreTrainedModel):
-    config_class = CanineConfig
+    config: CanineConfig
     load_tf_weights = load_tf_weights_in_canine
     base_model_prefix = "canine"
     supports_gradient_checkpointing = True

@@ -87,7 +87,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PerceptionLMPreTrainedModel(PreTrainedModel):
-    config_class = PerceptionLMConfig
+    config: PerceptionLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"

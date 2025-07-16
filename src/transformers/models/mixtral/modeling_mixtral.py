@@ -380,7 +380,7 @@ class MixtralRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class MixtralPreTrainedModel(PreTrainedModel):
-    config_class = MixtralConfig
+    config: MixtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MixtralDecoderLayer"]
