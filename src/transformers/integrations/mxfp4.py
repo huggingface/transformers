@@ -84,7 +84,6 @@ def convert_moe_packed_tensors(
 
     scales = scales.to(torch.int32) - 127
 
-
     assert  blocks.shape[:-1] == scales.shape, (
         f"{blocks.shape=} does not match {scales.shape=}"
     )
@@ -159,7 +158,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
 
         smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
 
-        self.gate_up_proj_right_pad = 0#smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
+        self.gate_up_proj_right_pad = 0#    smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
         self.gate_up_proj_bottom_pad = 0 
         
         self.down_proj_right_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
@@ -197,9 +196,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                                     value=0)
 
             apply_router_weight_on_input = False
-            # if torch.isnan(hidden_states).any():
-            #           raise ValueError("NaNs detected in hidden_states.")
-
+            
             intermediate_cache1 = matmul_ogs(hidden_states,
                                             self.gate_up_proj,
                                             self.gate_up_proj_bias.to(torch.float32),
@@ -210,13 +207,6 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                                             fused_activation=act)
 
             torch.cuda.synchronize()
-
-            if torch.isnan(intermediate_cache1).any():
-                print(f"hidden_states.shape: {hidden_states.shape}, self.gate_up_proj.shape: {self.gate_up_proj.shape}")
-                print(f"precision_config: {self.gate_up_proj_precision_config}")
-                print(f"hidden_states.dtype: {hidden_states.dtype}, self.gate_up_proj.dtype: {self.gate_up_proj.dtype}, self.gate_up_proj_bias.dtype: {self.gate_up_proj_bias.dtype}")
-          
-                raise ValueError("NaNs detected in intermediate_cache1 after matmul_ogs (gate_up_proj).")
 
         with torch.cuda.device(hidden_states.device):    
             intermediate_cache3 = matmul_ogs(
@@ -229,15 +219,6 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                 gammas=None if apply_router_weight_on_input else routing_data.gate_scal)
             
             torch.cuda.synchronize()
-            if torch.isnan(intermediate_cache3).any():
-                print(f"routing_data: {routing_data}")
-                print(f"scatter_idx: {scatter_idx}")
-                print(f"intermediate_cache3.shape: {intermediate_cache3.shape}")
-                print(f"self.down_proj.shape: {self.down_proj.shape}")
-                print(f"self.down_proj_bias.shape: {self.down_proj_bias.shape}")
-                print(f"self.down_proj_precision_config: {self.down_proj_precision_config}")
-                raise ValueError("NaNs detected in intermediate_cache3 after matmul_ogs (down_proj).")
-                
             # manually crop the tensor since oai kernel pad the output
             output_states = intermediate_cache3[..., :self.hidden_size].contiguous()
         torch.cuda.synchronize()
@@ -284,9 +265,9 @@ def _replace_with_mxfp4_linear(
                 # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                 model._modules[name] = Mxfp4OpenAIMoeExperts(config)
                 has_been_replaced=True
-        # if module.__class__.__name__ == "OpenAIMoeMLP":
-        #     from types import MethodType
-        #     module.forward = MethodType(mlp_forward, module)
+        if module.__class__.__name__ == "OpenAIMoeMLP" and not quantization_config.dequantize:
+            from types import MethodType
+            module.forward = MethodType(mlp_forward, module)
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_mxfp4_linear(
                 module,
@@ -315,6 +296,81 @@ def replace_with_mxfp4_linear(
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
     model, has_been_replaced = _replace_with_mxfp4_linear(
+        model,
+        modules_to_not_convert,
+        current_key_name,
+        quantization_config,
+        config=config,
+        tp_plan=tp_plan,
+    )
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using mixed-precision FP4 quantization but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
+
+    return model
+
+def _reverse_replace_with_mxfp4_linear(
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    has_been_replaced=False,
+    config=None,
+    tp_plan=None,
+):
+    if current_key_name is None:
+        current_key_name = []
+
+    for name, module in model.named_children():
+        current_key_name.append(name)
+        # if isinstance(module, nn.Linear):
+        #     raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
+        from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
+        from accelerate import init_empty_weights
+        if module.__class__.__name__ == "Mxfp4OpenAIMoeExperts":
+            
+                # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
+            gate_up_proj = module.gate_up_proj
+            down_proj = module.down_proj
+            gate_up_proj_bias = module.gate_up_proj_bias
+            down_proj_bias = module.down_proj_bias
+            model._modules[name] = OpenAIMoeExperts(config)
+            model._modules[name].gate_up_proj = torch.nn.Parameter(gate_up_proj, requires_grad=False)   
+            model._modules[name].down_proj = torch.nn.Parameter(down_proj, requires_grad=False)
+            model._modules[name].gate_up_proj_bias = torch.nn.Parameter(gate_up_proj_bias, requires_grad=False)
+            model._modules[name].down_proj_bias = torch.nn.Parameter(down_proj_bias, requires_grad=False)
+            has_been_replaced=True
+        if len(list(module.children())) > 0:
+            _, has_been_replaced = _reverse_replace_with_mxfp4_linear(
+                module,
+                modules_to_not_convert,
+                current_key_name,
+                quantization_config,
+                has_been_replaced=has_been_replaced,
+                config=config,
+                tp_plan=tp_plan,
+            )
+        current_key_name.pop(-1)
+    return model, has_been_replaced
+
+
+def reverse_replace_with_mxfp4_linear(
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    config=None,
+    tp_plan=None,
+):
+    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+
+    if quantization_config.modules_to_not_convert is not None:
+        modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
+    modules_to_not_convert = list(set(modules_to_not_convert))
+    model, has_been_replaced = _reverse_replace_with_mxfp4_linear(
         model,
         modules_to_not_convert,
         current_key_name,

@@ -273,6 +273,8 @@ from .import_utils import (
     is_yt_dlp_available,
     requires_backends,
     torch_only_method,
+    is_triton_available,
+    is_triton_kernels_availalble,
 )
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,

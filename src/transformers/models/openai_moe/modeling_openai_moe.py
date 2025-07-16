@@ -127,7 +127,7 @@ class TopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts if hasattr(config, "num_experts") else config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.bias = nn.Parameter(torch.empty(self.num_experts))

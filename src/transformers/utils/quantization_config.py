@@ -2066,7 +2066,9 @@ class Mxfp4Config(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[list] = None,
+        dequantize: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.MXFP4
         self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
