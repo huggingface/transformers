@@ -37,7 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_glm4_moe import Glm4MoeConfig
 
 
@@ -433,9 +433,10 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False
     _supports_attention_backend = True
     _can_record_outputs = {
+        "router_logits": OutputRecorder(Glm4MoeSparseMoeBlock, index=1),
         "hidden_states": Glm4MoeDecoderLayer,
         "attentions": Glm4MoeAttention,
     }
