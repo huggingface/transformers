@@ -44,7 +44,7 @@ def apply_rotary_pos_emb_interleave(
     sin: torch.Tensor,
     position_ids: Optional[torch.Tensor] = None,
     unsqueeze_dim: Optional[int] = 1,
-) -> Tuple[torch.Tensor, ...]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     r"""
     TODO let's just use the original freqcis computation to not have the view
     transpose + reshape! This is not optimized!
@@ -174,9 +174,8 @@ class DeepseekV3MoE(nn.Module):
         )
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def execute_experts_hooks(self, subname: str) -> torch.Tensor:
+    def get_experts_weights(self, subname: str) -> torch.Tensor:
         """
-        Execute Hf hooks like AlignDevicesHook.
         Arguments:
         - subname: projection name (gate_proj, up_proj, down_proj)
         Returns:
@@ -205,43 +204,22 @@ class DeepseekV3MoE(nn.Module):
         Returns:
         - final_hidden_states: (N, H)
         """
-        # N, H = hidden_states.shape
-        # E = len(self.experts)
-        K = topk_indices.shape[1]
-        # I = self.config.moe_intermediate_size  # size of each expert’s inner layer
+        # Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
+        Wg = self.get_experts_weights("gate_proj")
+        Wu = self.get_experts_weights("up_proj")
+        Wd = self.get_experts_weights("down_proj")
 
-        # 1) Stack all expert projection weights once (no bias since bias=False).
-        #    Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
-        Wg = self.execute_experts_hooks("gate_proj")
-        Wu = self.execute_experts_hooks("up_proj")
-        Wd = self.execute_experts_hooks("down_proj")
-
-        # 2) For each token and its K experts, gather the appropriate weight slices:
-        #    Shapes become (N, K, I, H) for the first two, (N, K, H, I) for the third.
-        Wg_k = Wg[topk_indices]  # → (N, K, I, H)
-        Wu_k = Wu[topk_indices]  # → (N, K, I, H)
-        Wd_k = Wd[topk_indices]  # → (N, K, H, I)
-
-        # 3) Expand the inputs so we can batch the K experts per token:
-        #    x_k: (N, K, H, 1)
-        x_k = hidden_states.unsqueeze(1).expand(-1, K, -1).unsqueeze(-1)
-
-        # 4) Compute the two inner projections via batched einsums:
-        #    gate_raw = Wg_k @ x_k → (N, K, I, 1)
-        #     up_raw = Wu_k @ x_k → (N, K, I, 1)
-        gate_raw = torch.matmul(Wg_k, x_k)
-        up_raw = torch.matmul(Wu_k, x_k)
-
-        # 5) FiLM-style fusion + activation:
-        fused = self.act_fn(gate_raw) * up_raw  # (N, K, I, 1)
-
-        # 6) Final down-projection: Wd_k @ fused → (N, K, H, 1)
-        expert_out = torch.matmul(Wd_k, fused).squeeze(-1)
-
-        # 7) Weight by the gate values and sum over the K experts → (N, H)
-        weighted = expert_out * topk_weights.unsqueeze(-1)
-        final = weighted.sum(dim=1)
-
+        # Shape (E, N, I)
+        gate_raw = torch.matmul(hidden_states, Wg.transpose(-2, -1))
+        up_raw = torch.matmul(hidden_states, Wu.transpose(-2, -1))
+        # Shape (E, N, I)
+        fused = self.act_fn(gate_raw) * up_raw
+        # Shape (E, N, H)
+        expert_out = torch.matmul(fused, Wd.transpose(-2, -1))
+        # Shape (K, N, H)
+        new_indices = topk_indices.unsqueeze(-1).expand((-1, -1, hidden_states.size(1))).transpose(0, 1)
+        # Shape (N, H)
+        final = (expert_out.gather(0, new_indices) * topk_weights.transpose(0, 1).unsqueeze(-1)).sum(dim=0)
         return final.type(hidden_states.dtype)
 
     def forward(self, hidden_states: torch.Tensor):
