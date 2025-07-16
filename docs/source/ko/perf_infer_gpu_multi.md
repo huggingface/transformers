@@ -264,7 +264,7 @@ Readd this when I get the exact error message
 
 Transformers 텐서 병렬화 구현은 프레임워크에 구애받지 않지만, 구체적인 구현을 위해서는 [DeviceMesh](https://docs.pytorch.org/tutorials/recipes/distributed_device_mesh.html)와 [torch.distributed](https://docs.pytorch.org/tutorials/beginner/dist_overview.html)의 [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html)에 의존하여 간단하고 확장 가능한 인터페이스를 제공합니다.
 
-### DeviceMesh
+### DeviceMesh[[devicemesh]]
 
 `DeviceMesh`를 함께 통신하는 기기의 다차원 그리드로 상상해보세요. 다양한 병렬화 전략은 다양한 유형의 통신 패턴을 필요로 하므로 여러 하위 메시가 있는 `DeviceMesh`를 만들 수 있습니다.
 
@@ -277,7 +277,7 @@ device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
 
 `torch.distributed`에서 정의된 대부분의 병렬화 전략은 메시 자체나 하위 메시에 적용할 수 있으며, 자동으로 통신 패턴을 처리합니다.
 
-### DTensor
+### DTensor[[dtensor]]
 
 `DTensor`(분산 텐서)는 일반적인 텐서 연산 위에 분산 로직을 처리하는 텐서 하위 클래스입니다. 텐서 병렬화의 대부분의 모델 가중치는 `DTensor`로 저장됩니다.
 
