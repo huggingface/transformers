@@ -74,28 +74,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Glm4MoeForCausalLM if is_torch_available() else None
 
-    @unittest.skip(
-        "Glm4Moe alternates between attention and conv layers, so attention are only returned for attention layers"
-    )
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("Glm4Moe has a special cache format as it alternates between attention and conv layers")
-    def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip("Glm4Moe has a special cache format which is not compatible with contrastive search")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Glm4Moe has a special cache format which is not compatible with contrastive search")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Glm4Moe has a special cache format which is not compatible with contrastive search")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
 
 @require_torch_accelerator
 @require_read_token
