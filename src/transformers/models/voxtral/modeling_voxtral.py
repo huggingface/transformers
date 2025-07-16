@@ -402,12 +402,8 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
-        self.audio_tower = AutoModel.from_config(config.audio_config)  # Usually a `VoxtralEncoder` instance
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        # TODO: @eustlb, check if really needed
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.multi_modal_projector = VoxtralMultiModalProjector(config)
 
         # Initialize weights and apply final processing
@@ -433,11 +429,19 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
 
     def get_audio_embeds(self, input_features: torch.FloatTensor):
         """
-        TODO: @eustlb, add docstring
-        Takes (bs, num_mel_bins, num_frames)
-        and returns (stacked dim, config.text_config.hidden_size)
+        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
+        Args:
+            input_features (`torch.FloatTensor`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+
+        Returns:
+            `torch.FloatTensor`:
+                The audio embeddings.
         """
-        # TODO: @eustlb, is this memory efficient? we only need the last hidden state
         audio_outputs = self.audio_tower(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
@@ -482,7 +486,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            return_dict=True,
             **kwargs,
         )
         return outputs

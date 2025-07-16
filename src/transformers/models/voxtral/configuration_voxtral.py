@@ -20,11 +20,11 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 class VoxtralEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VoxtralEncoder`]. It is used to instantiate a
-    Qwen2-Audio audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
+    Voxtral audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Voxtral
     architecture.
 
-    e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
+    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
