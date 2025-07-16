@@ -177,58 +177,6 @@ _TOOL_CALL_TOKENS = {
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
 
 
-class TimedModel:
-    """
-    A wrapper for PreTrainedModel instances and their associated processor/tokenizer that automatically
-    deletes the instances after a specified timeout.
-    """
-
-    def __init__(
-        self,
-        model: "PreTrainedModel",
-        timeout_seconds: int,
-        processor: Optional["ProcessorMixin"] = None,
-        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
-    ):
-        self.model = model
-        self._name_or_path = str(model.name_or_path)
-        self.processor = processor
-        self.tokenizer = tokenizer
-        self.timeout_seconds = timeout_seconds
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
-        self._timer.start()
-
-    def reset_timer(self):
-        """Reset the timer for the deletion of the instances."""
-        self._timer.cancel()
-        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
-        self._timer.start()
-
-    def _delete_model(self):
-        """Delete the wrapped model and processor/tokenizer and clean up resources."""
-        if hasattr(self, "model") and self.model is not None:
-            # Delete the model, processor, and tokenizer
-            del self.model
-            del self.processor
-            del self.tokenizer
-            self.model = None
-            self.processor = None
-            self.tokenizer = None
-            gc.collect()
-
-            # Clear CUDA cache if available
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-            logger.info(
-                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
-            )
-
-    def is_deleted(self):
-        """Check if the instances have been deleted."""
-        return not hasattr(self, "model") or self.model is None
-
-
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
@@ -309,6 +257,58 @@ class ToolState:
         self.has_tool_name_defined = False
         self.arg_nesting_level = 0
         self.buffer = ""
+
+
+class TimedModel:
+    """
+    A class that holds a PreTrainedModel instance and its associated processor/tokenizer.
+    Automatically deletes the instances after a specified timeout.
+    """
+
+    def __init__(
+        self,
+        model: "PreTrainedModel",
+        timeout_seconds: int,
+        processor: Optional["ProcessorMixin"] = None,
+        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
+    ):
+        self.model = model
+        self._name_or_path = str(model.name_or_path)
+        self.processor = processor
+        self.tokenizer = tokenizer
+        self.timeout_seconds = timeout_seconds
+        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer.start()
+
+    def reset_timer(self):
+        """Reset the timer for the deletion of the instances."""
+        self._timer.cancel()
+        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer.start()
+
+    def _delete_model(self):
+        """Delete the wrapped model and processor/tokenizer and clean up resources."""
+        if hasattr(self, "model") and self.model is not None:
+            # Delete the model, processor, and tokenizer
+            del self.model
+            del self.processor
+            del self.tokenizer
+            self.model = None
+            self.processor = None
+            self.tokenizer = None
+            gc.collect()
+
+            # Clear CUDA cache if available
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            logger.info(
+                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
+            )
+
+    def is_deleted(self):
+        """Check if the instances have been deleted."""
+        return not hasattr(self, "model") or self.model is None
 
 
 @dataclass
@@ -726,10 +726,14 @@ class ServeCommand(BaseTransformersCLICommand):
 
                     finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
                     if result.status == RequestStatus.FINISHED:
-                        yield self.build_chat_completion_chunk(request_id, finish_reason=finish_reason, model=model_id_and_revision)
+                        yield self.build_chat_completion_chunk(
+                            request_id, finish_reason=finish_reason, model=model_id_and_revision
+                        )
                         break
                     else:
-                        yield self.build_chat_completion_chunk(request_id=request_id, content=result.next_token, model=model_id_and_revision)
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id, content=result.next_token, model=model_id_and_revision
+                        )
 
             except Exception as e:
                 logger.error(str(e))
@@ -821,7 +825,10 @@ class ServeCommand(BaseTransformersCLICommand):
                         if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
                             tool_state.reset()
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, finish_reason="tool_calls", model=model_id_and_revision
+                                request_id=_request_id,
+                                role=None,
+                                finish_reason="tool_calls",
+                                model=model_id_and_revision,
                             )
 
                             continue
@@ -877,7 +884,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
                     # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
                     if result != "":
-                        yield self.build_chat_completion_chunk(_request_id, content=result, model=model_id_and_revision)
+                        yield self.build_chat_completion_chunk(
+                            _request_id, content=result, model=model_id_and_revision
+                        )
                 yield self.build_chat_completion_chunk(_request_id, finish_reason="stop", model=model_id_and_revision)
 
                 thread.join()
@@ -927,7 +936,12 @@ class ServeCommand(BaseTransformersCLICommand):
         }
 
         def stream_response(streamer, _request_id):
-            thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+            # Thin wrapper to save the KV cache after generation
+            def generate_with_cache(**kwargs):
+                generate_output = model.generate(**kwargs)
+                self.last_kv_cache = generate_output.past_key_values
+
+            thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
             sequence_number = 0
             output_index = 0
             content_index = 0
