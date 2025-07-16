@@ -2665,8 +2665,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 submodel will dispatch the corresponding value.
         """
         current_implementation = (
-            attn_implementation if not isinstance(attn_implementation, dict) else attn_implementation.get("", None)
+            attn_implementation
+            if not isinstance(attn_implementation, dict)
+            else attn_implementation.get("", self.config._attn_implementation)
         )
+
+        # In this case, do nothing
+        if current_implementation == self.config._attn_implementation:
+            return
 
         # It can sometimes change the attn, mostly from sdpa (default) to eager if sdpa is not supported
         # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
@@ -2695,7 +2701,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if isinstance(attn_implementation, dict):
                     for subconfig_key in self.config.sub_configs:
                         if getattr(self.config, subconfig_key).__class__ == submodule.config_class:
-                            sub_implementation = attn_implementation.get(subconfig_key, None)
+                            sub_implementation = attn_implementation.get(
+                                subconfig_key, submodule.config._attn_implementation
+                            )
                             break
                 submodule.set_attn_implementation(sub_implementation)
 
