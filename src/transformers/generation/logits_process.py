@@ -361,6 +361,31 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         if self.prompt_ignore_length:
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
+        # Ensure input_ids is int64 for gather operation
+        input_ids = input_ids.to(torch.int64)
+
+        # Handle continuous batching case where scores have shape [batch_size, seq_len, vocab_size]
+        if scores.dim() == 3:
+            # For continuous batching, apply repetition penalty only to the last position
+            # This is compatible with CUDA graphs as it avoids dynamic operations
+            batch_size, seq_len, vocab_size = scores.shape
+
+            last_scores = scores[:, -1, :]  # [batch_size, vocab_size]
+
+            # Create a mask for all tokens that have appeared in the sequence
+            token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+
+            for i in range(seq_len):
+                token_mask.scatter_(1, input_ids[:, i : i + 1], True)
+
+            penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+            scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
+            return scores
+
+        # Handle 1D input_ids (batch_size,) by adding sequence dimension
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(1)
+
         score = torch.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
