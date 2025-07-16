@@ -90,7 +90,6 @@ class Wav2Vec2Processor(ProcessorMixin):
             text (`str`, `List[str]`, *optional*):
                 A text input is passed to [`PreTrainedTokenizer.__call__`].
 
-        [`~Wav2Vec2FeatureExtractor.__call__`] and PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] for more information.
 
         Returns:
             This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
