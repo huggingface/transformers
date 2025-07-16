@@ -2621,7 +2621,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             try:
                 self._sdpa_can_dispatch(is_early_check)
             except (ValueError, ImportError):
-                # In this case, sdpa was requested explicitly but we can't use it, se let's warn
+                # In this case, sdpa was requested explicitly but we can't use it, so let's warn
                 if attn_implementation is not None:
                     logger.warning_once(
                         f"{self.__class__.__name__} does not support an attention implementation through SDPA. Falling back to "
