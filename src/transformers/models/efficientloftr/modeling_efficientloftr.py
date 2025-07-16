@@ -414,16 +414,6 @@ class EfficientLoFTRMLP(nn.Module):
         return hidden_states
 
 
-def get_positional_embeddings_slice(
-    hidden_states: torch.Tensor, positional_embeddings: tuple[torch.Tensor, torch.Tensor]
-) -> tuple[torch.Tensor, torch.Tensor]:
-    batch_size, h, w, _ = hidden_states.shape
-    positional_embeddings = tuple(
-        tensor[:, :h, :w, :].expand(batch_size, -1, -1, -1) for tensor in positional_embeddings
-    )
-    return positional_embeddings
-
-
 class EfficientLoFTRAggregatedAttention(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
