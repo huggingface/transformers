@@ -391,6 +391,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
     def set_input_embeddings(self, value):
         self.model.language_model.set_input_embeddings(value)
 
+    def prepare_embeddings_for_image_generation(self) -> torch.Tensor:
+        raise AttributeError("Not needed for DeepseekVLHybrid")
+
     def get_output_embeddings(self):
         return self.lm_head
 

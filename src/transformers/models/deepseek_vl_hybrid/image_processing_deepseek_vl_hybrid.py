@@ -52,7 +52,6 @@ from ...utils import (
 if is_vision_available():
     import PIL
 
-
 logger = logging.get_logger(__name__)
 
 
