@@ -2242,14 +2242,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if torch_dtype is not None:
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
-        config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
-
-        if config._attn_implementation_internal is not None:
-            # In this case, the config has been created with the attn_implementation set by the user, which we should respect.
-            attn_implementation = config._attn_implementation_internal
-        else:
-            attn_implementation = None
-        config._attn_implementation = kwargs.pop("attn_implementation", attn_implementation)
+        # We do not want to modify the config inplace in _from_config
+        config = copy.deepcopy(config)
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")

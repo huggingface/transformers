@@ -193,7 +193,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",
-                "_attn_implementation_internal",
+                "_attn_implementation",
                 "transformers_version",
             ],
         )
