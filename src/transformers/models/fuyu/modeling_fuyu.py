@@ -41,7 +41,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
@@ -389,15 +388,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             model_inputs["image_patches"] = None
 
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

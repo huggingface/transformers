@@ -507,7 +507,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
     config_class = UMT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
@@ -1387,15 +1387,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.prepare_decoder_input_ids_from_labels
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @auto_docstring

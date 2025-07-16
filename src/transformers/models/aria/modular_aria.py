@@ -1286,7 +1286,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,

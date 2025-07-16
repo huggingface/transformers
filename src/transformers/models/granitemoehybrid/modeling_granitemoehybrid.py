@@ -1164,8 +1164,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _is_stateful = True
 
@@ -1739,15 +1738,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             router_logits=outputs.router_logits,
         )
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1804,15 +1794,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             }
         )
         return model_inputs
-
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
-        and do not need to initialize the Cache in advance in order to save memory
-        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
 
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]
