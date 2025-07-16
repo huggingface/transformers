@@ -432,7 +432,7 @@ class BLTSelfAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
-        self.is_causal = False
+        self.is_causal = True
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -484,13 +484,6 @@ class BLTSelfAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Check if we're in a decoder context by checking the layer index
-        # BLT decoder layers should use causal attention for correct generation
-        original_is_causal = self.is_causal
-        # If attention_mask is None, we're likely in a decoder that should be causal
-        if attention_mask is None:
-            self.is_causal = True
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -501,8 +494,6 @@ class BLTSelfAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-
-        self.is_causal = original_is_causal
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
