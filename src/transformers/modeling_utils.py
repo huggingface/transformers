@@ -5718,7 +5718,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
-        else:
+        elif not is_quantized:
             self.initialize_weights()
 
     def get_parameter_or_buffer(self, target: str):
