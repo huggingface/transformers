@@ -56,6 +56,7 @@ batch_outputs = model.generate_batch(
 )
 end_time_simple = time.time()
 
+generated_tokens: int = 0
 for request in batch_outputs:
     input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
     try:
@@ -66,6 +67,7 @@ for request in batch_outputs:
     if len(output_text) > 0:
         print("-" * 20)
         print(f"{request} Input:  {input_text}")
+        generated_tokens += len(batch_outputs[request].generated_tokens)
         print(f"{request} Output: {output_text}")
     else:
         print("", end="\r\r\r\r")
@@ -73,7 +75,9 @@ print("-" * 20)
 print("--- Finished CB Generation Example ---\n\n")
 
 
-print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
+print(
+    f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds for {generated_tokens} generated tokens. So {generated_tokens / (end_time_simple - start_time_simple)} tok/s\n"
+)
 
 # train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 

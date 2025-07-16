@@ -321,7 +321,7 @@ class PagedAttentionCache:
                 self._k_scale_tensor = torch.tensor(1.0, device=key.device, dtype=key.dtype)
             if not hasattr(self, "_v_scale_tensor") or self._v_scale_tensor.device != value.device:
                 self._v_scale_tensor = torch.tensor(1.0, device=value.device, dtype=value.dtype)
-                
+
             reshaping_function(
                 key,
                 value,
@@ -346,7 +346,7 @@ class PagedAttentionCache:
             v_cache_flat[write_index, :, :] = value
             if kwargs.get("is_decoding", False):
                 return self.key_cache[layer_idx], self.value_cache[layer_idx]
-            
+
             return k_cache_flat[read_index, :, :], v_cache_flat[read_index, :, :]
 
 
@@ -818,7 +818,7 @@ class ContinuousBatchProcessor:
         self.tokenizer = Tokenizer.from_pretrained(self.config._name_or_path)
         self.decode_stream = DecodeStream(skip_special_tokens=True)
         self.is_decoding = False
-        
+
     @traced(standalone=True)
     def setup_static_tensors(self):
         T = self.max_batch_tokens
@@ -1006,8 +1006,9 @@ class ContinuousBatchProcessor:
         )
 
         self.metrics.record_kv_cache_memory_metrics(self.cache)
-        
+
         self.is_decoding = (self.max_seqlen_q == 1).item()
+
     @traced
     def _build_tensors(
         self,
@@ -1029,7 +1030,7 @@ class ContinuousBatchProcessor:
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
         if (
-            self.config._attn_implementation != "paged_attention"
+            self.config._attn_implementation != "paged_attention" and self.max_seqlen_q != 1
         ):  # we set `is_causal` to True in paged call`
             # when decoding with sdpa paged, no need for a mask
             for i in range(len(cumulative_seqlens_q) - 1):
