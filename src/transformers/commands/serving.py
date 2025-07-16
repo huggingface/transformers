@@ -294,10 +294,6 @@ def create_generation_config_from_req(
     if req.get("seed") is not None:
         torch.manual_seed(req["seed"])
 
-    # Sets server-specific defaults, if unset
-    if generation_config.max_new_tokens is None:
-        generation_config.max_new_tokens = 1024
-
     return generation_config
 
 
@@ -508,6 +504,7 @@ class ServeCommand(BaseTransformersCLICommand):
         self,
         request_id: Optional[str] = "",
         content: Optional[str] = None,
+        model: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
@@ -523,6 +520,8 @@ class ServeCommand(BaseTransformersCLICommand):
                 The request ID.
             content (`str`, *optional*):
                 Content of the response from the model.
+            model (`str`, *optional*):
+                The model that generated the content.
             role (`str`, *optional*):
                 The role of the next content, until a new role is defined.
             finish_reason (`str`, *optional*):
@@ -536,7 +535,7 @@ class ServeCommand(BaseTransformersCLICommand):
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
-            model=self.loaded_model,
+            model=model,
             choices=[
                 Choice(
                     delta=ChoiceDelta(
@@ -714,7 +713,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant")
+                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 for result in self.running_continuous_batching_manager:
                     if result.request_id != request_id:
@@ -727,10 +726,10 @@ class ServeCommand(BaseTransformersCLICommand):
 
                     finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
                     if result.status == RequestStatus.FINISHED:
-                        yield self.build_chat_completion_chunk(request_id, finish_reason=finish_reason)
+                        yield self.build_chat_completion_chunk(request_id, finish_reason=finish_reason, model=model_id_and_revision)
                         break
                     else:
-                        yield self.build_chat_completion_chunk(request_id=request_id, content=result.next_token)
+                        yield self.build_chat_completion_chunk(request_id=request_id, content=result.next_token, model=model_id_and_revision)
 
             except Exception as e:
                 logger.error(str(e))
@@ -808,7 +807,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant")
+                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 for result in streamer:
                     # ====== TOOL CALL LOGIC ======
@@ -822,7 +821,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
                             tool_state.reset()
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, finish_reason="tool_calls"
+                                request_id=_request_id, role=None, finish_reason="tool_calls", model=model_id_and_revision
                             )
 
                             continue
@@ -871,15 +870,15 @@ class ServeCommand(BaseTransformersCLICommand):
                                 )
 
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, tool_calls=[tool]
+                                request_id=_request_id, role=None, tool_calls=[tool], model=model_id_and_revision
                             )
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
 
                     # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
                     if result != "":
-                        yield self.build_chat_completion_chunk(_request_id, content=result)
-                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop")
+                        yield self.build_chat_completion_chunk(_request_id, content=result, model=model_id_and_revision)
+                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop", model=model_id_and_revision)
 
                 thread.join()
             except Exception as e:
@@ -946,7 +945,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="queued",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         object="response",
@@ -967,7 +966,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="in_progress",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         object="response",
@@ -1072,7 +1071,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="completed",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         output=[response_output_item_done.item],
@@ -1104,7 +1103,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="failed",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         output=[],
@@ -1158,7 +1157,7 @@ class ServeCommand(BaseTransformersCLICommand):
         audio_inputs = audio_processor(audio_array, sampling_rate=model_sampling_rate, return_tensors="pt").to(
             audio_model.device
         )
-        audio_inputs = {k: v.to(audio_model.device) for k, v in audio_inputs.items()}
+        audio_inputs["input_features"] = audio_inputs["input_features"].to(audio_model.dtype)
 
         generation_kwargs = {
             "streamer": generation_streamer,
@@ -1300,6 +1299,15 @@ class ServeCommand(BaseTransformersCLICommand):
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
 
+        has_default_max_length = (
+            model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
+        )
+        has_short_max_new_tokens = (
+            model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 1024
+        )
+        if has_default_max_length or has_short_max_new_tokens:
+            model.generation_config.max_new_tokens = 1024
+
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
@@ -1320,11 +1328,6 @@ class ServeCommand(BaseTransformersCLICommand):
             model, tokenizer = self._load_model_and_data_processor(
                 model_id_and_revision, AutoModelForCausalLM, AutoTokenizer
             )
-
-            # Task-specific configuration
-            if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 1024:
-                model.generation_config.max_new_tokens = 1024
-
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
                 timeout_seconds=self.args.model_timeout,
@@ -1352,15 +1355,6 @@ class ServeCommand(BaseTransformersCLICommand):
             audio_model, audio_processor = self._load_model_and_data_processor(
                 model_id_and_revision, AutoModelForSpeechSeq2Seq, AutoProcessor
             )
-
-            # Task-specific configuration
-            # TODO: be smarter about this (whisper has a small max_length limit)
-            if (
-                audio_model.generation_config.max_new_tokens is not None
-                and audio_model.generation_config.max_new_tokens < 256
-            ):
-                audio_model.generation_config.max_new_tokens = 256
-
             self.loaded_models[model_id_and_revision] = TimedModel(
                 audio_model,
                 timeout_seconds=self.args.model_timeout,
