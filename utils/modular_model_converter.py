@@ -115,7 +115,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         new_name: str,
         original_new_model_name: str = "",
         only_doc: bool = False,
-        module_code: str | None = None,
+        module_code: Union[str, None] = None,
     ):
         super().__init__()
         old_name = old_name.replace("-", "_")
