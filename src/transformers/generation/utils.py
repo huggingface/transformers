@@ -68,7 +68,6 @@ from .candidate_generator import (
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
-    _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
@@ -567,15 +566,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 1. Handle BC:
         model_inputs = {}
-        # - some models don't have `Cache` support (which implies they don't expect `cache_position` in `forward`)
-        if self._supports_cache_class:
-            model_inputs["cache_position"] = cache_position
-        # - `cache_position` was not a mandatory input in `prepare_inputs_for_generation` for those models, and this
-        #   function may be called outside of `generate`. Handle most use cases by creating `cache_position` on the fly
-        #   (this alternative is not as robust as calling `generate` and letting it create `cache_position`)
-        elif cache_position is None:
-            past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-            cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
+        model_inputs["cache_position"] = cache_position
 
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
@@ -1013,12 +1004,6 @@ class GenerationMixin(ContinuousMixin):
             ).to(past_positions.device)
             model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
         return model_kwargs
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        raise NotImplementedError(
-            f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to"
-            f" enable beam search for {self.__class__}"
-        )
 
     def _get_candidate_generator(
         self,
@@ -1559,13 +1544,6 @@ class GenerationMixin(ContinuousMixin):
 
     def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
-        # If a `Cache` instance is passed, checks whether the model is compatible with it
-        if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support an instance of `Cache` as `past_key_values`. Please "
-                "check the model documentation for supported cache formats."
-            )
-
         # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
@@ -1974,22 +1952,23 @@ class GenerationMixin(ContinuousMixin):
             self._cache.reset()
         return self._cache
 
-    def _supports_default_dynamic_cache(self) -> bool:
+    @classmethod
+    def _supports_default_dynamic_cache(cls) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Mamba` models which
-        use their own caches and do not need to initialize the Cache in advance in
-        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for mamba-based models).
+        This adds exception for some models like `Mamba` models which use their own caches
+        and do not need to initialize the Cache in advance in order to save memory (because no back and forth
+        `to_legacy_cache` and `from_legacy_cache` will be performed for mamba-based models).
         """
-        return (
-            self._supports_cache_class
-            and "mamba" not in self.__class__.__name__.lower()
-            and "jamba" not in self.__class__.__name__.lower()
-            and "zamba" not in self.__class__.__name__.lower()
-            and "bamba" not in self.__class__.__name__.lower()
-            and "minimax" not in self.__class__.__name__.lower()
-            and "lfm2" not in self.__class__.__name__.lower()
+        # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
+        return not cls._is_stateful and all(
+            special_model_name not in cls.__name__.lower()
+            for special_model_name in [
+                "reformer",
+                "minimax",
+                "xlnet",
+                "lfm2",
+            ]
         )
 
     def _prepare_cache_for_generation(
@@ -2076,7 +2055,7 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
-                if not self._supports_quantized_cache:
+                if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
                     raise ValueError(
                         "This model does not support the quantized cache. If you want your model to support quantized "
                         "cache, please open an issue and tag @zucchini-nlp."
@@ -3708,33 +3687,6 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
-    # Auxiliary functions for beam search
-    def _temporary_reorder_cache(self, past_key_values, beam_idx):
-        """
-        Temporary function to handle the different types of cache reordering processes while we roll out `Cache`.
-
-        TODO: standardize cache formats and make all models compatible with `Cache`. It would remove the need
-        for this function, with `Cache.reorder_cache` being the sole remaining code path
-        """
-        model_class = self.__class__.__name__.lower()
-        # Exception 1: code path for models using the legacy cache format
-        if isinstance(past_key_values, (tuple, list)):
-            past_key_values = self._reorder_cache(past_key_values, beam_idx)
-        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
-        # cache format is standardized, to avoid adding complexity to the codebase.
-        elif "gptbigcode" in model_class:
-            if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
-                raise ValueError(
-                    f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
-                    "legacy tuple format or `DynamicCache`"
-                )
-            past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-        # Standard code path: use the `Cache.reorder_cache`
-        else:
-            past_key_values.reorder_cache(beam_idx)
-        return past_key_values
-
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
         """[batch_size, num_beams, ...] -> [batch_size * num_beams, ...]"""
@@ -4230,11 +4182,13 @@ class GenerationMixin(ContinuousMixin):
             # beam search as a whole (as opposed to individual beams, i.e. `stopping_criteria`)
 
             # pluck the cache from the beam indices that will be used in the next iteration
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    past_key_values=model_kwargs["past_key_values"],
-                    beam_idx=self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len]),
-                )
+                beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
 
             cur_len = cur_len + 1
             is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
@@ -4537,10 +4491,14 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], reordering_indices
-                )
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(
+                        model_kwargs["past_key_values"], reordering_indices
+                    )
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(reordering_indices)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -4774,10 +4732,12 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], beam_idx
-                )
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple(beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices)))
@@ -5002,8 +4962,7 @@ class GenerationMixin(ContinuousMixin):
             new_cur_len = input_ids.shape[1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
-            new_cache_size = new_cur_len - 1
-            outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
+            outputs.past_key_values.crop(new_cur_len - 1)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)

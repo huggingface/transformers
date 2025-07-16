@@ -543,7 +543,7 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
-    config_class = Glm4vVisionConfig
+    config: Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -1222,10 +1222,6 @@ class Glm4vModel(Qwen2_5_VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
-            [`Glm4vImageProcessor`] for processing videos.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1392,10 +1388,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
-            [`Glm4vImageProcessor`] for processing videos.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):

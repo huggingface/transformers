@@ -995,14 +995,13 @@ class EomtPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = EomtConfig
+    config: EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
 
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
