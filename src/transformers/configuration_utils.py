@@ -412,11 +412,12 @@ class PretrainedConfig(PushToHubMixin):
 
         # Set it recursively on the subconfigs
         for subconfig_key in self.sub_configs:
-            subconfig = getattr(self, subconfig_key)
-            sub_implementation = (
-                value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
-            )
-            subconfig._attn_implementation = sub_implementation
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
+                )
+                subconfig._attn_implementation = sub_implementation
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
