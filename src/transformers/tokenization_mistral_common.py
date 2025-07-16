@@ -1482,17 +1482,13 @@ class MistralCommonTokenizer(PushToHubMixin):
                     maybe_base64: Optional[str] = content.get("base64")
                     if maybe_url or maybe_path:
                         audio_data = load_audio_base64(maybe_url or maybe_path, force_mono=True, return_dict=True)
-                    elif maybe_base64:
-                        if not maybe_base64.startswith("data:audio"):
-                            # TODO: @eustlb check if this is correct
-                            maybe_base64 = "data:audio/unk;base64," + maybe_base64
-                        audio_data = maybe_base64
-                    else:
+                        normalized_content.append({"type": "input_audio", "input_audio": audio_data})
+                        continue
+                    if not maybe_base64:
                         raise ValueError("Audio content must be specified.")
-                    normalized_content.append({"type": "input_audio", "input_audio": audio_data})
+                    normalized_content.append({"type": "audio_url", "audio_url": {"url": maybe_base64}})
                 else:
                     normalized_content.append(content)
-            message["content"] = normalized_content
 
         outputs = []
         images: list[np.ndarray] = []
