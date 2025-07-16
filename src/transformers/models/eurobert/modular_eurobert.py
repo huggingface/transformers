@@ -717,6 +717,7 @@ class EuroBertForTokenClassification(EuroBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "EuroBertConfig",
     "EuroBertPreTrainedModel",

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2-VL model."""
 
+import copy
 import gc
 import unittest
 
@@ -23,10 +23,13 @@ from transformers import (
     AutoProcessor,
     Qwen2VLConfig,
     Qwen2VLForConditionalGeneration,
+    Qwen2VLModel,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
+    backend_empty_cache,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -170,52 +173,14 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
-        labels = torch.zeros(
-            (self.batch_size, self.seq_length),
-            dtype=torch.long,
-            device=torch_device,
-        )
+
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": labels,
         }
         return config, inputs_dict
-
-    def create_and_check_qwen2_vl_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        model = Qwen2VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_qwen2_vl_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        config.torch_dtype = torch.float16
-        model = Qwen2VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_grid_thw=image_grid_thw,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
 
 
 @require_torch
@@ -224,7 +189,14 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen2VLModel,
+            Qwen2VLForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
     test_pruning = False
     test_head_masking = False
@@ -260,20 +232,21 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dict)  # successfull forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            input_dict["pixel_values"] = input_dict["pixel_values"][-one_img_length:, ...]
-            input_dict["image_grid_thw"] = input_dict["image_grid_thw"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = input_dict["image_grid_thw"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -296,11 +269,11 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             model = model_class(config).to(torch_device)
 
             # Generate and make sure rope_deltas are not `None`
-            self.assertTrue(model.rope_deltas is None)
+            self.assertTrue(model.model.rope_deltas is None)
             generation_output = model.generate(
                 **input_dict, max_new_tokens=4, return_dict_in_generate=True, output_logits=True
             )
-            self.assertTrue(model.rope_deltas is not None)
+            self.assertTrue(model.model.rope_deltas is not None)
 
             # Now if we try to do forward pass, we should get new rope logits, because cache is not passed
             forward_output = model(**input_dict)
@@ -329,10 +302,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2VL models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen2VL models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -342,18 +311,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
-        pass
-
-    @unittest.skip(
-        reason="Qwen2-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(
-        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
 
@@ -375,7 +332,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_small_model_integration_test(self):
@@ -497,15 +454,27 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets'
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("xpu", 3): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+                ],
+                ("cuda", None): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets',
+                ],
+                ("cuda", 8): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices'
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
+        self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_flash_attn

@@ -538,7 +538,36 @@ def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
 
 
+class AttentionMaskInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def model_addition_debugger_context(*args, **kwargs):
+    requires_backends(model_addition_debugger_context, ["torch"])
+
+
+class GradientCheckpointingLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 ROPE_INIT_FUNCTIONS = None
+
+
+def dynamic_rope_update(*args, **kwargs):
+    requires_backends(dynamic_rope_update, ["torch"])
+
+
+class AttentionInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class PreTrainedModel(metaclass=DummyObject):
@@ -548,6 +577,7 @@ class PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+<<<<<<< HEAD
 class AlbertForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -10744,14 +10774,9 @@ class ZoeDepthPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+=======
+>>>>>>> 26be7f717e12241df3d575d825bfa51026da9be8
 class Adafactor(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AdamW(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

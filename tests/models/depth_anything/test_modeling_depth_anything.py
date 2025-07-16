@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,7 @@ from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -147,6 +147,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
+    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
@@ -181,14 +182,6 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -214,7 +207,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 model.to(torch_device)
                 model.eval()
 
-                # Confirm out_indices propogated to backbone
+                # Confirm out_indices propagated to backbone
                 self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -294,8 +287,11 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_export(self):
-        for strict in [True, False]:
+        for strict in [False, True]:
             with self.subTest(strict=strict):
+                if strict and get_torch_major_and_minor_version() == "2.7":
+                    self.skipTest(reason="`strict=True` is currently failing with torch 2.7.")
+
                 if not is_torch_greater_or_equal_than_2_4:
                     self.skipTest(reason="This test requires torch >= 2.4 to run.")
                 model = (

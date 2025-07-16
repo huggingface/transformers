@@ -1,6 +1,8 @@
 import enum
 import warnings
+from typing import Any, Union
 
+from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -26,6 +28,11 @@ class ReturnType(enum.Enum):
 class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Example:
 
@@ -59,6 +66,17 @@ class Text2TextGenerationPipeline(Pipeline):
     text2text_generator = pipeline("text2text-generation")
     text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     ```"""
+
+    _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+    # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        num_beams=4,
+    )
 
     # Used in the return key of the pipeline.
     return_name = "generated"
@@ -141,12 +159,12 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, list[str]], **kwargs: Any) -> list[dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Input text for the encoder.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -238,6 +256,11 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
+
     Usage:
 
     ```python
@@ -258,7 +281,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Summarize the text(s) given as inputs.
 
         Args:
-            documents (*str* or `List[str]`):
+            documents (*str* or `list[str]`):
                 One or several articles (or one list of articles) to summarize.
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs
@@ -290,7 +313,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             logger.warning(
                 f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
                 "a summarization task, where outputs shorter than the input are typically wanted, you might "
-                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
+                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length // 2})"
             )
 
 
@@ -306,6 +329,11 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
     For a list of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Usage:
 
@@ -354,7 +382,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         Translate the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Texts to be translated.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.

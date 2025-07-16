@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,6 +58,7 @@ class ViTMSNModelTester:
         initializer_range=0.02,
         scope=None,
         attn_implementation="eager",
+        mask_ratio=0.5,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -82,6 +82,8 @@ class ViTMSNModelTester:
         # in ViT MSN, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
+        self.num_masks = int(mask_ratio * self.seq_length)
+        self.mask_length = self.seq_length - 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])

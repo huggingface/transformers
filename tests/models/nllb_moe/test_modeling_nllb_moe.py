@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -353,7 +352,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -492,11 +491,11 @@ class NllbMoeRouterTest(unittest.TestCase):
         mask = mask.reshape(-1)
         set_seed(0)
         hidden_states = torch.rand((self.batch_size, self.sequence_length, self.config.hidden_size))
-        classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
+        classifier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
         hf_router = NllbMoeTop2Router(self.config)
 
         _, _, hidden_dim = hidden_states.shape
-        logits = classfier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
+        logits = classifier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
         top_1_mask, router_probs = hf_router.route_tokens(logits, padding_mask=mask)
         torch.argmax(top_1_mask, dim=-1)
         router_mask = router_probs.bool()

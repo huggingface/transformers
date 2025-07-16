@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -511,7 +510,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -739,9 +737,11 @@ class BertModelIntegrationTest(unittest.TestCase):
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
             )
 
-            # Case where query length != kv_length.
-            res_eager = model(**inp, past_key_values=pkv)
-            res_sdpa = model_sdpa(**inp, past_key_values=pkv)
+            # Case where query length != kv_length. Note that model needs to be a decoder so we can use cache
+            model.config.is_decoder = True
+            model_sdpa.config.is_decoder = True
+            res_eager = model(**inp, past_key_values=pkv, use_cache=True)
+            res_sdpa = model_sdpa(**inp, past_key_values=pkv, use_cache=True)
             self.assertTrue(
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
             )

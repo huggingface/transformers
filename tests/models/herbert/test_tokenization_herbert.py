@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors, Allegro.pl and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,12 +32,13 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = HerbertTokenizerFast
     test_rust_tokenizer = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Use a simpler test file without japanese/chinese characters
         with open(f"{get_tests_dir()}/fixtures/sample_text_no_unicode.txt", encoding="utf-8") as f_data:
-            self._data = f_data.read().replace("\n\n", "\n").strip()
+            cls._data = f_data.read().replace("\n\n", "\n").strip()
 
         vocab = [
             "<s>",
@@ -69,11 +69,11 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
-        with open(self.merges_file, "w") as fp:
+        with open(cls.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
     def get_input_output_texts(self, tokenizer):

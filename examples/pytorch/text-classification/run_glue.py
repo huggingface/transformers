@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,7 @@ import logging
 import os
 import random
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.50.0.dev0")
+check_min_version("4.54.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -156,9 +156,9 @@ class DataTrainingArguments:
             train_extension = self.train_file.split(".")[-1]
             assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
             validation_extension = self.validation_file.split(".")[-1]
-            assert (
-                validation_extension == train_extension
-            ), "`validation_file` should have the same extension (csv or json) as `train_file`."
+            assert validation_extension == train_extension, (
+                "`validation_file` should have the same extension (csv or json) as `train_file`."
+            )
 
 
 @dataclass
@@ -313,9 +313,9 @@ def main():
             if data_args.test_file is not None:
                 train_extension = data_args.train_file.split(".")[-1]
                 test_extension = data_args.test_file.split(".")[-1]
-                assert (
-                    test_extension == train_extension
-                ), "`test_file` should have the same extension (csv or json) as `train_file`."
+                assert test_extension == train_extension, (
+                    "`test_file` should have the same extension (csv or json) as `train_file`."
+                )
                 data_files["test"] = data_args.test_file
             else:
                 raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
@@ -468,6 +468,14 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on dataset",
         )
+
+    def print_class_distribution(dataset, split_name):
+        label_counts = Counter(dataset["label"])
+        total = sum(label_counts.values())
+        logger.info(f"Class distribution in {split_name} set:")
+        for label, count in label_counts.items():
+            logger.info(f"  Label {label}: {count} ({count / total:.2%})")
+
     if training_args.do_train:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -475,6 +483,7 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
+        print_class_distribution(train_dataset, "train")
 
     if training_args.do_eval:
         if "validation" not in raw_datasets and "validation_matched" not in raw_datasets:
@@ -483,6 +492,7 @@ def main():
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
+        print_class_distribution(eval_dataset, "validation")
 
     if training_args.do_predict or data_args.task_name is not None or data_args.test_file is not None:
         if "test" not in raw_datasets and "test_matched" not in raw_datasets:
@@ -491,6 +501,7 @@ def main():
         if data_args.max_predict_samples is not None:
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
             predict_dataset = predict_dataset.select(range(max_predict_samples))
+        print_class_distribution(predict_dataset, "test")
 
     # Log a few random samples from the training set:
     if training_args.do_train:
@@ -509,8 +520,12 @@ def main():
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+        labels = p.label_ids
+        if not training_args.eval_do_concat_batches:
+            preds = np.concatenate(preds, axis=0)
+            labels = np.concatenate(p.label_ids, axis=0)
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
-        result = metric.compute(predictions=preds, references=p.label_ids)
+        result = metric.compute(predictions=preds, references=labels)
         if len(result) > 1:
             result["combined_score"] = np.mean(list(result.values())).item()
         return result

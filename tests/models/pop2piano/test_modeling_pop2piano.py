@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_essentia_available, is_librosa_available, is_scipy_available, is_torch_available
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -359,24 +357,6 @@ class Pop2PianoModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_values(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = Pop2PianoForConditionalGeneration(config=config).to(torch_device).eval()
-        torch.manual_seed(0)
-        output_without_past_cache = model.generate(
-            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
-        )
-        torch.manual_seed(0)
-        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
-        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
-
     def create_and_check_model_fp16_forward(
         self,
         config,
@@ -504,7 +484,7 @@ class Pop2PianoModelTester:
 
 
 @require_torch
-class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. Has custom generation method with a different interface
     all_generative_model_classes = ()
@@ -595,7 +575,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)

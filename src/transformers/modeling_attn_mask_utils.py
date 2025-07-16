@@ -11,8 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+IMPORTANT NOTICE: Every class and function in this file is deprecated in favor of using the much more general
+`masking_utils.py` primitives. New code should not rely on it, it is only kept for backward compatibility for now,
+and will be removed in the future.
+"""
+
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -187,7 +193,7 @@ class AttentionMaskConverter:
 
         expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
 
-        inverted_mask = 1.0 - expanded_mask
+        inverted_mask = torch.tensor(1.0, dtype=dtype) - expanded_mask
 
         return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
@@ -301,7 +307,7 @@ class AttentionMaskConverter:
 
 def _prepare_4d_causal_attention_mask(
     attention_mask: Optional[torch.Tensor],
-    input_shape: Union[torch.Size, Tuple, List],
+    input_shape: Union[torch.Size, tuple, list],
     inputs_embeds: torch.Tensor,
     past_key_values_length: int,
     sliding_window: Optional[int] = None,
@@ -354,7 +360,7 @@ def _prepare_4d_causal_attention_mask(
 # Adapted from _prepare_4d_causal_attention_mask
 def _prepare_4d_causal_attention_mask_for_sdpa(
     attention_mask: Optional[torch.Tensor],
-    input_shape: Union[torch.Size, Tuple, List],
+    input_shape: Union[torch.Size, tuple, list],
     inputs_embeds: torch.Tensor,
     past_key_values_length: int,
     sliding_window: Optional[int] = None,
@@ -452,7 +458,7 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
 
 
 def _create_4d_causal_attention_mask(
-    input_shape: Union[torch.Size, Tuple, List],
+    input_shape: Union[torch.Size, tuple, list],
     dtype: torch.dtype,
     device: torch.device,
     past_key_values_length: int = 0,

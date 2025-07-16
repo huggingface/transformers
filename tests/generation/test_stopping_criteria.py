@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -256,7 +255,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             ]
         )
 
-        # trigger stopping when at leat one criteria is satisfied, one value per batch
+        # trigger stopping when at least one criteria is satisfied, one value per batch
         self.assertTrue(criteria(inputs["input_ids"], scores))
 
         # return False when neither is satisfied
@@ -283,7 +282,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             ]
         )
 
-        # trigger stopping when at leat one criteria is satisfied
+        # trigger stopping when at least one criteria is satisfied
         self.assertListEqual(criteria(inputs["input_ids"], scores).tolist(), [True, False, False])
 
         # False when neither is satisfied

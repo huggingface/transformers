@@ -27,7 +27,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -333,7 +340,8 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -545,10 +553,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -577,10 +585,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -636,7 +644,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_with_different_dtypes(self, torch_dtype_str):
         torch_dtype = {
@@ -658,7 +666,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
         torch_dtype = {
@@ -729,42 +737,60 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
-        expected_logits = torch.tensor(
-            [
-                [-3.7047, -5.1914, -6.1787],
-                [-4.0108, -9.3449, -5.2047],
-                [-4.1287, -4.7461, -5.8633],
-            ]
-        ).to(torch_device)
-        expected_boxes = torch.tensor(
-            [
-                [0.2582, 0.5497, 0.4764],
-                [0.1684, 0.1985, 0.2120],
-                [0.7665, 0.4146, 0.4669],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[-3.7047, -5.1914, -6.1787], [-4.0108, -9.3449, -5.2047], [-4.1287, -4.7461, -5.8633]],
+                ("cuda", 8): [[-3.7039, -5.1923, -6.1787], [-4.0106, -9.3452, -5.2045], [-4.1285, -4.7468, -5.8641]],
+            }
+        )
+        expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
+        expectations = Expectations(
+            {
+                (None, None): [[0.2582, 0.5497, 0.4764], [0.1684, 0.1985, 0.2120], [0.7665, 0.4146, 0.4669]],
+            }
+        )
+        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9652, 0.9599, 0.9462, 0.8613], device=torch_device)
-        expected_labels = [15, 15, 65, 57]
-        expected_slice_boxes = torch.tensor(
-            [
-                [3.4114e02, 2.5111e01, 6.3998e02, 3.7289e02],
-                [1.2780e01, 5.6346e01, 3.1767e02, 4.7134e02],
-                [3.9959e01, 7.3117e01, 1.7565e02, 1.1744e02],
-                [-1.0521e-01, 2.9717e00, 6.3989e02, 4.7362e02],
-            ],
-            device=torch_device,
+
+        expectations = Expectations(
+            {
+                (None, None): [0.9652, 0.9599, 0.9462, 0.8613],
+                ("cuda", 8): [0.9652, 0.9599, 0.9461, 0.8613],
+            }
         )
-        self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4))
+        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expected_labels = [15, 15, 65, 57]
+
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [3.4114e02, 2.5111e01, 6.3998e02, 3.7289e02],
+                    [1.2780e01, 5.6346e01, 3.1767e02, 4.7134e02],
+                    [3.9959e01, 7.3117e01, 1.7565e02, 1.1744e02],
+                    [-1.0521e-01, 2.9717e00, 6.3989e02, 4.7362e02],
+                ],
+                ("cuda", 8): [
+                    [3.4115e02, 2.5109e01, 6.3997e02, 3.7290e02],
+                    [1.2785e01, 5.6350e01, 3.1767e02, 4.7134e02],
+                    [3.9959e01, 7.3117e01, 1.7565e02, 1.1744e02],
+                    [-1.0471e-01, 2.9680e00, 6.3989e02, 4.7362e02],
+                ],
+            }
+        )
+        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=1e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)

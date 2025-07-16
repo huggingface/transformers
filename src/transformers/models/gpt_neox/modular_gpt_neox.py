@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -7,7 +7,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -17,28 +19,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from ..llama.modeling_llama import (
-    LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaRotaryEmbedding,
-    rotate_half,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
-_CONFIG_FOR_DOC = "GPTNeoXConfig"
 
 
 class GPTNeoXMLP(nn.Module):
@@ -147,7 +132,7 @@ class GPTNeoXAttention(nn.Module):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -169,28 +154,9 @@ class GPTNeoXAttention(nn.Module):
             }
             key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # Checking for fallbacks in case an unsupported feature is requested
-        attention_type = self.config._attn_implementation
-        if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
-            "sdpa",
-            "flash_attention_2",
-        ]:
-            logger.warning_once(
-                f"Setting `attention_type` to `eager` because `{attention_type}` does not support"
-                f" `output_attentions=True` or `head_mask`."
-            )
-            attention_type = "eager"
-
-        elif self.training and self.attention_dropout > 0 and self.config._attn_implementation == "flex_attention":
-            logger.warning_once(
-                f"Setting `attention_type` to `eager` because `dropout` is not supported in `{attention_type}`."
-            )
-            attention_type = "eager"
-
         attention_interface: Callable = eager_attention_forward
-        attention_interface = (
-            ALL_ATTENTION_FUNCTIONS[attention_type] if attention_type != "eager" else attention_interface
-        )
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         # Compute attention
         attn_output, attn_weights = attention_interface(
@@ -212,7 +178,7 @@ class GPTNeoXAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GPTNeoXLayer(nn.Module):
+class GPTNeoXLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
@@ -233,7 +199,7 @@ class GPTNeoXLayer(nn.Module):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         attn_output, attn_weights = self.attention(
@@ -321,13 +287,6 @@ class GPTNeoXModel(LlamaModel, nn.Module):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -339,15 +298,13 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -363,6 +320,10 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
@@ -375,8 +336,13 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         # Prepare head mask if needed
@@ -402,32 +368,18 @@ class GPTNeoXModel(LlamaModel, nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    head_mask[i],
-                    use_cache,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                outputs = layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    head_mask=head_mask[i],
-                    layer_past=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
+            outputs = layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                head_mask=head_mask[i],
+                layer_past=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
             hidden_states = outputs[0]
 
             if output_attentions:
@@ -438,20 +390,18 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
-        return output if return_dict else output.to_tuple()
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
-@add_start_docstrings(
-    """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
+@auto_docstring(
+    custom_intro="""
+    GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.
+    """
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
@@ -473,8 +423,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -482,26 +432,20 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        Returns:
 
         Example:
 
@@ -519,9 +463,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -531,12 +474,11 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.embed_out(hidden_states[:, slice_indices, :])
@@ -544,10 +486,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -558,8 +496,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The GPTNeoX Model transformer with a sequence classification head on top (linear layer).
 
     [`GPTNeoXForSequenceClassification`] uses the last token in order to do the classification, as other causal models
@@ -570,8 +508,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
-    """,
-    GPT_NEOX_START_DOCSTRING,
+    """
 )
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
     def __init__(self, config):
@@ -583,12 +520,8 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -596,22 +529,20 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
+    ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -621,9 +552,8 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         batch_size = logits.shape[0]
@@ -634,7 +564,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
@@ -648,10 +578,6 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        if not return_dict:
-            output = (pooled_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -674,17 +600,12 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint="LarsJonasson/pythia-410m-deduped-sft-swedish",
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_loss=0.25,
-    )
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
+        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor]]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -694,17 +615,15 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -714,20 +633,15 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
         logits = self.classifier(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -737,13 +651,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The GPT-NeoX Model transformer with a span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    GPT_NEOX_START_DOCSTRING,
-)
+@auto_docstring
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -754,13 +662,8 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
-    )
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -773,21 +676,8 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.gpt_neox(
+    ) -> QuestionAnsweringModelOutput:
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -795,10 +685,9 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -808,10 +697,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         loss = None
         if start_positions is not None and end_positions is not None:
             loss = self.loss_function(start_logits, end_logits, start_positions, end_positions)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=loss,

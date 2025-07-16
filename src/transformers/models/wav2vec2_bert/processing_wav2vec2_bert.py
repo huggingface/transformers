@@ -17,7 +17,7 @@ Speech processor class for Wav2Vec2-BERT
 """
 
 import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
@@ -72,7 +72,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
     def __call__(
         self,
         audio: AudioInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         images=None,
         videos=None,
         **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
@@ -81,15 +81,15 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
         and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audio` is not
         `None` to pre-process the audio. To prepare the target sequences(s), this method forwards the `text` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
+        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
 
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -127,7 +127,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         """
         If `input_features` is not `None`, this method forwards the `input_features` and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.pad`] to pad the input features.
         If `labels` is not `None`, this method forwards the `labels` and `kwargs` arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.pad`] to pad the label(s).
-        Please refer to the doctsring of the above two methods for more information.
+        Please refer to the docstring of the above two methods for more information.
         """
         if input_features is None and labels is None:
             raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")

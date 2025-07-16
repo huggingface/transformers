@@ -16,7 +16,7 @@ body:
     id: system-info
     attributes:
       label: System Info
-      description: Please share your system info with us. You can run the command `transformers-cli env` and copy-paste its output below.
+      description: Please share your system info with us. You can run the command `transformers env` and copy-paste its output below.
       placeholder: transformers version, platform, python version, ...
     validations:
       required: true
@@ -38,24 +38,30 @@ body:
 
           - text models: @ArthurZucker
           - vision models: @amyeroberts, @qubvel
-          - speech models: @ylacombe, @eustlb
+          - speech models: @eustlb
           - graph models: @clefourrier
 
         Library:
 
-          - flax: @sanchit-gandhi
+          - flax: @gante and @Rocketknight1
           - generate: @zucchini-nlp (visual-language models) or @gante (all others)
           - pipelines: @Rocketknight1
           - tensorflow: @gante and @Rocketknight1
           - tokenizers: @ArthurZucker and @itazap
-          - trainer: @muellerzr @SunMarc
+          - trainer: @zach-huggingface @SunMarc
 
         Integrations:
 
-          - deepspeed: HF Trainer/Accelerate: @muellerzr
+          - deepspeed: HF Trainer/Accelerate: @SunMarc @zach-huggingface
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
           - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+        
+        Devices/Backends:
+        
+          - AMD ROCm: @ivarflakstad
+          - Intel XPU: @IlyasMoutawwakil
+          - Ascend NPU: @ivarflakstad 
 
         Documentation: @stevhliu
 
@@ -72,7 +78,7 @@ body:
 
         Maintained examples (not research project or legacy):
 
-          - Flax: @sanchit-gandhi
+          - Flax: @Rocketknight1
           - PyTorch: See Models above and tag the person corresponding to the modality of the example.
           - TensorFlow: @Rocketknight1
 

@@ -34,43 +34,43 @@ class CvtConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3]`):
+        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3]`):
             The kernel size of each encoder's patch embedding.
-        patch_stride (`List[int]`, *optional*, defaults to `[4, 2, 2]`):
+        patch_stride (`list[int]`, *optional*, defaults to `[4, 2, 2]`):
             The stride size of each encoder's patch embedding.
-        patch_padding (`List[int]`, *optional*, defaults to `[2, 1, 1]`):
+        patch_padding (`list[int]`, *optional*, defaults to `[2, 1, 1]`):
             The padding size of each encoder's patch embedding.
-        embed_dim (`List[int]`, *optional*, defaults to `[64, 192, 384]`):
+        embed_dim (`list[int]`, *optional*, defaults to `[64, 192, 384]`):
             Dimension of each of the encoder blocks.
-        num_heads (`List[int]`, *optional*, defaults to `[1, 3, 6]`):
+        num_heads (`list[int]`, *optional*, defaults to `[1, 3, 6]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        depth (`List[int]`, *optional*, defaults to `[1, 2, 10]`):
+        depth (`list[int]`, *optional*, defaults to `[1, 2, 10]`):
             The number of layers in each encoder block.
-        mlp_ratios (`List[float]`, *optional*, defaults to `[4.0, 4.0, 4.0, 4.0]`):
+        mlp_ratios (`list[float]`, *optional*, defaults to `[4.0, 4.0, 4.0, 4.0]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
-        attention_drop_rate (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
+        attention_drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
             The dropout ratio for the attention probabilities.
-        drop_rate (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
+        drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
             The dropout ratio for the patch embeddings probabilities.
-        drop_path_rate (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.1]`):
+        drop_path_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.1]`):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        qkv_bias (`List[bool]`, *optional*, defaults to `[True, True, True]`):
+        qkv_bias (`list[bool]`, *optional*, defaults to `[True, True, True]`):
             The bias bool for query, key and value in attentions
-        cls_token (`List[bool]`, *optional*, defaults to `[False, False, True]`):
+        cls_token (`list[bool]`, *optional*, defaults to `[False, False, True]`):
             Whether or not to add a classification token to the output of each of the last 3 stages.
-        qkv_projection_method (`List[string]`, *optional*, defaults to ["dw_bn", "dw_bn", "dw_bn"]`):
+        qkv_projection_method (`list[string]`, *optional*, defaults to ["dw_bn", "dw_bn", "dw_bn"]`):
             The projection method for query, key and value Default is depth-wise convolutions with batch norm. For
             Linear projection use "avg".
-        kernel_qkv (`List[int]`, *optional*, defaults to `[3, 3, 3]`):
+        kernel_qkv (`list[int]`, *optional*, defaults to `[3, 3, 3]`):
             The kernel size for query, key and value in attention layer
-        padding_kv (`List[int]`, *optional*, defaults to `[1, 1, 1]`):
+        padding_kv (`list[int]`, *optional*, defaults to `[1, 1, 1]`):
             The padding size for key and value in attention layer
-        stride_kv (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
+        stride_kv (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
             The stride size for key and value in attention layer
-        padding_q (`List[int]`, *optional*, defaults to `[1, 1, 1]`):
+        padding_q (`list[int]`, *optional*, defaults to `[1, 1, 1]`):
             The padding size for query in attention layer
-        stride_q (`List[int]`, *optional*, defaults to `[1, 1, 1]`):
+        stride_q (`list[int]`, *optional*, defaults to `[1, 1, 1]`):
             The stride size for query in attention layer
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

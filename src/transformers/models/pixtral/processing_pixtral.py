@@ -16,13 +16,24 @@
 Processor class for Pixtral.
 """
 
-from typing import List, Union
+from typing import Union
+
+import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_vision_available, logging
+
+
+if is_vision_available():
+    from .image_processing_pixtral import get_resize_output_image_size
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +43,7 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {},
         "common_kwargs": {
@@ -64,6 +76,8 @@ class PixtralProcessor(ProcessorMixin):
             The tokenizer is a required input.
         patch_size (`int`, *optional*, defaults to 16):
             Patch size from the vision tower.
+        spatial_merge_size (`int`, *optional*, defaults to 1):
+            The downsampling factor for the spatial merge operation.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"[IMG]"`):
@@ -75,13 +89,6 @@ class PixtralProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "image_token",
-        "image_break_token",
-        "image_end_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -90,6 +97,7 @@ class PixtralProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size: int = 16,
+        spatial_merge_size: int = 1,
         chat_template=None,
         image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
         image_break_token="[IMG_BREAK]",
@@ -97,15 +105,21 @@ class PixtralProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.spatial_merge_size = spatial_merge_size
         self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[PixtralProcessorKwargs],
@@ -114,14 +128,14 @@ class PixtralProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -142,14 +156,14 @@ class PixtralProcessor(ProcessorMixin):
             `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             PixtralProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
             if is_image_or_image_url(images):
@@ -167,7 +181,7 @@ class PixtralProcessor(ProcessorMixin):
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             images = [load_image(im) if isinstance(im, str) else im for im in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 
@@ -187,8 +201,8 @@ class PixtralProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // self.patch_size
-                    num_width_tokens = width // self.patch_size
+                    num_height_tokens = height // patch_size
+                    num_width_tokens = width // patch_size
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
@@ -204,10 +218,54 @@ class PixtralProcessor(ProcessorMixin):
                     sample = sample.replace("<placeholder>", replace_str, 1)
                 prompt_strings.append(sample)
 
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(
-            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
-        )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            patch_size = self.patch_size * self.spatial_merge_size
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                resized_height, resized_width = get_resize_output_image_size(
+                    np.zeros((height, width, 3)),
+                    size=(size["longest_edge"], size["longest_edge"]),
+                    patch_size=(patch_size, patch_size),
+                )
+                num_height_tokens = resized_height // patch_size
+                num_width_tokens = resized_width // patch_size
+                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
