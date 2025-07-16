@@ -29,8 +29,8 @@ class VocosConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VocosModel`]. It is used to
     instantiate a Vocos vocoder model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a model similar to
-    a “vocos-base”.
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Manel/Vocos](https://huggingface.co/Manel/Vocos) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
     outputs. Read the documentation from [`PretrainedConfig`] for more information.
@@ -109,8 +109,8 @@ class VocosWithEncodecConfig(VocosConfig):
     r"""
     This is the configuration class to store the configuration of a
     [`VocosWithEncodecModel`]. It extends [`VocosConfig`] by adding EnCodec‐specific parameters
-    for audio encoding and quantization. Instantiating a configuration with the defaults will yield
-    a model similar to “vocos-with-encodec-base”.
+    for audio encoding and quantization. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Manel/Vocos-Encodec](https://huggingface.co/Manel/Vocos-Encodec) architecture.
 
     Args:
         encodec_config (Union[Dict, EncodecConfig], *optional*):

@@ -392,7 +392,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("voxtral", "VoxtralConfig"),
         ("voxtral_encoder", "VoxtralEncoderConfig"),
         ("vocos", "VocosConfig"),
-        ("vocos_with_encodec", "VocosWithEncodecConfig"),
+        ("vocos", "VocosWithEncodecConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
