@@ -163,7 +163,9 @@ class Florence2VisionText2TextModelTester:
             "projection_dim": self.projection_dim,
         }
 
-        return Florence2Config(text_config=text_config, vision_config=vision_config, image_token_id=self.image_token_id)
+        return Florence2Config(
+            text_config=text_config, vision_config=vision_config, image_token_id=self.image_token_id
+        )
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
