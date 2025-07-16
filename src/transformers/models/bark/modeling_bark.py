@@ -403,14 +403,14 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, cache_position=None, **kwargs):
         # Overwritten -- bark has a model-specific hack
         input_embeds = kwargs.get("input_embeds", None)
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
 
-        if past_key_values is not None:
+        if cache_position[0] != 0:
             # Omit tokens covered by past_key_values
             seq_len = input_ids.shape[1]
             past_length = past_key_values.get_seq_length()
@@ -456,6 +456,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 "use_cache": kwargs.get("use_cache"),
                 "position_ids": position_ids,
                 "attention_mask": attention_mask,
+                "cache_position": cache_position,
             }
         return {
             "input_ids": input_ids,
@@ -463,6 +464,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
+            "cache_position": cache_position,
         }
 
     @auto_docstring
