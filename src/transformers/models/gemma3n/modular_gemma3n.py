@@ -2450,7 +2450,7 @@ class Gemma3nModel(PaliGemmaModel):
         Args:
             input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
                The tensors corresponding to the input audio.
-            input_features (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+            input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
                The attention mask for the input audio.
 
         Returns:
@@ -2503,8 +2503,6 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         **lm_kwargs,
     ) -> Gemma3nCausalLMOutputWithPast:
         r"""
-        input_features (torch.Tensor, *optional*, defaults to None):
-            The audio inputs to be encoded.
         input_features_mask (torch.Tensor, *optional*, defaults to None):
             The attention mask for the input audio.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
