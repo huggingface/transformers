@@ -138,18 +138,17 @@ class EncodecConv1d(nn.Module):
         """
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
-        assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-        if mode == "reflect":
-            max_pad = max(padding_left, padding_right)
-            extra_pad = 0
-            if length <= max_pad:
-                extra_pad = max_pad - length + 1
-                hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
-            padded = nn.functional.pad(hidden_states, paddings, mode, value)
-            end = padded.shape[-1] - extra_pad
-            return padded[..., :end]
-        else:
+        if not mode == "reflect":
             return nn.functional.pad(hidden_states, paddings, mode, value)
+
+        max_pad = max(padding_left, padding_right)
+        extra_pad = 0
+        if length <= max_pad:
+            extra_pad = max_pad - length + 1
+            hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
+        padded = nn.functional.pad(hidden_states, paddings, mode, value)
+        end = padded.shape[-1] - extra_pad
+        return padded[..., :end]
 
     def forward(self, hidden_states):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)

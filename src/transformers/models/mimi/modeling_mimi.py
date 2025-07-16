@@ -273,8 +273,7 @@ class MimiConv1d(nn.Module):
         return ideal_length - length
 
     @staticmethod
-    # Copied from https://github.com/huggingface/transformers/blob/9f41f67135b0656c428ff2c2b446d8eb15f5a7c5/src/transformers/models/encodec/modeling_encodec.py#L136
-    # But was failing, see https://github.com/huggingface/transformers/pull/39431
+    # Copied from transformers.models.encodec.modeling_encodec.EncodecConv1d._pad1d
     def _pad1d(hidden_states: torch.Tensor, paddings: tuple[int, int], mode: str = "zero", value: float = 0.0):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happens.
