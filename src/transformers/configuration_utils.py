@@ -323,7 +323,7 @@ class PretrainedConfig(PushToHubMixin):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
-        # Attention implementation to use, if relevant
+        # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._attn_implementation = kwargs.pop("attn_implementation", None)
 
         # Drop the transformers version info
