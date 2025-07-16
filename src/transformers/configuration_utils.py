@@ -324,7 +324,7 @@ class PretrainedConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
         # Attention implementation to use, if relevant.
-        self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -398,14 +398,6 @@ class PretrainedConfig(PushToHubMixin):
         # compute it based on the length of the `id2label` map
         if self.id2label is None or self.num_labels != num_labels:
             self._create_id_label_maps(num_labels)
-
-    @property
-    def _attn_implementation(self):
-        return self._attn_implementation_internal if self._attn_implementation_internal is not None else "eager"
-
-    @_attn_implementation.setter
-    def _attn_implementation(self, value):
-        self._attn_implementation_internal = value
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
@@ -1042,8 +1034,8 @@ class PretrainedConfig(PushToHubMixin):
             d["output_attentions"] = d.pop("_output_attentions")
         if "_commit_hash" in d:
             del d["_commit_hash"]
-        if "_attn_implementation_internal" in d:
-            del d["_attn_implementation_internal"]
+        if "_attn_implementation" in d:
+            del d["_attn_implementation"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
