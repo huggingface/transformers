@@ -41,7 +41,7 @@ def sdpa_attention_forward(
     if hasattr(module, "num_key_value_groups"):
         if (
             version.parse(get_torch_version()) < version.parse("2.1")
-            or attention_mask is not None
+            or query.device.type == "cuda"
             or isinstance(key, torch.fx.Proxy)
         ):
             # fx.trace symbolic tracing failure if set `enable_gqa` in sdpa
