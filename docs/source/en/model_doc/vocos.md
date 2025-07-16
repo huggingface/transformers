@@ -165,6 +165,10 @@ Audio(audio, rate=44100)
 
 [[autodoc]] VocosWithEncodecConfig
 
+## VocosFeatureExtractor
+
+[[autodoc]] VocosFeatureExtractor
+
 ## VocosModel
 
 [[autodoc]] VocosModel

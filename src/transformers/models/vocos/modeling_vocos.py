@@ -246,6 +246,7 @@ class VocosPreTrainedModel(PreTrainedModel):
 class VocosModel(VocosPreTrainedModel):
     config_class = VocosConfig
     base_model_prefix = "vocos"
+    main_input_name = "features"
 
     def __init__(self, config: VocosConfig):
         super().__init__(config)
@@ -294,6 +295,7 @@ class VocosModel(VocosPreTrainedModel):
 )
 class VocosWithEncodecModel(VocosPreTrainedModel):
     config_class = VocosWithEncodecConfig
+    main_input_name = "audio"
 
     def __init__(self, config: VocosWithEncodecConfig):
         super().__init__(config)
@@ -332,9 +334,10 @@ class VocosWithEncodecModel(VocosPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        bandwidth_id: torch.LongTensor,
         audio: Optional[torch.FloatTensor] = None,
         codes: Optional[torch.LongTensor] = None,
+        *,
+        bandwidth_id: torch.LongTensor,
         return_codes: bool = False,
     ):
         r"""
@@ -343,15 +346,15 @@ class VocosWithEncodecModel(VocosPreTrainedModel):
 
 
         Args:
-            bandwidth_id (torch.LongTensor):
-                Index in [0, 1, 2, 3] used to select the desired bandwidth for EnCodec
-                quantizer [1.5, 3, 6, 12] kbps respectively. This determines
-                the number of RVQ codebooks used[2, 4, 6, 8].
             audio (torch.FloatTensor, optional):
                 Raw audio input of shape (batch_size, n_samples).
             codes (torch.LongTensor, optional):
                 Pre-computed RVQ discrete codes of shape
                 (n_codebooks, seq_len) or (n_codebooks, batch_size, seq_len).
+            bandwidth_id (torch.LongTensor):
+                Index in [0, 1, 2, 3] used to select the desired bandwidth for EnCodec
+                quantizer [1.5, 3, 6, 12] kbps respectively. This determines
+                the number of RVQ codebooks used[2, 4, 6, 8].
             return_codes (bool):
                 Whether to return the codes along with reconstructed audio.
 
