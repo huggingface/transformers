@@ -2244,6 +2244,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # We do not want to modify the config inplace in _from_config
         config = copy.deepcopy(config)
+        # If passing `attn_implementation` as kwargs, respect it
+        config._attn_implementation = kwargs.pop("attn_implementation", config._attn_implementation)
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
