@@ -39,7 +39,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         num_attention_heads=16,
         num_key_value_heads=None,
         num_hidden_layers=1,
-        norm_eps=1e-5,
+        rms_norm_eps=1e-5,
         dropout=0.0,
         max_position_embeddings=24576,
         rope_theta=500000.0,
@@ -59,7 +59,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.head_dim = hidden_size // num_attention_heads
         self.intermediate_size = intermediate_size or int(8 * hidden_size / 3)
         self.num_hidden_layers = num_hidden_layers
-        self.norm_eps = norm_eps
+        self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
@@ -86,7 +86,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         num_attention_heads=16,
         num_key_value_heads=None,
         num_hidden_layers=9,
-        norm_eps=1e-5,
+        rms_norm_eps=1e-5,
         dropout=0.0,
         max_position_embeddings=24576,
         rope_theta=500000.0,
@@ -105,7 +105,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.head_dim = hidden_size // num_attention_heads
         self.intermediate_size = intermediate_size or int(8 * hidden_size / 3)
         self.num_hidden_layers = num_hidden_layers
-        self.norm_eps = norm_eps
+        self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
@@ -128,7 +128,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         num_attention_heads=16,
         num_key_value_heads=None,
         num_hidden_layers=25,
-        norm_eps=1e-5,
+        rms_norm_eps=1e-5,
         dropout=0.0,
         max_position_embeddings=4096,
         rope_theta=500000.0,
@@ -143,7 +143,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.head_dim = hidden_size // num_attention_heads
         self.intermediate_size = intermediate_size or int(8 * hidden_size / 3)
         self.num_hidden_layers = num_hidden_layers
-        self.norm_eps = norm_eps
+        self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
@@ -172,7 +172,7 @@ class BLTPatcherConfig(PretrainedConfig):
             Number of key-value heads in the entropy model.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             Maximum sequence length for the entropy model.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
             Layer normalization epsilon for the entropy model.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the entropy model.
@@ -198,7 +198,7 @@ class BLTPatcherConfig(PretrainedConfig):
         num_attention_heads=12,
         num_key_value_heads=None,
         max_position_embeddings=8192,
-        norm_eps=1e-5,
+        rms_norm_eps=1e-5,
         dropout=0.0,
         rope_theta=10000.0,
         attn_bias_type="local_block_causal",
@@ -213,7 +213,7 @@ class BLTPatcherConfig(PretrainedConfig):
         self.head_dim = hidden_size // num_attention_heads
         self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.norm_eps = norm_eps
+        self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.rope_theta = rope_theta
         self.attn_bias_type = attn_bias_type

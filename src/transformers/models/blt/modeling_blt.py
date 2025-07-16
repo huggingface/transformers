@@ -296,8 +296,8 @@ class BLTTransformerLayer(GradientCheckpointingLayer):
 
         self.self_attn = BLTSelfAttention(config=config, layer_idx=layer_idx)
         self.mlp = BLTMLP(config)
-        self.input_layernorm = BLTRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.post_attention_layernorm = BLTRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.input_layernorm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -439,7 +439,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class BLTSelfAttention(nn.Module):
-    def __init__(self, config, layer_idx: int):
+    """BLT variant of MllamaTextSelfAttention. Inherits all logic directly."""
+
+    def __init__(self, config: BLTConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.num_heads = config.num_attention_heads
@@ -452,23 +454,21 @@ class BLTSelfAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.layer_idx = layer_idx
 
-        self.is_causal = True
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.is_causal = True
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        attention_mask: torch.Tensor,
+        position_embeddings: torch.Tensor,
         output_attentions: bool = False,
         use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_value=None,
+        cache_position=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -481,20 +481,16 @@ class BLTSelfAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = (
-                {"sin": sin, "cos": cos, "cache_position": cache_position}
-                if position_embeddings is not None
-                else {"cache_position": cache_position}
-            )
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
+
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -521,7 +517,7 @@ class BLTSelfAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # BLT-SPECIFIC COMPONENTS (no Mllama equivalent)
@@ -694,7 +690,7 @@ class BLTLocalDecoder(nn.Module):
             bias=False,
         )
 
-        self.norm = BLTRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.norm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.cross_attn_layers = torch.nn.ModuleList()
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
@@ -798,25 +794,22 @@ class BLTCrossAttention(nn.Module):
     def __init__(self, config: BLTConfig, layer_idx: int, hidden_size: Optional[int] = None):
         super().__init__()
         self.config = config
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.head_dim = config.hidden_size // self.num_heads
         self.layer_idx = layer_idx
-        # Use provided hidden_size or fallback to encoder dimension
-        self.hidden_size = hidden_size or config.encoder_config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_attention_heads  # Assuming same for cross attention
-        self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.dropout = config.dropout
-
-        self.is_causal = False
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-
-        self.q_norm = nn.RMSNorm(self.hidden_size, eps=config.norm_eps)
-        self.k_norm = nn.RMSNorm(self.hidden_size, eps=config.norm_eps)
+        self.q_norm = BLTRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = BLTRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.is_causal = False
 
     def forward(
         self,
@@ -824,39 +817,39 @@ class BLTCrossAttention(nn.Module):
         cross_attention_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_norm(hidden_states)  # BLT normalizes first
-        query_states = self.q_proj(query_states)
+        query_states = self.q_proj(hidden_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_norm(query_states)
 
         if cross_attention_states is not None:
-            cross_attention_states = self.k_norm(cross_attention_states)  # BLT normalizes first
             key_states = self.k_proj(cross_attention_states)
             value_states = self.v_proj(cross_attention_states)
+            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+            key_states = self.k_norm(key_states)
             if past_key_value is not None:
-                # if we have a new cross attention states + new tokens, we only computed key_states on that new cross attention states
-                # we still update the cross key states, past_cross_states, new_cross_states. And use it!
+                # if we have a new image + new tokens, we only computed key_states on that new image
+                # we still update the cross key states, past_image, new_image. And use it!
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
-        elif cache_position is not None and cache_position[0] != 0:
+        elif cache_position[0] != 0:
             key_states, value_states = (
                 past_key_value.key_cache[self.layer_idx],
                 past_key_value.value_cache[self.layer_idx],
             )
         else:
-            if cross_attention_states is None:
-                raise ValueError(
-                    "Cross attention layer can't find neither `cross_attention_states` nor cached values for key/values!"
-                )
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
 
         attention_interface: Callable = eager_attention_forward
 
@@ -869,17 +862,13 @@ class BLTCrossAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             **kwargs,
         )
@@ -887,15 +876,10 @@ class BLTCrossAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        if full_text_row_masked_out_mask is not None:
-            attn_output = full_text_row_masked_out_mask[:, 0] * attn_output
-
-        attn_output = attn_output + hidden_states
-
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class BLTGlobalTransformer(nn.Module):
@@ -1385,7 +1369,7 @@ class BLTPatcher(BLTPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(self.config.vocab_size, self.config.hidden_size)
 
-        self.norm = BLTRMSNorm(self.config.hidden_size, eps=self.config.norm_eps)
+        self.norm = BLTRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
 
         self.lm_head = nn.Linear(
             self.config.hidden_size,
