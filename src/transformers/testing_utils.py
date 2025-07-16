@@ -112,6 +112,7 @@ from .utils import (
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
+    is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -1534,6 +1535,13 @@ def require_speech(test_case):
     Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
     """
     return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
+
+
+def require_openai(test_case):
+    """
+    Decorator marking a test that requires openai
+    """
+    return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
 
 
 def require_mistral_common(test_case):
