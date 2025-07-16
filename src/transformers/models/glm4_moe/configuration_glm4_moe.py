@@ -134,8 +134,8 @@ class Glm4MoeConfig(PretrainedConfig):
             allow the model to output the auxiliary loss. See [here]() for more details.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
-        add_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether or not to add normalization to the query and key projections in the attention layer.
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use query-key normalization in the attention
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 
@@ -201,7 +201,7 @@ class Glm4MoeConfig(PretrainedConfig):
         norm_topk_prob=True,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        add_qk_norm=False,
+        use_qk_norm=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -239,7 +239,7 @@ class Glm4MoeConfig(PretrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
-        self.add_qk_norm = add_qk_norm
+        self.use_qk_norm = use_qk_norm
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

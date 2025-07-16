@@ -158,7 +158,7 @@ class Glm4MoeAttention(nn.Module):
         )
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
-        if self.config.add_qk_norm:
+        if self.config.use_qk_norm:
             self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -178,7 +178,7 @@ class Glm4MoeAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
-        if self.config.add_qk_norm:
+        if self.config.use_qk_norm:
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
