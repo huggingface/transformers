@@ -33,18 +33,3 @@ This will update After model release.
 
 [[autodoc]] Glm4MoeForCausalLM
     - forward
-
-## Glm4MoeForSequenceClassification
-
-[[autodoc]] Glm4MoeForSequenceClassification
-    - forward
-
-## Glm4MoeForTokenClassification
-
-[[autodoc]] Glm4MoeForTokenClassification
-    - forward
-
-## Glm4MoeForQuestionAnswering
-
-[[autodoc]] Glm4MoeForQuestionAnswering
-    - forward

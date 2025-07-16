@@ -33,11 +33,6 @@ from ...utils import TransformersKwargs, logging
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..glm4.modeling_glm4 import Glm4Attention, eager_attention_forward
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
-from ..llama.modeling_llama import (
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-)
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
@@ -635,24 +630,9 @@ class Glm4MoeForCausalLM(MixtralForCausalLM):
         )
 
 
-class Glm4MoeForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class Glm4MoeForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
-class Glm4MoeForQuestionAnswering(LlamaForQuestionAnswering):
-    pass
-
-
 __all__ = [
     "Glm4MoeConfig",
     "Glm4MoePreTrainedModel",
     "Glm4MoeModel",
     "Glm4MoeForCausalLM",
-    "Glm4MoeForSequenceClassification",
-    "Glm4MoeForTokenClassification",
-    "Glm4MoeForQuestionAnswering",
 ]

@@ -1344,7 +1344,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("gemma2", "Gemma2ForTokenClassification"),
         ("glm", "GlmForTokenClassification"),
         ("glm4", "Glm4ForTokenClassification"),
-        ("glm4_moe", "Glm4MoeForTokenClassification"),
         ("gpt-sw3", "GPT2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("gpt_bigcode", "GPTBigCodeForTokenClassification"),

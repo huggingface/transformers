@@ -30,9 +30,6 @@ if is_torch_available():
     from transformers import (
         Glm4MoeConfig,
         Glm4MoeForCausalLM,
-        Glm4MoeForQuestionAnswering,
-        Glm4MoeForSequenceClassification,
-        Glm4MoeForTokenClassification,
         Glm4MoeModel,
     )
 
@@ -42,9 +39,6 @@ class Glm4MoeModelTester(CausalLMModelTester):
         config_class = Glm4MoeConfig
         base_model_class = Glm4MoeModel
         causal_lm_class = Glm4MoeForCausalLM
-        sequence_classification_class = Glm4MoeForSequenceClassification
-        token_classification_class = Glm4MoeForTokenClassification
-        question_answering_class = Glm4MoeForQuestionAnswering
 
     def __init__(
         self,
@@ -59,9 +53,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
         (
             Glm4MoeModel,
             Glm4MoeForCausalLM,
-            Glm4MoeForSequenceClassification,
-            Glm4MoeForTokenClassification,
-            Glm4MoeForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -69,10 +60,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": Glm4MoeModel,
-            "text-classification": Glm4MoeForSequenceClassification,
-            "token-classification": Glm4MoeForTokenClassification,
             "text-generation": Glm4MoeForCausalLM,
-            "question-answering": Glm4MoeForQuestionAnswering,
         }
         if is_torch_available()
         else {}
