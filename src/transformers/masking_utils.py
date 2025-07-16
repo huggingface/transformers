@@ -623,20 +623,15 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor:
     # What separate different sequences is when 2 consecutive positions_ids are separated by more than 1. So
     # taking the diff (by prepending the first value - 1 to keep correct indexing) and applying cumsum to the result
     # gives exactly the sequence indices
-    # We should also check edge cases since position_ids is not strictly increasing for some models (e.g. qwen2-vl).
     # Note that we assume that a single sequence cannot span several batch dimensions, i.e. 1 single sequence
     # cannot be part of the end of the first batch dim and the start of the 2nd one for example
     first_dummy_value = position_ids[:, :1] - 1  # We just need the diff on this first value to be 1
     position_diff = torch.diff(position_ids, prepend=first_dummy_value, dim=-1)
-
-    packed_sequence_mask = position_diff > 1
-    packed_sequence_mask |= (position_ids[:, 1:] == 0) & (position_ids[:, :-1] == 0)
-    packed_sequence_mask |= (position_ids[:, 1:] == 0) & (position_ids[:, :-1] > 0)
-    packed_sequence_mask = F.pad(packed_sequence_mask, (1, 0), value=False)
+    packed_sequence_mask = (position_diff != 1).cumsum(-1)
 
     # Here it would be nice to return None if we did not detect packed sequence format, i.e. if `packed_sequence_mask[:, -1] == 0`
     # but it causes issues with export
-    return packed_sequence_mask.cumsum(dim=-1)
+    return packed_sequence_mask
 
 
 def _preprocess_mask_arguments(
