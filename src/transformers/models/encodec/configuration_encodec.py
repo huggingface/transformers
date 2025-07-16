@@ -153,6 +153,7 @@ class EncodecConfig(PretrainedConfig):
         self.num_lstm_layers = num_lstm_layers
         self.trim_right_ratio = trim_right_ratio
         self.codebook_size = codebook_size
+        self.codebook_nbits = math.ceil(math.log2(codebook_size))
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
         self.use_conv_shortcut = use_conv_shortcut
 
@@ -186,7 +187,7 @@ class EncodecConfig(PretrainedConfig):
 
     @property
     def num_quantizers(self) -> int:
-        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * self.codebook_nbits))
 
 
 __all__ = ["EncodecConfig"]
