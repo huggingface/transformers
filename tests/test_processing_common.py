@@ -351,6 +351,18 @@ class ProcessorTesterMixin:
                 return_tensors="pt",
             )
 
+    def test_args_overlap_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_first = self.get_processor()
+        image_processor = processor_first.image_processor
+        image_processor.is_override = True
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_first.save_pretrained(tmpdirname)
+            processor_second = self.processor_class.from_pretrained(tmpdirname, image_processor=image_processor)
+            self.assertTrue(processor_second.image_processor.is_override)
+
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -1098,3 +1110,42 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+
+    def test_chat_template_jinja_kwargs(self):
+        """Tests that users can pass any kwargs and they will be used in jinja templates."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Which of these animals is making the sound?"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "It is a cow."}],
+            },
+        ]
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if add_system_prompt %}"
+            "{{'You are a helpful assistant.'}}"
+            "{% endif %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_system_prompt=True, tokenize=False, chat_template=dummy_template
+        )
+        expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
+        self.assertEqual(formatted_prompt, expected_prompt)

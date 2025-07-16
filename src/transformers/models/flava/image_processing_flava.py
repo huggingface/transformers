@@ -318,7 +318,7 @@ class FlavaImageProcessor(BaseImageProcessor):
             image_processor_dict["codebook_crop_size"] = kwargs.pop("codebook_crop_size")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    @lru_cache()
+    @lru_cache
     def masking_generator(
         self,
         input_size_patches,

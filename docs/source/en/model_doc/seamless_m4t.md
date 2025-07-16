@@ -56,7 +56,7 @@ Here is how to use the processor to process text and audio:
 ```python
 >>> # let's load an audio sample from an Arabic speech corpus
 >>> from datasets import load_dataset
->>> dataset = load_dataset("arabic_speech_corpus", split="test", streaming=True, trust_remote_code=True)
+>>> dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streaming=True)
 >>> audio_sample = next(iter(dataset))["audio"]
 
 >>> # now, process it

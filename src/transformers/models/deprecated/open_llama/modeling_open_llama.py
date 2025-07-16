@@ -29,6 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
 from ....modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -339,7 +340,7 @@ class OpenLlamaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class OpenLlamaDecoderLayer(nn.Module):
+class OpenLlamaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OpenLlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -430,7 +431,7 @@ OPEN_LLAMA_START_DOCSTRING = r"""
     OPEN_LLAMA_START_DOCSTRING,
 )
 class OpenLlamaPreTrainedModel(PreTrainedModel):
-    config_class = OpenLlamaConfig
+    config: OpenLlamaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenLlamaDecoderLayer"]
@@ -591,7 +592,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
                 use_cache = False
 
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = past_key_values.get_seq_length()
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
@@ -631,25 +632,14 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    position_ids,
-                    None,
-                    output_attentions,
-                    None,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -804,7 +794,7 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

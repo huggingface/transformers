@@ -167,16 +167,7 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
 
 
 class Zamba2RotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(
-        self,
-        config: Zamba2Config,
-        device=None,
-    ):
-        super().__init__(config, device)
-        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            device=device, base=config.rope_theta, dim=config.attention_head_dim
-        )
+    pass
 
 
 class Zamba2Attention(ZambaAttention):
@@ -660,7 +651,7 @@ class Zamba2MambaMixer(nn.Module):
 
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
 
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
             B_decay_contraction = B * decay_states.permute(0, 2, 3, 1)[..., None]
             # permute back B * decay states
             states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
@@ -903,15 +894,15 @@ class Zamba2HybridLayer(ZambaHybridLayer):
 
 
 class Zamba2PreTrainedModel(PreTrainedModel):
-    config_class = Zamba2Config
+    config: Zamba2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
+    # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):

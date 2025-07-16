@@ -72,30 +72,32 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
 
 
 @dataclass
-class SuperPointKeypointDescriptionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
     keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of images,
     the maximum number of keypoints is set as the dimension of the keypoints, scores and descriptors tensors. The mask
     tensor is used to indicate which values in the keypoints, scores and descriptors tensors are keypoint information
     and which are padding.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-            Loss computed during training.
-        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
-            Relative (x, y) coordinates of predicted keypoints in a given image.
-        scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
-            Scores of predicted keypoints.
-        descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
-            Descriptors of predicted keypoints.
-        mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
-            Mask indicating which values in keypoints, scores and descriptors are keypoint information.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
-        when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
-            (also called feature maps) of the model at the output of each stage.
+    """
+)
+class SuperPointKeypointDescriptionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Loss computed during training.
+    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+        Relative (x, y) coordinates of predicted keypoints in a given image.
+    scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
+        Scores of predicted keypoints.
+    descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
+        Descriptors of predicted keypoints.
+    mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
+        Mask indicating which values in keypoints, scores and descriptors are keypoint information.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+    when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+        (also called feature maps) of the model at the output of each stage.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -320,7 +322,7 @@ class SuperPointDescriptorDecoder(nn.Module):
 
 @auto_docstring
 class SuperPointPreTrainedModel(PreTrainedModel):
-    config_class = SuperPointConfig
+    config: SuperPointConfig
     base_model_prefix = "superpoint"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False

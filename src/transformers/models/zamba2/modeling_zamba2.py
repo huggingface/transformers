@@ -206,14 +206,10 @@ class Zamba2HybridDynamicCache(DynamicCache):
 
 
 class Zamba2RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Zamba2Config,
-        device=None,
-    ):
+    def __init__(self, config: Zamba2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -222,10 +218,8 @@ class Zamba2RotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            device=device, base=config.rope_theta, dim=config.attention_head_dim
-        )
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -319,17 +313,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 class Zamba2Attention(nn.Module):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
-
-    Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
-    The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
-    The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-    (see fig. 2 in https://huggingface.co/papers/2405.16712).
-    Additionally, replaced
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
-
     Multi-headed attention from 'Attention Is All You Need' paper.
 
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
@@ -881,7 +864,7 @@ class Zamba2MambaMixer(nn.Module):
 
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
 
-            decay_states = torch.exp((A_cumsum[:, :, :, -1:] - A_cumsum))
+            decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
             B_decay_contraction = B * decay_states.permute(0, 2, 3, 1)[..., None]
             # permute back B * decay states
             states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
@@ -1188,15 +1171,15 @@ class Zamba2HybridLayer(nn.Module):
 
 
 class Zamba2PreTrainedModel(PreTrainedModel):
-    config_class = Zamba2Config
+    config: Zamba2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
+    # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
@@ -1527,7 +1510,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1580,7 +1563,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

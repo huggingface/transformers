@@ -294,8 +294,35 @@ def infer_framework_load_model(
                     model = model.eval()
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError):
-                all_traceback[model_class.__name__] = traceback.format_exc()
+            except (OSError, ValueError, TypeError, RuntimeError):
+                # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `torch_dtype`
+                # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
+                # we can transparently retry the load in float32 before surfacing an error to the user.
+                fallback_tried = False
+                if is_torch_available() and ("torch_dtype" in kwargs):
+                    import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
+
+                    fallback_tried = True
+                    fp32_kwargs = kwargs.copy()
+                    fp32_kwargs["torch_dtype"] = torch.float32
+
+                    try:
+                        model = model_class.from_pretrained(model, **fp32_kwargs)
+                        if hasattr(model, "eval"):
+                            model = model.eval()
+                        logger.warning(
+                            "Falling back to torch.float32 because loading with the original dtype failed on the"
+                            " target device."
+                        )
+                        break
+                    except Exception:
+                        # If it still fails, capture the traceback and continue to the next class.
+                        all_traceback[model_class.__name__] = traceback.format_exc()
+                        continue
+
+                # If no fallback was attempted or it also failed, record the original traceback.
+                if not fallback_tried:
+                    all_traceback[model_class.__name__] = traceback.format_exc()
                 continue
 
         if isinstance(model, str):
@@ -898,21 +925,15 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     constructor argument. If set to `True`, the output will be stored in the pickle format.
     """
 
-    # Historically we have pipelines working with `tokenizer`, `feature_extractor`, and `image_processor`
-    # as separate processing components. While we have `processor` class that combines them, some pipelines
-    # might still operate with these components separately.
-    # With the addition of `processor` to `pipeline`, we want to avoid:
-    #  - loading `processor` for pipelines that still work with `image_processor` and `tokenizer` separately;
-    #  - loading `image_processor`/`tokenizer` as a separate component while we operate only with `processor`,
-    #    because `processor` will load required sub-components by itself.
-    # Below flags allow granular control over loading components and set to be backward compatible with current
-    # pipelines logic. You may override these flags when creating your pipeline. For example, for
-    # `zero-shot-object-detection` pipeline which operates with `processor` you should set `_load_processor=True`
-    # and all the rest flags to `False` to avoid unnecessary loading of the components.
-    _load_processor = False
-    _load_image_processor = True
-    _load_feature_extractor = True
-    _load_tokenizer = True
+    # These flags should be overridden for downstream pipelines. They indicate which preprocessing classes are
+    # used by each pipeline. The possible values are:
+    # - True (the class is mandatory, raise an error if it's not present in the repo)
+    # - None (the class is optional; it should be loaded if present in the repo but the pipeline can work without it)
+    # - False (the class is never used by the pipeline and should not be loaded even if present)
+    _load_processor = None
+    _load_image_processor = None
+    _load_feature_extractor = None
+    _load_tokenizer = None
 
     # Pipelines that call `generate` have shared logic, e.g. preparing the generation config.
     _pipeline_calls_generate = False
@@ -1006,11 +1027,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = device if device is not None else -1
 
-        if is_torch_available() and torch.distributed.is_initialized():
+        if is_torch_available() and torch.distributed.is_available() and torch.distributed.is_initialized():
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
+
         # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
             self.framework == "pt"

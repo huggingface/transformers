@@ -70,7 +70,7 @@ class ConvNextV2DropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class ConvNextV2GRN(nn.Module):
@@ -273,7 +273,7 @@ class ConvNextV2Encoder(nn.Module):
 
 @auto_docstring
 class ConvNextV2PreTrainedModel(PreTrainedModel):
-    config_class = ConvNextV2Config
+    config: ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
     _no_split_modules = ["ConvNextV2Layer"]

@@ -535,7 +535,7 @@ class TFRemBertEncoder(keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="embedding_hidden_mapping_in",
         )
-        self.layer = [TFRemBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFRemBertLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,

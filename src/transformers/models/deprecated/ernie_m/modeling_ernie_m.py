@@ -400,7 +400,7 @@ class ErnieMPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = ErnieMConfig
+    config: ErnieMConfig
     base_model_prefix = "ernie_m"
 
     def _init_weights(self, module):
@@ -484,7 +484,7 @@ ERNIE_M_INPUTS_DOCSTRING = r"""
 )
 class ErnieMModel(ErnieMPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
-        super(ErnieMModel, self).__init__(config)
+        super().__init__(config)
         self.initializer_range = config.initializer_range
         self.embeddings = ErnieMEmbeddings(config)
         self.encoder = ErnieMEncoder(config)
@@ -539,7 +539,7 @@ class ErnieMModel(ErnieMPreTrainedModel):
 
         past_key_values_length = 0
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = past_key_values.get_seq_length()
 
         # Adapted from paddlenlp.transformers.ernie_m.ErnieMModel
         if attention_mask is None:
@@ -964,7 +964,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
 )
 class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
     def __init__(self, config):
-        super(ErnieMForInformationExtraction, self).__init__(config)
+        super().__init__(config)
         self.ernie_m = ErnieMModel(config)
         self.linear_start = nn.Linear(config.hidden_size, 1)
         self.linear_end = nn.Linear(config.hidden_size, 1)

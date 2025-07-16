@@ -21,7 +21,7 @@ import pytest
 from datasets import load_dataset
 
 from transformers import UniSpeechSatConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -807,7 +807,7 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class UniSpeechSatModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
@@ -820,7 +820,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 

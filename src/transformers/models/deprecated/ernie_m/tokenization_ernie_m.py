@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Ernie-M."""
 
-import io
 import os
 import unicodedata
 from typing import Any, Optional
@@ -172,7 +171,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
     def clean_text(self, text):
         """Performs invalid character removal and whitespace cleanup on text."""
-        return "".join((self.SP_CHAR_MAPPING.get(c, c) for c in text))
+        return "".join(self.SP_CHAR_MAPPING.get(c, c) for c in text)
 
     def _tokenize(self, text, enable_sampling=False, nbest_size=64, alpha=0.1):
         """Tokenize a string."""
@@ -373,7 +372,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
     def load_vocab(self, filepath):
         token_to_idx = {}
-        with io.open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for index, line in enumerate(f):
                 token = line.rstrip("\n")
                 token_to_idx[token] = int(index)

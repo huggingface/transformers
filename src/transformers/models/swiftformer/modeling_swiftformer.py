@@ -91,7 +91,7 @@ class SwiftFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class SwiftFormerEmbeddings(nn.Module):
@@ -388,7 +388,7 @@ class SwiftFormerEncoder(nn.Module):
 
 @auto_docstring
 class SwiftFormerPreTrainedModel(PreTrainedModel):
-    config_class = SwiftFormerConfig
+    config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

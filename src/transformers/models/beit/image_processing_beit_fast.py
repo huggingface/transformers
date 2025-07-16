@@ -105,6 +105,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -112,7 +113,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
             images = self.reduce_label(images)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -122,7 +123,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -173,11 +174,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
         return processed_segmentation_maps
-
-    def __call__(self, images, segmentation_maps=None, **kwargs):
-        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
-        # be passed in as positional arguments.
-        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     @auto_docstring
     def preprocess(

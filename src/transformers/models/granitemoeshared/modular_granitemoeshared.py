@@ -43,7 +43,7 @@ class GraniteMoeSharedMLP(nn.Module):
     """
 
     def __init__(self, config: GraniteMoeSharedConfig):
-        super(GraniteMoeSharedMLP, self).__init__()
+        super().__init__()
 
         self.input_size = config.hidden_size
         self.hidden_size = config.shared_intermediate_size
@@ -107,7 +107,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -140,9 +140,6 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
@@ -150,7 +147,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 
 
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
-    config_class = GraniteMoeSharedConfig
+    config: GraniteMoeSharedConfig
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
 
 

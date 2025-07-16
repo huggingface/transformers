@@ -27,10 +27,8 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
             raise ValueError("You must include at least one label and at least one sequence.")
         if hypothesis_template.format(labels[0]) == hypothesis_template:
             raise ValueError(
-                (
-                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
-                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
-                ).format(hypothesis_template)
+                f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
+                "Make sure the passed template includes formatting syntax such as {} where the label should go."
             )
 
         if isinstance(sequences, str):
@@ -83,6 +81,11 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     The models that this pipeline can use are models that have been fine-tuned on an NLI task. See the up-to-date list
     of available models on [huggingface.co/models](https://huggingface.co/models?search=nli).
     """
+
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         self._args_parser = args_parser

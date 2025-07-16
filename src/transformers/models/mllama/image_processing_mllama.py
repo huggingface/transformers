@@ -487,7 +487,7 @@ def to_channel_dimension_format(
     elif target_channel_dim == ChannelDimension.LAST:
         image = image.transpose((1, 2, 0))
     else:
-        raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
+        raise ValueError(f"Unsupported channel dimension format: {channel_dim}")
 
     return image
 

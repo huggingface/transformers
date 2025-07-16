@@ -71,7 +71,7 @@ class PvtDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class PvtPatchEmbeddings(nn.Module):
@@ -442,7 +442,7 @@ class PvtEncoder(nn.Module):
 
 @auto_docstring
 class PvtPreTrainedModel(PreTrainedModel):
-    config_class = PvtConfig
+    config: PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
     _no_split_modules = []

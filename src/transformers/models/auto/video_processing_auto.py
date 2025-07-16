@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
             ("internvl", "InternVLVideoProcessor"),
@@ -311,7 +312,12 @@ class AutoVideoProcessor:
         if video_processor_class is None and video_processor_auto_map is None:
             image_processor_class = config_dict.pop("image_processor_type", None)
             if image_processor_class is not None:
-                video_processor_class = image_processor_class.replace("ImageProcessor", "VideoProcessor")
+                video_processor_class_inferred = image_processor_class.replace("ImageProcessor", "VideoProcessor")
+
+                # Some models have different image processors, e.g. InternVL uses GotOCRImageProcessor
+                # We cannot use GotOCRVideoProcessor when falling back for BC and should try to infer from config later on
+                if video_processor_class_inferred in VIDEO_PROCESSOR_MAPPING_NAMES.values():
+                    video_processor_class = video_processor_class_inferred
             if "AutoImageProcessor" in config_dict.get("auto_map", {}):
                 image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")

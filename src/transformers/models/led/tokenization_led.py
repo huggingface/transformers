@@ -34,7 +34,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 # See all LED models at https://huggingface.co/models?filter=LED
 
 
-@lru_cache()
+@lru_cache
 # Copied from transformers.models.bart.tokenization_bart.bytes_to_unicode
 def bytes_to_unicode():
     """

@@ -404,7 +404,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         notes = np.round(notes).astype(np.int32)
         max_time_idx = notes[:, :2].max()
 
-        times = [[] for i in range((max_time_idx + 1))]
+        times = [[] for i in range(max_time_idx + 1)]
         for onset, offset, pitch, velocity in notes:
             times[onset].append([pitch, velocity])
             times[offset].append([pitch, 0])

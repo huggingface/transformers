@@ -517,7 +517,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             sampling_locations = reference_points[:, :, None, :, :2] + offset
         else:
             raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
+                f"Last dim of reference_points must be 2 or 4, but get {reference_points.shape[-1]} instead."
             )
 
         output = self.ms_deformable_attn_core(
@@ -917,7 +917,9 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         self.post_init()
 
     def forward(**super_kwargs):
-        """
+        r"""
+        Example:
+
         ```python
         >>> import torch
         >>> from transformers.image_utils import load_image

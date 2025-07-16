@@ -71,9 +71,6 @@ class HqqHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-
         if self.torch_dtype is None:
             if "torch_dtype" in kwargs:
                 self.torch_dtype = kwargs["torch_dtype"]
@@ -201,6 +198,15 @@ class HqqHfQuantizer(HfQuantizer):
 
         if is_hqq_available():
             from hqq.core.quantize import HQQLinear
+
+            # TODO: This is a compatibility hack. HQQ-quantized linear layers do not have a `weight` attribute,
+            # but some models attempt to access `weight.dtype` during the forward pass. To prevent runtime errors,
+            # we patch HQQLinear with a dummy `weight` property that returns an empty tensor with the correct dtype and device.
+            @property
+            def weight(_self: HQQLinear):
+                return torch.empty(0, dtype=_self.compute_dtype, device=_self.device)
+
+            HQQLinear.weight = weight
 
         module, tensor_name = get_module_from_name(model, param_name)
         layer_name = ".".join(param_name.split(".")[:-1])

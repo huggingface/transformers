@@ -31,10 +31,10 @@ import sys
 import tempfile
 import time
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -73,7 +73,6 @@ from .models.auto.modeling_auto import (
 from .optimization import Adafactor, get_scheduler
 from .processing_utils import ProcessorMixin
 from .pytorch_utils import (
-    ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_2_3,
 )
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -170,6 +169,7 @@ from .utils import (
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -231,7 +231,6 @@ if is_accelerate_available():
         AutocastKwargs,
         DistributedDataParallelKwargs,
         DistributedType,
-        TorchTensorParallelPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
@@ -526,12 +525,15 @@ class Trainer:
             if is_liger_kernel_available():
                 from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
+                # Prepare kernel config - use provided config or default (empty dict for default behavior)
+                kernel_config = self.args.liger_kernel_config if self.args.liger_kernel_config is not None else {}
+
                 if isinstance(model, PreTrainedModel):
-                    # Patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model)
+                    # Patch the model with liger kernels. Use the the specified or default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model, **kernel_config)
                 elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
-                    # Patch the base model with liger kernels where model is a PeftModel. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model.get_base_model())
+                    # Patch the base model with liger kernels where model is a PeftModel. Use the specified or default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model.get_base_model(), **kernel_config)
                 else:
                     logger.warning(
                         "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
@@ -627,18 +629,21 @@ class Trainer:
 
         # Just in case the model was wrapped outside of the `Trainer`
         unwrapped_model = self.accelerator.unwrap_model(model)
-        model_forward = (
-            unwrapped_model.forward
-            if not _is_peft_model(unwrapped_model)
-            else unwrapped_model.get_base_model().forward
-        )
-        forward_params = inspect.signature(model_forward).parameters
+        # We also unwrap peft model
+        if _is_peft_model(unwrapped_model):
+            if hasattr(unwrapped_model, "get_base_model"):
+                unwrapped_model = unwrapped_model.get_base_model()
+            elif hasattr(unwrapped_model, "base_model") and hasattr(unwrapped_model.base_model, "model"):
+                unwrapped_model = unwrapped_model.base_model.model
+            else:
+                raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
-        if hasattr(model, "accepts_loss_kwargs"):
-            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        if hasattr(unwrapped_model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = unwrapped_model.accepts_loss_kwargs
         else:
+            forward_params = inspect.signature(unwrapped_model.forward).parameters
             self.model_accepts_loss_kwargs = any(
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
@@ -1183,9 +1188,10 @@ class Trainer:
 
         This function filters out parameters in two ways:
         1. By layer type (instances of layers specified in ALL_LAYERNORM_LAYERS)
-        2. By parameter name patterns (containing 'bias', 'layernorm', or 'rmsnorm')
+        2. By parameter name patterns (containing 'bias', or variation of 'norm')
         """
-        decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS, ["bias", "layernorm", "rmsnorm"])
+        forbidden_name_patterns = [r"bias", r"layernorm", r"rmsnorm", r"(?:^|\.)norm(?:$|\.)", r"_norm(?:$|\.)"]
+        decay_parameters = get_parameter_names(model, [nn.LayerNorm], forbidden_name_patterns)
         return decay_parameters
 
     def create_optimizer(self):
@@ -1723,6 +1729,31 @@ class Trainer:
                 }
             )
             optimizer_kwargs.update(additional_optim_kwargs)
+        elif args.optim == OptimizerNames.STABLE_ADAMW:
+            if not is_torch_optimi_available():
+                raise ImportError(
+                    "You need to install `torch-optimi` in order to use stable_adamw optimizers. "
+                    "Install it with `pip install torch-optimi`."
+                )
+            from optimi import StableAdamW
+
+            max_lr = optim_args.pop("max_lr", None)
+            if max_lr is not None:
+                max_lr = float(max_lr)
+
+            kahan_sum = optim_args.pop("kahan_sum", None)
+            if kahan_sum is not None:
+                kahan_sum = bool(kahan_sum)
+
+            stable_adamw_kwargs = {
+                "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
+                "max_lr": max_lr,
+                "kahan_sum": kahan_sum,
+            }
+
+            optimizer_cls = StableAdamW
+            optimizer_kwargs.update(adam_kwargs)
+            optimizer_kwargs.update(stable_adamw_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -2294,9 +2325,7 @@ class Trainer:
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
-        delay_optimizer_creation = (
-            is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled or self.is_tp_enabled
-        )
+        delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
         # Can't delay optimizer creation when using FSDP2: https://github.com/huggingface/accelerate/blob/3f636d626063ffcf9a337c7d3624d61b7d187d59/src/accelerate/accelerator.py#L1404
         is_fsdp2 = self.is_fsdp_enabled and (getattr(self.accelerator.state.fsdp_plugin, "fsdp_version", 1) == 2)
@@ -2356,7 +2385,8 @@ class Trainer:
                 if self.use_apex:
                     model = self.accelerator.prepare(self.model)
                 else:
-                    if delay_optimizer_creation:
+                    # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
+                    if self.is_tp_enabled:
                         self.optimizer = self.accelerator.prepare(self.optimizer)
                     else:
                         model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
@@ -3696,7 +3726,13 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return self.autocast_smart_context_manager()
+        ctx_stack = contextlib.ExitStack()
+
+        autocast_ctx = self.autocast_smart_context_manager()
+        if not isinstance(autocast_ctx, contextlib.nullcontext):
+            ctx_stack.enter_context(autocast_ctx)
+
+        return ctx_stack
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
@@ -3829,10 +3865,10 @@ class Trainer:
         else:
             labels = None
         if self.model_accepts_loss_kwargs:
-            loss_kwargs = {}
+            kwargs = {}
             if num_items_in_batch is not None:
-                loss_kwargs["num_items_in_batch"] = num_items_in_batch
-            inputs = {**inputs, **loss_kwargs}
+                kwargs["num_items_in_batch"] = num_items_in_batch
+            inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -3938,7 +3974,7 @@ class Trainer:
 
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
-            self.push_to_hub(commit_message="Model save")
+            self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -4788,6 +4824,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=self.args.hub_revision,
         )
 
         push_jobs = [model_push_job]
@@ -4803,6 +4840,7 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
+                revision=self.args.hub_revision,
             )
             push_jobs.append(checkpoint_push)
 
@@ -4882,8 +4920,12 @@ class Trainer:
 
         self.create_model_card(model_name=model_name, **kwargs)
 
+        if revision is None:
+            revision = self.args.hub_revision
+
         # Wait for the current upload to be finished.
         self._finish_current_push()
+
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,

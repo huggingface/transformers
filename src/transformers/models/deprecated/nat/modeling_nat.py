@@ -287,7 +287,7 @@ class NatDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class NeighborhoodAttention(nn.Module):
@@ -615,7 +615,7 @@ class NatPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = NatConfig
+    config: NatConfig
     base_model_prefix = "nat"
     main_input_name = "pixel_values"
 

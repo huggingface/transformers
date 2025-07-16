@@ -34,6 +34,10 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import packaging.version
 
+
+if os.getenv("WANDB_MODE") == "offline":
+    print("⚙️  Running in WANDB offline mode")
+
 from .. import PreTrainedModel, TFPreTrainedModel, TrainingArguments
 from .. import __version__ as version
 from ..utils import (
@@ -860,7 +864,7 @@ class WandbCallback(TrainerCallback):
                     **init_args,
                 )
             # add config parameters (run may have been created manually)
-            self._wandb.config.update(combined_dict, allow_val_change=True)
+            self._wandb.config.update(combined_dict or {}, allow_val_change=True)
 
             # define default x-axis (for latest wandb versions)
             if getattr(self._wandb, "define_metric", None):
@@ -938,6 +942,7 @@ class WandbCallback(TrainerCallback):
 
             args_for_fake = copy.deepcopy(args)
             args_for_fake.deepspeed = None
+            args_for_fake.deepspeed_plugin = None
             fake_trainer = Trainer(
                 args=args_for_fake, model=model, processing_class=processing_class, eval_dataset=["fake"]
             )
@@ -1625,8 +1630,8 @@ class NeptuneCallback(TrainerCallback):
                 target_path = consistent_checkpoint_path
             except OSError as e:
                 logger.warning(
-                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
-                    "Could fail trying to upload.".format(e)
+                    f"NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{e}'. "
+                    "Could fail trying to upload."
                 )
 
         self._metadata_namespace[self._target_checkpoints_namespace].upload_files(target_path)
@@ -1975,9 +1980,7 @@ class ClearMLCallback(TrainerCallback):
                     )
                 except Exception as e:
                     logger.warning(
-                        "Could not remove checkpoint `{}` after going over the `save_total_limit`. Error is: {}".format(
-                            self._checkpoints_saved[0].name, e
-                        )
+                        f"Could not remove checkpoint `{self._checkpoints_saved[0].name}` after going over the `save_total_limit`. Error is: {e}"
                     )
                     break
                 self._checkpoints_saved = self._checkpoints_saved[1:]

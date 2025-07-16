@@ -33,7 +33,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control

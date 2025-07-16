@@ -35,7 +35,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_zamba import ZambaConfig
@@ -79,9 +78,6 @@ class ZambaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-ALL_LAYERNORM_LAYERS.append(ZambaRMSNorm)
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -332,12 +328,10 @@ class ZambaMambaMixer(nn.Module):
         # weight associated to the selective projection used to make dt, B and C input dependent
         # each mamba head is processed independently
         self.x_proj_weight = nn.Parameter(
-            (
-                torch.zeros(
-                    self.n_mamba_heads,
-                    self.time_step_rank + self.ssm_state_size * 2,
-                    self.mamba_head_dim,
-                )
+            torch.zeros(
+                self.n_mamba_heads,
+                self.time_step_rank + self.ssm_state_size * 2,
+                self.mamba_head_dim,
             )
         )
         # time step projection (discretization)
@@ -787,14 +781,14 @@ class ZambaHybridLayer(nn.Module):
 
 @auto_docstring
 class ZambaPreTrainedModel(PreTrainedModel):
-    config_class = ZambaConfig
+    config: ZambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ZambaAttentionDecoderLayer", "ZambaMambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
-    _supports_cache_class = True  # Note: only supports ZambaHybridDynamicCache
+    # Note: only supports ZambaHybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
@@ -828,30 +822,6 @@ class ZambaPreTrainedModel(PreTrainedModel):
             A = A.expand(module.intermediate_size, -1).contiguous()
             module.A_log.data.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
             module.D.data.fill_(1.0)
-
-    @classmethod
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
-        """
-        Overloads `PreTrainedModel._check_and_enable_flash_attn_2` so as to DISABLE Flash Attention 2 by default on Zamba models.
-        Flash attention 2 is currently not supported in the HuggingFace implementation of Zamba v1.
-        """
-        config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
-
-        # if using the default path -> swap sdpa by eager
-        if not hard_check_only and config._attn_implementation == "flash_attention_2":
-            config._attn_implementation = "eager"
-
-        return config
 
 
 @auto_docstring
@@ -1108,7 +1078,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1161,7 +1131,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

@@ -14,12 +14,6 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    pass
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
