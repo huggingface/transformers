@@ -28,7 +28,7 @@ if is_soundfile_available():
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import TranscriptionRequest
 
-from ...audio_utils import AudioInput, load_audio_into_buffer, make_list_of_audio
+from ...audio_utils import AudioInput, load_audio_as, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -333,9 +333,9 @@ class VoxtralProcessor(ProcessorMixin):
 
         # validate audio input
         if isinstance(audio, str):
-            audio = [load_audio_into_buffer(audio, force_mono=True)]
+            audio = [load_audio_as(audio, return_format="buffer", force_mono=True)]
         elif all(isinstance(el, str) for el in audio):
-            audio = [load_audio_into_buffer(el, force_mono=True) for el in audio]
+            audio = [load_audio_as(el, return_format="buffer", force_mono=True) for el in audio]
         else:
             audio = make_list_of_audio(audio)
             if len(audio) != len(format):

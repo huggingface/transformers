@@ -22,7 +22,7 @@ from typing import Any, Callable, Optional, Union, overload
 
 import numpy as np
 
-from transformers.audio_utils import load_audio_base64
+from transformers.audio_utils import load_audio_as
 from transformers.tokenization_utils_base import (
     LARGE_INTEGER,
     VERY_LARGE_INTEGER,
@@ -1481,7 +1481,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                     maybe_path: Optional[str] = content.get("path")
                     maybe_base64: Optional[str] = content.get("base64")
                     if maybe_url or maybe_path:
-                        audio_data = load_audio_base64(maybe_url or maybe_path, force_mono=True, return_dict=True)
+                        audio_data = load_audio_as(maybe_url or maybe_path, return_format="dict", force_mono=True)
                         normalized_content.append({"type": "input_audio", "input_audio": audio_data})
                         continue
                     if not maybe_base64:

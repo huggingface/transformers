@@ -21,7 +21,7 @@ import io
 import os
 import warnings
 from io import BytesIO
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 
 import numpy as np
 import requests
@@ -75,103 +75,70 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     return audio
 
 
-def load_audio_base64(audio: str, timeout=None, force_mono=False, return_dict=False):
+def load_audio_as(
+    audio: str, 
+    return_format: str,
+    timeout: Optional[int] = None, 
+    force_mono: bool = False, 
+) -> Union[str, Dict[str, Any], io.BytesIO, None]:
     """
-    Load audio from either a local file path or URL and convert to base64 or return as BytesIO.
+    Load audio from either a local file path or URL and return in specified format.
+    
     Args:
-        audio (str): Either a local file path or a URL to an audio file
-        timeout (int): Timeout for URL requests in seconds
-        force_mono (bool): Whether to convert stereo audio to mono
-        return_dict (bool): If True, return dict with data and format. If False, return base64 string
+        audio (`str`): Either a local file path or a URL to an audio file
+        return_format (`str`): Format to return the audio in:
+            - "base64": Base64 encoded string
+            - "dict": Dictionary with data and format
+            - "buffer": BytesIO object
+        timeout (`int`, *optional*): Timeout for URL requests in seconds
+        force_mono (`bool`): Whether to convert stereo audio to mono
+    
     Returns:
-        str or dict: Base64 encoded audio data or dict with data and format, or None if failed
+        `Union[str, Dict[str, Any], io.BytesIO, None]`: 
+            - `str`: Base64 encoded audio data (if return_format="base64")
+            - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")  
+            - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
+    if return_format not in ["base64", "dict", "buffer"]:
+        raise ValueError(f"Invalid return_format: {return_format}. Must be 'base64', 'dict', or 'buffer'")
+    
     try:
+        # Load audio bytes from URL or file
         audio_bytes = None
-        if audio.startswith("http://") or audio.startswith("https://"):
+        if audio.startswith(("http://", "https://")):
             response = requests.get(audio, timeout=timeout)
             response.raise_for_status()
             audio_bytes = response.content
         elif os.path.isfile(audio):
-            # Load from local path
             with open(audio, "rb") as audio_file:
                 audio_bytes = audio_file.read()
         else:
-            print(f"File not found: {audio}")
-            return None
+            raise ValueError(f"File not found: {audio}")
 
-        if audio_bytes:
-            with io.BytesIO(audio_bytes) as audio_file:
-                with sf.SoundFile(audio_file) as f:
-                    # Read the entire audio data
-                    audio_array = f.read(dtype="float32")
-                    sampling_rate = f.samplerate
-                    audio_format = f.format
+        # Process audio data
+        with io.BytesIO(audio_bytes) as audio_file:
+            with sf.SoundFile(audio_file) as f:
+                audio_array = f.read(dtype="float32")
+                sampling_rate = f.samplerate
+                audio_format = f.format
 
-            # convert to mono if needed
-            if force_mono and audio_array.ndim != 1:
-                audio_array = audio_array.mean(axis=1)
+        # Convert to mono if needed
+        if force_mono and audio_array.ndim != 1:
+            audio_array = audio_array.mean(axis=1)
 
-            # Create new BytesIO object and write audio data to it
-            with io.BytesIO() as output_file:
-                sf.write(output_file, audio_array, sampling_rate, format=audio_format.upper())
-                output_file.seek(0)
-                # Read the data while the file is still open
-                audio_base64 = base64.b64encode(output_file.read()).decode("utf-8")
+        buffer = io.BytesIO()
+        sf.write(buffer, audio_array, sampling_rate, format=audio_format.upper())
+        buffer.seek(0)
 
-            if return_dict:
-                return {
-                    "data": audio_base64,
-                    "format": audio_format.lower(),
-                }
-            else:
-                return audio_base64
-
-    except Exception as e:
-        raise ValueError(f"Error loading audio: {e}")
-
-
-def load_audio_into_buffer(audio: str, timeout=None, force_mono=False):
-    """
-    Load audio from either a local file path or URL and convert to base64 or return as BytesIO.
-    Args:
-        audio (str): Either a local file path or a URL to an audio file
-        timeout (int): Timeout for URL requests in seconds
-        force_mono (bool): Whether to convert stereo audio to mono
-    Returns:
-        io.BytesIO: A BytesIO object containing the audio data
-    """
-    try:
-        audio_bytes = None
-        if audio.startswith("http://") or audio.startswith("https://"):
-            response = requests.get(audio, timeout=timeout)
-            response.raise_for_status()
-            audio_bytes = response.content
-        elif os.path.isfile(audio):
-            # Load from local path
-            with open(audio, "rb") as audio_file:
-                audio_bytes = audio_file.read()
-        else:
-            print(f"File not found: {audio}")
-            return None
-
-        if audio_bytes:
-            with io.BytesIO(audio_bytes) as audio_file:
-                with sf.SoundFile(audio_file) as f:
-                    # Read the entire audio data
-                    audio_array = f.read(dtype="float32")
-                    sampling_rate = f.samplerate
-                    audio_format = f.format
-
-            # convert to mono if needed
-            if force_mono and audio_array.ndim != 1:
-                audio_array = audio_array.mean(axis=1)
-
-            # Create new BytesIO object and write audio data to it
-            buffer = io.BytesIO()
-            sf.write(buffer, audio_array, sampling_rate, format=audio_format.upper())
-            buffer.seek(0)
+        if return_format == "buffer":
             return buffer
+        elif return_format == "base64":
+            return base64.b64encode(buffer.read()).decode("utf-8")
+        elif return_format == "dict":
+            return {
+                "data": base64.b64encode(buffer.read()).decode("utf-8"),
+                "format": audio_format.lower(),
+            }
 
     except Exception as e:
         raise ValueError(f"Error loading audio: {e}")
