@@ -127,7 +127,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         except Exception:
             return False
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+    def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
 
