@@ -422,7 +422,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     r"""
-    Constructs a DeepseekVLHybrid image processor.
+    Constructs a DEEPSEEK_VL_HYBRID image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -434,12 +434,15 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
             Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        min_size (`int`, *optional*, defaults to 14):
+            The minimum allowed size for the resized image. Ensures that neither the height nor width
+            falls below this value after resizing.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
+            overridden by the `high_res_resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
@@ -449,32 +452,31 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        high_res_image_mean (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
+        high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
             Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
-        high_res_image_std (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
+        high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
             Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
-
     def __init__(
         self,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
         high_res_size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        min_size: int = 14,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -499,6 +501,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         super().__init__(
             do_resize=do_resize,
             size=size,
+            min_size=min_size,
             resample=resample,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -509,7 +512,10 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             **kwargs,
         )
 
-        self.background_color = tuple([int(x * 255) for x in self.high_res_image_mean])
+        if high_res_image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple([int(x * 255) for x in high_res_image_mean])
 
     @filter_out_non_signature_kwargs()
     def preprocess(

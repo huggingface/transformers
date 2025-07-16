@@ -26,8 +26,6 @@ from ...image_processing_utils import BaseImageProcessor
 from ...image_processing_utils_fast import BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
@@ -52,12 +50,13 @@ from ...utils import (
 if is_vision_available():
     import PIL
 
+
 logger = logging.get_logger(__name__)
 
 
 class DeepseekVLHybridImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a DeepseekVLHybrid image processor.
+    Constructs a DEEPSEEK_VL_HYBRID image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -69,12 +68,15 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
             Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        min_size (`int`, *optional*, defaults to 14):
+            The minimum allowed size for the resized image. Ensures that neither the height nor width
+            falls below this value after resizing.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
+            overridden by the `high_res_resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
@@ -84,18 +86,18 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        high_res_image_mean (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
+        high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
             Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
-        high_res_image_std (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
+        high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
             Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
@@ -109,7 +111,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
         high_res_size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        min_size: int = 14,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -140,24 +143,32 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
-        self.background_color = tuple([int(x * 255) for x in self.high_res_image_mean])
+        self.min_size = min_size
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple([int(x * 255) for x in image_mean])
+
+        if high_res_image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple([int(x * 255) for x in high_res_image_mean])
 
     def resize(
         self,
         image: np.ndarray,
-        size: dict[str, int],
+        size: Union[dict[str, int], int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize and pad an image to a square based on the longest edge in `size`.
+        Resize an image to dynamically calculated size.
 
         Args:
             image (`np.ndarray`):
@@ -195,7 +206,10 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
 
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
-        output_size_nonpadded = [int(height * delta), int(width * delta)]
+        output_size_nonpadded = [
+            max(int(height * delta), self.min_size),
+            max(int(width * delta), self.min_size),
+        ]
 
         image = resize(
             image,
@@ -203,12 +217,12 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
-            return_numpy=True,
             **kwargs,
         )
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
+            background_color=self.background_color,
             input_data_format=input_data_format,
         )
         return image
@@ -390,6 +404,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
     def pad_to_square(
         self,
         image: np.ndarray,
+        background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
@@ -399,6 +414,10 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -425,9 +444,17 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
 
         max_dim = max(height, width)
 
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
         if input_data_format == ChannelDimension.FIRST:
             result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(self.background_color):
+            for i, color in enumerate(background_color):
                 result[i, :, :] = color
             if width > height:
                 start = (max_dim - height) // 2
@@ -437,7 +464,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 result[:, :, start : start + width] = image
         else:
             result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(self.background_color):
+            for i, color in enumerate(background_color):
                 result[:, :, i] = color
             if width > height:
                 start = (max_dim - height) // 2
@@ -447,6 +474,10 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 result[:, start : start + width, :] = image
 
         return result
+
+    def postprocess(self):
+        """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
+        raise AttributeError("Not needed for DeepseekVLHybrid")
 
 
 __all__ = ["DeepseekVLHybridImageProcessor"]
