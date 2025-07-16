@@ -14,32 +14,29 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import torch
 import torch.utils.checkpoint
-from torch import nn
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
-from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
-from ...utils.generic import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3PreTrainedModel, DeepseekV3TopkRouter
-from ..glm4.modeling_glm4 import Glm4Attention, eager_attention_forward
-from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
-from ..mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
-    MixtralModel,
-    load_balancing_loss_func,
+from ...utils import logging
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3DecoderLayer,
+    DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
+    DeepseekV3Model,
+    DeepseekV3PreTrainedModel,
+    DeepseekV3RMSNorm,
+    DeepseekV3TopkRouter,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeMLP, Qwen3MoeRMSNorm
+from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -152,11 +149,6 @@ class Glm4MoeConfig(PretrainedConfig):
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss. See [here]() for more details.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention
     ```python
@@ -222,8 +214,6 @@ class Glm4MoeConfig(PretrainedConfig):
         topk_group=1,
         first_k_dense_replace=1,
         norm_topk_prob=True,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
         use_qk_norm=False,
         **kwargs,
     ):
@@ -260,8 +250,6 @@ class Glm4MoeConfig(PretrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
         self.use_qk_norm = use_qk_norm
 
         super().__init__(
@@ -270,31 +258,11 @@ class Glm4MoeConfig(PretrainedConfig):
         )
 
 
-class Glm4MoeAttention(Glm4Attention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+class Glm4MoeAttention(LlamaAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-
-        if self.config.use_qk_norm:
+        super().__init__(config, layer_idx)
+        self.use_qk_norm = config.use_qk_norm
+        if self.use_qk_norm:
             self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -314,7 +282,7 @@ class Glm4MoeAttention(Glm4Attention):
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
-        if self.config.use_qk_norm:
+        if self.use_qk_norm:
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
@@ -326,7 +294,6 @@ class Glm4MoeAttention(Glm4Attention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -350,7 +317,7 @@ class Glm4MoeAttention(Glm4Attention):
         return attn_output, attn_weights
 
 
-class Glm4MoeMLP(Qwen3MoeMLP):
+class Glm4MoeMLP(DeepseekV3MLP):
     pass
 
 
@@ -360,266 +327,24 @@ class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
         self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
 
 
-class Glm4MoeSparseMoeBlock(DeepseekV3MoE):
+class Glm4MoeRMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class Glm4MoeRMSNorm(Qwen3MoeRMSNorm):
+class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
     pass
-
-
-class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Glm4MoeConfig, layer_idx: int):
-        super().__init__()
-        self.layer_idx = layer_idx
-        self.hidden_size = config.hidden_size
-        self.self_attn = Glm4MoeAttention(config, layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Glm4MoeSparseMoeBlock(config)
-        else:
-            self.mlp = Glm4MoeMLP(config, intermediate_size=config.intermediate_size)
-        self.input_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.FloatTensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-                and should not be returned during inference.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        # For the MoE layers, we need to unpack
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_static_cache = False
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(Glm4MoeSparseMoeBlock, index=1),
-        "hidden_states": Glm4MoeDecoderLayer,
-        "attentions": Glm4MoeAttention,
-    }
 
 
-class Glm4MoeModel(MixtralModel):
-    def __init__(self, config: Glm4MoeConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Glm4MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-
-        hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-
-        return MoeModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-        )
+class Glm4MoeModel(DeepseekV3Model):
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*"]
 
 
-class Glm4MoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Glm4MoeModel(config)
-        self.num_experts = config.n_routed_experts
-
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Glm4MoeForCausalLM
-
-        >>> model = Glm4MoeForCausalLM.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-MoE-100B-A10B")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=aux_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+class Glm4MoeForCausalLM(DeepseekV3ForCausalLM):
+    pass
 
 
 __all__ = [

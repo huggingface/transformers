@@ -129,11 +129,6 @@ class Glm4MoeConfig(PretrainedConfig):
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss. See [here]() for more details.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention
     ```python
@@ -199,8 +194,6 @@ class Glm4MoeConfig(PretrainedConfig):
         topk_group=1,
         first_k_dense_replace=1,
         norm_topk_prob=True,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
         use_qk_norm=False,
         **kwargs,
     ):
@@ -237,8 +230,6 @@ class Glm4MoeConfig(PretrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
         self.use_qk_norm = use_qk_norm
 
         super().__init__(
