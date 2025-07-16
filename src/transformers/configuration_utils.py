@@ -369,8 +369,11 @@ class PretrainedConfig(PushToHubMixin):
         return self._output_attentions
 
     @output_attentions.setter
-    def output_attentions(self, value):
-        if value is True and self._attn_implementation != "eager":
+    def output_attentions(self, value: bool):
+        # If we set `output_attentions` before the attn implementation, dispatch eager
+        if value and self._attn_implementation is None:
+            self._attn_implementation = "eager"
+        if value and self._attn_implementation != "eager":
             raise ValueError(
                 "The `output_attentions` attribute is not supported when using the `attn_implementation` set to "
                 f"{self._attn_implementation}. Please set it to 'eager' instead."
