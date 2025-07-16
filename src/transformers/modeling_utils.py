@@ -2094,8 +2094,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
         self.config = config
 
-        # Check the attention implementation is supported, or set it if not yet set
-        self.config._attn_implementation = self._check_and_adjust_attn_implementation(
+        # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
+        # setting it recursively)
+        self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_early_check=True
         )
 
@@ -2244,8 +2245,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # We do not want to modify the config inplace in _from_config
         config = copy.deepcopy(config)
-        # If passing `attn_implementation` as kwargs, respect it
-        config._attn_implementation = kwargs.pop("attn_implementation", config._attn_implementation)
+        # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
+        if "attn_implementation" in kwargs:
+            config._attn_implementation = kwargs.pop("attn_implementation")
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -2683,8 +2685,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             applicable_attn_implementation = self._check_and_adjust_attn_implementation(
                 current_implementation, is_early_check=False
             )
-            # Apply the change
-            self.config._attn_implementation = applicable_attn_implementation
+            # Apply the change (on the internal attr, to avoid setting it recursively)
+            self.config._attn_implementation_internal = applicable_attn_implementation
         except (ValueError, ImportError) as e:
             logger.warning(
                 f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"

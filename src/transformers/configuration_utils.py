@@ -323,7 +323,7 @@ class PretrainedConfig(PushToHubMixin):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
-        # Attention implementation to use, if relevant.
+        # Attention implementation to use, if relevant
         self._attn_implementation = kwargs.pop("attn_implementation", None)
 
         # Drop the transformers version info
@@ -398,6 +398,25 @@ class PretrainedConfig(PushToHubMixin):
         # compute it based on the length of the `id2label` map
         if self.id2label is None or self.num_labels != num_labels:
             self._create_id_label_maps(num_labels)
+
+    @property
+    def _attn_implementation(self):
+        return self._attn_implementation_internal
+
+    @_attn_implementation.setter
+    def _attn_implementation(self, value: Optional[Union[str, dict]]):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        attn_implementation = value if not isinstance(value, dict) else value.get("", self._attn_implementation)
+        self._attn_implementation_internal = attn_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key)
+            sub_implementation = (
+                value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
+            )
+            subconfig._attn_implementation = sub_implementation
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
@@ -1034,8 +1053,8 @@ class PretrainedConfig(PushToHubMixin):
             d["output_attentions"] = d.pop("_output_attentions")
         if "_commit_hash" in d:
             del d["_commit_hash"]
-        if "_attn_implementation" in d:
-            del d["_attn_implementation"]
+        if "_attn_implementation_internal" in d:
+            del d["_attn_implementation_internal"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
