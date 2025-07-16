@@ -154,7 +154,7 @@ def write_model(
     final_ = {}
     for file in list(os.listdir(input_base_path)):
         # TODO: remove that 
-        if file.endswith("of-00007.safetensors"):
+        if file.endswith(".safetensors"):
             final_.update(safe_load(os.path.join(input_base_path, file)))
 
     print("Converting ..")
@@ -210,6 +210,9 @@ def write_model(
             if not re.search("norm", new_key):
                 weight = weight.to(torch.bfloat16)  # norms are the only ones in float32
             state_dict[new_key] = weight
+            if "bias" in new_key and "down_proj" in new_key:
+                print("new_key: ", new_key)
+                print(f"bias.shape: {state_dict[new_key].shape}")
 
     del final_
     gc.collect()

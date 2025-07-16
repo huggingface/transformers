@@ -784,7 +784,6 @@ def _load_state_dict_into_meta_model(
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
-
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -855,6 +854,7 @@ def _load_state_dict_into_meta_model(
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
                 )
+
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.

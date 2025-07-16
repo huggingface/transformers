@@ -27,12 +27,19 @@ import re
 
 logger = logging.get_logger(__name__)
 
+FP4_VALUES = [
+    +0.0, +0.5, +1.0, +1.5, +2.0, +3.0, +4.0, +6.0,
+    -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
+]
 
 def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale): 
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
     from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
-    swizzle_axis = 2 if swizzle_mx_scale else None
+
+    
+    swizzle_axis = 2 if swizzle_mx_scale or swizzle_mx_value else None
     w = w.to(torch.bfloat16)
+
     w, mx_scales, weight_scale_shape = downcast_to_mxfp(
         w,
         torch.uint8,
@@ -66,55 +73,116 @@ def shuffle_weight(w: "torch.Tensor") -> "torch.Tensor":
     w_shuffled = stacked.reshape(shape)
     return w_shuffled
 
+def convert_moe_packed_tensors(
+    blocks,
+    scales,
+    *,
+    dtype: torch.dtype = torch.bfloat16,
+    rows_per_chunk: int = 32768 * 1024,
+) -> torch.Tensor:
+    import math
+
+    scales = scales.to(torch.int32) - 127
+
+
+    assert  blocks.shape[:-1] == scales.shape, (
+        f"{blocks.shape=} does not match {scales.shape=}"
+    )
+
+    lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
+
+    *prefix_shape, G, B = blocks.shape
+    rows_total   = math.prod(prefix_shape) * G
+
+    blocks = blocks.reshape(rows_total, B)
+    scales = scales.reshape(rows_total, 1)
+
+    out = torch.empty(rows_total, B * 2, dtype=dtype, device=blocks.device)
+
+    for r0 in range(0, rows_total, rows_per_chunk):
+        r1 = min(r0 + rows_per_chunk, rows_total)
+
+        blk = blocks[r0:r1]
+        exp = scales[r0:r1]
+
+        # nibble indices -> int64
+        idx_lo = (blk & 0x0F).to(torch.long)
+        idx_hi = (blk >> 4).to(torch.long)
+
+        sub = out[r0:r1]
+        sub[:, 0::2] = lut[idx_lo]
+        sub[:, 1::2] = lut[idx_hi]
+
+        torch.ldexp(sub, exp, out=sub)
+        del idx_lo, idx_hi, blk, exp
+
+    out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
+    # to match for now existing implementation
+    return out
+
 # maybe subclass
 class Mxfp4OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
+        from triton_kernels.matmul_ogs import InFlexData, FlexCtx, PrecisionConfig, MicroscalingCtx
+
+        from triton_kernels.numerics_details.mxfp import downcast_to_mxfp, SwizzlingType
+
         super().__init__()
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-
+        # print("#######################expert_dim: ", self.expert_dim)
+        # print("#######################num_experts: ", self.num_experts)
+        # print(config)
         # dtype torch.float4_e2m1fn not supported yet
-        self.gate_up_proj = nn.Parameter(
-            torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim, dtype=torch.float8_e5m2),
+        self.gate_up_proj_blocks = nn.Parameter(
+            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size//32, 16, dtype=torch.uint8), requires_grad=False,
         )
-        self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim))
-        self.down_proj = nn.Parameter(
-            torch.zeros((self.num_experts, self.expert_dim, self.hidden_size), dtype=torch.float8_e5m2),
+        self.gate_up_proj_scales = nn.Parameter(
+            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size//32, dtype=torch.uint8), requires_grad=False,
         )
-        self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size))
+        self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim, dtype=torch.float32), requires_grad=False)
+
+        self.down_proj_blocks = nn.Parameter(
+            torch.zeros((self.num_experts, self.expert_dim, self.hidden_size//32, 16), dtype=torch.uint8), requires_grad=False,
+        )
+        self.down_proj_scales = nn.Parameter(
+            torch.zeros(self.num_experts, self.expert_dim, self.hidden_size//32, dtype=torch.uint8), requires_grad=False,
+        )
+        self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.expert_dim, dtype=torch.float32), requires_grad=False)
         self.alpha = 1.702
-        
+
+
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
 
         smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
 
-        self.gate_up_proj_right_pad = smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
+        self.gate_up_proj_right_pad = 0#smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
         self.gate_up_proj_bottom_pad = 0 
         
-        self.down_proj_right_pad = smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
-        self.down_proj_bottom_pad = self.gate_up_proj_right_pad // 2
+        self.down_proj_right_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
+        self.down_proj_bottom_pad = 0#self.gate_up_proj_right_pad // 2
             
+        self.hidden_size_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         """
         To update with moe mxfp4 kernels, for now we just upcast the weights in torch.bfloat16
         """
-        
         # type check, uint8 means mxfp4
         #TODO: fp8 x mxfp4 on blackwell
         assert hidden_states.dtype == torch.bfloat16
-        assert self.gate_up_proj.dtype in (torch.bfloat16, torch.uint8)
-        assert self.down_proj.dtype in (torch.bfloat16, torch.uint8)
-        assert self.gate_up_proj_bias.dtype == torch.float32
-        assert self.down_proj_bias.dtype == torch.float32
+        assert self.gate_up_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
+        assert self.down_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
+        # assert self.gate_up_proj_bias.dtype == torch.float32, "expected float32 for gate_up_proj_bias and got " + str(self.gate_up_proj_bias.dtype)
+        # assert self.down_proj_bias.dtype == torch.float32, "expected float32 for down_proj_bias and got " + str(self.down_proj_bias.dtype)
 
         # Shape check, only check non-mxfp4
-        if self.gate_up_proj.dtype != torch.uint8:
+        if self.gate_up_proj_blocks.dtype != torch.uint8:
             assert hidden_states.ndim == 2
-            assert hidden_states.shape[-1] == self.gate_up_proj.shape[-2]
-            assert self.down_proj.shape[-1] == self.gate_up_proj.shape[1]
+            assert hidden_states.shape[-1] == self.gate_up_proj_blocks.shape[-2]
+            assert self.down_proj_blocks.shape[-1] == self.gate_up_proj_blocks.shape[1]
 
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
         from triton_kernels.swiglu import swiglu_fn
@@ -122,25 +190,54 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         with torch.cuda.device(hidden_states.device):
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),(self.alpha, None), 2)
 
+            if self.hidden_size_pad is not None:
+                hidden_states = torch.nn.functional.pad(hidden_states,
+                                    (0, self.hidden_size_pad, 0, 0),
+                                    mode="constant",
+                                    value=0)
+
             apply_router_weight_on_input = False
+            # if torch.isnan(hidden_states).any():
+            #           raise ValueError("NaNs detected in hidden_states.")
+
             intermediate_cache1 = matmul_ogs(hidden_states,
                                             self.gate_up_proj,
-                                            self.gate_up_proj_bias,
+                                            self.gate_up_proj_bias.to(torch.float32),
                                             routing_data,
                                             gather_indx=gather_idx,
                                             precision_config=self.gate_up_proj_precision_config,
                                             gammas=routing_data.gate_scal if apply_router_weight_on_input else None,
                                             fused_activation=act)
 
+            torch.cuda.synchronize()
+
+            if torch.isnan(intermediate_cache1).any():
+                print(f"hidden_states.shape: {hidden_states.shape}, self.gate_up_proj.shape: {self.gate_up_proj.shape}")
+                print(f"precision_config: {self.gate_up_proj_precision_config}")
+                print(f"hidden_states.dtype: {hidden_states.dtype}, self.gate_up_proj.dtype: {self.gate_up_proj.dtype}, self.gate_up_proj_bias.dtype: {self.gate_up_proj_bias.dtype}")
+          
+                raise ValueError("NaNs detected in intermediate_cache1 after matmul_ogs (gate_up_proj).")
+
+        with torch.cuda.device(hidden_states.device):    
             intermediate_cache3 = matmul_ogs(
                 intermediate_cache1,
                 self.down_proj,
-                self.down_proj_bias,
+                self.down_proj_bias.to(torch.float32),
                 routing_data,
                 scatter_indx=scatter_idx,
                 precision_config=self.down_proj_precision_config,
                 gammas=None if apply_router_weight_on_input else routing_data.gate_scal)
-
+            
+            torch.cuda.synchronize()
+            if torch.isnan(intermediate_cache3).any():
+                print(f"routing_data: {routing_data}")
+                print(f"scatter_idx: {scatter_idx}")
+                print(f"intermediate_cache3.shape: {intermediate_cache3.shape}")
+                print(f"self.down_proj.shape: {self.down_proj.shape}")
+                print(f"self.down_proj_bias.shape: {self.down_proj_bias.shape}")
+                print(f"self.down_proj_precision_config: {self.down_proj_precision_config}")
+                raise ValueError("NaNs detected in intermediate_cache3 after matmul_ogs (down_proj).")
+                
             # manually crop the tensor since oai kernel pad the output
             output_states = intermediate_cache3[..., :self.hidden_size].contiguous()
         torch.cuda.synchronize()
@@ -180,16 +277,16 @@ def _replace_with_mxfp4_linear(
         if not should_convert_module(current_key_name, modules_to_not_convert):
             current_key_name.pop(-1)
             continue
-        if isinstance(module, nn.Linear):
-            raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
+        # if isinstance(module, nn.Linear):
+        #     raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
         if module.__class__.__name__ == "OpenAIMoeExperts":
             with init_empty_weights():
                 # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                 model._modules[name] = Mxfp4OpenAIMoeExperts(config)
                 has_been_replaced=True
-        if module.__class__.__name__ == "OpenAIMoeMLP":
-            from types import MethodType
-            module.forward = MethodType(mlp_forward, module)
+        # if module.__class__.__name__ == "OpenAIMoeMLP":
+        #     from types import MethodType
+        #     module.forward = MethodType(mlp_forward, module)
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_mxfp4_linear(
                 module,
