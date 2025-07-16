@@ -2071,7 +2071,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # otherwise we derive it from the annotated `config` attribute.
 
         # defined in this particular subclass
-        child_annotation = cls.__annotations__.get("config", None)
+        child_annotation = cls.__dict__.get("__annotations__", {}).get("config", None)
         child_attribute = cls.__dict__.get("config_class", None)
 
         # defined in the class (this subclass or any parent class)
