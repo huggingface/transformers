@@ -114,7 +114,7 @@ class HybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache, Cache):
     """
 
     def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
-        Cache.__init__(config, batch_size, dtype, device)
+        Cache.__init__()
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
