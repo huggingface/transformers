@@ -2095,7 +2095,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self.config = config
 
         # Check the attention implementation is supported, or set it if not yet set
-        self.config._attn_implementation = self._check_and_adjust_attn_implementation(self.config._attn_implementation, is_early_check=True)
+        self.config._attn_implementation = self._check_and_adjust_attn_implementation(
+            self.config._attn_implementation, is_early_check=True
+        )
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
@@ -2478,7 +2480,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             raise ValueError(
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
-        
+
         # With the early check, the parameters are not yet initalized correctly
         if not is_early_check:
             param_devices = list({param.device for param in self.parameters()})
@@ -2508,9 +2510,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
         if not is_torch_sdpa_available():
-            raise ImportError(
-                "PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1."
-            )
+            raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1.")
 
         if (
             torch.version.hip is not None
@@ -2551,8 +2551,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # If no error raise by this point, we can return `True`
         return True
-    
-    def _check_and_adjust_attn_implementation(self, attn_implementation: Optional[str], is_early_check: bool = False) -> str:
+
+    def _check_and_adjust_attn_implementation(
+        self, attn_implementation: Optional[str], is_early_check: bool = False
+    ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
         it matches hf kernels pattern.
@@ -2598,17 +2600,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
-            if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
+            if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
                 message += (
                     ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
                     ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
                 )
-            if cls._supports_sdpa:
+            if self._supports_sdpa:
                 message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
-            if cls._supports_flex_attn:
+            if self._supports_flex_attn:
                 message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
             raise ValueError(message + ".")
-        
+
         # Perform relevant checks
         if applicable_attn_implementation == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_early_check)
@@ -2649,17 +2651,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
         # warn the user that the requested value is not working
         try:
-            applicable_attn_implementation = self._check_and_adjust_attn_implementation(current_implementation, is_early_check=False)
+            applicable_attn_implementation = self._check_and_adjust_attn_implementation(
+                current_implementation, is_early_check=False
+            )
             # Apply the change
             self.config._attn_implementation = applicable_attn_implementation
         except (ValueError, ImportError) as e:
-            logger.warning(f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}")
+            logger.warning(
+                f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
+            )
 
         # Apply it to all submodels as well
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
-            if submodule is not self and isinstance(submodule, PreTrainedModel) and submodule.config.__class__ != self.config.__class__:
+            if (
+                submodule is not self
+                and isinstance(submodule, PreTrainedModel)
+                and submodule.config.__class__ != self.config.__class__
+            ):
                 sub_implementation = attn_implementation
                 if isinstance(attn_implementation, dict):
                     for subconfig_key in self.config.sub_configs:
