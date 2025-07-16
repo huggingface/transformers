@@ -734,7 +734,7 @@ class RoCBertOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class RoCBertPreTrainedModel(PreTrainedModel):
-    config_class = RoCBertConfig
+    config: RoCBertConfig
     load_tf_weights = load_tf_weights_in_roc_bert
     base_model_prefix = "roc_bert"
     supports_gradient_checkpointing = True

@@ -223,7 +223,7 @@ class LlavaNextMultiModalProjector(nn.Module):
 
 @auto_docstring
 class LlavaNextPreTrainedModel(PreTrainedModel):
-    config_class = LlavaNextConfig
+    config: LlavaNextConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]

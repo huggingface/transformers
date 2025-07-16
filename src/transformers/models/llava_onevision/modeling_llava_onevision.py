@@ -277,7 +277,7 @@ def unpad_image(tensor, original_size):
 
 @auto_docstring
 class LlavaOnevisionPreTrainedModel(PreTrainedModel):
-    config_class = LlavaOnevisionConfig
+    config: LlavaOnevisionConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]

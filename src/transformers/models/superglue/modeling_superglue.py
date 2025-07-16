@@ -517,7 +517,7 @@ class SuperGlueFinalProjection(nn.Module):
 
 @auto_docstring
 class SuperGluePreTrainedModel(PreTrainedModel):
-    config_class = SuperGlueConfig
+    config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
 

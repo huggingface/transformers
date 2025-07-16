@@ -30,7 +30,7 @@ from .configuration_colpali import ColPaliConfig
 
 @auto_docstring
 class ColPaliPreTrainedModel(PreTrainedModel):
-    config_class = ColPaliConfig
+    config: ColPaliConfig
     base_model_prefix = "model"
     _no_split_modules = []
 

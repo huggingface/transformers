@@ -815,7 +815,7 @@ class DPTFeatureFusionLayer(nn.Module):
 
 @auto_docstring
 class DPTPreTrainedModel(PreTrainedModel):
-    config_class = DPTConfig
+    config: DPTConfig
     base_model_prefix = "dpt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

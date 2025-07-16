@@ -1245,7 +1245,7 @@ class LongT5Block(GradientCheckpointingLayer):
 
 @auto_docstring
 class LongT5PreTrainedModel(PreTrainedModel):
-    config_class = LongT5Config
+    config: LongT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LongT5Block"]

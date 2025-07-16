@@ -631,7 +631,12 @@ class Trainer:
         unwrapped_model = self.accelerator.unwrap_model(model)
         # We also unwrap peft model
         if _is_peft_model(unwrapped_model):
-            unwrapped_model = unwrapped_model.get_base_model()
+            if hasattr(unwrapped_model, "get_base_model"):
+                unwrapped_model = unwrapped_model.get_base_model()
+            elif hasattr(unwrapped_model, "base_model") and hasattr(unwrapped_model.base_model, "model"):
+                unwrapped_model = unwrapped_model.base_model.model
+            else:
+                raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
@@ -3721,7 +3726,13 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return self.autocast_smart_context_manager()
+        ctx_stack = contextlib.ExitStack()
+
+        autocast_ctx = self.autocast_smart_context_manager()
+        if not isinstance(autocast_ctx, contextlib.nullcontext):
+            ctx_stack.enter_context(autocast_ctx)
+
+        return ctx_stack
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """

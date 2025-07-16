@@ -819,7 +819,7 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
 
 @auto_docstring
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
-    config_class = InstructBlipVideoConfig
+    config: InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
@@ -858,7 +858,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
 
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = InstructBlipVideoVisionConfig
+    config: InstructBlipVideoVisionConfig
 
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__(config)
@@ -1357,7 +1357,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
     """
 )
 class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
-    config_class = InstructBlipVideoConfig
+    config: InstructBlipVideoConfig
     main_input_name = "pixel_values"
 
     _supports_static_cache = True

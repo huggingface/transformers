@@ -626,7 +626,7 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
-    config_class = TimeSeriesTransformerConfig
+    config: TimeSeriesTransformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True

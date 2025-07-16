@@ -288,7 +288,7 @@ class Starcoder2RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Starcoder2PreTrainedModel(PreTrainedModel):
-    config_class = Starcoder2Config
+    config: Starcoder2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Starcoder2DecoderLayer"]

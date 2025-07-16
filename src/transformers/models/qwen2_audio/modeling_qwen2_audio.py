@@ -257,7 +257,7 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2AudioPreTrainedModel(PreTrainedModel):
-    config_class = Qwen2AudioConfig
+    config: Qwen2AudioConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
@@ -303,7 +303,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     """
 
     # Ignore copy
-    config_class = Qwen2AudioEncoderConfig
+    config: Qwen2AudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
 

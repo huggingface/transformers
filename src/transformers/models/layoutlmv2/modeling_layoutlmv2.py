@@ -468,7 +468,7 @@ class LayoutLMv2Encoder(nn.Module):
 
 @auto_docstring
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
-    config_class = LayoutLMv2Config
+    config: LayoutLMv2Config
     base_model_prefix = "layoutlmv2"
 
     def _init_weights(self, module):

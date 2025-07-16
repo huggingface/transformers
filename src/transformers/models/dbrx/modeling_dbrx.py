@@ -802,7 +802,7 @@ class DbrxBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
-    config_class = DbrxConfig
+    config: DbrxConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]

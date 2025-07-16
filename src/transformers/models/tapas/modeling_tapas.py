@@ -698,7 +698,7 @@ class TapasOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class TapasPreTrainedModel(PreTrainedModel):
-    config_class = TapasConfig
+    config: TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
@@ -892,7 +892,7 @@ class TapasModel(TapasPreTrainedModel):
 @auto_docstring
 class TapasForMaskedLM(TapasPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
-    config_class = TapasConfig
+    config: TapasConfig
     base_model_prefix = "tapas"
 
     def __init__(self, config):
