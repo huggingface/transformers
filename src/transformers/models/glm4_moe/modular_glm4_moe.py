@@ -18,6 +18,7 @@ from typing import Callable, Optional
 
 import torch
 import torch.utils.checkpoint
+from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
@@ -261,6 +262,7 @@ class Glm4MoeConfig(PretrainedConfig):
 class Glm4MoeAttention(LlamaAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
             self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)

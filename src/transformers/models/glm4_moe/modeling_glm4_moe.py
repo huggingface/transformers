@@ -146,9 +146,7 @@ class Glm4MoeAttention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
             self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
