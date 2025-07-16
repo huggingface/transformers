@@ -158,6 +158,7 @@ class BLTModelTester(CausalLMModelTester):
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,
             global_config=self.global_config,
+            rope_scaling=self.rope_scaling,
             tie_word_embeddings=False,
         )
 
@@ -269,7 +270,7 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0}
         # Propagate rope_scaling to sub-configs for BLT
         config.encoder_config.rope_scaling = config.rope_scaling
         config.decoder_config.rope_scaling = config.rope_scaling
@@ -289,7 +290,6 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
-        # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @unittest.skip(reason="Training is not supported yet")

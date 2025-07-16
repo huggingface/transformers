@@ -18,8 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from enum import Enum
 from typing import Callable, Optional, Union
 
 import torch
@@ -37,8 +35,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
-
-# Import configuration classes
 from .configuration_blt import (
     BLTConfig,
     BLTGlobalTransformerConfig,
@@ -57,15 +53,6 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-class PatchingModeEnum(str, Enum):
-    entropy = "entropy"
-    bpe = "bpe"
-    bpe_patcher = "bpe_patcher"
-    space = "space"
-    static = "static"
-    byte = "byte"
 
 
 class BLTMLP(nn.Module):
@@ -106,9 +93,14 @@ class BLTRMSNorm(nn.Module):
 
 
 class BLTRotaryEmbedding(nn.Module):
-    def __init__(self, config, device=None):
+    def __init__(self, config: BLTConfig, device=None):
         super().__init__()
-        self.rope_type = config.rope_scaling.get("type", "default")
+        # BC: "rope_type" was originally "type"
+        self.rope_type = (
+            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if config.rope_scaling is not None
+            else "default"
+        )
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -374,6 +366,18 @@ class BLTTransformerLayer(GradientCheckpointingLayer):
         return outputs
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -398,18 +402,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -1250,7 +1242,7 @@ class BLTModel(BLTPreTrainedModel):
             batch_size, sequence_length, _ = inputs_embeds.shape
         # Handle patching
         if patch_lengths is None:
-            if self.config.patching_mode == PatchingModeEnum.entropy and self.patcher is not None:
+            if self.config.patching_mode == "entropy" and self.patcher is not None:
                 if input_ids is None:
                     raise ValueError("input_ids is required for entropy-based patching")
                 _, patch_lengths, _ = self.patcher(

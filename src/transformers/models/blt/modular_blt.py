@@ -14,7 +14,6 @@
 # limitations under the License.
 """BLT modular model, inheriting from Mllama where appropriate."""
 
-from enum import Enum
 from typing import Callable, Optional, Union
 
 import torch
@@ -26,11 +25,8 @@ from ...cache_utils import Cache
 from ...generation.utils import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import is_torch_flex_attn_available, logging
-
-# Import configuration classes
 from .configuration_blt import (
     BLTConfig,
     BLTGlobalTransformerConfig,
@@ -44,9 +40,9 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
-# Import from mllama for inheritance
 from ..mllama.modeling_mllama import (
     MllamaPreTrainedModel,
+    MllamaRotaryEmbedding,
     MllamaTextMLP,
     MllamaTextRMSNorm,
     eager_attention_forward,
@@ -54,27 +50,6 @@ from ..mllama.modeling_mllama import (
 
 
 logger = logging.get_logger(__name__)
-
-
-class PatchingModeEnum(str, Enum):
-    entropy = "entropy"
-    bpe = "bpe"
-    bpe_patcher = "bpe_patcher"
-    space = "space"
-    static = "static"
-    byte = "byte"
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -310,9 +285,6 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optiona
     return padded
 
 
-# INHERITED COMPONENTS (minimal changes from Mllama)
-
-
 class BLTMLP(MllamaTextMLP):
     pass
 
@@ -321,33 +293,15 @@ class BLTRMSNorm(MllamaTextRMSNorm):
     pass
 
 
-class BLTRotaryEmbedding(nn.Module):
-    def __init__(self, config, device=None):
-        super().__init__()
-        self.rope_type = config.rope_scaling.get("type", "default")
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class BLTRotaryEmbedding(MllamaRotaryEmbedding):
+    def __init__(self, config: BLTConfig, device=None):
+        super().__init__(config=config, device=device)
+        # BC: "rope_type" was originally "type"
+        self.rope_type = (
+            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if config.rope_scaling is not None
+            else "default"
+        )
 
 
 # INHERITED BUT CUSTOMIZED COMPONENTS
@@ -1069,7 +1023,7 @@ class BLTModel(BLTPreTrainedModel):
             batch_size, sequence_length, _ = inputs_embeds.shape
         # Handle patching
         if patch_lengths is None:
-            if self.config.patching_mode == PatchingModeEnum.entropy and self.patcher is not None:
+            if self.config.patching_mode == "entropy" and self.patcher is not None:
                 if input_ids is None:
                     raise ValueError("input_ids is required for entropy-based patching")
                 _, patch_lengths, _ = self.patcher(

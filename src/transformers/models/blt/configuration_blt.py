@@ -63,7 +63,7 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"type": "default"}
+        self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
@@ -109,7 +109,7 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"type": "default"}
+        self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
@@ -147,7 +147,7 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"type": "default"}
+        self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
@@ -203,6 +203,7 @@ class BLTPatcherConfig(PretrainedConfig):
         rope_theta=10000.0,
         attn_bias_type="local_block_causal",
         intermediate_size=2048,
+        rope_scaling=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -218,7 +219,8 @@ class BLTPatcherConfig(PretrainedConfig):
         self.attn_bias_type = attn_bias_type
         self.hidden_act = "silu"  # BLT uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
-        self.rope_scaling = {"type": "default"}
+        self.rope_scaling = rope_scaling
+
         super().__init__(**kwargs)
 
 
@@ -329,7 +331,7 @@ class BLTConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling or {"type": "default"}
+        self.rope_scaling = rope_scaling
 
         # Patching configuration
         self.patch_in_forward = patch_in_forward
