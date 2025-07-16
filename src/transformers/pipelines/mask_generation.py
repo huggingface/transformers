@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
 from ..image_utils import load_image
 from ..utils import (
@@ -15,6 +15,9 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
@@ -33,7 +36,7 @@ logger = logging.get_logger(__name__)
 class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
-    image, given an image. It is a `ChunkPipeline` because you can seperate the points in a mini-batch in order to
+    image, given an image. It is a `ChunkPipeline` because you can separate the points in a mini-batch in order to
     avoid OOM issues. Use the `points_per_batch` argument to control the number of points that will be processed at the
     same time. Default is `64`.
 
@@ -81,6 +84,11 @@ class MaskGenerationPipeline(ChunkPipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=mask-generation).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         requires_backends(self, "vision")
@@ -125,12 +133,22 @@ class MaskGenerationPipeline(ChunkPipeline):
             postprocess_kwargs["output_bboxes_mask"] = kwargs["output_bboxes_mask"]
         return preprocess_kwargs, forward_params, postprocess_kwargs
 
-    def __call__(self, image, *args, num_workers=None, batch_size=None, **kwargs):
+    @overload
+    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+
+    @overload
+    def __call__(
+        self, image: Union[list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]: ...
+
+    def __call__(
+        self, image: Union[str, "Image.Image", list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         """
         Generates binary segmentation masks
 
         Args:
-            inputs (`np.ndarray` or `bytes` or `str` or `dict`):
+            image (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 Image or list of images.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 Threshold to use when turning the predicted masks into binary values.
@@ -163,6 +181,8 @@ class MaskGenerationPipeline(ChunkPipeline):
                   the "object" described by the label and the mask.
 
         """
+        num_workers = kwargs.pop("num_workers", None)
+        batch_size = kwargs.pop("batch_size", None)
         return super().__call__(image, *args, num_workers=num_workers, batch_size=batch_size, **kwargs)
 
     def preprocess(
@@ -189,7 +209,17 @@ class MaskGenerationPipeline(ChunkPipeline):
                 inference_context = self.get_inference_context()
                 with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+                    embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+
+                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
+                    if isinstance(embeddings, tuple):
+                        image_embeddings, intermediate_embeddings = embeddings
+                        model_inputs["intermediate_embeddings"] = intermediate_embeddings
+                    else:
+                        image_embeddings = embeddings
+                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
+                    #       Consider using a more robust method for distinguishing model types here.
+
                     model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]

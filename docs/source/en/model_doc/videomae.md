@@ -18,12 +18,13 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
 
-The VideoMAE model was proposed in [VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training](https://arxiv.org/abs/2203.12602) by Zhan Tong, Yibing Song, Jue Wang, Limin Wang.
+The VideoMAE model was proposed in [VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training](https://huggingface.co/papers/2203.12602) by Zhan Tong, Yibing Song, Jue Wang, Limin Wang.
 VideoMAE extends masked auto encoders ([MAE](vit_mae)) to video, claiming state-of-the-art performance on several video classification benchmarks.
 
 The abstract from the paper is the following:
@@ -33,7 +34,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/videomae_architecture.jpeg"
 alt="drawing" width="600"/>
 
-<small> VideoMAE pre-training. Taken from the <a href="https://arxiv.org/abs/2203.12602">original paper</a>. </small>
+<small> VideoMAE pre-training. Taken from the <a href="https://huggingface.co/papers/2203.12602">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).

@@ -15,8 +15,10 @@
 
 import re
 import unicodedata
+from collections.abc import Iterator
 from fractions import Fraction
-from typing import Iterator, List, Match, Optional, Union
+from re import Match
+from typing import Optional, Union
 
 import regex
 
@@ -208,7 +210,7 @@ class EnglishNumberNormalizer:
         }
         self.literal_words = {"one", "ones"}
 
-    def process_words(self, words: List[str]) -> Iterator[str]:
+    def process_words(self, words: list[str]) -> Iterator[str]:
         prefix: Optional[str] = None
         value: Optional[Union[str, int]] = None
         skip = False

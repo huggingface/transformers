@@ -16,7 +16,7 @@
 
 import itertools
 import math
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -35,7 +35,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_nested_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -58,7 +58,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
@@ -71,10 +71,10 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
             `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -95,18 +95,18 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        do_pan_and_scan: bool = None,
-        pan_and_scan_min_crop_size: int = None,
-        pan_and_scan_max_num_crops: int = None,
-        pan_and_scan_min_ratio_to_activate: float = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_convert_rgb: Optional[bool] = None,
+        do_pan_and_scan: Optional[bool] = None,
+        pan_and_scan_min_crop_size: Optional[int] = None,
+        pan_and_scan_max_num_crops: Optional[int] = None,
+        pan_and_scan_min_ratio_to_activate: Optional[float] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -140,7 +140,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     ):
         """
         Pan and Scan and image, by cropping into smaller images when the aspect ratio exceeds
-        minumum allowed ratio.
+        minimum allowed ratio.
 
         Args:
             image (`np.ndarray`):
@@ -213,7 +213,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
     def _process_images_for_pan_and_scan(
         self,
-        images: List[np.ndarray],
+        images: list[np.ndarray],
         do_pan_and_scan: bool,
         pan_and_scan_min_crop_size: int,
         pan_and_scan_max_num_crops: int,
@@ -240,22 +240,22 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        do_convert_rgb: bool = None,
-        do_pan_and_scan: bool = None,
-        pan_and_scan_min_crop_size: int = None,
-        pan_and_scan_max_num_crops: int = None,
-        pan_and_scan_min_ratio_to_activate: float = None,
+        do_convert_rgb: Optional[bool] = None,
+        do_pan_and_scan: Optional[bool] = None,
+        pan_and_scan_min_crop_size: Optional[int] = None,
+        pan_and_scan_max_num_crops: Optional[int] = None,
+        pan_and_scan_min_ratio_to_activate: Optional[float] = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -266,7 +266,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
@@ -277,9 +277,9 @@ class Gemma3ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -334,9 +334,9 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             else self.pan_and_scan_min_ratio_to_activate
         )
 
-        images_list = make_nested_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
-        if not valid_images(images_list[0]):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -353,12 +353,12 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             resample=resample,
         )
         if do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+            images = [convert_to_rgb(image) for image in images]
 
         # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images = [to_numpy_array(image) for image in images]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -366,45 +366,40 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_pan_and_scan:
-            images_list_and_num_crops = [
-                self._process_images_for_pan_and_scan(
-                    images=images,
-                    do_pan_and_scan=do_pan_and_scan,
-                    pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
-                    pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
-                    pan_and_scan_min_ratio_to_activate=pan_and_scan_min_ratio_to_activate,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                for images in images_list
-            ]
-            images_list = [images for images, _ in images_list_and_num_crops]
-            num_crops = [num_crops for _, num_crops in images_list_and_num_crops]
+            images, num_crops = self._process_images_for_pan_and_scan(
+                images=images,
+                do_pan_and_scan=do_pan_and_scan,
+                pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
+                pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
+                pan_and_scan_min_ratio_to_activate=pan_and_scan_min_ratio_to_activate,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
+
         else:
-            num_crops = [[0] for images in images_list]
+            num_crops = [0 for _ in images]
 
         processed_images = []
-        for images in images_list:
-            for image in images:
-                if do_resize:
-                    height, width = size["height"], size["width"]
-                    image = resize(
-                        image=image, size=(height, width), resample=resample, input_data_format=input_data_format
-                    )
+        for image in images:
+            if do_resize:
+                height, width = size["height"], size["width"]
+                image = resize(
+                    image=image, size=(height, width), resample=resample, input_data_format=input_data_format
+                )
 
-                if do_rescale:
-                    image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-                if do_normalize:
-                    image = self.normalize(
-                        image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                    )
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
-                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                processed_images.append(image)
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            processed_images.append(image)
 
         data = {"pixel_values": processed_images, "num_crops": num_crops}
         return BatchFeature(data=data, tensor_type=return_tensors)

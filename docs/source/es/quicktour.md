@@ -220,7 +220,7 @@ Pasa tu texto al tokenizador:
 El tokenizador devolverá un diccionario conteniendo:
 
 * [input_ids](./glossary#input-ids): representaciones numéricas de los tokens.
-* [atttention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
+* [attention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
 
 Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, el tokenizador también puede rellenar (pad, en inglés) y truncar el texto para devolver un lote (batch, en inglés) de longitud uniforme:
 

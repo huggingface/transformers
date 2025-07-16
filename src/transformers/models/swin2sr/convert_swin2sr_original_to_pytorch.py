@@ -170,7 +170,7 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
 
     if len(missing_keys) > 0:
-        raise ValueError("Missing keys when converting: {}".format(missing_keys))
+        raise ValueError(f"Missing keys when converting: {missing_keys}")
     for key in unexpected_keys:
         if not ("relative_position_index" in key or "relative_coords_table" in key or "self_mask" in key):
             raise ValueError(f"Unexpected key {key} in state_dict")
@@ -224,9 +224,9 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
             [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
         )
 
-    assert (
-        outputs.reconstruction.shape == expected_shape
-    ), f"Shape of reconstruction should be {expected_shape}, but is {outputs.reconstruction.shape}"
+    assert outputs.reconstruction.shape == expected_shape, (
+        f"Shape of reconstruction should be {expected_shape}, but is {outputs.reconstruction.shape}"
+    )
     assert torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 

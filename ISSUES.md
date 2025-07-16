@@ -26,7 +26,7 @@ There are two main venues to receive support: [the forums](https://discuss.huggi
 
 [The user forums](https://discuss.huggingface.co/) are supported by the wide community of the library users and backed up by developers when needed.
 
-If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystalized and you still need support from the library developers do proceed to file an [issue](https://github.com/huggingface/transformers/issues).
+If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystallized and you still need support from the library developers do proceed to file an [issue](https://github.com/huggingface/transformers/issues).
 
 In particular all "Please explain" questions or objectively very user-specific feature requests belong to the forums. Here are some example of such questions:
 
@@ -263,9 +263,9 @@ You are not required to read the following guidelines before opening an issue. H
     But if you're replying to a comment that happened some comments back it's always a good practice to quote just the relevant lines you're replying it. The `>` is used for quoting, or you can always use the menu to do so. For example your editor box will look like:
 
     ```
-    > How big is your gpu cluster?
+    > How big is your GPU cluster?
 
-    Our cluster is made of 256 gpus.
+    Our cluster is made of 256 GPUs.
     ```
 
     If you are addressing multiple comments, quote the relevant parts of each before your answer. Some people use the same comment to do multiple replies, others separate them into separate comments. Either way works. The latter approach helps for linking to a specific comment.

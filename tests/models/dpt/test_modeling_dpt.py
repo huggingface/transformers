@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import unittest
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -255,6 +254,10 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="Inductor error for dynamic shape")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -286,7 +289,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model.eval()
 
                 if model.__class__.__name__ == "DPTForDepthEstimation":
-                    # Confirm out_indices propogated to backbone
+                    # Confirm out_indices propagated to backbone
                     self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -339,11 +342,15 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 384, 384))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]],
+                ("cuda", 8): [[6.3215, 6.3635, 6.4155], [6.3863, 6.3622, 6.4174], [6.3530, 6.3184, 6.3583]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_semantic_segmentation(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")

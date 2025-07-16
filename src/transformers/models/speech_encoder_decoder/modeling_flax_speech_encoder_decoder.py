@@ -15,7 +15,7 @@
 """Classes to support Flax Speech-Encoder-Decoder architectures"""
 
 import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import flax.linen as nn
 import jax
@@ -46,11 +46,11 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
     tasks was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation
-    Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
+    Tasks](https://huggingface.co/papers/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
     Additionally, in [Large-Scale Self- and Semi-Supervised Learning for Speech
-    Translation](https://arxiv.org/abs/2104.06678) it is shown how leveraging large pretrained speech models for speech
+    Translation](https://huggingface.co/papers/2104.06678) it is shown how leveraging large pretrained speech models for speech
     translation yields a significant performance improvement.
 
     After such an Speech-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
@@ -86,8 +86,9 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         inputs (`jnp.ndarray` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
-            or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile
-            library (`pip install soundfile`). To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
+            or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.*
+            via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
             [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
             `torch.FloatTensor`.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -128,10 +129,10 @@ SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         inputs (`jnp.ndarray` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a *.flac*
-            or *.wav* audio file into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile
-            library (*pip install soundfile*). To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or
-            [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
-            *torch.FloatTensor*.
+            or *.wav* audio file into an array of type *list[float]* or a *numpy.ndarray*, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or [`Speech2TextProcessor`] should be used
+            for padding and conversion into a tensor of type *torch.FloatTensor*.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -182,7 +183,7 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range `[0, config.decoder.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+        past_key_values (`dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):
@@ -341,7 +342,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: SpeechEncoderDecoderConfig,
-        input_shape: Optional[Tuple] = None,
+        input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -374,7 +375,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input DeviceArrays
@@ -474,7 +475,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
         train: bool = False,
         freeze_feature_encoder: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -542,12 +543,12 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -671,7 +672,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
         train: bool = False,
         freeze_feature_encoder: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -807,7 +808,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
             model_args (remaining positional arguments, *optional*):
-                All remaning positional arguments will be passed to the underlying model's `__init__` method.
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,

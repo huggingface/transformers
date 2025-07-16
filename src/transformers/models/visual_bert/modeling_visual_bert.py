@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -32,20 +33,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_visual_bert import VisualBertConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "VisualBertConfig"
-_CHECKPOINT_FOR_DOC = "uclanlp/visualbert-vqa-coco-pre"
 
 
 class VisualBertEmbeddings(nn.Module):
@@ -140,7 +132,7 @@ class VisualBertEmbeddings(nn.Module):
                 visual_position_embeddings *= image_text_alignment_mask.to(dtype=dtype).unsqueeze(-1)
                 visual_position_embeddings = visual_position_embeddings.sum(2)
 
-                # We want to averge along the alignment_number dimension.
+                # We want to average along the alignment_number dimension.
                 image_text_alignment_mask = image_text_alignment_mask.to(dtype=dtype).sum(2)
 
                 if (image_text_alignment_mask == 0).sum() != 0:
@@ -339,7 +331,7 @@ class VisualBertOutput(nn.Module):
         return hidden_states
 
 
-class VisualBertLayer(nn.Module):
+class VisualBertLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -403,16 +395,7 @@ class VisualBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -507,12 +490,8 @@ class VisualBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@auto_docstring
 class VisualBertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VisualBertConfig
     base_model_prefix = "visual_bert"
     supports_gradient_checkpointing = True
@@ -523,146 +502,53 @@ class VisualBertPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        elif isinstance(module, VisualBertLMPredictionHead):
             module.bias.data.zero_()
 
 
 @dataclass
-class VisualBertForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`VisualBertForPreTraining`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the sentence-image prediction
-            (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the sentence-image prediction (classification) head (scores of True/False continuation
-            before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VisualBertForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the masked language modeling loss and the sentence-image prediction
+        (classification) loss.
+    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Prediction scores of the sentence-image prediction (classification) head (scores of True/False continuation
+        before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
-VISUAL_BERT_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`VisualBertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VISUAL_BERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
-            The embedded representation of the visual inputs, generally derived using using an object detector.
-
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
-            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
-            Segment token indices to indicate different portions of the visual embeds.
-
-            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
-            *visual_token_type_ids* to *1* for all tokens.
-
-        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
-            Image-Text alignment uses to decide the position IDs of the visual embeddings.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare VisualBert Model transformer outputting raw hidden-states without any specific head on top.",
-    VISUAL_BERT_START_DOCSTRING,
-)
-class VisualBertModel(VisualBertPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
-
+)
+class VisualBertModel(VisualBertPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -693,8 +579,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -710,10 +595,24 @@ class VisualBertModel(VisualBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
+        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+            The embedded representation of the visual inputs, generally derived using using an object detector.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
-        Returns:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Segment token indices to indicate different portions of the visual embeds.
+
+            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
+            *visual_token_type_ids* to *1* for all tokens.
+        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
+            Image-Text alignment uses to decide the position IDs of the visual embeddings.
 
         Example:
 
@@ -844,12 +743,11 @@ class VisualBertModel(VisualBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     VisualBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
     `sentence-image prediction (classification)` head.
-    """,
-    VISUAL_BERT_START_DOCSTRING,
+    """
 )
 class VisualBertForPreTraining(VisualBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
@@ -870,8 +768,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=VisualBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -889,8 +786,24 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         sentence_image_labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], VisualBertForPreTrainingOutput]:
+    ) -> Union[tuple[torch.Tensor], VisualBertForPreTrainingOutput]:
         r"""
+        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+            The embedded representation of the visual inputs, generally derived using using an object detector.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Segment token indices to indicate different portions of the visual embeds.
+
+            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
+            *visual_token_type_ids* to *1* for all tokens.
+        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
+            Image-Text alignment uses to decide the position IDs of the visual embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
@@ -901,8 +814,6 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
             - 0 indicates sequence B is a matching pair of sequence A for the given image,
             - 1 indicates sequence B is a random sequence w.r.t A for the given image.
-
-        Returns:
 
         Example:
 
@@ -990,13 +901,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    VisualBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
-    a softmax) e.g. for VCR tasks.
-    """,
-    VISUAL_BERT_START_DOCSTRING,
-)
+@auto_docstring
 class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1008,10 +913,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
-    @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1028,14 +930,52 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+            The embedded representation of the visual inputs, generally derived using using an object detector.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Segment token indices to indicate different portions of the visual embeds.
+
+            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
+            *visual_token_type_ids* to *1* for all tokens.
+        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
+            Image-Text alignment uses to decide the position IDs of the visual embeddings.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
-
-        Returns:
 
         Example:
 
@@ -1143,12 +1083,11 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     VisualBert Model with a classification/regression head on top (a dropout and a linear layer on top of the pooled
     output) for VQA.
-    """,
-    VISUAL_BERT_START_DOCSTRING,
+    """
 )
 class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     def __init__(self, config):
@@ -1162,8 +1101,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1180,13 +1118,27 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
+        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+            The embedded representation of the visual inputs, generally derived using using an object detector.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Segment token indices to indicate different portions of the visual embeds.
+
+            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
+            *visual_token_type_ids* to *1* for all tokens.
+        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
+            Image-Text alignment uses to decide the position IDs of the visual embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. A KLDivLoss is computed between the labels and the returned logits.
-
-        Returns:
 
         Example:
 
@@ -1269,12 +1221,11 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     VisualBert Model with a sequence classification head on top (a dropout and a linear layer on top of the pooled
     output) for Visual Reasoning e.g. for NLVR task.
-    """,
-    VISUAL_BERT_START_DOCSTRING,
+    """
 )
 class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
     def __init__(self, config):
@@ -1288,8 +1239,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1306,13 +1256,27 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
+        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+            The embedded representation of the visual inputs, generally derived using using an object detector.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Segment token indices to indicate different portions of the visual embeds.
+
+            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
+            *visual_token_type_ids* to *1* for all tokens.
+        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
+            Image-Text alignment uses to decide the position IDs of the visual embeddings.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
-
-        Returns:
 
         Example:
 
@@ -1429,12 +1393,11 @@ class VisualBertRegionToPhraseAttention(nn.Module):
         return attention_scores
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     VisualBert Model with a Masked Language Modeling head and an attention layer on top for Region-to-Phrase Alignment
     e.g. for Flickr30 Entities task.
-    """,
-    VISUAL_BERT_START_DOCSTRING,
+    """
 )
 class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias"]
@@ -1450,8 +1413,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1469,16 +1431,29 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         return_dict: Optional[bool] = None,
         region_to_phrase_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
+        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+            The embedded representation of the visual inputs, generally derived using using an object detector.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        visual_token_type_ids (`torch.LongTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+            Segment token indices to indicate different portions of the visual embeds.
+
+            [What are token type IDs?](../glossary#token-type-ids) The authors of VisualBERT set the
+            *visual_token_type_ids* to *1* for all tokens.
+        image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
+            Image-Text alignment uses to decide the position IDs of the visual embeddings.
         region_to_phrase_position (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
             The positions depicting the position of the image embedding corresponding to the textual tokens.
-
         labels (`torch.LongTensor` of shape `(batch_size, total_sequence_length, visual_sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. KLDivLoss is computed against these labels and the
             outputs from the attention layer.
-
-        Returns:
 
         Example:
 

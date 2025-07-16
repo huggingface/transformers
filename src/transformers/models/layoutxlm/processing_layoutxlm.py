@@ -17,7 +17,7 @@ Processor class for LayoutXLM.
 """
 
 import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -68,10 +68,10 @@ class LayoutXLMProcessor(ProcessorMixin):
     def __call__(
         self,
         images,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -101,8 +101,7 @@ class LayoutXLMProcessor(ProcessorMixin):
         # verify input
         if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
-                "You cannot provide bounding boxes "
-                "if you initialized the image processor with apply_ocr set to True."
+                "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."
             )
 
         if self.image_processor.apply_ocr and (word_labels is not None):

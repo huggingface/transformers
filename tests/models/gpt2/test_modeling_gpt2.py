@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ import pytest
 
 from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -431,9 +431,9 @@ class GPT2ModelTester:
         model.eval()
 
         # We want this for SDPA, eager works with a `None` attention mask
-        assert (
-            model.config._attn_implementation == "sdpa"
-        ), "This test assumes the model to have the SDPA implementation for its attention calculations."
+        assert model.config._attn_implementation == "sdpa", (
+            "This test assumes the model to have the SDPA implementation for its attention calculations."
+        )
 
         # Prepare cache and non_cache input, needs a full attention mask
         cached_len = input_ids.shape[-1] // 2
@@ -662,7 +662,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
@@ -724,7 +724,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
@@ -818,10 +818,16 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        expected_outputs = Expectations(
+            {
+                ("rocm", None): 'Today is a nice day and we can do this again."\n\nDana said that she will',
+                ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("xpu", 3): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = expected_outputs.get_expectation()
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
         self.assertTrue(
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
@@ -866,7 +872,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_flash_attn_2_generate_padding_left(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
 

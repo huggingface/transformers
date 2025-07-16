@@ -15,7 +15,8 @@
 # limitations under the License.
 
 import math
-from typing import Dict, Iterable, List, Optional, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -27,7 +28,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    VideoInput,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
@@ -46,12 +46,12 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def make_batched_images(images) -> List[List[ImageInput]]:
+def make_batched_images(images) -> list[list[ImageInput]]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
 
     Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
+        images (`Union[list[list[ImageInput]], list[ImageInput], ImageInput]`):
             The input image.
 
     Returns:
@@ -81,9 +81,7 @@ def smart_resize(
     3. The aspect ratio of the image is maintained as closely as possible.
 
     """
-    if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
+    if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
@@ -91,8 +89,8 @@ def smart_resize(
     w_bar = round(width / factor) * factor
     if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
         h_bar = math.ceil(height * beta / factor) * factor
@@ -115,9 +113,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
@@ -141,8 +139,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         do_pad: bool = True,
         min_pixels: int = 512 * 512,
@@ -166,15 +164,15 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
-        do_resize: bool = None,
+        images: ImageInput,
+        do_resize: Optional[bool] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -184,7 +182,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`List[Dict]`, *optional*):
+            vision_info (`list[Dict]`, *optional*):
                 Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -196,9 +194,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 Scale factor to use if rescaling the image.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
@@ -262,8 +260,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
     def _pad_for_batching(
         self,
-        pixel_values: List[np.ndarray],
-        image_sizes: List[List[int]],
+        pixel_values: list[np.ndarray],
+        image_sizes: list[list[int]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -271,9 +269,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
 
         Args:
-            pixel_values (`List[np.ndarray]`):
+            pixel_values (`list[np.ndarray]`):
                 An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
-            image_sizes (`List[List[int]]`):
+            image_sizes (`list[list[int]]`):
                 A list of sizes for each image in `pixel_values` in (height, width) format.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
@@ -287,7 +285,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 If unset, will use the inferred format of the input image.
 
         Returns:
-            List[`np.ndarray`]: The padded images.
+            list[`np.ndarray`]: The padded images.
         """
 
         max_shape = (
@@ -308,15 +306,15 @@ class Emu3ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_convert_rgb: Optional[bool] = None,
         do_pad: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -329,7 +327,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -341,9 +339,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
@@ -433,8 +431,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Union[str, TensorType] = "PIL.Image.Image",
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -450,9 +448,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:

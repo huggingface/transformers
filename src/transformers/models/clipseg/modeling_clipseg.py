@@ -17,7 +17,7 @@
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,23 +25,14 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
 
 
 # contrastive loss function, adapted from
@@ -58,37 +49,37 @@ def clipseg_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLIPSeg
 class CLIPSegOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPSegTextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPSegVisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`CLIPSegTextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`CLIPSegVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    logits_per_image: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -96,44 +87,44 @@ class CLIPSegOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class CLIPSegDecoderOutput(ModelOutput):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Classification scores for each pixel.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+        Classification scores for each pixel.
     """
 
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
+@auto_docstring
 class CLIPSegImageSegmentationOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        ...
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPSegVisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Binary cross entropy loss for segmentation.
+    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+        Classification scores for each pixel.
+    conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+        Conditional embeddings used for segmentation.
+    pooled_output (`torch.FloatTensor` of shape `(batch_size, embed_dim)`):
+        Pooled output of the [`CLIPSegVisionModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`CLIPSegVisionModel`].
+    decoder_output (`CLIPSegDecoderOutput`):
+        The output of the [`CLIPSegDecoder`].
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    conditional_embeddings: torch.FloatTensor = None
-    pooled_output: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    conditional_embeddings: Optional[torch.FloatTensor] = None
+    pooled_output: Optional[torch.FloatTensor] = None
     vision_model_output: BaseModelOutputWithPooling = None
     decoder_output: CLIPSegDecoderOutput = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["vision_model_output", "decoder_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -209,7 +200,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
             )
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -264,11 +255,34 @@ class CLIPSegTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->CLIPSeg
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class CLIPSegAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: Union[CLIPSegVisionConfig, CLIPSegTextConfig]):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -281,14 +295,12 @@ class CLIPSegAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -296,77 +308,55 @@ class CLIPSegAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        # CLIP text model uses both `causal_attention_mask` and `attention_mask`
+        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
+        if self.config._attn_implementation != "flash_attention_2":
+            if attention_mask is not None and causal_attention_mask is not None:
+                attention_mask = attention_mask + causal_attention_mask
+            elif causal_attention_mask is not None:
+                attention_mask = causal_attention_mask
         else:
-            attn_weights_reshaped = None
+            self.is_causal = causal_attention_mask is not None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
+        if not output_attentions:
+            attn_weights = None
 
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->CLIPSeg
@@ -386,7 +376,7 @@ class CLIPSegMLP(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->CLIPSeg
-class CLIPSegEncoderLayer(nn.Module):
+class CLIPSegEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: CLIPSegConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -401,7 +391,7 @@ class CLIPSegEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -436,12 +426,8 @@ class CLIPSegEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class CLIPSegPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = CLIPSegConfig
     base_model_prefix = "clip"
     supports_gradient_checkpointing = True
@@ -488,106 +474,6 @@ class CLIPSegPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-CLIPSEG_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`CLIPSegConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-CLIPSEG_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLIPSEG_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLIPSEG_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `True`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->CLIPSeg
 class CLIPSegEncoder(nn.Module):
     """
@@ -604,6 +490,7 @@ class CLIPSegEncoder(nn.Module):
         self.layers = nn.ModuleList([CLIPSegEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -612,7 +499,7 @@ class CLIPSegEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -655,22 +542,12 @@ class CLIPSegEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
-
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -679,8 +556,6 @@ class CLIPSegEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -698,9 +573,7 @@ class CLIPSegTextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegTextConfig)
-    # Adapted from transformers.models.clip.modeling_clip.CLIPTextTransformer.forward with clip->clipseg, CLIP->CLIPSeg
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -709,11 +582,7 @@ class CLIPSegTextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -800,8 +669,7 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegTextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -810,10 +678,8 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -850,8 +716,7 @@ class CLIPSegVisionTransformer(nn.Module):
         self.encoder = CLIPSegEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor],
@@ -859,11 +724,7 @@ class CLIPSegVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -908,8 +769,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -917,10 +777,8 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -949,7 +807,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         )
 
 
-@add_start_docstrings(CLIPSEG_START_DOCSTRING)
+@auto_docstring
 class CLIPSegModel(CLIPSegPreTrainedModel):
     config_class = CLIPSegConfig
 
@@ -985,7 +843,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1032,7 +890,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_VISION_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1083,8 +941,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPSegOutput, config_class=CLIPSegConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1096,9 +953,10 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLIPSegOutput]:
+    ) -> Union[tuple, CLIPSegOutput]:
         r"""
-        Returns:
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 
@@ -1200,7 +1058,7 @@ class CLIPSegDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1281,7 +1139,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.Tensor],
+        hidden_states: tuple[torch.Tensor],
         conditional_embeddings: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1336,11 +1194,10 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     CLIPSeg model with a Transformer-based decoder on top for zero-shot and one-shot image segmentation.
-    """,
-    CLIPSEG_START_DOCSTRING,
+    """
 )
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
     config_class = CLIPSegConfig
@@ -1360,7 +1217,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
     def get_conditional_embeddings(
         self,
-        batch_size: int = None,
+        batch_size: Optional[int] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1387,8 +1244,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         return conditional_embeddings
 
-    @add_start_docstrings_to_model_forward(CLIPSEG_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPSegImageSegmentationOutput, config_class=CLIPSegTextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.FloatTensor] = None,
@@ -1402,14 +1258,17 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLIPSegOutput]:
+    ) -> Union[tuple, CLIPSegOutput]:
         r"""
+        conditional_pixel_values (`torch.FloatTensor`, *optional*):
+            The pixel values of the conditional images.
+        conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
+            The conditional embeddings for the query images. If provided, the model will use this instead of computing
+            the embeddings from the conditional_pixel_values.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 

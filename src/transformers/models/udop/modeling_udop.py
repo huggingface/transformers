@@ -19,9 +19,10 @@ import logging
 import math
 import random
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -34,18 +35,17 @@ from transformers.modeling_outputs import (
 )
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
-    replace_return_docstrings,
 )
 
 
@@ -58,215 +58,50 @@ if is_torch_flex_attn_available():
 logger = logging.getLogger(__name__)
 
 
-_CONFIG_FOR_DOC = "UdopConfig"
-
-
-UDOP_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Args:
-        config ([`UdopConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-UDOP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. UDOP is a model with relative position embeddings so
-            you should be able to pad the inputs on both the right and the left. Indices can be obtained using
-            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
-            [What are input IDs?](../glossary#input-ids)
-
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-
-        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
-            Bounding boxes of each input sequence tokens. Selected in the range `[0,
-            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
-            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
-            y1) represents the position of the lower right corner.
-
-            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
-            token. See `pixel_values` for `patch_sequence_length`.
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
-            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
-            config.patch_size) * (width / config.patch_size))`.
-
-        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
-            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
-
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
-            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
-            [What are decoder input IDs?](../glossary#decoder-input-ids) T5 uses the `pad_token_id` as the starting
-            token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
-            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
-            `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
-        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
-            1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
-                `[0, 1]`:
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
-            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix. If
-            `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value of
-            `inputs_embeds`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-            cache in the correct position and to infer the complete sequence length.
-"""
-
-
-UDOP_ENCODER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for detail.
-
-            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
-            Bounding boxes of each input sequence tokens. Selected in the range `[0,
-            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
-            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
-            y1) represents the position of the lower right corner.
-
-            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
-            token. See `pixel_values` for `patch_sequence_length`.
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
-            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
-            config.patch_size) * (width / config.patch_size))`.
-
-        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
-            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @dataclass
-class BaseModelOutputWithAttentionMask(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for the model's outputs that may also contain a past key/values (to speed up sequential decoding). Includes
     an additional attention mask.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
-            the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or
-        when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
-            self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
-            that can be used (see `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
-        when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when
-        `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and
-        `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class BaseModelOutputWithAttentionMask(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
+        the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
+    attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Attention mask used in the model's forward pass to avoid performing attention on padding token indices.
+        Mask values selected in `[0, 1]`:
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+        encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
+        self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
+        that can be used (see `past_key_values` input) to speed up sequential decoding.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+        the model at the output of each layer plus the optional initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+        used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    attention_mask: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    attention_mask: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 def get_visual_bbox(image_size=224, patch_size=16):
@@ -407,20 +242,15 @@ class UdopPatchEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.proj(pixel_values)
         embeddings = embeddings.flatten(2).transpose(1, 2)
         return embeddings
 
 
+@auto_docstring
 class UdopPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models. Based on `T5PreTrainedModel`.
-    """
-
     config_class = UdopConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
@@ -525,7 +355,7 @@ class UdopLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # Udop uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -758,13 +588,16 @@ class UdopAttention(nn.Module):
         query_states = self.q(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        if past_key_value is not None:
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
                 curr_past_key_value = past_key_value.cross_attention_cache
             else:
                 curr_past_key_value = past_key_value.self_attention_cache
+        else:
+            curr_past_key_value = past_key_value
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
@@ -833,7 +666,7 @@ class UdopAttention(nn.Module):
         attn_output = attn_output.view(batch_size, -1, self.inner_dim)
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output, past_key_value, position_bias)
+        outputs = (attn_output, position_bias)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -917,7 +750,7 @@ class UdopLayerCrossAttention(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Udop
-class UdopBlock(nn.Module):
+class UdopBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -958,8 +791,8 @@ class UdopBlock(nn.Module):
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states, past_key_value = self_attention_outputs[:2]
-        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
+        hidden_states = self_attention_outputs[0]
+        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
@@ -983,7 +816,7 @@ class UdopBlock(nn.Module):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
-            hidden_states, past_key_value = cross_attention_outputs[:2]
+            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
@@ -995,7 +828,7 @@ class UdopBlock(nn.Module):
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[2:]
+            attention_outputs = attention_outputs + cross_attention_outputs[1:]
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
@@ -1011,17 +844,14 @@ class UdopBlock(nn.Module):
 
         outputs = (hidden_states,)
 
-        if use_cache:
-            outputs = outputs + (past_key_value,) + attention_outputs
-        else:
-            outputs = outputs + attention_outputs
-
-        return outputs  # hidden-states, past_key_value, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+        return (
+            outputs + attention_outputs
+        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
 class UdopCellEmbeddings(nn.Module):
     def __init__(self, max_2d_position_embeddings=501, hidden_size=1024):
-        super(UdopCellEmbeddings, self).__init__()
+        super().__init__()
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
         self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
@@ -1085,7 +915,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
         prefix_bucket=False,
         expand=False,
     ):
-        super(RelativePositionBiasBase, self).__init__()
+        super().__init__()
         self.prefix_bucket = prefix_bucket
         self.augmentation = augmentation
         self.level = level
@@ -1102,11 +932,11 @@ class RelativePositionBiasBase(nn.Module, ABC):
     def prepare_input(
         self,
         attention_mask: Optional[Tensor] = None,
-        bbox: Optional[Dict[str, Any]] = None,
+        bbox: Optional[dict[str, Any]] = None,
     ) -> Tensor:
         pass
 
-    def get_bucket(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def get_bucket(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         relative_position = self.prepare_input(attention_mask, bbox)
         rp_bucket: Tensor = get_relative_position_bucket(
             relative_position,
@@ -1126,7 +956,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
 
         return relative_position.to(torch.long)
 
-    def forward(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def forward(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         # re-using pretrained model with subsequent addition of prefix_bucket
         if self.expand and self.prefix_bucket:
             new_bias = nn.Embedding(self.relative_attention_num_buckets + 2, self.num_heads)
@@ -1163,7 +993,7 @@ class RelativePositionBias1D(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         if self.scaling_factor != 1:
             raise ValueError("No need to scale 1d features")
         relative_position = self.get_relative_position(
@@ -1181,7 +1011,7 @@ class RelativePositionBiasHorizontal(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         if not self.scaling_factor > 1.0:
             raise ValueError("Need to scale the values of bboxes, as there are in small (0,1) range")
         if bbox is None:
@@ -1200,7 +1030,7 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None) -> Tensor:
         if not self.scaling_factor > 1.0:
             raise ValueError("Need to scale the values of bboxes, as there are in small (0,1) range")
         if bbox is None:
@@ -1224,7 +1054,7 @@ class RelativePositionBiasAggregated(nn.Module):
         self.biases = nn.ModuleList(modules)
 
     def forward(
-        self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None
+        self, attention_mask: Optional[Tensor] = None, bbox: Optional[dict[str, Any]] = None
     ) -> Union[float, Tensor]:
         output = 0.0
         for bias in self.biases:  # type: ignore
@@ -1365,7 +1195,7 @@ class UdopStack(UdopPreTrainedModel):
 
         if inputs_embeds is None:
             if self.embed_tokens is None:
-                raise ValueError("You have to intialize the model with valid token embeddings")
+                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
@@ -1393,25 +1223,14 @@ class UdopStack(UdopPreTrainedModel):
         batch_size, seq_length = input_shape
 
         if use_cache is True:
-            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
+            assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
-        # initialize past_key_values
-        return_legacy_cache = False
-        return_self_attention_cache = False
-        if self.is_decoder and (use_cache or past_key_values is not None):
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                return_legacy_cache = True
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-            elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        if self.is_decoder:
+            if use_cache and past_key_values is None:
+                if self.config.is_encoder_decoder:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
@@ -1433,7 +1252,9 @@ class UdopStack(UdopPreTrainedModel):
                 attention_mask,
                 inputs_embeds,
                 cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values,
                 output_attentions,
             )
         else:
@@ -1469,35 +1290,32 @@ class UdopStack(UdopPreTrainedModel):
 
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask=causal_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                causal_mask,
+                position_bias,
+                encoder_hidden_states,
+                encoder_extended_attention_mask,
+                encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 layer_head_mask=head_mask[i],
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-            # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            if use_cache is False:  # MP fixes
-                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
-            hidden_states, next_decoder_cache = layer_outputs[:2]
+
+            hidden_states = layer_outputs[0]
 
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention weights),
             # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
-            position_bias = layer_outputs[2]
+            position_bias = layer_outputs[1]
             if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1506,19 +1324,13 @@ class UdopStack(UdopPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
                     attention_mask,
-                    next_cache,
+                    past_key_values,
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
@@ -1529,20 +1341,20 @@ class UdopStack(UdopPreTrainedModel):
         return BaseModelOutputWithAttentionMask(
             last_hidden_state=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -1551,17 +1363,16 @@ class UdopStack(UdopPreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1570,9 +1381,9 @@ class UdopStack(UdopPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -1587,7 +1398,6 @@ class UdopStack(UdopPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -1595,7 +1405,7 @@ class UdopStack(UdopPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1607,13 +1417,12 @@ class UdopStack(UdopPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -1633,8 +1442,6 @@ class UdopStack(UdopPreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1646,11 +1453,11 @@ class UdopStack(UdopPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1666,10 +1473,7 @@ class UdopStack(UdopPreTrainedModel):
         return causal_mask
 
 
-@add_start_docstrings(
-    "The bare UDOP encoder-decoder Transformer outputting raw hidden-states without any specific head on top.",
-    UDOP_START_DOCSTRING,
-)
+@auto_docstring
 class UdopModel(UdopPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
@@ -1681,7 +1485,7 @@ class UdopModel(UdopPreTrainedModel):
     ]
 
     def __init__(self, config):
-        super(UdopModel, self).__init__(config)
+        super().__init__(config)
 
         # text and image embeddings
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1690,12 +1494,12 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config, self.shared)
 
@@ -1716,20 +1520,19 @@ class UdopModel(UdopPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(UDOP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
-        bbox: Dict[str, Any] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        bbox: Optional[dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
-        past_key_values: Optional[Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1739,9 +1542,38 @@ class UdopModel(UdopPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[Tensor, ...]:
+    ) -> tuple[Tensor, ...]:
         r"""
-        Returns:
+        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
+            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
+            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+            [What are decoder input IDs?](../glossary#decoder-input-ids) T5 uses the `pad_token_id` as the starting
+            token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
+            `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         Example:
 
@@ -1758,7 +1590,7 @@ class UdopModel(UdopPreTrainedModel):
 
         >>> # load an example image, along with the words and coordinates
         >>> # which were extracted using an OCR engine
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1829,12 +1661,13 @@ class UdopModel(UdopPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """The UDOP encoder-decoder Transformer with a language modeling head on top, enabling to generate text given document
+@auto_docstring(
+    custom_intro="""
+    The UDOP encoder-decoder Transformer with a language modeling head on top, enabling to generate text given document
     images and an optional prompt.
 
-    This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
-    UDOP_START_DOCSTRING,
+    This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.
+    """
 )
 class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
@@ -1848,7 +1681,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     ]
 
     def __init__(self, config):
-        super(UdopForConditionalGeneration, self).__init__(config)
+        super().__init__(config)
 
         # text and image embeddings
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1857,12 +1690,12 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
+        encoder_config.tie_encoder_decoder = False
         self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
+        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config, self.shared)
 
@@ -1892,20 +1725,19 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(UDOP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
-        bbox: Dict[str, Any] = None,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        bbox: Optional[dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
-        past_key_values: Optional[Tensor] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
@@ -1916,14 +1748,42 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[Tensor, ...]:
+    ) -> tuple[Tensor, ...]:
         r"""
+        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
+            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
+            [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+            [What are decoder input IDs?](../glossary#decoder-input-ids) T5 uses the `pad_token_id` as the starting
+            token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
+            `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
             1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size]`.
-
-        Returns:
 
         Examples:
 
@@ -1939,7 +1799,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
 
         >>> # load an example image, along with the words and coordinates
         >>> # which were extracted using an OCR engine
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -2059,10 +1919,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return reordered_decoder_past
 
 
-@add_start_docstrings(
-    "The bare UDOP Model transformer outputting encoder's raw hidden-states without any specific head on top.",
-    UDOP_START_DOCSTRING,
-)
+@auto_docstring
 class UdopEncoderModel(UdopPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
@@ -2105,23 +1962,39 @@ class UdopEncoderModel(UdopPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(UDOP_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithAttentionMask, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
-        input_ids: Tensor = None,
-        bbox: Dict[str, Any] = None,
-        attention_mask: Tensor = None,
+        input_ids: Optional[Tensor] = None,
+        bbox: Optional[dict[str, Any]] = None,
+        attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[dict[str, Any]] = None,
         head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
+    ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
-        Returns:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
+
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
+            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
 
         Example:
 
@@ -2138,7 +2011,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
 
         >>> # load an example image, along with the words and coordinates
         >>> # which were extracted using an OCR engine
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,15 +34,14 @@ from transformers.testing_utils import (
     is_torchaudio_available,
     require_flash_attn,
     require_pyctcdecode,
-    require_soundfile,
     require_torch,
     require_torch_gpu,
     require_torchaudio,
+    require_torchcodec,
     run_test_in_subprocess,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -91,8 +89,7 @@ if is_pyctcdecode_available():
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+from transformers.utils.fx import symbolic_trace
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
@@ -100,9 +97,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
     try:
         _ = in_queue.get(timeout=timeout)
 
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -573,6 +568,9 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -717,8 +715,8 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # TODO: fix it
         self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -814,12 +812,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
-
-    @unittest.skip(
-        "Need to investigate why config.do_stable_layer_norm is set to False here when it doesn't seem to be supported"
-    )
-    def test_flax_from_pt_safetensors(self):
-        return
 
 
 @require_torch
@@ -919,6 +911,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         config.output_attentions = True
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
@@ -1044,7 +1039,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         ).loss
 
         # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
-        self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+        self.assertTrue(loss.item() <= loss_more_masked.item())
 
     def test_mask_feature_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
@@ -1449,7 +1444,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
@@ -1467,7 +1462,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
@@ -1833,9 +1828,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1859,9 +1852,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1885,9 +1876,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
+        with (
+            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
+            multiprocessing.get_context("fork").Pool(2) as pool,
+        ):
             transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)
@@ -1959,9 +1951,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 
         def run_model(lang):
-            ds = load_dataset(
-                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True, trust_remote_code=True
-            )
+            ds = load_dataset("mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True)
             sample = next(iter(ds))
 
             wav2vec2_lang = LANG_MAP[lang]

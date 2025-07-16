@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -62,9 +62,9 @@ class TFAttention(keras.layers.Layer):
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
-        assert (
-            n_state % config.n_head == 0
-        ), f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}"
+        assert n_state % config.n_head == 0, (
+            f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}"
+        )
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -297,7 +297,7 @@ class TFOpenAIGPTMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -429,10 +429,10 @@ class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
-    mc_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    logits: Optional[tf.Tensor] = None
+    mc_logits: Optional[tf.Tensor] = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 OPENAI_GPT_START_DOCSTRING = r"""
@@ -561,7 +561,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -625,7 +625,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFCausalLMOutput]:
+    ) -> Union[tuple, TFCausalLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -712,7 +712,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFOpenAIGPTDoubleHeadsModelOutput]:
+    ) -> Union[tuple, TFOpenAIGPTDoubleHeadsModelOutput]:
         r"""
         mc_token_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
@@ -858,7 +858,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSequenceClassifierOutput]:
+    ) -> Union[tuple, TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,

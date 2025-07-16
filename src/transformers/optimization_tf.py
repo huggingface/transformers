@@ -14,8 +14,7 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
-import re
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import tensorflow as tf
 
@@ -59,7 +58,7 @@ class WarmUp(schedules.LearningRateSchedule):
         decay_schedule_fn: Callable,
         warmup_steps: int,
         power: float = 1.0,
-        name: str = None,
+        name: Optional[str] = None,
     ):
         super().__init__()
         self.initial_learning_rate = initial_learning_rate
@@ -105,7 +104,7 @@ def create_optimizer(
     adam_global_clipnorm: Optional[float] = None,
     weight_decay_rate: float = 0.0,
     power: float = 1.0,
-    include_in_weight_decay: Optional[List[str]] = None,
+    include_in_weight_decay: Optional[list[str]] = None,
 ):
     """
     Creates an optimizer with a learning rate schedule using a warmup phase followed by a linear decay.
@@ -134,7 +133,7 @@ def create_optimizer(
             The weight decay to use.
         power (`float`, *optional*, defaults to 1.0):
             The power to use for PolynomialDecay.
-        include_in_weight_decay (`List[str]`, *optional*):
+        include_in_weight_decay (`list[str]`, *optional*):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters except bias and layer norm parameters.
     """
@@ -182,7 +181,7 @@ class AdamWeightDecay(Adam):
     Adam enables L2 weight decay and clip_by_global_norm on gradients. Just adding the square of the weights to the
     loss function is *not* the correct way of using L2 regularization/weight decay with Adam, since that will interact
     with the m and v parameters in strange ways as shown in [Decoupled Weight Decay
-    Regularization](https://arxiv.org/abs/1711.05101).
+    Regularization](https://huggingface.co/papers/1711.05101).
 
     Instead we want to decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
@@ -198,18 +197,18 @@ class AdamWeightDecay(Adam):
             The epsilon parameter in Adam, which is a small constant for numerical stability.
         amsgrad (`bool`, *optional*, defaults to `False`):
             Whether to apply AMSGrad variant of this algorithm or not, see [On the Convergence of Adam and
-            Beyond](https://arxiv.org/abs/1904.09237).
+            Beyond](https://huggingface.co/papers/1904.09237).
         weight_decay_rate (`float`, *optional*, defaults to 0.0):
             The weight decay to apply.
-        include_in_weight_decay (`List[str]`, *optional*):
+        include_in_weight_decay (`list[str]`, *optional*):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters by default (unless they are in `exclude_from_weight_decay`).
-        exclude_from_weight_decay (`List[str]`, *optional*):
+        exclude_from_weight_decay (`list[str]`, *optional*):
             List of the parameter names (or re patterns) to exclude from applying weight decay to. If a
             `include_in_weight_decay` is passed, the names in it will supersede this list.
         name (`str`, *optional*, defaults to `"AdamWeightDecay"`):
             Optional name for the operations created when applying gradients.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Keyword arguments. Allowed to be {`clipnorm`, `clipvalue`, `lr`, `decay`}. `clipnorm` is clip gradients by
             norm; `clipvalue` is clip gradients by value, `decay` is included for backward compatibility to allow time
             inverse decay of learning rate. `lr` is included for backward compatibility, recommended to use
@@ -224,8 +223,8 @@ class AdamWeightDecay(Adam):
         epsilon: float = 1e-7,
         amsgrad: bool = False,
         weight_decay_rate: float = 0.0,
-        include_in_weight_decay: Optional[List[str]] = None,
-        exclude_from_weight_decay: Optional[List[str]] = None,
+        include_in_weight_decay: Optional[list[str]] = None,
+        exclude_from_weight_decay: Optional[list[str]] = None,
         name: str = "AdamWeightDecay",
         **kwargs,
     ):
@@ -238,10 +237,10 @@ class AdamWeightDecay(Adam):
     def from_config(cls, config):
         """Creates an optimizer from its config with WarmUp custom object."""
         custom_objects = {"WarmUp": WarmUp}
-        return super(AdamWeightDecay, cls).from_config(config, custom_objects=custom_objects)
+        return super().from_config(config, custom_objects=custom_objects)
 
     def _prepare_local(self, var_device, var_dtype, apply_state):
-        super(AdamWeightDecay, self)._prepare_local(var_device, var_dtype, apply_state)
+        super()._prepare_local(var_device, var_dtype, apply_state)
         apply_state[(var_device, var_dtype)]["weight_decay_rate"] = tf.constant(
             self.weight_decay_rate, name="adam_weight_decay_rate"
         )
@@ -257,7 +256,7 @@ class AdamWeightDecay(Adam):
 
     def apply_gradients(self, grads_and_vars, name=None, **kwargs):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
+        return super().apply_gradients(zip(grads, tvars), name=name, **kwargs)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""
@@ -276,13 +275,13 @@ class AdamWeightDecay(Adam):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
         decay = self._decay_weights_op(var, lr_t, apply_state)
         with tf.control_dependencies([decay]):
-            return super(AdamWeightDecay, self)._resource_apply_dense(grad, var, **kwargs)
+            return super()._resource_apply_dense(grad, var, **kwargs)
 
     def _resource_apply_sparse(self, grad, var, indices, apply_state=None):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
         decay = self._decay_weights_op(var, lr_t, apply_state)
         with tf.control_dependencies([decay]):
-            return super(AdamWeightDecay, self)._resource_apply_sparse(grad, var, indices, **kwargs)
+            return super()._resource_apply_sparse(grad, var, indices, **kwargs)
 
     def get_config(self):
         config = super().get_config()
@@ -296,12 +295,12 @@ class AdamWeightDecay(Adam):
 
         if self._include_in_weight_decay:
             for r in self._include_in_weight_decay:
-                if re.search(r, param_name) is not None:
+                if r in param_name:
                     return True
 
         if self._exclude_from_weight_decay:
             for r in self._exclude_from_weight_decay:
-                if re.search(r, param_name) is not None:
+                if r in param_name:
                     return False
         return True
 

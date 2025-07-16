@@ -14,89 +14,157 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# PaliGemma
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# PaliGemma
 
-The PaliGemma model was proposed in [PaliGemma – Google's Cutting-Edge Open Vision Language Model](https://huggingface.co/blog/paligemma) by Google. It is a 3B vision-language model composed by a [SigLIP](siglip) vision encoder and a [Gemma](gemma) language decoder linked by a multimodal linear projection. It cuts an image into a fixed number of VIT tokens and prepends it to an optional prompt. One particularity is that the model uses full block attention on all the image tokens plus the input text tokens. It comes in 3 resolutions, 224x224, 448x448 and 896x896 with 3 base models, with 55 fine-tuned versions for different tasks, and 2 mix models.
+[PaliGemma](https://huggingface.co/papers/2407.07726) is a family of vision-language models (VLMs), combining [SigLIP](./siglip) with the [Gemma](./gemma) 2B model. PaliGemma is available in 3B, 10B, and 28B parameters. The main purpose of PaliGemma is to provide an adaptable base VLM that is easy to transfer to other tasks. The SigLIP vision encoder is a "shape optimized" contrastively pretrained [ViT](./vit) that converts an image into a sequence of tokens and prepended to an optional prompt. The Gemma 2B model is used as the decoder. PaliGemma uses full attention on all image and text tokens to maximize its capacity.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/paligemma/paligemma_arch.png"
-alt="drawing" width="600"/>
+[PaliGemma 2](https://huggingface.co/papers/2412.03555) improves on the first model by using Gemma 2 (2B, 9B, and 27B parameter variants) as the decoder. These are available as **pt** or **mix** variants. The **pt** checkpoints are intended for further fine-tuning and the **mix** checkpoints are ready for use out of the box.
 
-<small> PaliGemma architecture. Taken from the <a href="https://huggingface.co/blog/paligemma">blog post.</a> </small>
+You can find all the original PaliGemma checkpoints under the [PaliGemma](https://huggingface.co/collections/google/paligemma-release-6643a9ffbf57de2ae0448dda), [PaliGemma 2](https://huggingface.co/collections/google/paligemma-2-release-67500e1e1dbfdd4dee27ba48), and [PaliGemma 2 Mix](https://huggingface.co/collections/google/paligemma-2-mix-67ac6a251aaf3ee73679dcc4) collections.
 
-This model was contributed by [Molbap](https://huggingface.co/Molbap).
+> [!TIP]
+> Click on the PaliGemma models in the right sidebar for more examples of how to apply PaliGemma to different vision and language tasks.
 
-## Usage tips
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-- PaliGemma is not meant for conversational use, and it works best when fine-tuning to a specific use case. Some downstream tasks on which PaliGemma can be fine-tuned include image captioning, visual question answering (VQA), object detection, referring expression segmentation and document understanding.
-- One can use `PaliGemmaProcessor` to prepare images, text and optional labels for the model. When fine-tuning a PaliGemma model, the `suffix` argument can be passed to the processor which creates the `labels` for the model:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-```python
-prompt = "What is on the flower?"
-answer = "a bee"
-inputs = processor(images=raw_image, text=prompt, suffix=answer, return_tensors="pt")
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="image-text-to-text",
+    model="google/paligemma2-3b-mix-224",
+    device=0,
+    torch_dtype=torch.bfloat16
+)
+pipeline(
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    text="What is in this image?"
+)
 ```
 
-## Usage Example
+</hfoption>
+<hfoption id="AutoModel">
 
-The model can accept a single or multiple images. According to the [paper](https://arxiv.org/abs/2407.07726v1), the checkpoint PaliGemma can transfer to tasks which take multiple images as input. NLVR2 is one such task, which asks one question about two images, and requires looking at both to give the correct answer. Here's an example code for single and multi image inference.
-
-### Single-image Inference
-
-```python
+```py
+import torch
+import requests
+from PIL import Image
 from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
-model_id = "google/paligemma-3b-mix-224"
-model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
-processor = AutoProcessor.from_pretrained(model_id)
-
-prompt = "What is on the flower?"
-image_file = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
-raw_image = Image.open(requests.get(image_file, stream=True).raw)
-inputs = processor(raw_image, prompt, return_tensors="pt")
-output = model.generate(**inputs, max_new_tokens=20)
-
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
-```
-
-### Multi-image Inference
-
-```python
-model_id = "google/paligemma-3b-ft-nlvr2-448"  # checkpoint tuned for multiple images
-model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
-processor = PaliGemmaProcessor.from_pretrained(model_id)
-
-prompt = "answer en Which of the two pictures shows a snowman, first or second?"
-stop_sign_image = Image.open(
-    requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw
+model = PaliGemmaForConditionalGeneration.from_pretrained(
+    "google/paligemma2-3b-mix-224",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
 )
-snow_image = Image.open(
-    requests.get(
-        "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True
-    ).raw
+processor = AutoProcessor.from_pretrained(
+    "google/paligemma2-3b-mix-224",
 )
 
-inputs = processor(images=[[snow_image, stop_sign_image]], text=prompt, return_tensors="pt")
+prompt = "What is in this image?"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = processor(image, prompt, return_tensors="pt").to("cuda")
 
-output = model.generate(**inputs, max_new_tokens=20)
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
-
+output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
+print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-## Resources
+</hfoption>
+</hfoptions>
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with PaliGemma. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-- A blog post introducing all the features of PaliGemma can be found [here](https://huggingface.co/blog/paligemma).
-- Demo notebooks on how to fine-tune PaliGemma for VQA with the Trainer API along with inference can be found [here](https://github.com/huggingface/notebooks/tree/main/examples/paligemma).
-- Demo notebooks on how to fine-tune PaliGemma on a custom dataset (receipt image -> JSON) along with inference can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/PaliGemma). 🌎
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
+
+```py
+# pip install torchao
+import torch
+import requests
+from PIL import Image
+from transformers import TorchAoConfig, AutoProcessor, PaliGemmaForConditionalGeneration
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+model = PaliGemmaForConditionalGeneration.from_pretrained(
+    "google/paligemma2-28b-mix-224",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+processor = AutoProcessor.from_pretrained(
+    "google/paligemma2-28b-mix-224",
+)
+
+prompt = "What is in this image?"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = processor(image, prompt, return_tensors="pt").to("cuda")
+
+output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
+print(processor.decode(output[0], skip_special_tokens=True))
+```
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+```py
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+visualizer = AttentionMaskVisualizer("google/paligemma2-3b-mix-224")
+visualizer("<img> What is in this image?")
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/paligemma2-attn-mask.png"/>
+</div>
+
+## Notes
+
+- PaliGemma is not a conversational model and works best when fine-tuned for specific downstream tasks such as image captioning, visual question answering (VQA), object detection, and document understanding.
+- [`PaliGemmaProcessor`] can prepare images, text, and optional labels for the model. Pass the `suffix` parameter to the processor to create labels for the model during fine-tuning.
+
+    ```py
+    prompt = "What is in this image?"
+    answer = "a pallas cat"
+    inputs = processor(images=image, text=prompt, suffix=answer, return_tensors="pt")
+    ```
+- PaliGemma can support multiple input images if it is fine-tuned to accept multiple images. For example, the [NLVR2](https://huggingface.co/google/paligemma-3b-ft-nlvr2-448) checkpoint supports multiple images. Pass the images as a list to the processor.
+
+    ```py
+    import torch
+    import requests
+    from PIL import Image
+    from transformers import TorchAoConfig, AutoProcessor, PaliGemmaForConditionalGeneration
+
+    model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-ft-nlvr2-448")
+    processor = AutoProcessor.from_pretrained("google/paligemma-3b-ft-nlvr2-448")
+
+    prompt = "Are these two images the same?"
+    cat_image = Image.open(
+        requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", stream=True).raw
+    )
+    cow_image = Image.open(
+        requests.get(
+            "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4=", stream=True
+        ).raw
+    )
+
+    inputs = processor(images=[[cat_image, cow_image]], text=prompt, return_tensors="pt")
+
+    output = model.generate(**inputs, max_new_tokens=20, cache_implementation="static")
+    print(processor.decode(output[0], skip_special_tokens=True))
+    ```
 
 ## PaliGemmaConfig
 
@@ -105,6 +173,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## PaliGemmaProcessor
 
 [[autodoc]] PaliGemmaProcessor
+
+## PaliGemmaModel
+
+[[autodoc]] PaliGemmaModel
 
 ## PaliGemmaForConditionalGeneration
 

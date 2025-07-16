@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +13,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
+import copy
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     torch_device,
 )
@@ -36,10 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    pass
 
 
 class PaliGemma2VisionText2TextModelTester:
@@ -186,69 +183,27 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         self.model_tester = PaliGemma2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
+        when number of images doesn't match number of image tokens in the text.
         Also we need to test multi-image cases when one prompr has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -294,7 +249,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         pass
 
     @unittest.skip(
-        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
+        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
         pass
@@ -313,37 +268,10 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
-    @unittest.skip(
-        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Low memory will be removed soon so no need to fix it")
@@ -351,6 +279,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -359,6 +288,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -386,3 +316,8 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache")
     def test_generate_with_static_cache(self):
         pass
+
+    @pytest.mark.generate
+    @is_flaky
+    def test_generate_compile_model_forward(self):
+        super().test_generate_compile_model_forward()

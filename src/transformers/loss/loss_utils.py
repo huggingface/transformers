@@ -12,33 +12,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
+from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
-def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
+def fixed_cross_entropy(
+    source: torch.Tensor,
+    target: torch.Tensor,
+    num_items_in_batch: Optional[torch.Tensor] = None,
+    ignore_index: int = -100,
+    **kwargs,
+) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
+        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
+        if torch.is_tensor(num_items_in_batch):
+            num_items_in_batch = num_items_in_batch.to(loss.device)
         loss = loss / num_items_in_batch
     return loss
 
 
 def ForCausalLMLoss(
-    logits, labels, vocab_size: int, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
-):
+    logits,
+    labels,
+    vocab_size: int,
+    num_items_in_batch: Optional[torch.Tensor] = None,
+    ignore_index: int = -100,
+    shift_labels: Optional[torch.Tensor] = None,
+    **kwargs,
+) -> torch.Tensor:
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
-    labels = labels.to(logits.device)
-    # Shift so that tokens < n predict n
-    labels = nn.functional.pad(labels, (0, 1), value=ignore_index)
-    shift_labels = labels[..., 1:].contiguous()
+
+    if shift_labels is None:
+        # Shift so that tokens < n predict n
+        labels = nn.functional.pad(labels, (0, 1), value=ignore_index)
+        shift_labels = labels[..., 1:].contiguous()
 
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
@@ -50,11 +69,15 @@ def ForCausalLMLoss(
 
 
 def ForMaskedLMLoss(
-    logits, labels, vocab_size: int, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    vocab_size: int,
+    num_items_in_batch: Optional[torch.Tensor] = None,
+    ignore_index: int = -100,
+    **kwargs,
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
-    labels = labels.to(logits.device)
 
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
@@ -66,12 +89,12 @@ def ForMaskedLMLoss(
     return loss
 
 
-def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
+def ForSequenceClassificationLoss(labels: torch.Tensor, pooled_logits: torch.Tensor, config, **kwargs) -> torch.Tensor:
     num_labels = config.num_labels
     if config.problem_type is None:
         if num_labels == 1:
             config.problem_type = "regression"
-        elif num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+        elif num_labels > 1 and (labels.dtype in (torch.long, torch.int)):
             config.problem_type = "single_label_classification"
         else:
             config.problem_type = "multi_label_classification"
@@ -80,15 +103,17 @@ def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
     if config.problem_type == "regression":
         loss_fct = MSELoss()
         if num_labels == 1:
-            loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+            return loss_fct(pooled_logits.squeeze(), labels.squeeze())
         else:
-            loss = loss_fct(pooled_logits, labels)
-    elif config.problem_type == "single_label_classification":
-        loss = fixed_cross_entropy(pooled_logits.view(-1, num_labels), labels.view(-1), **kwargs)
-    elif config.problem_type == "multi_label_classification":
+            return loss_fct(pooled_logits, labels)
+    if config.problem_type == "single_label_classification":
+        return fixed_cross_entropy(pooled_logits.view(-1, num_labels), labels.view(-1), **kwargs)
+
+    if config.problem_type == "multi_label_classification":
         loss_fct = BCEWithLogitsLoss()
-        loss = loss_fct(pooled_logits, labels)
-    return loss
+        return loss_fct(pooled_logits, labels)
+
+    raise RuntimeError(f"Invalid problem type: {config.problem_type}")
 
 
 def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_positions, **kwargs):
@@ -110,7 +135,7 @@ def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_posi
     return total_loss
 
 
-def ForTokenClassification(logits, labels, config, **kwargs):
+def ForTokenClassification(logits: torch.Tensor, labels, config, **kwargs):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.view(-1, config.num_labels)
     labels = labels.view(-1).to(logits.device)
@@ -124,6 +149,8 @@ LOSS_MAPPING = {
     "ForMaskedLM": ForMaskedLMLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
+    "ForImageClassification": ForSequenceClassificationLoss,
+    "ForVideoClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
@@ -134,4 +161,6 @@ LOSS_MAPPING = {
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
+    "DFineForObjectDetection": DFineForObjectDetectionLoss,
+    "CsmForConditionalGeneration": ForCausalLMLoss,
 }

@@ -19,7 +19,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -41,21 +42,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_megatron_bert import MegatronBertConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "MegatronBertConfig"
-_CHECKPOINT_FOR_DOC = "nvidia/megatron-bert-cased-345m"
 
 
 def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
@@ -72,7 +63,7 @@ def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
@@ -122,7 +113,7 @@ def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
             array = np.transpose(array)
         if pointer.shape != array.shape:
             raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        logger.info("Initialize PyTorch weight {}".format(name))
+        logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
 
@@ -225,9 +216,9 @@ class MegatronBertSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -367,9 +358,9 @@ class MegatronBertAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         ln_outputs = self.ln(hidden_states)
         self_outputs = self.self(
             ln_outputs,
@@ -415,7 +406,7 @@ class MegatronBertOutput(nn.Module):
 
 
 # Based on transformers.models.bert.modeling_bert.BertLayer. Added LayerNorm.
-class MegatronBertLayer(nn.Module):
+class MegatronBertLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -438,9 +429,9 @@ class MegatronBertLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -521,12 +512,12 @@ class MegatronBertEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -545,27 +536,15 @@ class MegatronBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
 
             # Because we moved the layer-norm at the end of the hidden layer, we have non-normali-
             # zed data here. If that's really needed, we must apply LN to match Transformer's BERT.
@@ -698,12 +677,8 @@ class MegatronBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@auto_docstring
 class MegatronBertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MegatronBertConfig
     load_tf_weights = load_tf_weights_in_megatron_bert
     base_model_prefix = "bert"
@@ -715,124 +690,48 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        elif isinstance(module, MegatronBertLMPredictionHead):
             module.bias.data.zero_()
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`MegatronBertForPreTraining`].
+    """
+)
 # Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->MegatronBert
 class MegatronBertForPreTrainingOutput(ModelOutput):
-    """
-    Output type of [`MegatronBertForPreTraining`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction
-            (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the masked language modeling loss and the next sequence prediction
+        (classification) loss.
+    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+        before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
-MEGATRON_BERT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MegatronBertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MEGATRON_BERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MegatronBert Model transformer outputting raw hidden-states without any specific head on top.",
-    MEGATRON_BERT_START_DOCSTRING,
-)
+@auto_docstring
 class MegatronBertModel(MegatronBertPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
@@ -841,6 +740,10 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -866,12 +769,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -882,32 +780,12 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -997,17 +875,20 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MegatronBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
     `next sentence prediction (classification)` head.
-    """,
-    MEGATRON_BERT_START_DOCSTRING,
+    """
 )
 class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config, add_binary_head=True):
+        r"""
+        add_binary_head (`bool`, *optional*, defaults to `True`):
+            Whether or not to add a binary head.
+        """
         super().__init__(config)
 
         self.bert = MegatronBertModel(config)
@@ -1023,8 +904,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=MegatronBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1038,7 +918,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MegatronBertForPreTrainingOutput]:
+    ) -> Union[tuple, MegatronBertForPreTrainingOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1050,10 +930,6 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
-
-        Returns:
 
         Example:
 
@@ -1107,9 +983,10 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning.""",
-    MEGATRON_BERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    MegatronBert Model with a `language modeling` head on top for CLM fine-tuning.
+    """
 )
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder"]
@@ -1133,8 +1010,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1146,38 +1022,18 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        Returns:
 
         Example:
 
@@ -1247,7 +1103,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-@add_start_docstrings("""MegatronBert Model with a `language modeling` head on top.""", MEGATRON_BERT_START_DOCSTRING)
+@auto_docstring
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -1273,12 +1129,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1293,7 +1144,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1352,9 +1203,10 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
-@add_start_docstrings(
-    """MegatronBert Model with a `next sentence prediction (classification)` head on top.""",
-    MEGATRON_BERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    MegatronBert Model with a `next sentence prediction (classification)` head on top.
+    """
 )
 class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
     def __init__(self, config):
@@ -1366,8 +1218,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1381,7 +1232,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, NextSentencePredictorOutput]:
+    ) -> Union[tuple, NextSentencePredictorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
@@ -1389,8 +1240,6 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-
-        Returns:
 
         Example:
 
@@ -1453,12 +1302,11 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MegatronBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
-    """,
-    MEGATRON_BERT_START_DOCSTRING,
+    """
 )
 class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
     def __init__(self, config):
@@ -1472,12 +1320,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1490,7 +1333,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1550,13 +1393,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    MegatronBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output
-    and a softmax) e.g. for RocStories/SWAG tasks.
-    """,
-    MEGATRON_BERT_START_DOCSTRING,
-)
+@auto_docstring
 class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1568,14 +1405,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1588,8 +1418,32 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
@@ -1643,13 +1497,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    MegatronBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
-    for Named-Entity-Recognition (NER) tasks.
-    """,
-    MEGATRON_BERT_START_DOCSTRING,
-)
+@auto_docstring
 class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1662,12 +1510,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1680,7 +1523,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1721,13 +1564,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    MegatronBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
-    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MEGATRON_BERT_START_DOCSTRING,
-)
+@auto_docstring
 class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1739,12 +1576,7 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1758,17 +1590,7 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(

@@ -19,7 +19,7 @@ from __future__ import annotations
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -88,11 +88,11 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: tf.Tensor = None
-    cls_logits: tf.Tensor = None
-    distillation_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    logits: Optional[tf.Tensor] = None
+    cls_logits: Optional[tf.Tensor] = None
+    distillation_logits: Optional[tf.Tensor] = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 class TFDeiTEmbeddings(keras.layers.Layer):
@@ -290,7 +290,7 @@ class TFDeiTSelfAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
@@ -388,7 +388,7 @@ class TFDeiTAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
         )
@@ -488,7 +488,7 @@ class TFDeiTLayer(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         attention_outputs = self.attention(
             # in DeiT, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states, training=training),
@@ -550,7 +550,7 @@ class TFDeiTEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -635,7 +635,7 @@ class TFDeiTMainLayer(keras.layers.Layer):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -785,7 +785,7 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple, TFBaseModelOutputWithPooling]:
         outputs = self.deit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -813,9 +813,9 @@ class TFDeiTPooler(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size,
+            units=config.pooler_output_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
+            activation=config.pooler_act,
             name="dense",
         )
         self.config = config
@@ -892,7 +892,7 @@ class TFDeitDecoder(keras.layers.Layer):
 
 @add_start_docstrings(
     "DeiT Model with a decoder on top for masked image modeling, as proposed in"
-    " [SimMIM](https://arxiv.org/abs/2111.09886).",
+    " [SimMIM](https://huggingface.co/papers/2111.09886).",
     DEIT_START_DOCSTRING,
 )
 class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,7 @@ import re
 import sys
 import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import datasets
 import evaluate
@@ -53,7 +52,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.50.0.dev0")
+check_min_version("4.54.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -201,11 +200,11 @@ class DataTrainingArguments:
             )
         },
     )
-    chars_to_ignore: Optional[List[str]] = list_field(
+    chars_to_ignore: Optional[list[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
-    eval_metrics: List[str] = list_field(
+    eval_metrics: list[str] = list_field(
         default=["wer"],
         metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
     )
@@ -300,7 +299,7 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
@@ -471,7 +470,7 @@ def main():
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
     chars_to_ignore_regex = (
-        f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
+        f"[{''.join(data_args.chars_to_ignore)}]" if data_args.chars_to_ignore is not None else None
     )
     text_column_name = data_args.text_column_name
 
@@ -805,7 +804,7 @@ def main():
     if "common_voice" in data_args.dataset_name:
         kwargs["language"] = config_name
 
-    # make sure that adapter weights are saved seperately
+    # make sure that adapter weights are saved separately
     adapter_file = WAV2VEC2_ADAPTER_SAFE_FILE.format(data_args.target_language)
     adapter_file = os.path.join(training_args.output_dir, adapter_file)
     logger.info(f"Saving adapter weights under {adapter_file}...")

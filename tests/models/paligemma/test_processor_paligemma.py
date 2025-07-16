@@ -33,16 +33,20 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PaliGemmaProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-        image_processor.image_seq_length = 0
+        image_processor.image_seq_length = 0  # TODO: raushan fix me in #37342
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @require_torch
     @require_vision
@@ -56,7 +60,21 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
-        self.assertEqual(len(inputs["input_ids"][0]), 112 + 14)
+        self.assertEqual(len(inputs["input_ids"][0]), 112)
+
+    @require_torch
+    def test_call_with_suffix(self):
+        input_str = "lower newer"
+        suffix = "upper older longer string"
+        image_input = self.prepare_image_inputs()
+        processor = self.get_processor()
+        inputs = processor(text=input_str, images=image_input, suffix=suffix)
+        self.assertTrue("labels" in inputs)
+        self.assertEqual(len(inputs["labels"][0]), len(inputs["input_ids"][0]))
+
+        inputs = processor(text=input_str, images=image_input, suffix=suffix, return_tensors="pt")
+        self.assertTrue("labels" in inputs)
+        self.assertEqual(len(inputs["labels"][0]), len(inputs["input_ids"][0]))
 
     def test_text_with_image_tokens(self):
         image_processor = self.get_component("image_processor")

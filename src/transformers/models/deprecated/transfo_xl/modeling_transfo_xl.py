@@ -20,7 +20,7 @@ https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.
 
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -155,9 +155,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert (
-                    pointer.shape == array.shape
-                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                assert pointer.shape == array.shape, (
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -600,7 +600,7 @@ class TransfoXLModelOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
@@ -618,9 +618,9 @@ class TransfoXLModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    mems: List[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    mems: list[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -633,7 +633,7 @@ class TransfoXLSequenceClassifierOutputWithPast(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
@@ -651,10 +651,10 @@ class TransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    mems: List[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    mems: list[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -667,7 +667,7 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
             Language modeling losses (not reduced).
         prediction_scores (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
@@ -687,10 +687,10 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     """
 
     losses: Optional[torch.FloatTensor] = None
-    prediction_scores: torch.FloatTensor = None
-    mems: List[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    prediction_scores: Optional[torch.FloatTensor] = None
+    mems: list[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
 
     @property
@@ -728,7 +728,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as `input_ids` as they have already been computed.
@@ -869,13 +869,13 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        mems: Optional[List[torch.FloatTensor]] = None,
+        mems: Optional[list[torch.FloatTensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TransfoXLModelOutput]:
+    ) -> Union[tuple, TransfoXLModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1064,14 +1064,14 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        mems: Optional[List[torch.FloatTensor]] = None,
+        mems: Optional[list[torch.FloatTensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TransfoXLLMHeadModelOutput]:
+    ) -> Union[tuple, TransfoXLLMHeadModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -1163,7 +1163,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self.crit.n_token = new_num_tokens
 
     @staticmethod
-    def _reorder_cache(mems: List[torch.Tensor], beam_idx: torch.Tensor) -> List[torch.Tensor]:
+    def _reorder_cache(mems: list[torch.Tensor], beam_idx: torch.Tensor) -> list[torch.Tensor]:
         """
         This function is used to re-order the `mems` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `mems` with the correct beam_idx at every
@@ -1205,14 +1205,14 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        mems: Optional[List[torch.FloatTensor]] = None,
+        mems: Optional[list[torch.FloatTensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TransfoXLSequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, TransfoXLSequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1238,9 +1238,9 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        assert self.config.pad_token_id is not None or batch_size == 1, (
+            "Cannot handle batch sizes > 1 if no padding token is defined."
+        )
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
@@ -1291,3 +1291,13 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "AdaptiveEmbedding",
+    "TransfoXLForSequenceClassification",
+    "TransfoXLLMHeadModel",
+    "TransfoXLModel",
+    "TransfoXLPreTrainedModel",
+    "load_tf_weights_in_transfo_xl",
+]

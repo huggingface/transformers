@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -303,7 +303,7 @@ class TFCTRLMainLayer(keras.layers.Layer):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -314,7 +314,7 @@ class TFCTRLMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPast]:
+    ) -> Union[tuple, TFBaseModelOutputWithPast]:
         # If using past key value states, only the last tokens
         # should be given as an input
         if past_key_values is not None:
@@ -522,7 +522,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past (`List[tf.Tensor]` of length `config.n_layers`):
+        past (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past` output below). Can be used to speed up sequential decoding. The token ids which have their past
             given to this model should not be passed as input ids as they have already been computed.
@@ -533,7 +533,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
@@ -541,7 +541,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
@@ -552,7 +552,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -594,7 +594,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -605,7 +605,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPast]:
+    ) -> Union[tuple, TFBaseModelOutputWithPast]:
         outputs = self.transformer(
             input_ids=input_ids,
             past_key_values=past_key_values,
@@ -722,7 +722,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -734,7 +734,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFCausalLMOutputWithPast]:
+    ) -> Union[tuple, TFCausalLMOutputWithPast]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -835,7 +835,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
@@ -847,7 +847,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSequenceClassifierOutput]:
+    ) -> Union[tuple, TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,

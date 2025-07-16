@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,8 +34,10 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import (
+    backend_torch_accelerator_module,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
     slow,
@@ -1057,7 +1058,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def inputs(self):
         input_ids = self.processor("In the light of the moon, a little egg lay on a leaf", voice_preset="en_speaker_6")
 
-        input_ids = input_ids.to(torch_device)
+        for k, v in input_ids.items():
+            input_ids[k] = v.to(torch_device)
 
         return input_ids
 
@@ -1075,6 +1077,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def fine_generation_config(self):
         fine_generation_config = BarkFineGenerationConfig(**self.model.generation_config.fine_acoustics_config)
         return fine_generation_config
+
+    def test_model_can_generate(self):
+        # Bark has custom generate without inheriting GenerationMixin. This test could prevent regression.
+        self.assertTrue(self.model.can_generate())
 
     @slow
     def test_generate_semantic(self):
@@ -1292,7 +1298,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_generate_end_to_end_with_offload(self):
         input_ids = self.inputs
@@ -1301,15 +1307,17 @@ class BarkModelIntegrationTests(unittest.TestCase):
             # standard generation
             output_with_no_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
-            torch.cuda.empty_cache()
+            torch_accelerator_module = backend_torch_accelerator_module(torch_device)
 
-            memory_before_offload = torch.cuda.memory_allocated()
+            torch_accelerator_module.empty_cache()
+
+            memory_before_offload = torch_accelerator_module.memory_allocated()
             model_memory_footprint = self.model.get_memory_footprint()
 
             # activate cpu offload
             self.model.enable_cpu_offload()
 
-            memory_after_offload = torch.cuda.memory_allocated()
+            memory_after_offload = torch_accelerator_module.memory_allocated()
 
             # checks if the model have been offloaded
 

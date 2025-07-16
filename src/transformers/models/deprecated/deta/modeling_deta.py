@@ -20,7 +20,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -39,6 +39,7 @@ from ....file_utils import (
     replace_return_docstrings,
 )
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import meshgrid
@@ -57,7 +58,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    root = Path(__file__).resolve().parent.parent.parent.parent / "kernels" / "deta"
     src_files = [
         root / filename
         for filename in [
@@ -67,7 +68,7 @@ def load_cuda_kernels():
         ]
     ]
 
-    load(
+    MultiScaleDeformableAttention = load(
         "MultiScaleDeformableAttention",
         src_files,
         with_cuda=True,
@@ -178,12 +179,12 @@ class DetaDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -232,16 +233,16 @@ class DetaModelOutput(ModelOutput):
             Logits of proposal bounding boxes coordinates in the gen_encoder_output_proposals.
     """
 
-    init_reference_points: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     output_proposals: Optional[torch.FloatTensor] = None
@@ -267,7 +268,7 @@ class DetaObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~DetaProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
@@ -311,20 +312,20 @@ class DetaObjectDetectionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    auxiliary_outputs: Optional[List[Dict]] = None
+    loss_dict: Optional[dict] = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
+    auxiliary_outputs: Optional[list[dict]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional = None
     enc_outputs_coord_logits: Optional = None
     output_proposals: Optional[torch.FloatTensor] = None
@@ -748,7 +749,7 @@ class DetaMultiheadAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, target_len, embed_dim = hidden_states.size()
@@ -843,7 +844,7 @@ class DetaEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -909,7 +910,7 @@ class DetaEncoderLayer(nn.Module):
         return outputs
 
 
-class DetaDecoderLayer(nn.Module):
+class DetaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DetaConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1341,29 +1342,16 @@ class DetaDecoder(DetaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    position_embeddings,
-                    reference_points_input,
-                    spatial_shapes,
-                    level_start_index,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    reference_points=reference_points_input,
-                    spatial_shapes=spatial_shapes,
-                    level_start_index=level_start_index,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                encoder_hidden_states=encoder_hidden_states,
+                reference_points=reference_points_input,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1570,8 +1558,8 @@ class DetaModel(DetaPreTrainedModel):
 
             scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
-            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
+            width_height = torch.ones_like(grid) * 0.05 * (2.0**level)
+            proposal = torch.cat((grid, width_height), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             _cur += height * width
             level_ids.append(grid.new_ones(height * width, dtype=torch.long) * level)
@@ -1602,7 +1590,7 @@ class DetaModel(DetaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DetaModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], DetaModelOutput]:
         r"""
         Returns:
 
@@ -1915,13 +1903,13 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         encoder_outputs: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[List[dict]] = None,
+        labels: Optional[list[dict]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DetaObjectDetectionOutput]:
+    ) -> Union[tuple[torch.FloatTensor], DetaObjectDetectionOutput]:
         r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
@@ -2110,7 +2098,7 @@ def dice_loss(inputs, targets, num_boxes):
 
 def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
     """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Loss used in RetinaNet for dense detection: https://huggingface.co/papers/1708.02002.
 
     Args:
         inputs (`torch.FloatTensor` of arbitrary shape):
@@ -2152,7 +2140,7 @@ class DetaLoss(nn.Module):
             Number of object categories, omitting the special no-object category.
         focal_alpha (`float`):
             Alpha parameter in focal loss.
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
@@ -2281,7 +2269,7 @@ class DetaLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
@@ -2293,7 +2281,7 @@ class DetaLoss(nn.Module):
         else:
             indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # Check that we have initialized the distributed state
@@ -2392,7 +2380,7 @@ class DetaHungarianMatcher(nn.Module):
                 A dictionary that contains at least these entries:
                 * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                 * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
+            targets (`list[dict]`):
                 A list of targets (len(targets) = batch_size), where each target is a dict containing:
                 * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
                   ground-truth
@@ -2400,7 +2388,7 @@ class DetaHungarianMatcher(nn.Module):
                 * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            `list[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
             - index_i is the indices of the selected predictions (in order)
             - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
@@ -2529,7 +2517,7 @@ class DetaMatcher:
     matches to prediction n in [0, N). (b) a vector of length N containing the labels for each prediction.
     """
 
-    def __init__(self, thresholds: List[float], labels: List[int], allow_low_quality_matches: bool = False):
+    def __init__(self, thresholds: list[float], labels: list[int], allow_low_quality_matches: bool = False):
         """
         Args:
             thresholds (`list[float]`):
@@ -2822,3 +2810,6 @@ class DetaStage1Assigner(nn.Module):
 
     def postprocess_indices(self, pr_inds, gt_inds, iou):
         return sample_topk_per_gt(pr_inds, gt_inds, iou, self.k)
+
+
+__all__ = ["DetaForObjectDetection", "DetaModel", "DetaPreTrainedModel"]

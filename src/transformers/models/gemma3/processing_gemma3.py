@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import to_py_obj
 
@@ -38,6 +38,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
             "do_pan_and_scan": False,
@@ -50,7 +51,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Gemma3Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "image_seq_length"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -65,6 +65,7 @@ class Gemma3Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
         self.boi_token = tokenizer.boi_token
+        self.image_token = tokenizer.image_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -78,7 +79,7 @@ class Gemma3Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos=None,
         audio=None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
@@ -112,8 +113,8 @@ class Gemma3Processor(ProcessorMixin):
                 )
 
             # Replace image tokens by the full expanded sequence
-            batch_num_crops = to_py_obj(image_inputs.pop("num_crops"))
-            text_with_crops = text
+            num_crops = to_py_obj(image_inputs.pop("num_crops"))
+            batch_num_crops = [[num_crops.pop(0) for _ in range(len(images))] for images in batched_images]
             for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, batched_images, batch_num_crops)):
                 image_indexes = [m.start() for m in re.finditer(self.boi_token, prompt)]
 
@@ -130,21 +131,47 @@ class Gemma3Processor(ProcessorMixin):
                             + " ".join([self.boi_token] * num)
                         )
                         prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.boi_token) :]
-                        text_with_crops[batch_idx] = prompt
+                        text[batch_idx] = prompt
 
             # Expand placeholder image tokens to the full image token sequence
             text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
-        array_ids = np.array(text_inputs["input_ids"])
-        mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-        mm_token_type_ids[array_ids == self.image_token_id] = 1
-        text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs
-        text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            # NOTE: no image cropping supported yet
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

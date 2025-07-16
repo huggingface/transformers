@@ -19,32 +19,26 @@ import json
 import math
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import gelu_new, silu
+from ...activations import gelu_new, get_activation, silu
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_openai import OpenAIGPTConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
-_CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
@@ -262,12 +256,108 @@ class Block(nn.Module):
         return outputs
 
 
-class OpenAIGPTPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->OpenAIGPT
+class OpenAIGPTSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config ([`OpenAIGPTConfig`]):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
+
+                - `"last"` -- Take the last token hidden state (like XLNet)
+                - `"first"` -- Take the first token hidden state (like Bert)
+                - `"mean"` -- Take the mean of all tokens hidden states
+                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - `"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
     """
 
+    def __init__(self, config: OpenAIGPTConfig):
+        super().__init__()
+
+        self.summary_type = getattr(config, "summary_type", "last")
+        if self.summary_type == "attn":
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        activation_string = getattr(config, "summary_activation", None)
+        self.activation: Callable = get_activation(activation_string) if activation_string else nn.Identity()
+
+        self.first_dropout = nn.Identity()
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
+
+        Returns:
+            `torch.FloatTensor`: The summary of the sequence hidden states.
+        """
+        if self.summary_type == "last":
+            output = hidden_states[:, -1]
+        elif self.summary_type == "first":
+            output = hidden_states[:, 0]
+        elif self.summary_type == "mean":
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == "cls_index":
+            if cls_index is None:
+                cls_index = torch.full_like(
+                    hidden_states[..., :1, :],
+                    hidden_states.shape[-2] - 1,
+                    dtype=torch.long,
+                )
+            else:
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
+            raise NotImplementedError
+
+        output = self.first_dropout(output)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output)
+
+        return output
+
+
+@auto_docstring
+class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
@@ -290,110 +380,32 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of models predicting if two sentences are consecutive or not.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        mc_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
-            Multiple choice classification loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        mc_logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
-            Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
+    mc_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
+        Multiple choice classification loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    mc_logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
+        Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
     mc_loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    mc_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    mc_logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
-OPENAI_GPT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`OpenAIGPTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-OPENAI_GPT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
-    OPENAI_GPT_START_DOCSTRING,
-)
+@auto_docstring
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -420,12 +432,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -437,7 +444,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
+    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -518,12 +525,11 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     OpenAI GPT Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
-    """,
-    OPENAI_GPT_START_DOCSTRING,
+    """
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
@@ -542,12 +548,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -561,7 +562,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutput]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -605,19 +606,18 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> dict[str, Any]:
         # Overwritten -- old model with reduced inputs
         return {"input_ids": input_ids}
 
 
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+        OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+    RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
+    input embeddings, the classification head takes as input the input of a specified classification token index in the
+    input sequence).
     """
-OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
-RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
-input embeddings, the classification head takes as input the input of a specified classification token index in the
-input sequence).
-""",
-    OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
@@ -628,7 +628,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         config.num_labels = 1
         self.transformer = OpenAIGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.multiple_choice_head = SequenceSummary(config)
+        self.multiple_choice_head = OpenAIGPTSequenceSummary(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -639,8 +639,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -655,7 +654,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], OpenAIGPTDoubleHeadsModelOutput]:
+    ) -> Union[tuple[torch.Tensor], OpenAIGPTDoubleHeadsModelOutput]:
         r"""
         mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
@@ -667,8 +666,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_labels (`torch.LongTensor` of shape `(batch_size)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
             where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
-
-        Return:
 
         Examples:
 
@@ -735,8 +732,8 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The Original OpenAI GPT Model transformer with a sequence classification head on top (linear layer).
     [`OpenAIGPTForSequenceClassification`] uses the last token in order to do the classification, as other causal
     models (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the position of the
@@ -744,8 +741,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     token in each row. If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since
     it cannot guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take
     the last value in each row of the batch).
-    """,
-    OPENAI_GPT_START_DOCSTRING,
+    """
 )
 class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
@@ -757,12 +753,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -775,7 +766,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -812,7 +803,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

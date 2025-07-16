@@ -23,8 +23,6 @@
     title: 🤗 PEFT로 어댑터 로드 및 학습하기
   - local: model_sharing
     title: 만든 모델 공유하기
-  - local: transformers_agents
-    title: 에이전트
   - local: llm_tutorial
     title: 대규모 언어 모델로 생성하기
   - local: conversations
@@ -79,6 +77,8 @@
         title: 이미지 특징 추출
       - local: tasks/mask_generation
         title: 마스크 생성
+      - local: tasks/keypoint_detection
+        title: 키포인트 탐지
       - local: tasks/knowledge_distillation_for_image_classification
         title: 컴퓨터 비전(이미지 분류)를 위한 지식 증류(knowledge distillation)
     title: 컴퓨터 비전
@@ -97,6 +97,8 @@
     sections:
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
+    - local: serving
+      title: 모델 서빙하기
     title: 생성
   - isExpanded: false
     sections:
@@ -123,6 +125,8 @@
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
     title: ONNX로 내보내기
+  - local: gpu_selection
+    title: GPU 선택하기
   - local: tflite
     title: TFLite로 내보내기
   - local: torchscript
@@ -153,6 +157,8 @@
     title: (번역중) VPTQ
   - local: quantization/quanto
     title: Quanto
+  - local: quantization/quark
+    title: Quark
   - local: quantization/eetq
     title: EETQ
   - local: in_translation
@@ -221,7 +227,7 @@
 - sections:
   - local: philosophy
     title: 이념과 목표
-  - local: in_translation
+  - local: glossary
     title: (번역중) Glossary
   - local: task_summary
     title: 🤗 Transformers로 할 수 있는 작업
@@ -248,8 +254,6 @@
   title: (번역중) 개념 가이드
 - sections:
   - sections:
-    - local: main_classes/agent
-      title: 에이전트와 도구
     - local: model_doc/auto
       title: 자동 클래스
     - local: in_translation
@@ -332,8 +336,8 @@
         title: (번역중) CamemBERT
       - local: in_translation
         title: (번역중) CANINE
-      - local: in_translation
-        title: (번역중) CodeGen
+      - local: model_doc/codegen
+        title: CodeGen
       - local: model_doc/cohere
         title: Cohere
       - local: model_doc/convbert
@@ -356,8 +360,8 @@
         title: (번역중) DistilBERT
       - local: in_translation
         title: (번역중) DPR
-      - local: in_translation
-        title: (번역중) ELECTRA
+      - local: model_doc/electra
+        title: ELECTRA
       - local: model_doc/encoder-decoder
         title: 인코더 디코더 모델
       - local: in_translation
@@ -484,8 +488,8 @@
         title: (번역중) RemBERT
       - local: in_translation
         title: (번역중) RetriBERT
-      - local: in_translation
-        title: (번역중) RoBERTa
+      - local: model_doc/roberta
+        title: RoBERTa
       - local: in_translation
         title: (번역중) RoBERTa-PreLayerNorm
       - local: in_translation
@@ -720,8 +724,12 @@
         title: (번역중) Perceiver
       - local: in_translation
         title: (번역중) Pix2Struct
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: in_translation
         title: (번역중) Segment Anything
+      - local: model_doc/siglip
+        title: SigLIP
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
       - local: in_translation

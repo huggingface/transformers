@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Team Authors, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -194,7 +193,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for TVP
+    # override as the `logit_scale` parameter initialization is different for TVP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -219,7 +218,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model.to(torch_device)
                 model.eval()
 
-                # Confirm out_indices propogated to backbone
+                # Confirm out_indices propagated to backbone
                 if model.__class__.__name__ == "TvpModel":
                     self.assertEqual(len(model.vision_model.backbone.out_indices), 2)
                 elif model.__class__.__name__ == "TvpForVideoGrounding":

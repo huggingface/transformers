@@ -52,7 +52,7 @@ To create the package for pypi.
    twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
 
    Check that you can install it in a virtualenv by running:
-   pip install -i https://testpypi.python.org/pypi transformers
+   pip install -i https://test.pypi.org/simple/ transformers
 
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
@@ -112,15 +112,14 @@ _deps = [
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
-    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.26.0,<1.0",
+    "hf_xet",
+    "huggingface-hub>=0.30.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
-    "isort>=5.5.4",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
@@ -129,6 +128,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "kernels>=0.6.1,<0.7",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -141,15 +141,17 @@ _deps = [
     "optimum-benchmark>=0.3.0",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
+    "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pydantic>=2",
+    "pytest>=7.2.0",
     "pytest-asyncio",
+    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
     "pytest-order",
@@ -160,10 +162,13 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.5.1",
+    "ruff==0.11.2",
+    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
+    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
+    # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.1",
+    "safetensors>=0.4.3",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
@@ -184,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.0",
+    "torch>=2.1",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -196,6 +201,10 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk",
+    "mistral-common[opencv]>=1.6.3",
 ]
 
 
@@ -281,6 +290,7 @@ extras["tf-cpu"] = deps_list(
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
+extras["hf_xet"] = deps_list("hf_xet")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
@@ -300,11 +310,17 @@ extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
+extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
-extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
+extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+extras["audio"] = deps_list(
+    "librosa",
+    "pyctcdecode",
+    "phonemizer",
+    "kenlm",
+)
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -319,6 +335,7 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
+extras["mistral-common"] = deps_list("mistral-common[opencv]")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -326,6 +343,7 @@ extras["testing"] = (
         "pytest-rich",
         "pytest-xdist",
         "pytest-order",
+        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
@@ -334,7 +352,6 @@ extras["testing"] = (
         "evaluate",
         "pytest-timeout",
         "ruff",
-        "sacrebleu",
         "rouge-score",
         "nltk",
         "GitPython",
@@ -344,14 +361,16 @@ extras["testing"] = (
         "tensorboard",
         "pydantic",
         "sentencepiece",
+        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["mistral-common"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
 
 extras["all"] = (
     extras["tf"]
@@ -368,6 +387,7 @@ extras["all"] = (
     + extras["accelerate"]
     + extras["video"]
     + extras["num2words"]
+    + extras["mistral-common"]
 )
 
 
@@ -420,11 +440,10 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
-extras["agents"] = deps_list(
-    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
-)
-
 extras["benchmark"] = deps_list("optimum-benchmark")
+
+# OpenTelemetry dependencies for metrics collection in continuous batching
+extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -442,7 +461,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.50.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.54.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -454,10 +473,15 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
+    entry_points={
+        "console_scripts": [
+            "transformers=transformers.commands.transformers_cli:main",
+            "transformers-cli=transformers.commands.transformers_cli:main_cli",
+        ]
+    },
     python_requires=">=3.9.0",
     install_requires=list(install_requires),
     classifiers=[
@@ -470,6 +494,9 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},

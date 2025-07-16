@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The PhiMoE model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://arxiv.org/abs/2404.14219) by Microsoft.
+The PhiMoE model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://huggingface.co/papers/2404.14219) by Microsoft.
 
 ### Summary
 

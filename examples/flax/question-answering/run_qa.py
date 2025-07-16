@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import datasets
 import evaluate
@@ -61,7 +60,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.50.0.dev0")
+check_min_version("4.54.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -547,7 +546,7 @@ def main():
     # region Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models at"
+            "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
             " this requirement"
         )
@@ -908,8 +907,8 @@ def main():
 
     # region Define train step functions
     def train_step(
-        state: train_state.TrainState, batch: Dict[str, Array], dropout_rng: PRNGKey
-    ) -> Tuple[train_state.TrainState, float]:
+        state: train_state.TrainState, batch: dict[str, Array], dropout_rng: PRNGKey
+    ) -> tuple[train_state.TrainState, float]:
         """Trains model with an optimizer (both in `state`) on `batch`, returning a pair `(new_state, loss)`."""
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
         start_positions = batch.pop("start_positions")

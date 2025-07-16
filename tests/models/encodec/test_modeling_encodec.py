@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +24,7 @@ from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
 from transformers.testing_utils import (
+    Expectations,
     is_torch_available,
     require_torch,
     slow,
@@ -117,7 +117,7 @@ class EncodecModelTester:
         config.normalize = True
 
         processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
-        input_values = list(input_values.cpu().numpy())
+        input_values = input_values.tolist()
         inputs_dict = processor(
             input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
         ).to(torch_device)
@@ -311,12 +311,13 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_feed_forward_chunking(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        # original_config.norm_type = "time_group_norm"
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
             config.chunk_length_s = None
             config.overlap = None
-            config.sampling_rate = 10
+            config.sampling_rate = 20
 
             model = model_class(config)
             model.to(torch_device)
@@ -327,9 +328,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             hidden_states_no_chunk = model(**inputs)[1]
 
             torch.manual_seed(0)
-            config.chunk_length_s = 1
+            config.chunk_length_s = 2
             config.overlap = 0
-            config.sampling_rate = 10
+            config.sampling_rate = 20
 
             model = model_class(config)
             model.to(torch_device)
@@ -342,18 +343,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
     )
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     def test_determinism(self):
@@ -471,10 +460,21 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": 0.0025,
             "24.0": 0.0015,
         }
-        expected_codesums = {
-            "1.5": [371955],
-            "24.0": [6659962],
-        }
+
+        expectations = Expectations(
+            {
+                (None, None): {
+                    "1.5": [371955],
+                    "24.0": [6659962],
+                },
+                ("cuda", 8): {
+                    "1.5": [371955],
+                    "24.0": [6655079],
+                },
+            }
+        )
+        expected_codesums = expectations.get_expectation()
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
 
@@ -492,10 +492,10 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
 
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
@@ -525,10 +525,21 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": 0.001,
             "24.0": 0.0005,
         }
-        expected_codesums = {
-            "3.0": [144259, 146765, 156435, 176871, 161971],
-            "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
-        }
+
+        expectations = Expectations(
+            {
+                (None, None): {
+                    "3.0": [144259, 146765, 156435, 176871, 161971],
+                    "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
+                },
+                ("cuda", 8): {
+                    "3.0": [144259, 146765, 156205, 176871, 161971],
+                    "24.0": [1566878, 1300459, 1310165, 1464747, 1663150],
+                },
+            }
+        )
+        expected_codesums = expectations.get_expectation()
+
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 
@@ -548,11 +559,11 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
                 )
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
@@ -608,10 +619,10 @@ class EncodecIntegrationTest(unittest.TestCase):
         input_values = inputs["input_values"].to(torch_device)
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
-                audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
-                audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums_0 = [a[0][0].sum().item() for a in encoder_outputs[0]]
+                audio_code_sums_1 = [a[0][1].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])

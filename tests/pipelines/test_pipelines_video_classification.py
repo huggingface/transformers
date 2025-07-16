@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_av,
-    require_tf,
     require_torch,
     require_torch_or_tf,
     require_vision,
@@ -38,6 +37,15 @@ from .test_pipelines_common import ANY
 @require_av
 class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+    example_video_filepath = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls.example_video_filepath is None:
+            cls.example_video_filepath = hf_hub_download(
+                repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
+            )
 
     def get_test_pipeline(
         self,
@@ -48,9 +56,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        example_video_filepath = hf_hub_download(
-            repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
-        )
+        self._load_dataset()
         video_classifier = VideoClassificationPipeline(
             model=model,
             tokenizer=tokenizer,
@@ -61,8 +67,9 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             top_k=2,
         )
         examples = [
-            example_video_filepath,
-            "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
+            self.example_video_filepath,
+            # TODO: re-enable this once we have a stable hub solution for CI
+            # "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
         ]
         return video_classifier, examples
 
@@ -116,8 +123,3 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         for output in outputs:
             for element in output:
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
-
-    @require_tf
-    @unittest.skip
-    def test_small_model_tf(self):
-        pass

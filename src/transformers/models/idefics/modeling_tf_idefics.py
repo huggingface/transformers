@@ -22,7 +22,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -91,11 +91,11 @@ class TFIdeficsBaseModelOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: tf.Tensor = None
-    past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
-    image_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    past_key_values: Optional[tuple[tuple[tf.Tensor]]] = None
+    hidden_states: Optional[tuple[tf.Tensor]] = None
+    attentions: Optional[tuple[tf.Tensor]] = None
+    image_hidden_states: Optional[tuple[tf.Tensor]] = None
 
 
 @dataclass
@@ -133,11 +133,11 @@ class TFIdeficsCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[tf.Tensor] = None
-    logits: tf.Tensor = None
-    past_key_values: Optional[List[tf.Tensor]] = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
-    image_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    logits: Optional[tf.Tensor] = None
+    past_key_values: Optional[list[tf.Tensor]] = None
+    hidden_states: Optional[tuple[tf.Tensor]] = None
+    attentions: Optional[tuple[tf.Tensor]] = None
+    image_hidden_states: Optional[tuple[tf.Tensor]] = None
 
 
 def expand_inputs_for_generation(
@@ -362,12 +362,7 @@ class TFIdeficsDecoupledEmbedding(tf.keras.layers.Embedding):
         return full_vector
 
     def extra_repr(self) -> str:
-        return "num_embeddings={}, num_additional_embeddings={}, embedding_dim={}, partially_freeze={}".format(
-            self.num_embeddings,
-            self.num_additional_embeddings,
-            self.output_dim,
-            self.partially_freeze,
-        )
+        return f"num_embeddings={self.num_embeddings}, num_additional_embeddings={self.num_additional_embeddings}, embedding_dim={self.output_dim}, partially_freeze={self.partially_freeze}"
 
 
 class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
@@ -431,13 +426,7 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
 
     def extra_repr(self) -> str:
         """Overwriting `nn.Linear.extra_repr` to include new parameters."""
-        return "in_features={}, out_features={}, out_additional_features={}, bias={}, partially_freeze={}".format(
-            self.in_features,
-            self.out_features,
-            self.out_additional_features,
-            self.bias is not None,
-            self.partially_freeze,
-        )
+        return f"in_features={self.in_features}, out_features={self.out_features}, out_additional_features={self.out_additional_features}, bias={self.bias is not None}, partially_freeze={self.partially_freeze}"
 
     @classmethod
     def from_config(cls, config):
@@ -672,10 +661,10 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         key_value_states: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        past_key_value: Optional[tuple[tf.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor], Optional[Tuple[tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, Optional[tf.Tensor], Optional[tuple[tf.Tensor]]]:
         # if key_value_states are provided this layer is used as a cross-attention layer
         is_cross_attention = self.is_cross_attention or key_value_states is not None
 
@@ -804,11 +793,11 @@ class TFIdeficsDecoderLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        past_key_value: Optional[tuple[tf.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         training=False,
-    ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, Optional[tuple[tf.Tensor, tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -996,8 +985,8 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         cross_attention_gate: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
-    ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
+        past_key_value: Optional[tuple[tf.Tensor]] = None,
+    ) -> tuple[tf.Tensor, Optional[tuple[tf.Tensor, tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1118,7 +1107,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,
@@ -1268,7 +1257,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         input_ids: TFModelInputType | None = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[List[tf.Tensor]] = None,
+        past_key_values: Optional[list[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         pixel_values: Optional[tf.Tensor] = None,
         image_encoder_embeddings: Optional[tf.Tensor] = None,
@@ -1280,7 +1269,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = None,
-    ) -> Union[TFIdeficsBaseModelOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFIdeficsBaseModelOutputWithPast, tuple[tf.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1567,7 +1556,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
         input_ids: TFModelInputType | None = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[List[tf.Tensor]] = None,
+        past_key_values: Optional[list[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         pixel_values: Optional[tf.Tensor] = None,
         image_encoder_embeddings: Optional[tf.Tensor] = None,
@@ -1579,7 +1568,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = None,
-    ) -> Union[TFIdeficsBaseModelOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFIdeficsBaseModelOutputWithPast, tuple[tf.Tensor]]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1672,7 +1661,7 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
         input_ids: TFModelInputType | None = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[List[tf.Tensor]] = None,
+        past_key_values: Optional[list[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         pixel_values: Optional[tf.Tensor] = None,
         image_encoder_embeddings: Optional[tf.Tensor] = None,
@@ -1685,7 +1674,7 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training=False,
-    ) -> Union[TFIdeficsCausalLMOutputWithPast, Tuple[tf.Tensor]]:
+    ) -> Union[TFIdeficsCausalLMOutputWithPast, tuple[tf.Tensor]]:
         r"""
             labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

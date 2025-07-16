@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,19 +15,22 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
     AyaVisionConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    get_device_properties,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -44,11 +46,8 @@ if is_torch_available():
 
     from transformers import (
         AyaVisionForConditionalGeneration,
+        AyaVisionModel,
     )
-
-
-if is_vision_available():
-    pass
 
 
 class AyaVisionVisionText2TextModelTester:
@@ -63,7 +62,7 @@ class AyaVisionVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
-        image_token_index=1,
+        image_token_index=2,
         num_channels=3,
         image_size=64,
         model_type="aya_vision",
@@ -141,7 +140,6 @@ class AyaVisionVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-        print("attention_mask", attention_mask.shape)
         # input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_index
@@ -153,37 +151,17 @@ class AyaVisionVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = AyaVisionForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
-        config.torch_dtype = torch.float16
-        model = AyaVisionForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values,
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AyaVisionModel,
+            AyaVisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -205,49 +183,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
@@ -256,16 +191,12 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -274,6 +205,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -310,16 +242,8 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("Cohere2 has HybridCache and doesn't support progressive generation using input embeds.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
         pass
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
@@ -346,10 +270,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     # todo: yoni - fix or improve the test
     @unittest.skip("Difference is slightly higher than the threshold")
     def test_batching_equivalence(self):
@@ -359,19 +279,40 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_read_token
 @require_torch
 class AyaVisionIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_checkpoint = "CohereForAI/aya-vision-8b"
+    @classmethod
+    def setUpClass(cls):
+        cls.model_checkpoint = "CohereForAI/aya-vision-8b"
+        cls.model = None
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @classmethod
+    def get_model(cls):
+        # Use 4-bit on T4
+        device_type, major, _ = get_device_properties()
+        load_in_4bit = (device_type == "cuda") and (major < 8)
+        torch_dtype = None if load_in_4bit else torch.float16
+
+        if cls.model is None:
+            cls.model = AyaVisionForConditionalGeneration.from_pretrained(
+                cls.model_checkpoint,
+                device_map=torch_device,
+                torch_dtype=torch_dtype,
+                load_in_4bit=load_in_4bit,
+            )
+        return cls.model
+
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -390,8 +331,17 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        print("actual_logits", actual_logits)
-        expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
+                # 4-bit
+                ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
+                ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
+
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -400,12 +350,11 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -423,17 +372,25 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        print("decoded_output", decoded_output)
-        expected_output = "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song."
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                # 4-bit
+                ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
+                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -452,17 +409,24 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        print("decoded_output", decoded_output)
-        expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+                # 4-bit
+                ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
+                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         # Prepare inputs
         messages = [
             [
@@ -492,8 +456,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
-        expected_output = "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene."  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                # 4-bit
+                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -502,8 +474,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
-        expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                # 4-bit
+                ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
+                ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         self.assertEqual(
             decoded_output,
@@ -512,12 +492,11 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
-        )
+        model = self.get_model()
         # Prepare inputs
         messages = [
             [
@@ -557,8 +536,15 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene."  # fmt: skip
-        print("decoded_output", decoded_output)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -567,8 +553,15 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
-        expected_output = "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at a"  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
+                ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
+                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,

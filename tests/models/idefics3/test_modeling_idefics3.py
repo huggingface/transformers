@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,6 +96,7 @@ class Idefics3VisionText2TextModelTester:
         image_token_id=57,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -149,6 +149,7 @@ class Idefics3VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.seq_length
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -366,10 +367,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
     )
     def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @pytest.mark.generate

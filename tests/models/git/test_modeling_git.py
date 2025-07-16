@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -187,14 +186,6 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/git-base"
@@ -356,7 +347,8 @@ class GitModelTester:
             num_return_sequences=2,
         )
 
-        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
+        self.parent.assertEqual(generated_ids.shape[0], self.batch_size * 2)
+        self.parent.assertTrue(generated_ids.shape[1] < 20)
 
     def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
         model = GitForCausalLM(config=config)

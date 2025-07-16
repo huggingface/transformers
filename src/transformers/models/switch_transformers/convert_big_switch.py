@@ -8,7 +8,6 @@ from flax import serialization
 from flax.traverse_util import flatten_dict, unflatten_dict
 from tensorflow.io import gfile
 
-from transformers.modeling_utils import dtype_byte_size
 from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import (
     rename_keys,
 )
@@ -94,7 +93,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         # open tensorstore file
         raw_weights = ts.open(unflatten_dict(all_layers[key])).result().read().result()
         raw_weights = torch.tensor(raw_weights)
-        weight_size = raw_weights.numel() * dtype_byte_size(raw_weights.dtype)
+        weight_size = raw_weights.numel() * raw_weights.element_size()
 
         # use the renaming pattern from the small conversion scripts
         key, raw_weights = rename_base_flax_keys(tuple(key.split("/")), raw_weights)
@@ -103,7 +102,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         # If this weight is going to tip up over the maximal size, we split.
         if current_block_size + weight_size > max_shard_size:
             save_path = os.path.join(
-                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
+                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts) + 1:05d}-of-???.bin")
             )
             rename_and_save_block(current_block, save_path)
             sharded_state_dicts.append(current_block.keys())
@@ -116,7 +115,9 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         total_size += weight_size
 
     # Add the last block
-    save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
+    save_path = os.path.join(
+        dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts) + 1:05d}-of-???.bin")
+    )
     rename_and_save_block(current_block, save_path)
     sharded_state_dicts.append(current_block.keys())
 
@@ -129,9 +130,9 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
         shard_file = weights_name.replace(
-            ".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin"
+            ".bin", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.bin"
         )  # len(sharded_state_dicts):05d}
-        temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin"))
+        temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx + 1:05d}-of-???.bin"))
         os.rename(temp_filename, os.path.join(dump_path, shard_file))
         shards[shard_file] = shard
         for key in shard:

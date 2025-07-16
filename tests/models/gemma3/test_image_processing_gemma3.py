@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,6 +142,29 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=84)
             self.assertEqual(image_processor.size, {"height": 84, "width": 84})
 
+    def test_without_pan_and_scan(self):
+        """
+        Disable do_pan_and_scan parameter.
+        """
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, do_pan_and_scan=False)
+
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
+
+            # Test not batched input
+            encoded_images = image_processor(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = (1, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched
+            encoded_images = image_processor(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (7, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
     def test_pan_and_scan(self):
         """
         Enables Pan and Scan path by choosing the correct input image resolution. If you are changing
@@ -163,6 +185,13 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test batched, 9 images because we have base image + 2 crops per each item
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (9, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched unbalanced, 9 images because we have base image + 2 crops per each item
+            encoded_images = image_processing(
+                [[image_inputs[0], image_inputs[1]], [image_inputs[2]]], return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (9, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -227,3 +256,34 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @unittest.skip("Gemma3 doesn't work with 4 channels due to pan and scan method")
     def test_call_numpy_4_channels(self):
         pass
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched_pas(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+        crop_config = {
+            "do_pan_and_scan": True,
+            "pan_and_scan_max_num_crops": 448,
+            "pan_and_scan_min_crop_size": 32,
+            "pan_and_scan_min_ratio_to_activate": 0.3,
+        }
+        image_processor_dict = self.image_processor_dict
+        image_processor_dict.update(crop_config)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        torch.testing.assert_close(encoding_slow.num_crops, encoding_fast.num_crops)
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)

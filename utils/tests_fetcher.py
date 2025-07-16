@@ -59,7 +59,7 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Optional, Union
 
 from git import Repo
 
@@ -182,10 +182,10 @@ def keep_doc_examples_only(content: str) -> str:
     return "\n".join(lines_to_keep)
 
 
-def get_all_tests() -> List[str]:
+def get_all_tests() -> list[str]:
     """
     Walks the `tests` folder to return a list of files/subfolders. This is used to split the tests to run when using
-    paralellism. The split is:
+    parallelism. The split is:
 
     - folders under `tests`: (`tokenization`, `pipelines`, etc) except the subfolder `models` is excluded.
     - folders under `tests/models`: `bert`, `gpt2`, etc.
@@ -263,7 +263,7 @@ def diff_contains_doc_examples(repo: Repo, branching_point: str, filename: str) 
     return old_content_clean != new_content_clean
 
 
-def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> List[str]:
+def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python modeling files that are impacted by the changes of `tiny_model_summary.json` in between:
 
@@ -379,7 +379,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
     return sorted(files)
 
 
-def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
+def get_diff(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the diff between a base commit and one or several commits.
 
@@ -421,7 +421,7 @@ def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
     return code_diff
 
 
-def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
+def get_modified_python_files(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python files that have been modified between:
 
@@ -451,7 +451,7 @@ def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
-def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
+def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the diff in doc examples between a base commit and one or several commits.
 
@@ -492,7 +492,7 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
     return code_diff
 
 
-def get_all_doctest_files() -> List[str]:
+def get_all_doctest_files() -> list[str]:
     """
     Return the complete list of python and Markdown files on which we run doctest.
 
@@ -525,7 +525,7 @@ def get_all_doctest_files() -> List[str]:
     return sorted(test_files_to_run)
 
 
-def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
+def get_new_doctest_files(repo, base_commit, branching_commit) -> list[str]:
     """
     Get the list of files that were removed from "utils/not_doctested.txt", between `base_commit` and
     `branching_commit`.
@@ -552,7 +552,7 @@ def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
     return []
 
 
-def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
+def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python and Markdown files where doc example have been modified between:
 
@@ -621,7 +621,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def extract_imports(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
     """
     Get the imports a given module makes.
 
@@ -703,7 +703,7 @@ def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> Li
     return result
 
 
-def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def get_module_dependencies(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
     """
     Refines the result of `extract_imports` to remove subfolders and get a proper list of module filenames: if a file
     as an import `from utils import Foo, Bar`, with `utils` being a subfolder containing many files, this will traverse
@@ -736,19 +736,28 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = extract_imports(module, cache=cache)
+                new_imported_modules = dict(extract_imports(module, cache=cache))
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
 
-                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
+                new_imported_modules_from_import_structure = define_import_structure(PATH_TO_REPO / module)
 
-                for mapping in new_imported_modules_2.values():
+                for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
+                        # Import Structure returns _module keys as import paths rather than local paths
+                        # We replace with os.path.sep so that it's Windows-compatible
+                        _module = _module.replace(".", os.path.sep)
                         _module = module.replace("__init__.py", f"{_module}.py")
-                        new_imported_modules.append((_module, list(_imports)))
+                        if _module not in new_imported_modules:
+                            new_imported_modules[_module] = list(_imports)
+                        else:
+                            original_imports = new_imported_modules[_module]
+                            for potential_new_item in list(_imports):
+                                if potential_new_item not in original_imports:
+                                    new_imported_modules[_module].append(potential_new_item)
 
-                for new_module, new_imports in new_imported_modules:
+                for new_module, new_imports in new_imported_modules.items():
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
@@ -777,7 +786,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
     return dependencies
 
 
-def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
+def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     """
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
@@ -791,7 +800,7 @@ def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
     return list(set(edges))
 
 
-def get_tree_starting_at(module: str, edges: List[Tuple[str, str]]) -> List[Union[str, List[str]]]:
+def get_tree_starting_at(module: str, edges: list[tuple[str, str]]) -> list[Union[str, list[str]]]:
     """
     Returns the tree starting at a given module following all edges.
 
@@ -852,9 +861,9 @@ def print_tree_deps_of(module, all_edges=None):
         print(line[0])
 
 
-def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
+def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
-    The test examples do not import from the examples (which are just scripts, not modules) so we need som extra
+    The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
     care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
     example files by linking each example to the example test file for the example framework.
 
@@ -888,7 +897,7 @@ def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
     return test_example_deps, all_examples
 
 
-def create_reverse_dependency_map() -> Dict[str, List[str]]:
+def create_reverse_dependency_map() -> dict[str, list[str]]:
     """
     Create the dependency map from module/test filename to the list of modules/tests that depend on it recursively.
 
@@ -944,8 +953,8 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
 
 
 def create_module_to_test_map(
-    reverse_map: Dict[str, List[str]] = None, filter_models: bool = False
-) -> Dict[str, List[str]]:
+    reverse_map: Optional[dict[str, list[str]]] = None, filter_models: bool = False
+) -> dict[str, list[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.
 
@@ -1043,7 +1052,6 @@ def infer_tests_to_run(
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
-    # Create the map that will give us all impacted modules.
     reverse_map = create_reverse_dependency_map()
     impacted_files = modified_files.copy()
     for f in modified_files:
@@ -1100,7 +1108,7 @@ def infer_tests_to_run(
             f.write(" ".join(doctest_list))
 
 
-def filter_tests(output_file: str, filters: List[str]):
+def filter_tests(output_file: str, filters: list[str]):
     """
     Reads the content of the output file and filters out all the tests in a list of given folders.
 
@@ -1127,7 +1135,7 @@ def filter_tests(output_file: str, filters: List[str]):
         f.write(" ".join(test_files))
 
 
-def parse_commit_message(commit_message: str) -> Dict[str, bool]:
+def parse_commit_message(commit_message: str) -> dict[str, bool]:
     """
     Parses the commit message to detect if a command is there to skip, force all or part of the CI.
 
@@ -1154,17 +1162,14 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_tokenization": r"tests/models/.*/test_tokenization.*",
+    "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
-    "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    "pipelines_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",

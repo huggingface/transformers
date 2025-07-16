@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Adding a new model to Transformers
+# Legacy model contribution
 
 > [!TIP]
 > Try adding new models with a more [modular](./modular_transformers) approach first. This makes it significantly easier to contribute a model to Transformers!
@@ -161,7 +161,7 @@ The downside is that if you aren't used to them, it may take some time to get us
 Run the command below to start and complete the questionnaire with some basic information about the new model. This command jumpstarts the process by automatically generating some model code that you'll need to adapt.
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 ## Create a pull request
@@ -292,7 +292,7 @@ Once you're able to run the original checkpoint, you're ready to start adapting 
 
 ## Adapt the model code
 
-The `transformers-cli add-new-model-like` command should have generated a model and configuration file.
+The `transformers add-new-model-like` command should have generated a model and configuration file.
 
 - `src/transformers/models/brand_new_llama/modeling_brand_new_llama.py`
 - `src/transformers/models/brand_new_llama/configuration_brand_new_llama.py`
@@ -476,7 +476,7 @@ When both implementations produce the same output, verify the outputs are within
 torch.allclose(original_output, output, atol=1e-3)
 ```
 
-This is typically the most difficult part of the process. Congratulations if you've made it this far! 
+This is typically the most difficult part of the process. Congratulations if you've made it this far!
 
 And if you're stuck or struggling with this step, don't hesitate to ask for help on your pull request.
 
@@ -540,6 +540,48 @@ input_ids = tokenizer(input_str).input_ids
 ```
 
 When both implementations have the same `input_ids`, add a tokenizer test file. This file is analogous to the modeling test files. The tokenizer test files should contain a couple of hardcoded integration tests.
+
+## Implement image processor
+
+> [!TIP]
+> Fast image processors use the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU, significantly improving processing speed.
+> We recommend adding a fast image processor ([`BaseImageProcessorFast`]) in addition to the "slow" image processor ([`BaseImageProcessor`]) to provide users with the best performance. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for help adding a [`BaseImageProcessorFast`].
+
+While this example doesn't include an image processor, you may need to implement one if your model requires image inputs. The image processor is responsible for converting images into a format suitable for your model. Before implementing a new one, check whether an existing image processor in the Transformers library can be reused, as many models share similar image processing techniques. Note that you can also use [modular](./modular_transformers) for image processors to reuse existing components.
+
+If you do need to implement a new image processor, refer to an existing image processor to understand the expected structure. Slow image processors ([`BaseImageProcessor`]) and fast image processors ([`BaseImageProcessorFast`]) are designed differently, so make sure you follow the correct structure based on the processor type you're implementing.
+
+Run the following command (only if you haven't already created the fast image processor with the `transformers add-new-model-like` command) to generate the necessary imports and to create a prefilled template for the fast image processor. Modify the template to fit your model.
+
+```bash
+transformers add-fast-image-processor --model-name your_model_name
+```
+
+This command will generate the necessary imports and provide a pre-filled template for the fast image processor. You can then modify it to fit your model's needs.
+
+Add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well.
+
+## Implement processor
+
+If your model accepts multiple modalities, like text and images, you need to add a processor. The processor centralizes the preprocessing of different modalities before passing them to the model.
+
+The processor should call the appropriate modality-specific processors within its `__call__` function to handle each type of input correctly. Be sure to check existing processors in the library to understand their expected structure. Transformers uses the following convention in the `__call__` function signature.
+
+```python
+def __call__(
+    self,
+    images: ImageInput = None,
+    text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+    audio=None,
+    videos=None,
+    **kwargs: Unpack[YourModelProcessorKwargs],
+) -> BatchFeature:
+    ...
+```
+
+`YourModelProcessorKwargs` is a `TypedDict` that includes all the typical processing arguments and any extra arguments a specific processor may require.
+
+Add tests for the processor in `tests/models/your_model_name/test_processor_your_model_name.py`. These tests should be similar to those for other processors and should verify that the processor correctly handles the different modalities.
 
 ## Integration tests
 

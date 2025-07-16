@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import dataclasses
 import json
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -70,10 +69,13 @@ class TrainerState:
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
-        log_history (`List[Dict[str, float]]`, *optional*):
+        log_history (`list[dict[str, float]]`, *optional*):
             The list of logs done since the beginning of training.
         best_metric (`float`, *optional*):
             When tracking the best model, the value of the best metric encountered so far.
+        best_global_step (`int`, *optional*):
+            When tracking the best model, the step at which the best metric was encountered.
+            Used for setting `best_model_checkpoint`.
         best_model_checkpoint (`str`, *optional*):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
             far.
@@ -86,7 +88,7 @@ class TrainerState:
         is_hyper_param_search (`bool`, *optional*, defaults to `False`):
             Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
             impact the way data will be logged in TensorBoard.
-        stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
+        stateful_callbacks (`list[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevant callbacks should implement a `state` and `from_state` function.
     """
@@ -97,19 +99,20 @@ class TrainerState:
     logging_steps: int = 500
     eval_steps: int = 500
     save_steps: int = 500
-    train_batch_size: int = None
+    train_batch_size: Optional[int] = None
     num_train_epochs: int = 0
     num_input_tokens_seen: int = 0
     total_flos: float = 0
-    log_history: List[Dict[str, float]] = None
+    log_history: list[dict[str, float]] = None
     best_metric: Optional[float] = None
+    best_global_step: Optional[int] = None
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
-    trial_name: str = None
-    trial_params: Dict[str, Union[str, float, int, bool]] = None
-    stateful_callbacks: List["TrainerCallback"] = None
+    trial_name: Optional[str] = None
+    trial_params: dict[str, Union[str, float, int, bool]] = None
+    stateful_callbacks: list["TrainerCallback"] = None
 
     def __post_init__(self):
         if self.log_history is None:
@@ -147,7 +150,7 @@ class TrainerState:
     @classmethod
     def load_from_json(cls, json_path: str):
         """Create an instance from the content of `json_path`."""
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             text = f.read()
         return cls(**json.loads(text))
 
@@ -318,11 +321,11 @@ class TrainerCallback:
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for evaluation.
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics computed by the last evaluation phase.
 
             Those are only accessible in the event `on_evaluate`.
-        logs  (`Dict[str, float]`):
+        logs  (`dict[str, float]`):
             The values to log.
 
             Those are only accessible in the event `on_log`.
@@ -746,12 +749,12 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "Using EarlyStoppingCallback without load_best_model_at_end=True. "
                 "Once training is finished, the best model will not be loaded automatically."
             )
-        assert (
-            args.metric_for_best_model is not None
-        ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
-        assert (
-            args.eval_strategy != IntervalStrategy.NO
-        ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+        assert args.metric_for_best_model is not None, (
+            "EarlyStoppingCallback requires metric_for_best_model to be defined"
+        )
+        assert args.eval_strategy != IntervalStrategy.NO, (
+            "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+        )
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model

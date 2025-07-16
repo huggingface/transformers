@@ -12,6 +12,8 @@ SHELL ["sh", "-lc"]
 ARG PYTORCH='2.6.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu121'
+# Disable kernel mapping for quantization tests
+ENV DISABLE_KERNEL_MAPPING=1
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
@@ -24,7 +26,7 @@ RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; 
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
-RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -79,8 +81,20 @@ RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submod
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
 
+# Add AMD Quark for quantization testing
+RUN python3 -m pip install --no-cache-dir amd-quark
+
+# Add AutoRound for quantization testing
+RUN python3 -m pip install --no-cache-dir "auto-round>=0.5.0"
+
 # Add transformers in editable mode
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
+
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
+
+# Uninstall flash-attn installed by autoawq, it causes issues here : https://github.com/huggingface/transformers/actions/runs/15915442841/job/44892146131
+RUN python3 -m pip uninstall -y flash-attn
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

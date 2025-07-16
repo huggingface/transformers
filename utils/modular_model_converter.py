@@ -19,7 +19,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Dict, Optional, Set, Union
+from typing import Optional, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -79,8 +79,11 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
 
 def get_cased_name(lowercase_name: str) -> str:
     """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
+    alt_lowercase_name = lowercase_name.replace("_", "-")
     if lowercase_name in CONFIG_MAPPING_NAMES:
         return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
+    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
     else:
         return "".join(x.title() for x in lowercase_name.split("_"))
 
@@ -106,6 +109,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
+        old_name = old_name.replace("-", "_")
+        new_name = new_name.replace("-", "_")
         self.old_name = old_name
         self.new_name = new_name
         self.cased_new_name = get_cased_name(self.new_name)
@@ -192,7 +197,7 @@ def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[st
 
 # Transformer class to replace ClassB.call_to_method and ClassB().call_to_method with super().call_to_method
 class ReplaceMethodCallTransformer(cst.CSTTransformer):
-    def __init__(self, all_bases: Set[str]):
+    def __init__(self, all_bases: set[str]):
         self.all_bases = all_bases
 
     def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
@@ -244,70 +249,13 @@ class ReplaceMethodCallTransformer(cst.CSTTransformer):
         return updated_node
 
 
-def get_docstring_indent(docstring):
-    # Match the first line after the opening triple quotes
-    match = re.search(r'(?:"""|\'\'\'|```)\n(\s+)', docstring)
-    if match:
-        # Return the indentation spaces captured
-        return len(match.group(1))
-    return 0
-
-
-def is_full_docstring(new_docstring: str) -> bool:
-    """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
-    be merged with the existing old one.
-    """
-    # libcst returns the docstrinbgs with litteral `r"""` quotes in front
-    new_docstring = new_docstring.split('"""', 1)[1]
-    # The docstring contains Args definition, so it is self-contained
-    if re.search(r"\n\s*Args:\n", new_docstring):
-        return True
-    # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
-    # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
-    match_object = re.search(r"\n([^\S\n]*)Returns:\n", new_docstring)
-    if match_object is not None:
-        full_indent = match_object.group(1)
-        striped_doc = new_docstring.strip("\n")
-        if striped_doc.startswith(full_indent + " " * 4) or striped_doc.startswith(full_indent + "\t"):
-            return True
-    return False
-
-
-def merge_docstrings(original_docstring, updated_docstring):
-    original_level = get_docstring_indent(original_docstring)
-    if not is_full_docstring(updated_docstring):
-        # Split the docstring at the example section, assuming `"""` is used to define the docstring
-        parts = original_docstring.split("```")
-        if "```" in updated_docstring and len(parts) > 1:
-            updated_docstring = updated_docstring.lstrip('r"')
-            new_parts = updated_docstring.split("```")
-            if len(new_parts) != 3:
-                raise ValueError("There should only be one example, and it should have opening and closing '```'")
-            parts[1] = new_parts[1]
-            updated_docstring = "".join(
-                [
-                    parts[0].rstrip(" \n") + new_parts[0],
-                    f"\n{original_level * ' '}```",
-                    parts[1],
-                    "```",
-                    parts[2],
-                ]
-            )
-        elif updated_docstring not in original_docstring:
-            # add tabulation if we are at the lowest level.
-            if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
-                updated_docstring = updated_docstring.replace("\n    ", "\n        ")
-            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"\n')
-    return updated_docstring
-
-
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def __init__(self, python_module: cst.Module, original_methods, updated_methods, all_bases=None):
+    def __init__(self, python_module: cst.Module, original_modeling_methods, modular_methods, all_bases=None):
         self.python_module = python_module
-        self.original_methods = original_methods
-        self.updated_methods = updated_methods
+        self.original_modeling_methods = original_modeling_methods
+        self.modular_methods = modular_methods
         self.all_assign_target = {}
         self.deleted_targets = {}  # child node can delete some arguments
         self.all_bases = all_bases or []
@@ -389,66 +337,37 @@ class SuperTransformer(cst.CSTTransformer):
                 break
         return new_body
 
-    def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
+    def replace_super_calls(self, node: cst.BaseSuite, func_name: str) -> cst.BaseSuite:
         """Updates the body of the input `node`'s `func_name` function by replacing calls
         to super().func_name() with the source code of the parent class' `func_name`.
         It keeps everything that is defined before `super().func_name()`.
         """
-        self.has_docstring = False
-        parent_has_docstring = False
-        if func_name in self.original_methods:
-            parent_has_docstring = m.matches(self.original_methods[func_name].body.body[0], DOCSTRING_NODE)
         new_body = []
-        has_super_call = False
+        modular_node_body = node.body
 
-        for i, expr in enumerate(node.body):
+        for i, expr in enumerate(modular_node_body):
             if is_call_to_super(expr, func_name):
-                has_super_call = True
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body[i + 1 :]))
+                original_modeling_method_body = self.original_modeling_methods[func_name].body.body
+                new_body.extend(self.update_body(original_modeling_method_body, modular_node_body[i + 1 :]))
                 new_body = self._fix_init_location(new_body)
+                return node.with_changes(body=new_body)
             else:
                 expr = expr.visit(self.transformer)
-            if m.matches(expr, DOCSTRING_NODE):
-                self.has_docstring = True
-                if parent_has_docstring:  # actually here we ought to de-duplicate?
-                    original_docstring = self.original_methods[func_name].body.body[0].body[0].value.value
-                    updated_docstring = expr.body[0].value.value
-                    merged_doc = merge_docstrings(original_docstring, updated_docstring)
-                    new_node = [expr.with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])]
-                else:
-                    new_node = [expr]
-                new_body.extend(new_node)
-            elif not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])) and not has_super_call:
+            if not m.matches(expr, m.SimpleStatementLine(body=[m.Del()])):
                 new_body.append(expr)
-        if not self.has_docstring and parent_has_docstring:
-            new_body = [self.original_methods[func_name].body.body[0]] + new_body
+
         return node.with_changes(body=new_body)
 
-    def leave_FunctionDef(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
-        if updated_node.name.value in self.updated_methods:
-            name = updated_node.name.value
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        name = updated_node.name.value
+        if name in self.modular_methods:
             new_body = self.replace_super_calls(updated_node.body, name)
             return updated_node.with_changes(body=new_body, params=updated_node.params)
         return updated_node
 
-    def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
-        """ "When a return statement is reached, it is replaced with the unrolled super code"""
-        if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
-            func_def = self.get_metadata(ParentNodeProvider, original_node)
-            if m.matched(func_def, m.FunctionDef()) and func_def.name.value in self.original_methods:
-                updated_return_value = updated_node.value.with_changes(
-                    args=[
-                        cst.Arg(
-                            value=cst.Call(func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))])
-                        )
-                    ]
-                )
-                return updated_node.with_changes(value=updated_return_value)
-        return updated_node
-
 
 def find_all_dependencies(
-    dependency_mapping: Dict[str, set],
+    dependency_mapping: dict[str, set],
     start_entity: Optional[str] = None,
     initial_dependencies: Optional[set] = None,
     initial_checked_dependencies: Optional[set] = None,
@@ -513,7 +432,7 @@ def find_all_dependencies(
     all_dependencies = set()
     all_dependencies_with_parent = []
     checked_dependencies = set(initial_checked_dependencies)
-    parents = {initial_dep: start_entity for initial_dep in initial_dependencies}
+    parents = dict.fromkeys(initial_dependencies, start_entity)
     while len(dependency_queue) > 0:
         # Pick element to visit
         current = dependency_queue.popleft()
@@ -524,7 +443,7 @@ def find_all_dependencies(
             if current in dependency_mapping.keys():
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
-                parents.update({dep: current for dep in dependency_mapping[current]})
+                parents.update(dict.fromkeys(dependency_mapping[current], current))
             # add visited node to the list
             checked_dependencies.add(current)
 
@@ -535,7 +454,10 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_HIDDEN_STATES_START_POSITION"]
+
+# Top-level variables that match the following patterns will use the value in the `modular_xxx.py` file only if they are not None
+ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE = [r"_DOCSTRING"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -590,7 +512,8 @@ ALL_FILE_TYPES = (
     "tokenization",
     "processing",
     "image_processing",
-    "feature_extractor",
+    "video_processing",
+    "feature_extraction",
 )
 
 
@@ -607,12 +530,13 @@ class ModuleMapper(CSTVisitor, ABC):
     def __init__(self, python_module: cst.Module):
         # fmt: off
         self.python_module: cst.Module = python_module             # original cst.Module being visited
-        self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
+        self.classes: dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
         self.imports = []                                          # stores all import statements
-        self.functions: Dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
+        self.functions: dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
-        self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
+        self.assignments: dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
+        self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
         # this keeps track of objects imported from modeling files (`from .configuration import Config`) -> `Config` should not be a dependency
         self.objects_imported_from_modeling = set()
@@ -643,11 +567,24 @@ class ModuleMapper(CSTVisitor, ABC):
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
+        simple_top_level_variable_indexing = m.SimpleStatementLine(
+            body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
+        )
+
         if m.matches(parent_node, m.Module()):
             if m.matches(node, simple_top_level_assign_structure):
                 left_hand_side = node.body[0].targets[0].target.value
                 self.current_assignment = left_hand_side
                 self.assignments[left_hand_side] = node
+            # This corresponds to a global variable being indexed or having an attribute look-up
+            elif m.matches(node, simple_top_level_variable_indexing):
+                indexed_variable = node.body[0].targets[0].target.value.value
+                # We should follow any dependencies relative to the variable being indexed
+                self.current_assignment = indexed_variable
+                # The indexing node should be directly added as a dependency of the indexed variable (register the node with a "fake" name)
+                node_name = self.python_module.code_for_node(node)
+                self.assignments[node_name] = node
+                self.object_dependency_mapping[indexed_variable].add(node_name)
             elif m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
                 self.imports.append(node)
 
@@ -669,7 +606,7 @@ class ModuleMapper(CSTVisitor, ABC):
 
     def visit_If(self, node):
         # If we are inside a function, do not add the import to the list of imports
-        if self.current_function is None:
+        if self.current_function is None and self.current_class is None:
             for stmt in node.body.body:
                 if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                     self.imports.append(node)
@@ -677,6 +614,10 @@ class ModuleMapper(CSTVisitor, ABC):
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
         self.classes[node.name.value] = node
+        self.current_class = node.name.value
+
+    def leave_ClassDef(self, node):
+        self.current_class = None
 
     def visit_Name(self, node: cst.Call):
         """This is used to create a mapping from module-scope functions and assignments to objects used inside them."""
@@ -854,13 +795,17 @@ class ModelFileMapper(ModuleMapper):
         """Update the global nodes with the assignment from the modular file.
 
         Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
-        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
-        big docstrings.
+        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE` and its value is not None, or if it matches a pattern in `ASSIGNMENTS_REGEX_TO_KEEP.
+        Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the big docstrings.
         """
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
 
-            if should_keep or assignment not in self.assignments:
+            should_keep_if_not_none = any(
+                re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE
+            ) and not (hasattr(node.body[0].value, "value") and node.body[0].value.value == "None")
+
+            if should_keep or should_keep_if_not_none or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
@@ -928,55 +873,52 @@ def common_partial_suffix(str1: str, str2: str) -> str:
 
 
 def replace_class_node(
-    mapper: ModelFileMapper, class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
-):
+    mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
+) -> cst.ClassDef:
     """
     Replace a class node which inherits from another modeling class. This function works in the following way:
-    - start from the base class node of the inherited class (a cst.Node)
-    - replace all methods of the base node with the methods defined in the child class
-    - append all new methods defined in the child class
+    - start from the methods and class attributes of the original modeling code node, and replace their definition
+    if overriden in the modular
+    - append all new methods and class attributes defined in the child class
+    - all potential method/class docstrings and decorators use the ones found in modular if any, else in original modeling
     - replace all calls to super() with the unravelled code
 
-                    |    ```python                          |               |    ```python
-                    |    class GemmaModel(LlamaModel):      |               |       class GemmaModel(nn.Module):
-                    |        def __init__(self):            |               |           def __init__(self):
-    Going from:     |            super().__init__()         |       to:     |               super().__init__(config)
-                    |            self.dropout = 0.2         |               |               self.dropout = 0.2
-                    |     ```                               |               |               self.padding_idx = config.pad_token_id
-                                                                            |               self.vocab_size = config.vocab_size
-                                                                            |               self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-                                                                            |               self.layers = nn.ModuleList(
-                                                                            |                   [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-                                                                            |               )
-                                                                            |               self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-                                                                            |               self.gradient_checkpointing = False
-                                                                            |               # Initialize weights and apply final processing
-                                                                            |               self.post_init()
-                                                                            |     ```
-    """
-    all_bases = [get_full_attribute_name(k.value) for k in class_node.bases]
-    if any(base is None for base in all_bases):
-        raise ValueError(f"Could not parse the name of the bases for {class_node.name.value}")
+    Args:
+        mapper (`ModelFileMapper`):
+            The mapper corresponding to the visited file from which the modular class node inherits.
+        modular_class_node (`cst.ClassDef`):
+            The class node as found in the modular file.
+        renamed_super_class (`str`):
+            The name of the class from which `modular_class_node` inherits after automatic renaming.
+        original_super_class (`str`):
+            The name of the class from which `modular_class_node` inherits before automatic renaming.
 
-    original_node = mapper.classes[renamed_super_class]
+    Returns:
+        A new class node corresponding to the modular definition.
+    """
+    all_bases = [get_full_attribute_name(k.value) for k in modular_class_node.bases]
+    if any(base is None for base in all_bases):
+        raise ValueError(f"Could not parse the name of the bases for {modular_class_node.name.value}")
+
+    original_modeling_node = mapper.classes[renamed_super_class]
     # Always use the new name of the class (in case we use e.g. `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`)
-    new_name = class_node.name
+    new_class_name = modular_class_node.name
 
     # If the new class name is different from the renamed super class name, we need to update the docstrings/comments accordingly
-    if new_name.value != renamed_super_class:
-        common_suffix = common_partial_suffix(new_name.value, renamed_super_class)
+    if new_class_name.value != renamed_super_class:
+        common_suffix = common_partial_suffix(new_class_name.value, renamed_super_class)
         # Note that this works even without common prefix, in which case it does not replace anything
-        old, new = renamed_super_class.replace(common_suffix, ""), new_name.value.replace(common_suffix, "")
-        temp_module = cst.Module(body=[original_node])
-        original_node = temp_module.visit(
+        old, new = renamed_super_class.replace(common_suffix, ""), new_class_name.value.replace(common_suffix, "")
+        temp_module = cst.Module(body=[original_modeling_node])
+        original_modeling_node = temp_module.visit(
             ReplaceNameTransformer(get_lowercase_name(old), get_lowercase_name(new), only_doc=True)
         ).body[0]
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
     additional_bases = [base for base in all_bases if base != original_super_class]
-    new_bases = []
-    for original_base in original_node.bases:
+    new_class_bases = []
+    for original_base in original_modeling_node.bases:
         new_base = original_base
         # we only potentially switch base for Name-based bases, not Attribute
         if m.matches(original_base.value, m.Name()):
@@ -987,97 +929,150 @@ def replace_class_node(
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)
                     break
-        new_bases.append(new_base)
+        new_class_bases.append(new_base)
 
-    original_methods = {
-        f.name.value if hasattr(f, "name") else mapper.python_module.code_for_node(f): f
-        for f in original_node.body.body
-    }
-    updated_methods = {
-        f.name.value if hasattr(f, "name") else mapper.python_module.code_for_node(f): f for f in class_node.body.body
-    }
-    end_meth = []
+    # Use class decorators redefined in modular file if any
+    new_class_decorators = (
+        modular_class_node.decorators if len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
+    )
 
-    assign_targets = {}
-    docstring_node = []
-    # Iterate directly from node.body as there can be property/setters with same names which are overwritten when we use a dict
-    for func in original_node.body.body:
-        name = func.name.value if hasattr(func, "name") else mapper.python_module.code_for_node(func)
-        if m.matches(func, m.FunctionDef()) and name in updated_methods and updated_methods[name] is not None:
-            new_params = updated_methods[name].params
-            # Replace the method in the replacement class, preserving decorators
-            kwarg_name = getattr(updated_methods[name].params, "star_kwarg", None)
-            if kwarg_name and kwarg_name.name.value == "super_kwargs":
-                parent_params = {k.name.value: k for k in func.params.params}
-                parent_params.update({k.name.value: k for k in new_params.params[1:]})
-                new_params = new_params.with_changes(
-                    params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
-                )
-            # Keep decorators in `modular_xxx.py` if any, else original decorators
-            new_decorators = (
-                updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
-            )
-            if not re.match(
-                r"\ndef .*\(.*\):\n    raise.*Error\(.*",
-                mapper.python_module.code_for_node(updated_methods[name]),
-            ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params, decorators=new_decorators)
+    # Compute new class docstring
+    original_modeling_docstring = [
+        node for node in original_modeling_node.body.body if m.matches(node, DOCSTRING_NODE)
+    ]
+    modular_docstring = [node for node in modular_class_node.body.body if m.matches(node, DOCSTRING_NODE)]
+    # Use class docstring in modular if any, else original modeling code docstring
+    new_class_docstring = modular_docstring if len(modular_docstring) > 0 else original_modeling_docstring
+
+    # Compute new class attributes
+    original_modeling_class_attributes = {
+        node.body[0].targets[0].target.value: node
+        for node in original_modeling_node.body.body
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
+    }
+    original_modeling_class_attributes.update(
+        {
+            node.body[0].target.value: node
+            for node in original_modeling_node.body.body
+            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
+        }
+    )
+    modular_class_attributes = {
+        node.body[0].targets[0].target.value: node
+        for node in modular_class_node.body.body
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
+    }
+    modular_class_attributes.update(
+        {
+            node.body[0].target.value: node
+            for node in modular_class_node.body.body
+            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
+        }
+    )
+    # Use all original modeling attributes, and potentially override some with values in the modular
+    new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
+
+    # Check class methods defined in the modular and associated modeling
+    original_modeling_methods = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in original_modeling_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    original_modeling_methods[f"{node.name.value}_setter"] = original_modeling_methods[node.name.value]
+                    original_modeling_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    original_modeling_methods[f"{node.name.value}_setter"] = node
             else:
+                original_modeling_methods[node.name.value] = node
+    modular_methods = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in modular_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    modular_methods[f"{node.name.value}_setter"] = modular_methods[node.name.value]
+                    modular_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    modular_methods[f"{node.name.value}_setter"] = node
+            else:
+                modular_methods[node.name.value] = node
+
+    new_class_methods = []
+    # Iterate over the methods of the original modeling code, and add them to the list of methods to add
+    for name, node in original_modeling_methods.items():
+        # If the method was redefined in modular, make appropriate changes to the node
+        if name in modular_methods:
+            # Get the corresponding method node in modular
+            modular_node = modular_methods[name]
+
+            # If we match the pattern, we should avoid inheriting the method
+            if re.match(r"\ndef .*\(.*\):\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_node)):
                 continue
 
-        if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
-            target = mapper.python_module.code_for_node(func.body[0].targets[0])
-            assign_targets[target] = func
-        elif m.matches(func, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            target = mapper.python_module.code_for_node(func.body[0].target)
-            assign_targets[target] = func
-        elif m.matches(func, DOCSTRING_NODE):
-            docstring_node = [func]
-        else:
-            end_meth.append(func)
+            # Compute new method docstring
+            modeling_docstring = [node_ for node_ in node.body.body if m.matches(node_, DOCSTRING_NODE)]
+            modular_docstring = [node_ for node_ in modular_node.body.body if m.matches(node_, DOCSTRING_NODE)]
+            # Use method docstring in modular if any, else original modeling code docstring
+            new_body = (
+                modular_node.body.body
+                if len(modular_docstring) > 0
+                else modeling_docstring + list(modular_node.body.body)
+            )
+            new_body = modular_node.body.with_changes(body=new_body)
+
+            # Use arguments as defined in the modular
+            new_params = modular_node.params
+
+            # If using the `**super_kwargs` syntax in modular, merge any existing modular arg with all the original modeling ones
+            kwarg_name = getattr(modular_node.params, "star_kwarg", None)
+            if kwarg_name and kwarg_name.name.value == "super_kwargs":
+                original_modeling_params = {k.name.value: k for k in node.params.params}
+                modular_params = {k.name.value: k for k in new_params.params[1:]}
+                new_param_list = list({**original_modeling_params, **modular_params}.values())
+                new_params = new_params.with_changes(params=new_param_list, star_kwarg=node.params.star_kwarg)
+
+            # Keep decorators in modular if any, else original decorators
+            new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
+
+            # Keep return annotation in modular if any, else original return annotation
+            new_return_annotation = modular_node.returns if modular_node.returns else node.returns
+
+            # Update the method node
+            node = node.with_changes(
+                body=new_body,
+                params=new_params,
+                decorators=new_decorators,
+                returns=new_return_annotation,
+            )
+
+        new_class_methods.append(node)
 
     # Port new methods that are defined only in modular-file and append at the end
-    for func in class_node.body.body:
-        name = func.name.value if hasattr(func, "name") else mapper.python_module.code_for_node(func)
-        if m.matches(func, DOCSTRING_NODE):  # This processes the docstring of the class!
-            # Extract the original docstring
-            updated_docstring = func.body[0].value.value
-            if len(docstring_node) == 0:  # If the original docstring is empty, just create one from the updated.
-                docstring_node = [
-                    cst.SimpleStatementLine(body=[cst.Expr(value=cst.SimpleString(value=updated_docstring))])
-                ]
-            else:
-                original_docstring = docstring_node[0].body[0].value.value
-                merged_doc = merge_docstrings(original_docstring, updated_docstring)
-                # Update the docstring in the original function
-                docstring_node = [
-                    docstring_node[0].with_changes(body=[cst.Expr(value=cst.SimpleString(value=merged_doc))])
-                ]
-        if name not in original_methods and func is not None and isinstance(func, cst.FunctionDef):
-            end_meth.append(func)
-        if m.matches(func, m.SimpleStatementLine(body=[m.Assign()])):
-            # TODO we only use single assign might cause issues
-            target = mapper.python_module.code_for_node(func.body[0].targets[0])
-            assign_targets[target] = func
-        if m.matches(func, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            target = mapper.python_module.code_for_node(func.body[0].target)
-            assign_targets[target] = func
-    end_meth = docstring_node + list(assign_targets.values()) + end_meth
+    for name, node in modular_methods.items():
+        if name not in original_modeling_methods:
+            new_class_methods.append(node)
 
-    # Replace the calls to `super()` with the unrolled code
-    result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
+    # Recreate the whole new class body
+    new_class_body = new_class_docstring + new_class_attributes + new_class_methods
+
+    # Replace the calls to `super()` of the redefined modular methods with the unrolled code
+    result_node = original_modeling_node.with_changes(body=cst.IndentedBlock(body=new_class_body))
     temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
     new_replacement_class = new_module.visit(
-        SuperTransformer(temp_module, original_methods, updated_methods, all_bases)
+        SuperTransformer(temp_module, original_modeling_methods, modular_methods, all_bases)
     )
-    new_replacement_body = new_replacement_class.body[0].body  # get the indented block
+    new_class_body = new_replacement_class.body[0].body  # get the indented block
 
-    # Use decorators redefined in `modular_xxx.py` if any
-    new_decorators = class_node.decorators if len(class_node.decorators) > 0 else original_node.decorators
-
-    return original_node.with_changes(
-        body=new_replacement_body, decorators=new_decorators, bases=new_bases, name=new_name
+    return original_modeling_node.with_changes(
+        body=new_class_body, decorators=new_class_decorators, bases=new_class_bases, name=new_class_name
     )
 
 
@@ -1087,9 +1082,12 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "VideoProcessor": "video_processing",
+    "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing*_fast",
-    "FeatureExtractor": "feature_extractor",
+    "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
+    "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
     "TextKwargs": "processing",
 }
@@ -1129,7 +1127,7 @@ def append_new_import_node(
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
-        name_value = name.evaluated_name
+        name_value = name.evaluated_alias or name.evaluated_name
         if name_value not in unused_imports and name_value not in added_names:
             names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
             added_names.add(name_value)
@@ -1141,7 +1139,7 @@ def append_new_import_node(
 def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """Get all the imports needed in the `body`, from the list of `all_imports`.
     `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
-    Note: we need to use `isinstance` on scope assignements, m.matches apparently does not work here yet!
+    Note: we need to use `isinstance` on scope assignments, m.matches apparently does not work here yet!
     """
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
@@ -1216,8 +1214,8 @@ class ModularFileMapper(ModuleMapper):
         # fmt: off
         self.model_name = new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` or `phi3`
 
-        self.model_specific_imported_objects: Dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
-        self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
+        self.model_specific_imported_objects: dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
+        self.model_specific_modules: dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.all_all_to_add = {}
         # fmt: on
@@ -1265,6 +1263,10 @@ class ModularFileMapper(ModuleMapper):
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
+        simple_top_level_variable_indexing = m.SimpleStatementLine(
+            body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
+        )
+
         if m.matches(parent_node, m.Module()):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
@@ -1284,6 +1286,15 @@ class ModularFileMapper(ModuleMapper):
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
+            # This corresponds to a global variable being indexed or having an attribute look-up
+            elif m.matches(node, simple_top_level_variable_indexing):
+                indexed_variable = node.body[0].targets[0].target.value.value
+                # We should follow any dependencies relative to the variable being indexed
+                self.current_assignment = indexed_variable
+                # The indexing node should be directly added as a dependency of the indexed variable (register the node with a "fake" name)
+                node_name = self.python_module.code_for_node(node)
+                self.assignments[node_name] = node
+                self.object_dependency_mapping[indexed_variable].add(node_name)
 
     def leave_Module(self, node):
         """When we leave the modular file, we do the following in order:
@@ -1389,7 +1400,7 @@ class ModularFileMapper(ModuleMapper):
 
         original_dependencies = []
         other_files_dependencies = defaultdict(list)
-        for dep in tuple(missing_dependencies):
+        for dep in sorted(missing_dependencies):
             if dep in self.added_objects_file_mapping:
                 file = self.added_objects_file_mapping[dep]
                 other_files_dependencies[file].append(dep)
@@ -1440,6 +1451,10 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
+                    # If both the old model and new model share the last part of their name, is detected as a common
+                    # suffix, but it should not be the case -> use the full name in this case
+                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
+                        cased_model_name = cased_default_name
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1615,7 +1630,7 @@ def get_class_node_and_dependencies(
 
 
 def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
-    """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
+    """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
     current_file_indices = defaultdict(lambda: 0)
 
@@ -1724,20 +1739,44 @@ def save_modeling_file(modular_file, converted_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    # Same arg as both positional and optional, just for convenience
     parser.add_argument(
+        "files",
+        nargs="*",
+        help="A list of `modular_xxxx` files that should be converted to single model file",
+    )
+    parser.add_argument(
+        "--files-to-parse",
         "--files_to_parse",
+        "--files",
+        "-f",
         default=["all"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
-    if args.files_to_parse == ["all"]:
-        args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-    if args.files_to_parse == ["examples"]:
-        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    # Both arg represent the same data, but as positional and optional
+    files_to_parse = args.files if len(args.files) > 0 else args.files_to_parse
 
-    priority_list, _ = find_priority_list(args.files_to_parse)
-    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+    if files_to_parse == ["all"]:
+        files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
+    if files_to_parse == ["examples"]:
+        files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    else:
+        for i, model_name in enumerate(files_to_parse):
+            if os.sep not in model_name:
+                full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
+                # If it does not exist, try in the examples section
+                if not os.path.isfile(full_path):
+                    full_path = os.path.join("examples", "modular-transformers", f"modular_{model_name}.py")
+                # We did not find it anywhere
+                if not os.path.isfile(full_path):
+                    raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
+                files_to_parse[i] = full_path
+
+    priority_list, _ = find_priority_list(files_to_parse)
+    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
+    assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")

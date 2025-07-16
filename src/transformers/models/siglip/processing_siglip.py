@@ -16,7 +16,7 @@
 Image/Text processor class for SigLIP.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -48,26 +48,26 @@ class SiglipProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
+        max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to SiglipTokenizer's [`~SiglipTokenizer.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` argument to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):

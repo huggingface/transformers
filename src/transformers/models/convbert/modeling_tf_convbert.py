@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -106,10 +106,10 @@ class TFConvBertEmbeddings(keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -869,7 +869,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         outputs = self.convbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1000,7 +1000,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMaskedLMOutput]:
+    ) -> Union[tuple, TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1125,7 +1125,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSequenceClassifierOutput]:
+    ) -> Union[tuple, TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1213,7 +1213,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMultipleChoiceModelOutput]:
+    ) -> Union[tuple, TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1321,7 +1321,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFTokenClassifierOutput]:
+    ) -> Union[tuple, TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1405,7 +1405,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         start_positions: tf.Tensor | None = None,
         end_positions: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFQuestionAnsweringModelOutput]:
+    ) -> Union[tuple, TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

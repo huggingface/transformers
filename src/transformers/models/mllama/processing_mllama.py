@@ -15,17 +15,14 @@
 
 """Processor class for Mllama."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
@@ -42,7 +39,7 @@ class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) -> List[List[int]]:
+def get_cross_attention_token_mask(input_ids: list[int], image_token_id: int) -> list[list[int]]:
     """
     Generate a cross-attention token mask for image tokens in the input sequence.
 
@@ -50,11 +47,11 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
     a mask that defines which subsequent tokens each image token should attend to.
 
     Args:
-        input_ids (List[int]): A list of token ids representing the input sequence.
+        input_ids (list[int]): A list of token ids representing the input sequence.
         image_token_id (int): The id of the token used to represent images in the sequence.
 
     Returns:
-        List[List[int]]: A list of [start, end] pairs, where each pair represents the range
+        list[list[int]]: A list of [start, end] pairs, where each pair represents the range
         of tokens an image token should attend to.
 
     Notes:
@@ -91,8 +88,8 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
 
 
 def convert_sparse_cross_attention_mask_to_dense(
-    cross_attention_token_mask: List[List[List[int]]],
-    num_tiles: List[List[int]],
+    cross_attention_token_mask: list[list[list[int]]],
+    num_tiles: list[list[int]],
     max_num_tiles: int,
     length: int,
 ) -> np.ndarray:
@@ -103,11 +100,11 @@ def convert_sparse_cross_attention_mask_to_dense(
     The sparse representation is a nested list structure that defines attention ranges for each image in each batch item.
 
     Args:
-        cross_attention_token_mask (List[List[List[int]]]): A nested list structure where:
+        cross_attention_token_mask (list[list[list[int]]]): A nested list structure where:
             - The outer list represents the batch dimension.
             - The middle list represents different images within each batch item.
             - The inner list contains pairs of integers [start, end] representing token ranges for each image.
-        num_tiles (List[List[int]]): A nested list structure specifying the number of tiles for each image in each batch item.
+        num_tiles (list[list[int]]): A nested list structure specifying the number of tiles for each image in each batch item.
         max_num_tiles (int): The maximum possible number of tiles.
         length (int): The total sequence length of the input.
 
@@ -208,7 +205,6 @@ class MllamaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = "MllamaImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
@@ -228,7 +224,7 @@ class MllamaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],
@@ -241,10 +237,10 @@ class MllamaProcessor(ProcessorMixin):
         to the docstring of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -274,6 +270,7 @@ class MllamaProcessor(ProcessorMixin):
         )
 
         text_kwargs = output_kwargs["text_kwargs"]
+        text_kwargs["return_tensors"] = None
         images_kwargs = output_kwargs["images_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
 
@@ -287,6 +284,8 @@ class MllamaProcessor(ProcessorMixin):
             text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
             _ = text_kwargs.pop("padding_side", None)  # hack until padding-side is an accepted kwarg by tokenizers
             encoding = self.tokenizer(text, **text_kwargs)
+            self._check_special_mm_tokens(text, encoding, modalities=["image"])
+            n_images_in_ids = [token_ids.count(self.image_token_id) for token_ids in encoding["input_ids"]]
             data.update(encoding)
 
         n_images_in_images = [0]
@@ -301,12 +300,21 @@ class MllamaProcessor(ProcessorMixin):
                 raise ValueError(
                     "If a batch of text is provided, there should be either no images or at least one image per sample"
                 )
-            if sum(n_images_in_images) != sum(n_images_in_text):
+            if sum(n_images_in_text) > 0 and (
+                n_images_in_images != n_images_in_text or n_images_in_ids != n_images_in_images
+            ):
                 if images is None:
                     raise ValueError("No image were provided, but there are image tokens in the prompt")
                 else:
+                    add_message = ""
+                    if sum(n_images_in_images) == sum(n_images_in_text) and n_images_in_images != n_images_in_text:
+                        add_message = "Make sure to pass your images as a nested list, where each sub-list holds images per batch"
+                    elif n_images_in_ids != n_images_in_images:
+                        add_message = "If you activated truncation with `max_length`, increase the `max_length` so image tokens aren't cropped."
+
                     raise ValueError(
-                        f"The number of image token ({sum(n_images_in_text)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
+                        f"The number of image tokens in each text ({n_images_in_text}) should be the same as the "
+                        f"number of provided images per batch ({n_images_in_images}). {add_message}"
                     )
 
         if images is not None:
@@ -358,13 +366,13 @@ class MllamaProcessor(ProcessorMixin):
                 or `(sequence_length,)`.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
             **kwargs:
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
             generated_outputs,

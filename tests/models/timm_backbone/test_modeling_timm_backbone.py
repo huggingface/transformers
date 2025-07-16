@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,8 +26,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import TimmBackbone, TimmBackboneConfig
 
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -74,17 +71,6 @@ class TimmBackboneModelTester:
             stage_names=self.stage_names,
             use_pretrained_backbone=self.use_pretrained_backbone,
             backbone=self.backbone,
-        )
-
-    def create_and_check_model(self, config, pixel_values):
-        model = TimmBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        self.parent.assertEqual(
-            result.feature_map[-1].shape,
-            (self.batch_size, model.channels[-1], 14, 14),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -170,16 +156,16 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_save_load(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_device_context_manager(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_global_device_set(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")

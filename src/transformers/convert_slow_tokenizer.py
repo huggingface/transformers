@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
-from typing import Dict, List, Tuple
+from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -91,7 +90,7 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -105,7 +104,7 @@ class SentencePieceExtractor:
 
 
 class GemmaSentencePieceExtractor(SentencePieceExtractor):
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -328,7 +327,9 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -397,7 +398,9 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1580,14 +1583,18 @@ class TikTokenConverter:
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = additional_special_tokens
+        self.additional_special_tokens = (
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
+        )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+                "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
 
         bpe_ranks = load_tiktoken_bpe(tiktoken_url)
@@ -1629,7 +1636,10 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
+
+        tokenizer.add_special_tokens(
+            [AddedToken(token, normalized=False, special=True) for token in self.additional_special_tokens]
+        )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
@@ -1727,7 +1737,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
             ).converted()
         except Exception:
             raise ValueError(
-                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"Converting from SentencePiece and Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
                 f"with a SentencePiece tokenizer.model file."
                 f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )

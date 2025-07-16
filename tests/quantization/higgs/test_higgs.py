@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,7 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, HiggsConfig, OPTForCausalLM
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_flute_hadamard,
     require_torch_gpu,
@@ -88,7 +88,7 @@ class HiggsTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -156,7 +156,7 @@ class HiggsTest(unittest.TestCase):
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = HiggsConfig()
@@ -184,7 +184,7 @@ class HiggsTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @unittest.skip("This will almost surely OOM. Enable when swithed to a smaller model")
+    @unittest.skip("This will almost surely OOM. Enable when switched to a smaller model")
     def test_dequantize(self):
         """
         Test the ability to dequantize a model

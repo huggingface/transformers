@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# 1. Standard library
 import difflib
 import json
 import os
@@ -21,14 +22,21 @@ from dataclasses import dataclass
 from datetime import date
 from itertools import chain
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+from re import Pattern
+from typing import Any, Callable, Optional, Union
 
 import yaml
 
 from ..models import auto as auto_module
 from ..models.auto.configuration_auto import model_type_to_module_name
-from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
+from ..utils import (
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from . import BaseTransformersCLICommand
+from .add_fast_image_processor import add_fast_image_processor
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -66,6 +74,9 @@ class ModelPatterns:
         image_processor_class (`str`, *optional*):
             The image processor class associated with this model (leave to `None` for models that don't use an image
             processor).
+        image_processor_fast_class (`str`, *optional*):
+            The fast image processor class associated with this model (leave to `None` for models that don't use a fast
+            image processor).
         feature_extractor_class (`str`, *optional*):
             The feature extractor class associated with this model (leave to `None` for models that don't use a feature
             extractor).
@@ -82,6 +93,7 @@ class ModelPatterns:
     config_class: Optional[str] = None
     tokenizer_class: Optional[str] = None
     image_processor_class: Optional[str] = None
+    image_processor_fast_class: Optional[str] = None
     feature_extractor_class: Optional[str] = None
     processor_class: Optional[str] = None
 
@@ -107,6 +119,7 @@ ATTRIBUTE_TO_PLACEHOLDER = {
     "config_class": "[CONFIG_CLASS]",
     "tokenizer_class": "[TOKENIZER_CLASS]",
     "image_processor_class": "[IMAGE_PROCESSOR_CLASS]",
+    "image_processor_fast_class": "[IMAGE_PROCESSOR_FAST_CLASS]",
     "feature_extractor_class": "[FEATURE_EXTRACTOR_CLASS]",
     "processor_class": "[PROCESSOR_CLASS]",
     "checkpoint": "[CHECKPOINT]",
@@ -135,7 +148,7 @@ def find_indent(line: str) -> int:
     return len(search.groups()[0])
 
 
-def parse_module_content(content: str) -> List[str]:
+def parse_module_content(content: str) -> list[str]:
     """
     Parse the content of a module in the list of objects it defines.
 
@@ -143,7 +156,7 @@ def parse_module_content(content: str) -> List[str]:
         content (`str`): The content to parse
 
     Returns:
-        `List[str]`: The list of objects defined in the module.
+        `list[str]`: The list of objects defined in the module.
     """
     objects = []
     current_object = []
@@ -323,7 +336,7 @@ def add_content_to_file(
 
 def replace_model_patterns(
     text: str, old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Replace all patterns present in a given text.
 
@@ -339,7 +352,13 @@ def replace_model_patterns(
     # contains the camel-cased named, but will be treated before.
     attributes_to_check = ["config_class"]
     # Add relevant preprocessing classes
-    for attr in ["tokenizer_class", "image_processor_class", "feature_extractor_class", "processor_class"]:
+    for attr in [
+        "tokenizer_class",
+        "image_processor_class",
+        "image_processor_fast_class",
+        "feature_extractor_class",
+        "processor_class",
+    ]:
         if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
             attributes_to_check.append(attr)
 
@@ -395,10 +414,10 @@ def simplify_replacements(replacements):
     "BertConfig->BertNewConfig" is implied by "Bert->BertNew" so not needed.
 
     Args:
-        replacements (`List[Tuple[str, str]]`): List of patterns (old, new)
+        replacements (`list[tuple[str, str]]`): List of patterns (old, new)
 
     Returns:
-        `List[Tuple[str, str]]`: The list of patterns simplified.
+        `list[tuple[str, str]]`: The list of patterns simplified.
     """
     if len(replacements) <= 1:
         # Nothing to simplify
@@ -500,7 +519,7 @@ def duplicate_module(
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
     add_copied_from: bool = True,
-    attrs_to_remove: List[str] = None,
+    attrs_to_remove: Optional[list[str]] = None,
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
@@ -566,17 +585,17 @@ def duplicate_module(
 
 
 def filter_framework_files(
-    files: List[Union[str, os.PathLike]], frameworks: Optional[List[str]] = None
-) -> List[Union[str, os.PathLike]]:
+    files: list[Union[str, os.PathLike]], frameworks: Optional[list[str]] = None
+) -> list[Union[str, os.PathLike]]:
     """
     Filter a list of files to only keep the ones corresponding to a list of frameworks.
 
     Args:
-        files (`List[Union[str, os.PathLike]]`): The list of files to filter.
-        frameworks (`List[str]`, *optional*): The list of allowed frameworks.
+        files (`list[Union[str, os.PathLike]]`): The list of files to filter.
+        frameworks (`list[str]`, *optional*): The list of allowed frameworks.
 
     Returns:
-        `List[Union[str, os.PathLike]]`: The list of filtered files.
+        `list[Union[str, os.PathLike]]`: The list of filtered files.
     """
     if frameworks is None:
         frameworks = get_default_frameworks()
@@ -598,17 +617,17 @@ def filter_framework_files(
     return [framework_to_file[f] for f in frameworks if f in framework_to_file] + others
 
 
-def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
+def get_model_files(model_type: str, frameworks: Optional[list[str]] = None) -> dict[str, Union[Path, list[Path]]]:
     """
     Retrieves all the files associated to a model.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will only keep the model files corresponding to the passed frameworks.
 
     Returns:
-        `Dict[str, Union[Path, List[Path]]]`: A dictionary with the following keys:
+        `dict[str, Union[Path, list[Path]]]`: A dictionary with the following keys:
         - **doc_file** -- The documentation file for the model.
         - **model_files** -- All the files in the model module.
         - **test_files** -- The test files for the model.
@@ -640,18 +659,18 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     return {"doc_file": doc_file, "model_files": model_files, "module_name": module_name, "test_files": test_files}
 
 
-_re_checkpoint_for_doc = re.compile(r"^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
+_re_checkpoint_in_config = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 def find_base_model_checkpoint(
-    model_type: str, model_files: Optional[Dict[str, Union[Path, List[Path]]]] = None
+    model_type: str, model_files: Optional[dict[str, Union[Path, list[Path]]]] = None
 ) -> str:
     """
     Finds the model checkpoint used in the docstrings for a given model.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        model_files (`Dict[str, Union[Path, List[Path]]`, *optional*):
+        model_files (`dict[str, Union[Path, list[Path]]`, *optional*):
             The files associated to `model_type`. Can be passed to speed up the function, otherwise will be computed.
 
     Returns:
@@ -661,13 +680,14 @@ def find_base_model_checkpoint(
         model_files = get_model_files(model_type)
     module_files = model_files["model_files"]
     for fname in module_files:
-        if "modeling" not in str(fname):
+        # After the @auto_docstring refactor, we expect the checkpoint to be in the configuration file's docstring
+        if "configuration" not in str(fname):
             continue
 
         with open(fname, "r", encoding="utf-8") as f:
             content = f.read()
-            if _re_checkpoint_for_doc.search(content) is not None:
-                checkpoint = _re_checkpoint_for_doc.search(content).groups()[0]
+            if _re_checkpoint_in_config.search(content) is not None:
+                checkpoint = _re_checkpoint_in_config.search(content).groups()[0]
                 # Remove quotes
                 checkpoint = checkpoint.replace('"', "")
                 checkpoint = checkpoint.replace("'", "")
@@ -694,18 +714,18 @@ def get_default_frameworks():
 _re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
 
 
-def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, List[str]]:
+def retrieve_model_classes(model_type: str, frameworks: Optional[list[str]] = None) -> dict[str, list[str]]:
     """
     Retrieve the model classes associated to a given model.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             The frameworks to look for. Will default to `["pt", "tf", "flax"]`, passing a smaller list will restrict
             the classes returned.
 
     Returns:
-        `Dict[str, List[str]]`: A dictionary with one key per framework and the list of model classes associated to
+        `dict[str, list[str]]`: A dictionary with one key per framework and the list of model classes associated to
         that framework as values.
     """
     if frameworks is None:
@@ -735,20 +755,20 @@ def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = No
     return model_classes
 
 
-def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
+def retrieve_info_for_model(model_type, frameworks: Optional[list[str]] = None):
     """
     Retrieves all the information from a given model_type.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will only keep the info corresponding to the passed frameworks.
 
     Returns:
         `Dict`: A dictionary with the following keys:
-        - **frameworks** (`List[str]`): The list of frameworks that back this model type.
-        - **model_classes** (`Dict[str, List[str]]`): The model classes implemented for that model type.
-        - **model_files** (`Dict[str, Union[Path, List[Path]]]`): The files associated with that model type.
+        - **frameworks** (`list[str]`): The list of frameworks that back this model type.
+        - **model_classes** (`dict[str, list[str]]`): The model classes implemented for that model type.
+        - **model_files** (`dict[str, Union[Path, list[Path]]]`): The files associated with that model type.
         - **model_patterns** (`ModelPatterns`): The various patterns for the model.
     """
     if model_type not in auto_module.MODEL_NAMES_MAPPING:
@@ -763,10 +783,10 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         tokenizer_class = None
     image_processor_classes = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
     if isinstance(image_processor_classes, tuple):
-        image_processor_class = image_processor_classes[0]  # we take the slow image processor class.
+        image_processor_class, image_processor_fast_class = image_processor_classes
     else:
         image_processor_class = image_processor_classes
-
+        image_processor_fast_class = None
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
@@ -800,6 +820,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         image_processor_class=image_processor_class,
+        image_processor_fast_class=image_processor_fast_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
@@ -813,7 +834,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
 
 def clean_frameworks_in_init(
-    init_file: Union[str, os.PathLike], frameworks: Optional[List[str]] = None, keep_processing: bool = True
+    init_file: Union[str, os.PathLike], frameworks: Optional[list[str]] = None, keep_processing: bool = True
 ):
     """
     Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers/feature
@@ -821,7 +842,7 @@ def clean_frameworks_in_init(
 
     Args:
         init_file (`str` or `os.PathLike`): The path to the init to treat.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
            If passed, this will remove all imports that are subject to a framework not in frameworks
         keep_processing (`bool`, *optional*, defaults to `True`):
             Whether or not to keep the preprocessing (tokenizer, feature extractor, image processor, processor) imports
@@ -894,7 +915,7 @@ def clean_frameworks_in_init(
 def add_model_to_main_init(
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
-    frameworks: Optional[List[str]] = None,
+    frameworks: Optional[list[str]] = None,
     with_processing: bool = True,
 ):
     """
@@ -903,9 +924,9 @@ def add_model_to_main_init(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If specified, only the models implemented in those frameworks will be added.
-        with_processsing (`bool`, *optional*, defaults to `True`):
+        with_processing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
@@ -957,6 +978,7 @@ def add_model_to_main_init(
                 processing_classes = [
                     old_model_patterns.tokenizer_class,
                     old_model_patterns.image_processor_class,
+                    old_model_patterns.image_processor_fast_class,
                     old_model_patterns.feature_extractor_class,
                     old_model_patterns.processor_class,
                 ]
@@ -994,10 +1016,11 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
     with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
         content = f.read()
 
+    pattern_tokenizer = re.compile(r"^\s*TOKENIZER_MAPPING_NAMES\s*=\s*OrderedDict\b")
     lines = content.split("\n")
     idx = 0
     # First we get to the TOKENIZER_MAPPING_NAMES block.
-    while not lines[idx].startswith("    TOKENIZER_MAPPING_NAMES = OrderedDict("):
+    while not pattern_tokenizer.search(lines[idx]):
         idx += 1
     idx += 1
 
@@ -1009,9 +1032,12 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
         # Otherwise it takes several lines until we get to a "),"
         else:
             block = []
-            while not lines[idx].startswith("            ),"):
+            # should change to "        )," instead of "            ),"
+            while not lines[idx].startswith("        ),"):
                 block.append(lines[idx])
                 idx += 1
+            # if the lines[idx] does start with "        )," we still need it in our block
+            block.append(lines[idx])
             block = "\n".join(block)
         idx += 1
 
@@ -1034,7 +1060,7 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
     "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
-    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_class}"),'],
+    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_classes}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
@@ -1043,7 +1069,7 @@ AUTO_CLASSES_PATTERNS = {
 
 
 def add_model_to_auto_classes(
-    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: Dict[str, List[str]]
+    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: dict[str, list[str]]
 ):
     """
     Add a model to the relevant mappings in the auto module.
@@ -1051,7 +1077,7 @@ def add_model_to_auto_classes(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        model_classes (`Dict[str, List[str]]`): A dictionary framework to list of model classes implemented.
+        model_classes (`dict[str, list[str]]`): A dictionary framework to list of model classes implemented.
     """
     for filename in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
@@ -1068,14 +1094,27 @@ def add_model_to_auto_classes(
                     )
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
-            elif "{image_processor_class}" in pattern:
+            elif "{image_processor_classes}" in pattern:
                 if (
                     old_model_patterns.image_processor_class is not None
                     and new_model_patterns.image_processor_class is not None
                 ):
-                    new_patterns.append(
-                        pattern.replace("{image_processor_class}", old_model_patterns.image_processor_class)
-                    )
+                    if (
+                        old_model_patterns.image_processor_fast_class is not None
+                        and new_model_patterns.image_processor_fast_class is not None
+                    ):
+                        new_patterns.append(
+                            pattern.replace(
+                                '"{image_processor_classes}"',
+                                f'("{old_model_patterns.image_processor_class}", "{old_model_patterns.image_processor_fast_class}")',
+                            )
+                        )
+                    else:
+                        new_patterns.append(
+                            pattern.replace(
+                                '"{image_processor_classes}"', f'("{old_model_patterns.image_processor_class}",)'
+                            )
+                        )
             elif "{feature_extractor_class}" in pattern:
                 if (
                     old_model_patterns.feature_extractor_class is not None
@@ -1101,7 +1140,6 @@ def add_model_to_auto_classes(
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
-
             add_content_to_file(full_name, new_model_line, add_after=old_model_line)
 
     # Tokenizers require special handling
@@ -1132,7 +1170,7 @@ def duplicate_doc_file(
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     dest_file: Optional[Union[str, os.PathLike]] = None,
-    frameworks: Optional[List[str]] = None,
+    frameworks: Optional[list[str]] = None,
 ):
     """
     Duplicate a documentation file and adapts it for a new model.
@@ -1143,7 +1181,7 @@ def duplicate_doc_file(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
             Will default to the a file named `{new_model_patterns.model_type}.md` in the same folder as `module_file`.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will only keep the model classes corresponding to this list of frameworks in the new doc file.
     """
     with open(doc_file, "r", encoding="utf-8") as f:
@@ -1197,6 +1235,10 @@ def duplicate_doc_file(
             elif "ImageProcessor" in block_class:
                 # We only add the image processor if necessary
                 if old_model_patterns.image_processor_class != new_model_patterns.image_processor_class:
+                    new_blocks.append(new_block)
+            elif "ImageProcessorFast" in block_class:
+                # We only add the image processor if necessary
+                if old_model_patterns.image_processor_fast_class != new_model_patterns.image_processor_fast_class:
                     new_blocks.append(new_block)
             elif "FeatureExtractor" in block_class:
                 # We only add the feature extractor if necessary
@@ -1279,8 +1321,9 @@ def create_new_model_like(
     model_type: str,
     new_model_patterns: ModelPatterns,
     add_copied_from: bool = True,
-    frameworks: Optional[List[str]] = None,
+    frameworks: Optional[list[str]] = None,
     old_checkpoint: Optional[str] = None,
+    create_fast_image_processor: bool = False,
 ):
     """
     Creates a new model module like a given model of the Transformers library.
@@ -1290,11 +1333,13 @@ def create_new_model_like(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         add_copied_from (`bool`, *optional*, defaults to `True`):
             Whether or not to add "Copied from" statements to all classes in the new model modeling files.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will limit the duplicate to the frameworks specified.
         old_checkpoint (`str`, *optional*):
             The name of the base checkpoint for the old model. Should be passed along when it can't be automatically
             recovered from the `model_type`.
+        create_fast_image_processor (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a fast image processor to the new model, if the old model had only a slow one.
     """
     # Retrieve all the old model info.
     model_info = retrieve_info_for_model(model_type, frameworks=frameworks)
@@ -1309,7 +1354,13 @@ def create_new_model_like(
         )
 
     keep_old_processing = True
-    for processing_attr in ["image_processor_class", "feature_extractor_class", "processor_class", "tokenizer_class"]:
+    for processing_attr in [
+        "image_processor_class",
+        "image_processor_fast_class",
+        "feature_extractor_class",
+        "processor_class",
+        "tokenizer_class",
+    ]:
         if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
             keep_old_processing = False
 
@@ -1416,7 +1467,11 @@ def create_new_model_like(
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
     insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
 
-    # 6. Warn the user for duplicate patterns
+    # 6. Add fast image processor if necessary
+    if create_fast_image_processor:
+        add_fast_image_processor(model_name=new_model_patterns.model_lower_cased)
+
+    # 7. Warn the user for duplicate patterns
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
         print(
             "The model you picked has the same name for the model type and the checkpoint name "
@@ -1484,6 +1539,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
                 self.add_copied_from,
                 self.frameworks,
                 self.old_checkpoint,
+                self.create_fast_image_processor,
             ) = get_user_input()
 
         self.path_to_repo = path_to_repo
@@ -1503,6 +1559,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             add_copied_from=self.add_copied_from,
             frameworks=self.frameworks,
             old_checkpoint=self.old_checkpoint,
+            create_fast_image_processor=self.create_fast_image_processor,
         )
 
 
@@ -1594,6 +1651,7 @@ def get_user_input():
     old_model_info = retrieve_info_for_model(old_model_type)
     old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
     old_image_processor_class = old_model_info["model_patterns"].image_processor_class
+    old_image_processor_fast_class = old_model_info["model_patterns"].image_processor_fast_class
     old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
     old_processor_class = old_model_info["model_patterns"].processor_class
     old_frameworks = old_model_info["frameworks"]
@@ -1634,7 +1692,13 @@ def get_user_input():
 
     old_processing_classes = [
         c if not isinstance(c, tuple) else c[0]
-        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        for c in [
+            old_image_processor_class,
+            old_image_processor_fast_class,
+            old_feature_extractor_class,
+            old_tokenizer_class,
+            old_processor_class,
+        ]
         if c is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
@@ -1645,9 +1709,11 @@ def get_user_input():
     )
     if keep_processing:
         image_processor_class = old_image_processor_class
+        image_processor_fast_class = old_image_processor_fast_class
         feature_extractor_class = old_feature_extractor_class
         processor_class = old_processor_class
         tokenizer_class = old_tokenizer_class
+        create_fast_image_processor = False
     else:
         if old_tokenizer_class is not None:
             tokenizer_class = get_user_field(
@@ -1663,6 +1729,13 @@ def get_user_input():
             )
         else:
             image_processor_class = None
+        if old_image_processor_fast_class is not None:
+            image_processor_fast_class = get_user_field(
+                "What will be the name of the fast image processor class for this model? ",
+                default_value=f"{model_camel_cased}ImageProcessorFast",
+            )
+        else:
+            image_processor_fast_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
                 "What will be the name of the feature extractor class for this model? ",
@@ -1677,6 +1750,16 @@ def get_user_input():
             )
         else:
             processor_class = None
+        if old_image_processor_class is not None and old_image_processor_fast_class is None:
+            create_fast_image_processor = get_user_field(
+                "A fast image processor can be created from the slow one, but modifications might be needed. "
+                "Should we add a fast image processor class for this model (recommended, yes/no)? ",
+                convert_to=convert_to_bool,
+                default_value="yes",
+                fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+            )
+        else:
+            create_fast_image_processor = False
 
     model_patterns = ModelPatterns(
         model_name,
@@ -1688,6 +1771,7 @@ def get_user_input():
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         image_processor_class=image_processor_class,
+        image_processor_fast_class=image_processor_fast_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
@@ -1706,6 +1790,7 @@ def get_user_input():
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
     )
+
     if all_frameworks:
         frameworks = None
     else:
@@ -1715,4 +1800,4 @@ def get_user_input():
         )
         frameworks = list(set(frameworks.split(" ")))
 
-    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint)
+    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint, create_fast_image_processor)

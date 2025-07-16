@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,7 +51,7 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    is_torch_tpu_available,
+    is_torch_xla_available,
 )
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import check_min_version, send_example_telemetry
@@ -60,7 +59,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.50.0.dev0")
+check_min_version("4.54.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -234,9 +233,7 @@ def parse_args():
         "--fim_pad_token",
         type=str,
         default="<fim_pad>",
-        help=(
-            "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True." " Defaults to '<fim_pad>'."
-        ),
+        help=("Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. Defaults to '<fim_pad>'."),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -289,14 +286,6 @@ def parse_args():
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
             ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations. '
             "Only applicable when `--with_tracking` is passed."
-        ),
-    )
-    parser.add_argument(
-        "--low_cpu_mem_usage",
-        action="store_true",
-        help=(
-            "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
-            "If passed, LLM loading time and RAM consumption will be benefited."
         ),
     )
     args = parser.parse_args()
@@ -477,7 +466,6 @@ def main():
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
-            low_cpu_mem_usage=args.low_cpu_mem_usage,
             trust_remote_code=args.trust_remote_code,
         )
     else:
@@ -491,10 +479,10 @@ def main():
 
     # Get the factor by which the embedding layer should be padded based on the device
     pad_factor = 1
-    if torch.cuda.is_availble():
+    if torch.cuda.is_available():
         pad_factor = 8
 
-    elif is_torch_tpu_available():
+    elif is_torch_xla_available(check_is_tpu=True):
         pad_factor = 128
 
     # Add the new tokens to the tokenizer
@@ -520,7 +508,7 @@ def main():
                 covariance_matrix=1e-5 * sigma,
             )
             new_token_embeddings = torch.stack(
-                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                tuple(dist.sample() for _ in range(len(special_tokens))),
                 dim=0,
             )
     else:
@@ -540,7 +528,7 @@ def main():
             covariance_matrix=1e-5 * sigma,
         )
         new_token_embeddings = torch.stack(
-            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            tuple(dist.sample() for _ in range(len(special_tokens))),
             dim=0,
         )
 
@@ -894,9 +882,6 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -910,6 +895,9 @@ def main():
 
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump({"perplexity": perplexity}, f)
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

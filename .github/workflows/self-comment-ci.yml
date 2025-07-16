@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: Get PR number
     # For security: only allow team members to run
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "muellerzr"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "muellerzr", "eustlb", "MekkCyber", "manueldeprada", "vasqu", "ivarflakstad", "stevhliu"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     outputs:
       PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
     steps:
@@ -145,7 +145,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODELS: ${{ needs.get-tests.outputs.models }}
-          BODY: "This comment contains run-slow, running the specified jobs:\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}"
+          BODY: "\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}"
         run: |
           gh api \
             --method POST \
@@ -185,7 +185,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.get-tests.outputs.models) }}
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
        group: '${{ matrix.machine_type }}'
     container:
@@ -239,9 +239,9 @@ jobs:
         shell: bash
         run: |
           echo "${{ matrix.machine_type }}"
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -292,7 +292,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.get-tests.outputs.quantizations) }}
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -338,9 +338,9 @@ jobs:
         shell: bash
         run: |
           echo "${{ matrix.machine_type }}"
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}

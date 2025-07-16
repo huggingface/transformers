@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,7 +43,12 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -188,11 +192,15 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Moshi has no strict equivalence between two modes, skipping this test.")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+            self.skipTest("Test is failing, fix me :) ")
+        parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
+        parent_parameterized_test(self)
 
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):
@@ -572,7 +580,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, filtered_inputs_dict
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
+        # Overwrite because the generate method actually always uses `inputs_embeds` so `use_cache` is always `True`
         super()._check_generate_outputs(
             output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
@@ -609,22 +617,22 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(
-        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @unittest.skip(reason="The Moshi model does not have support dynamic compile yet")
@@ -714,7 +722,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
                 ).to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -722,7 +729,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
                     attn_implementation="eager",
                 ).to(torch_device)
 
@@ -840,7 +846,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 **model.get_unconditional_inputs(num_samples=4), max_new_tokens=5, concat_unconditional_inputs=False
             )
 
-            # check same results from uncondtional or no inputs
+            # check same results from unconditional or no inputs
             outputs_from_unconditional = model.generate(
                 **model.get_unconditional_inputs(num_samples=1), max_new_tokens=5, concat_unconditional_inputs=False
             )
@@ -942,8 +948,8 @@ class MoshiIntegrationTests(unittest.TestCase):
         expected_text_token = 452
         expected_audio_tokens = [916, 1396, 1238, 579, 1105, 914, 1257, 810]  # fmt: skip
 
-        self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].cpu().item())
-        self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist())
+        self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].item())
+        self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].tolist())
 
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
@@ -957,7 +963,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         )
 
         # eager equivalence is not as strict as sdpa.
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
@@ -977,8 +983,8 @@ class MoshiIntegrationTests(unittest.TestCase):
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
     @require_torch_fp16
@@ -999,8 +1005,8 @@ class MoshiIntegrationTests(unittest.TestCase):
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
     @require_torch_fp16
@@ -1021,5 +1027,5 @@ class MoshiIntegrationTests(unittest.TestCase):
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= 2048)
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())

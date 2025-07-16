@@ -47,7 +47,7 @@ class ResnetConfig(PretrainedConfig):
     def __init__(
         self,
         block_type="bottleneck",
-        layers: List[int] = [3, 4, 6, 3],
+        layers: list[int] = [3, 4, 6, 3],
         num_classes: int = 1000,
         input_channels: int = 3,
         cardinality: int = 1,
@@ -131,7 +131,7 @@ class ResnetModel(PreTrainedModel):
 </hfoption>
 <hfoption id="ResnetModelForImageClassification">
 
-The `forward` method needs to be rewrittten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
+The `forward` method needs to be rewritten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
 
 > [!TIP]
 > Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
