@@ -717,6 +717,8 @@
         title: DeepSeek-V2
       - local: model_doc/deformable_detr
         title: Deformable DETR
+      - local: model_doc/deim
+        title: deim
       - local: model_doc/deit
         title: DeiT
       - local: model_doc/depth_anything
