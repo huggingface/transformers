@@ -45,6 +45,7 @@ AUTODOC_FILES = [
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
+    "video_processor_class": ("video_processing_auto", "VIDEO_PROCESSOR_MAPPING_NAMES"),
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
@@ -529,6 +530,15 @@ class ModelArgs:
         "shape": "of shape `(batch_size, num_channels, image_size, image_size)`",
     }
 
+    pixel_values_videos = {
+        "description": """
+    The tensors corresponding to the input video. Pixel values for videos can be obtained using
+    [`{video_processor_class}`]. See [`{video_processor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{video_processor_class}`] for processing videos).
+    """,
+        "shape": "of shape `(batch_size, num_frames, num_channels, frame_size, frame_size)`",
+    }
+
     vision_feature_layer = {
         "description": """
     The index of the layer to select the vision feature. If multiple indices are provided,
@@ -563,6 +573,15 @@ class ModelArgs:
     [What are attention masks?](../glossary#attention-mask)
     """,
         "shape": "of shape `(batch_size, height, width)`",
+    }
+
+    input_features = {
+        "description": """
+    The tensors corresponding to the input audio features. Audio features can be obtained using
+    [`{feature_extractor_class}`]. See [`{feature_extractor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{feature_extractor_class}`] for processing audios).
+    """,
+        "shape": "of shape `(batch_size, sequence_length, feature_dim)`",
     }
 
 
@@ -816,6 +835,20 @@ class ModelOutputArgs:
     Text embeddings before the projection layer, used to mimic the last hidden state of the teacher encoder.
     """,
         "shape": "of shape `(batch_size,config.project_dim)`",
+    }
+
+    image_hidden_states = {
+        "description": """
+    Image hidden states of the model produced by the vision encoder and after projecting the last hidden state.
+    """,
+        "shape": "of shape `(batch_size, num_images, sequence_length, hidden_size)`",
+    }
+
+    video_hidden_states = {
+        "description": """
+    Video hidden states of the model produced by the vision encoder and after projecting the last hidden state.
+    """,
+        "shape": "of shape `(batch_size * num_frames, num_images, sequence_length, hidden_size)`",
     }
 
 

@@ -1073,8 +1073,6 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         **kwargs,
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
         context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
             The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
@@ -1178,8 +1176,6 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

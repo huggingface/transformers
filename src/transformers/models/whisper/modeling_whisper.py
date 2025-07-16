@@ -1072,13 +1072,6 @@ class WhisperModel(WhisperPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1243,13 +1236,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1569,13 +1555,6 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

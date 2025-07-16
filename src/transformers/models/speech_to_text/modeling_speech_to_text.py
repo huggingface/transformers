@@ -1089,14 +1089,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
-            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a
-            `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
-            (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting
-            the fbank features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~Speech2TextFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1255,14 +1247,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
-            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a
-            `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
-            (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting
-            the fbank features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~Speech2TextFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 

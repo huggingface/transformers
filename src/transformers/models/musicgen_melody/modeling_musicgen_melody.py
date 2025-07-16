@@ -1608,10 +1608,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[tuple, MusicgenMelodyOutputWithPast]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, audio_sequence_length, num_chroma)`):
-            Input audio features.
-            This should be returned by the [`MusicgenMelodyFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`MusicgenMelodyFeatureExtractor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
 

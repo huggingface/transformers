@@ -194,14 +194,6 @@ class PerceptionLMModel(LlavaModel):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
-        """
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
-            Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-
-        Returns:
-            [`PerceptionLMModelOutputWithPast`] or `tuple`:
-                Model outputs as a `PerceptionLMModelOutputWithPast` if `return_dict=True`, otherwise a tuple.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -315,14 +307,6 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
-        """
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
-            Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-
-        Returns:
-            [`PerceptionLMCausalLMOutputWithPast`] or `tuple`:
-                Model outputs as a `PerceptionLMCausalLMOutputWithPast` if `return_dict=True`, otherwise a tuple.
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
