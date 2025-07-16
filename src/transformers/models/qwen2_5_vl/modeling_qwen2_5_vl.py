@@ -318,7 +318,7 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
-    config_class = Qwen2_5_VLConfig
+    config: Qwen2_5_VLConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
@@ -344,7 +344,7 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
-    config_class = Qwen2_5_VLVisionConfig
+    config: Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:
@@ -803,7 +803,7 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
-    config_class = Qwen2_5_VLTextConfig
+    config: Qwen2_5_VLTextConfig
 
     def __init__(self, config: Qwen2_5_VLTextConfig):
         super().__init__(config)
@@ -952,7 +952,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = {"^model": "language_model"}
-    config_class = Qwen2_5_VLConfig
+    config: Qwen2_5_VLConfig
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config):

@@ -38,7 +38,7 @@ if is_torch_available():
 
 @auto_docstring
 class ColQwen2PreTrainedModel(PreTrainedModel):
-    config_class = ColQwen2Config
+    config: ColQwen2Config
     base_model_prefix = "model"
     _no_split_modules = []
     _supports_flash_attn = True

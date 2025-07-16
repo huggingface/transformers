@@ -621,7 +621,7 @@ class TransformerFFN(nn.Module):
 
 @auto_docstring
 class XLMPreTrainedModel(PreTrainedModel):
-    config_class = XLMConfig
+    config: XLMConfig
     load_tf_weights = None
     base_model_prefix = "transformer"
 

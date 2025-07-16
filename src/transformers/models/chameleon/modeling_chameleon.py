@@ -807,7 +807,7 @@ class ChameleonImageVocabularyMapping:
 
 @auto_docstring
 class ChameleonPreTrainedModel(PreTrainedModel):
-    config_class = ChameleonConfig
+    config: ChameleonConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ChameleonDecoderLayer", "ChameleonSwinDecoderLayer"]
@@ -847,7 +847,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     """
 )
 class ChameleonVQVAE(ChameleonPreTrainedModel):
-    config_class = ChameleonVQVAEConfig
+    config: ChameleonVQVAEConfig
     _no_split_modules = ["ChameleonVQVAEVectorQuantizer"]
 
     def __init__(self, config: ChameleonVQVAEConfig):

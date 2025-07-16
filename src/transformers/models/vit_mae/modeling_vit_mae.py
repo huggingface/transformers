@@ -611,7 +611,7 @@ class ViTMAEEncoder(nn.Module):
 
 @auto_docstring
 class ViTMAEPreTrainedModel(PreTrainedModel):
-    config_class = ViTMAEConfig
+    config: ViTMAEConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

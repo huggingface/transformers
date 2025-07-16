@@ -322,7 +322,7 @@ class SuperPointDescriptorDecoder(nn.Module):
 
 @auto_docstring
 class SuperPointPreTrainedModel(PreTrainedModel):
-    config_class = SuperPointConfig
+    config: SuperPointConfig
     base_model_prefix = "superpoint"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False

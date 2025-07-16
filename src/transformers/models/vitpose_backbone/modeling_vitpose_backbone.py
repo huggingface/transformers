@@ -410,7 +410,7 @@ class VitPoseBackboneEncoder(nn.Module):
 
 @auto_docstring
 class VitPoseBackbonePreTrainedModel(PreTrainedModel):
-    config_class = VitPoseBackboneConfig
+    config: VitPoseBackboneConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -124,7 +124,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 )
 @auto_docstring
 class CsmPreTrainedModel(PreTrainedModel):
-    config_class = CsmConfig
+    config: CsmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
@@ -161,7 +161,7 @@ class CsmPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
-    config_class = CsmDepthDecoderConfig
+    config: CsmDepthDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)

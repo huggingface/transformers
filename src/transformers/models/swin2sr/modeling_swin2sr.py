@@ -723,7 +723,7 @@ class Swin2SREncoder(nn.Module):
 
 @auto_docstring
 class Swin2SRPreTrainedModel(PreTrainedModel):
-    config_class = Swin2SRConfig
+    config: Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

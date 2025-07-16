@@ -691,7 +691,7 @@ class CamembertPooler(nn.Module):
 
 @auto_docstring
 class CamembertPreTrainedModel(PreTrainedModel):
-    config_class = CamembertConfig
+    config: CamembertConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_sdpa = True

@@ -381,7 +381,7 @@ class RwkvBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class RwkvPreTrainedModel(PreTrainedModel):
-    config_class = RwkvConfig
+    config: RwkvConfig
     base_model_prefix = "rwkv"
     _no_split_modules = ["RwkvBlock"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
