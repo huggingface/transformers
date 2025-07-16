@@ -858,6 +858,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
         # It may already have been prepared by e.g. `generate`
+        # NOTE: we need to pass text position ids for FA2 packing
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
@@ -866,7 +867,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "position_ids": position_ids,
+                "position_ids": position_ids[0],
             }
             # Create the masks
             causal_mask_mapping = {

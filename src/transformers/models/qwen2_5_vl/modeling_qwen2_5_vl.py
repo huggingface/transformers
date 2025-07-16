@@ -883,6 +883,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
         # It may already have been prepared by e.g. `generate`
+        # NOTE: we need to pass text position ids for FA2 packing
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
@@ -891,7 +892,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "position_ids": position_ids,
+                "position_ids": position_ids[0],
             }
             # Create the masks
             causal_mask_mapping = {
@@ -1072,10 +1073,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                         ed_image = input_tokens.index(image_token_id, st)
                     else:
                         ed_image = len(input_tokens) + 1
+
                     if video_token_id in input_tokens and remain_videos > 0:
                         ed_video = input_tokens.index(video_token_id, st)
                     else:
                         ed_video = len(input_tokens) + 1
+
                     if ed_image < ed_video:
                         t, h, w = (
                             image_grid_thw[image_index][0],
