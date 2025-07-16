@@ -28,6 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
+from ...utils.generic import TransformersKwargs
 from ..llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -231,6 +232,7 @@ class EuroBertRMSNorm(LlamaRMSNorm):
         super().__init__(hidden_size, eps)
 
 
+# llama without cache
 class EuroBertAttention(LlamaAttention):
     def __init__(self, config: EuroBertConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -289,7 +291,7 @@ class EuroBertModel(LlamaModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -302,21 +304,18 @@ class EuroBertModel(LlamaModel):
         else:
             mask = attention_mask
 
-        hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the encoder layers
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=mask,
                 position_ids=position_ids,
-                output_attentions=output_attentions,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
         hidden_states = self.norm(hidden_states)
 
