@@ -91,8 +91,6 @@ print(similarity)
 </hfoptions>
 
 
-## Quantization
-
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
@@ -113,8 +111,8 @@ url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
 image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
-processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")
-model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", quantization_config=quantization_config, torch_dtype="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
+model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, torch_dtype="auto", attn_implementation="sdpa")
 
 
 def infer(image):
