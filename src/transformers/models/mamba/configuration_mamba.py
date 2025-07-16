@@ -125,7 +125,7 @@ class MambaConfig(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
-        use_mambapy=False,
+        use_mambapy=False,  # modular: no_replace
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -152,7 +152,7 @@ class MambaConfig(PretrainedConfig):
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
-        self.use_mambapy = use_mambapy
+        self.use_mambapy = use_mambapy  # modular: no_replace
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
 

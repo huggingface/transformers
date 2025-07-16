@@ -37,6 +37,23 @@ from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_avail
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
+if is_mambapy_available():  # modular: no_replace
+    from mambapy.pscan import pscan  # modular: no_replace
+else:
+    pscan = None
+
+if is_mamba_ssm_available():  # modular: no_replace
+    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn  # modular: no_replace
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update  # modular: no_replace
+else:
+    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None  # modular: no_replace
+
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -141,26 +158,15 @@ class FalconMambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
-def is_fast_path_available():
-    if is_mamba_ssm_available():
-        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    else:
-        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-    if is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-    else:
-        causal_conv1d_update, causal_conv1d_fn = None, None
-
-    return (
-        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
+is_fast_path_available = all(
+    (
         selective_state_update,
         selective_scan_fn,
-        mamba_inner_fn,
-        causal_conv1d_update,
         causal_conv1d_fn,
+        causal_conv1d_update,
+        mamba_inner_fn,  # modular: no_replace
     )
+)
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -212,7 +218,7 @@ class FalconMambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.use_falcon_mambapy = config.use_falcon_mambapy
+        self.use_mambapy = config.use_mambapy  # modular: no_replace
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
@@ -268,17 +274,6 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mamba_ssm_available():
-            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-        else:
-            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-        if is_causal_conv1d_available():
-            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-        else:
-            causal_conv1d_update, causal_conv1d_fn = None, None
-
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -394,10 +389,6 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mambapy_available():
-            from mambapy.pscan import pscan
-        else:
-            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -466,7 +457,7 @@ class FalconMambaMixer(nn.Module):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        if self.use_falcon_mambapy and self.training and cache_params is None:
+        if self.use_mambapy and self.training and cache_params is None:
             hs = pscan(
                 discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)
             )  # [batch, seq_len, intermediate_size, ssm_state_size]
@@ -684,10 +675,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         self.post_init()
 
     def load_hook(self, state_dict, prefix, *args):
-        for k in state_dict:
-            if "embedding." in k:
-                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
-                break
+        pass
 
     def get_input_embeddings(self):
         return self.embeddings

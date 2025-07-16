@@ -107,7 +107,16 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         - LLaMa -> MyNewModel       abd     MyNewModel      -> Llama
     """
 
-    def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
+    METADATA_DEPENDENCIES = (PositionProvider,)
+
+    def __init__(
+        self,
+        old_name: str,
+        new_name: str,
+        original_new_model_name: str = "",
+        only_doc: bool = False,
+        module_code: str | None = None,
+    ):
         super().__init__()
         old_name = old_name.replace("-", "_")
         new_name = new_name.replace("-", "_")
@@ -124,8 +133,23 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         # In case new_name is a prefix alias, and not the original new model name
         self.original_new_model_name = original_new_model_name
         self.only_doc = only_doc
+        # Lines that must not be altered due to the `# modular: no_replace` pragma
+        self.no_replace_lines: set[int] = set()
+        if module_code is not None:
+            for idx, line in enumerate(module_code.splitlines(), 1):
+                if "modular: no_replace" in line:
+                    self.no_replace_lines.add(idx)
+
+    def visit_Comment(self, node):
+        if "modular: no_replace" in node.value:
+            line = self.get_metadata(PositionProvider, node).start.line
+            self.no_replace_lines.add(line)
 
     def _replace_name(self, original_node, updated_node):
+        pos = self.get_metadata(PositionProvider, original_node)
+        if pos.start.line in self.no_replace_lines:
+            return updated_node
+
         if re.findall(r"# Copied from", updated_node.value):
             return cst.RemoveFromParent()
         update = preserve_case_replace(updated_node.value, self.patterns, self.cased_new_name)
@@ -910,9 +934,10 @@ def replace_class_node(
         # Note that this works even without common prefix, in which case it does not replace anything
         old, new = renamed_super_class.replace(common_suffix, ""), new_class_name.value.replace(common_suffix, "")
         temp_module = cst.Module(body=[original_modeling_node])
-        original_modeling_node = temp_module.visit(
-            ReplaceNameTransformer(get_lowercase_name(old), get_lowercase_name(new), only_doc=True)
-        ).body[0]
+        renamer = ReplaceNameTransformer(
+            get_lowercase_name(old), get_lowercase_name(new), only_doc=True, module_code=temp_module.code
+        )
+        original_modeling_node = MetadataWrapper(temp_module).visit(renamer).body[0]
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
@@ -1313,8 +1338,8 @@ class ModularFileMapper(ModuleMapper):
         for file, module in self.model_specific_modules.items():
             file_model_name = file.split(".")[-2]
             new_name = name_prefixes[file]
-            renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name)
-            renamed_module = module.visit(renamer)
+            renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name, module_code=module.code)
+            renamed_module = MetadataWrapper(module).visit(renamer)
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
                 self.classes,

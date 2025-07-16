@@ -17,11 +17,14 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils.import_utils import (
+    is_causal_conv1d_available,
+    is_mamba_ssm_available,  # modular: no_replace
+    is_mambapy_available,  # modular: no_replace
+)
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -39,36 +42,31 @@ from ..mamba.modeling_mamba import (
 logger = logging.get_logger(__name__)
 
 
-def is_fast_path_available():
-    if is_mamba_ssm_available():
-        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    else:
-        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+if is_mambapy_available():  # modular: no_replace
+    from mambapy.pscan import pscan  # modular: no_replace
+else:
+    pscan = None
 
-    if is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-    else:
-        causal_conv1d_update, causal_conv1d_fn = None, None
+if is_mamba_ssm_available():  # modular: no_replace
+    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn  # modular: no_replace
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update  # modular: no_replace
+else:
+    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None  # modular: no_replace
 
-    return (
-        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
+
+is_fast_path_available = all(
+    (
         selective_state_update,
         selective_scan_fn,
-        mamba_inner_fn,
-        causal_conv1d_update,
         causal_conv1d_fn,
+        causal_conv1d_update,
+        mamba_inner_fn,  # modular: no_replace
     )
-
-
-(
-    is_fast_path_available,
-    selective_state_update,
-    selective_scan_fn,
-    mamba_inner_fn,
-    causal_conv1d_update,
-    causal_conv1d_fn,
-) = is_fast_path_available()
+)
 
 
 class FalconMambaConfig(MambaConfig):
@@ -127,7 +125,7 @@ class FalconMambaConfig(MambaConfig):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
-        use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
+        use_mambapy (`bool`, *optional*, defaults to `False`):
             Determines the fallback strategy during training if the CUDA-based official implementation of FalconMamba is not available. If `True`, the falcon_mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
@@ -173,7 +171,7 @@ class FalconMambaConfig(MambaConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
-        use_falcon_mambapy=False,
+        use_mambapy=False,
         mixer_rms_eps=1e-6,
         **kwargs,
     ):
@@ -201,7 +199,7 @@ class FalconMambaConfig(MambaConfig):
             time_step_floor=time_step_floor,
             rescale_prenorm_residual=rescale_prenorm_residual,
             use_cache=use_cache,
-            use_falcon_mambapy=use_falcon_mambapy,
+            use_mambapy=use_mambapy,
             **kwargs,
         )
         self.mixer_rms_eps = mixer_rms_eps
@@ -269,17 +267,6 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mamba_ssm_available():
-            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-        else:
-            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-        if is_causal_conv1d_available():
-            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-        else:
-            causal_conv1d_update, causal_conv1d_fn = None, None
-
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -395,10 +382,6 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mambapy_available():
-            from mambapy.pscan import pscan
-        else:
-            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -467,7 +450,7 @@ class FalconMambaMixer(MambaMixer):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        if self.use_falcon_mambapy and self.training and cache_params is None:
+        if self.use_mambapy and self.training and cache_params is None:
             hs = pscan(
                 discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)
             )  # [batch, seq_len, intermediate_size, ssm_state_size]
@@ -521,7 +504,8 @@ class FalconMambaCausalLMOutput(MambaCausalLMOutput):
 
 
 class FalconMambaModel(MambaModel):
-    pass
+    def load_hook(self, state_dict, prefix, *args):
+        pass
 
 
 class FalconMambaForCausalLM(MambaForCausalLM):
