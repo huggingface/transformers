@@ -1623,9 +1623,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Input text Tokens. Processed from the [`ClvpTokenizer`]. If speech_ids is not provided, then input_ids
                 and input_features will be used.
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`, *optional*):
-                Indicates log-melspectrogram representations for audio returned by [`ClvpFeatureExtractor`]. If
-                speech_ids is not provided, then input_ids and input_features will be used.
             conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
                 inputs_embeds for `ClvpConditioningEncoder`. Can be used in place of `input_ids`.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1713,8 +1710,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ClvpOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`):
-            Indicates log mel-spectrogram representations for audio returned by [`ClvpFeatureExtractor`].
         conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
             inputs_embeds for `ClvpConditioningEncoder`. Can be used in place of `input_ids`.
         text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
@@ -1857,8 +1852,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         Args:
             input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Input text Tokens. Processed from the [`ClvpTokenizer`].
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`, *optional*):
-                Indicates log-melspectrogram representations for audio returned by [`ClvpFeatureExtractor`].
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding text token indices. Mask values selected in `[0, 1]`:
 
