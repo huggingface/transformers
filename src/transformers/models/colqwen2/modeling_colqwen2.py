@@ -43,7 +43,6 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _no_split_modules = []
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = (

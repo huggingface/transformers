@@ -1830,10 +1830,8 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config: Blip2Config
     main_input_name = "pixel_values"
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
 
+    _supports_static_cache = True
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 
