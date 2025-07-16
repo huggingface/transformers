@@ -2614,7 +2614,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 applicable_attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
             except FileNotFoundError as e:
                 logger.warning_once(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using default attention implementation instead."
+                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
+                    "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
             except AttributeError:
@@ -2623,7 +2624,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
                 )
         if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-            message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+            message = (
+                f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
+                '`attn_implementation="eager"` (manual attention implementation)'
+            )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
                 message += (
@@ -2647,13 +2651,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_early_check)
-            except (ValueError, ImportError):
-                # In this case, sdpa was requested explicitly but we can't use it, so let's warn
-                if attn_implementation is not None:
-                    logger.warning_once(
-                        f"{self.__class__.__name__} does not support an attention implementation through SDPA. Falling back to "
-                        "eager attention"
-                    )
+            except (ValueError, ImportError) as e:
+                # In this case, sdpa was requested explicitly, but we can't use it, so let's raise
+                if attn_implementation == "sdpa":
+                    raise e
                 applicable_attn_implementation = "eager"
 
         return applicable_attn_implementation
