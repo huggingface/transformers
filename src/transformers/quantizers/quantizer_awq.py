@@ -52,7 +52,11 @@ class AwqQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
-        if self.quantization_config.version == AWQLinearVersion.GEMM and not torch.cuda.is_available() and not torch.xpu.is_available():
+        if (
+            self.quantization_config.version == AWQLinearVersion.GEMM
+            and not torch.cuda.is_available()
+            and not torch.xpu.is_available()
+        ):
             logger.warning_once("No CUDA or XPU found, replace GEMM with IPEX version to support non-cuda AWQ model.")
             self.quantization_config.version = AWQLinearVersion.IPEX
 
@@ -98,7 +102,9 @@ class AwqQuantizer(HfQuantizer):
             logger.warning("`torch.bfloat16` is not supported for AWQ CUDA kernels yet. Casting to `torch.float16`.")
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16 and torch.cuda.is_available() and not torch.xpu.is_available():
-            logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ.")
+            logger.warning(
+                "We suggest you to set `torch_dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ."
+            )
         return torch_dtype
 
     def _process_model_before_weight_loading(
