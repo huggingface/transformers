@@ -1208,7 +1208,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # Mask all the tokens that are neither BOS nor BOI with pad token in the unconditional logits.
         mask = (input_tokens[batch_size:, :] != generation_config.bos_token_id) & (
-            input_tokens[batch_size:, :] != generation_config.boi_token_id
+            input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]
         )
         input_tokens[batch_size:, :].masked_fill_(mask, generation_config.pad_token_id)
 
