@@ -105,13 +105,11 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         "num_hidden_layers": "n_layers",
         "intermediate_size": "hidden_dim",
         "num_attention_heads": "n_heads",
-        "num_key_value_heads": "n_kv_heads",
-        "rms_norm_eps": "norm_eps",
+        "num_key_value_heads": "n_heads",
     }
     similar_audio_keys_to_keep = [
         "head_dim",
         "vocab_size",
-        "rope_theta",
     ]
     new_audio_config_kwargs = {k: original_audio_config[v] for k, v in audio_key_mapping.items()}
     new_audio_config_kwargs.update({k: v for k, v in original_audio_config.items() if k in similar_audio_keys_to_keep})
@@ -119,6 +117,8 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     new_config = VoxtralConfig(
         audio_config=new_audio_config_kwargs,
         text_config=new_text_config_kwargs,
+        audio_token_id=24,
+        projector_hidden_act="gelu",
     )
 
     return new_config

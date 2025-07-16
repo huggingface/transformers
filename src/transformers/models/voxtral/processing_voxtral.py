@@ -311,9 +311,13 @@ class VoxtralProcessor(ProcessorMixin):
         common_kwargs = output_kwargs["common_kwargs"]
 
         if sampling_rate is None:
-            logger.warning_once(f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors.")
+            logger.warning_once(
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors."
+            )
         elif sampling_rate != audio_kwargs["sampling_rate"]:
-            raise ValueError(f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate.")
+            raise ValueError(
+                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+            )
 
         return_dict = common_kwargs.pop("return_dict", False)
         tokenize = common_kwargs.pop("tokenize", False)
@@ -335,7 +339,9 @@ class VoxtralProcessor(ProcessorMixin):
         else:
             audio = make_list_of_audio(audio)
             if len(audio) != len(format):
-                raise ValueError(f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})")
+                raise ValueError(
+                    f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})"
+                )
             audio_buffers = []
             for array, f in zip(audio, format):
                 # Create new BytesIO object and write audio data to it

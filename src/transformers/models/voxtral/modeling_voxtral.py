@@ -33,44 +33,12 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-@auto_docstring
-class VoxtralPreTrainedModel(PreTrainedModel):
-    config_class = VoxtralConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["VoxtralAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        # important: this ported version of Voxtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 def eager_attention_forward(
@@ -261,6 +229,38 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
+@auto_docstring
+class VoxtralPreTrainedModel(PreTrainedModel):
+    config_class = VoxtralConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["VoxtralAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        # important: this ported version of Voxtral isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.audio_config.initializer_range
+        )
+
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 @auto_docstring(
     custom_intro="""
     The audio model from Voxtral without any head or projection on top.
@@ -279,6 +279,10 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     config_class = VoxtralEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["VoxtralEncoderLayer"]
+    _can_record_outputs = {
+        "attentions": VoxtralAttention,
+        "hidden_states": VoxtralEncoderLayer,
+    }
 
     def __init__(self, config: VoxtralEncoderConfig):
         super().__init__(config)
@@ -317,14 +321,12 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @check_model_inputs
     def forward(
         self,
         input_features,
         attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -337,91 +339,34 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
             attention_mask (`torch.Tensor`)`, *optional*):
                 Voxtral does not support masking of the `input_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
             raise ValueError(
                 f"Qwen2Audio expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # Ignore copy
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
-
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
-
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        embed_pos = self.embed_positions.weight
 
-        # ====
-        # TODO: @eustlb, below the only line making we have to over write the forward method
+        embed_pos = self.embed_positions.weight
         hidden_states = (inputs_embeds + embed_pos).to(inputs_embeds.dtype)
-        # ====
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
-
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            # Ignore copy
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions,
-                )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                layer_head_mask=None,
+            )
+            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
         )
 
     # Ignore copy
