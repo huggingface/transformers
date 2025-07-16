@@ -4639,20 +4639,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if "gguf_file" in model_kwargs:
                 model_kwargs.pop("gguf_file")
         else:
-            # In case one passes a config to `from_pretrained` + "attn_implementation"
-            # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
-            # Please see: https://github.com/huggingface/transformers/issues/28038
-
-            # Overwrite `config._attn_implementation` by the one from the kwargs --> in auto-factory
-            # we pop attn_implementation from the kwargs but this handles the case where users
-            # passes manually the config to `from_pretrained`.
             config = copy.deepcopy(config)
-
-            kwarg_attn_imp = kwargs.pop("attn_implementation", None)
-            if kwarg_attn_imp is not None:
-                config._attn_implementation = kwarg_attn_imp
-
             model_kwargs = kwargs
+
+        # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
+        # to correctly redispatch recursively if the kwarg is provided
+        if "attn_implementation" in kwargs:
+            config._attn_implementation = kwargs.pop("attn_implementation")
 
         transformers_explicit_filename = getattr(config, "transformers_weights", None)
 
