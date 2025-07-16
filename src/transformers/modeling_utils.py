@@ -3924,12 +3924,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 # init state_dict for this shard
                 shard_state_dict = dict.fromkeys(shard, "")
                 for module_name in shard:
-                    # skip to collect this weight again
-                    if shard_state_dict.get(module_name) != "":
-                        continue
-                    module = module_map[module_name]
-                    # update state dict with onloaded parameters
-                    shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
+                    # note that get_state_dict_from_offload can update with meta tensors
+                    # if both a parent module and its descendant are offloaded
+                    tensor = shard_state_dict[module_name]
+                    if tensor == "" or (isinstance(tensor, torch.Tensor) and tensor.device.type == "meta"):
+                        # update state dict with onloaded parameters
+                        module = module_map[module_name]
+                        shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
 
                 # assign shard to be the completed state dict
                 shard = shard_state_dict
