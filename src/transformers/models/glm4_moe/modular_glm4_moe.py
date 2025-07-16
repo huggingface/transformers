@@ -30,13 +30,12 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3PreTrainedModel, DeepseekV3TopkRouter
 from ..glm4.modeling_glm4 import Glm4Attention, eager_attention_forward
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
-    MixtralPreTrainedModel,
     load_balancing_loss_func,
 )
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeMLP, Qwen3MoeRMSNorm
@@ -444,21 +443,8 @@ class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Glm4MoePreTrainedModel(MixtralPreTrainedModel):
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Glm4MoeRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Glm4MoeTopkRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
+class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
+    pass
 
 
 class Glm4MoeModel(MixtralModel):
