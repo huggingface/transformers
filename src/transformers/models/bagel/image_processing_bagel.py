@@ -91,9 +91,9 @@ class BagelImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        max_size: int = 1024,
-        min_size: int = 512,
-        stride: int = 16,
+        max_size: int = 980,
+        min_size: int = 224,
+        stride: int = 14,
         max_pixels: int = 14 * 14 * 9 * 1024,
         image_number: int = 1,
         do_resize: bool = True,
@@ -163,10 +163,10 @@ class BagelImageProcessor(BaseImageProcessor):
         """
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
-        
-        width, height = get_image_size(image, input_data_format)
 
-        #  Calculate initial scale
+        height, width = get_image_size(image, input_data_format)
+
+        # Calculate initial scale
         scale = min(self.max_size / max(width, height), 1.0)
         scale = max(scale, self.min_size / min(width, height))
 

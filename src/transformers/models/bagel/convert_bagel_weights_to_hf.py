@@ -27,13 +27,13 @@ from huggingface_hub import snapshot_download
 from transformers import (
     AutoTokenizer,
     BagelConfig,
-    JanusForConditionalGeneration,
-    JanusVisionConfig,
-    JanusVQVAEConfig,
-    LlamaConfig,
+    BagelForConditionalGeneration,
+    BagelVQVAEConfig,
+    Qwen2Config,
+    SiglipVisionConfig,
 )
-from transformers.models.janus.image_processing_janus import JanusImageProcessor
-from transformers.models.janus.processing_janus import JanusProcessor
+from transformers.models.bagel.image_processing_janus import BagelImageProcessor
+from transformers.models.bagel.processing_janus import BagelProcessor
 
 
 MAPPINGS = {
@@ -84,22 +84,6 @@ def convert_old_keys_to_new_keys(state_dict):
             new_keys_as_text = re.sub(old, repl, new_keys_as_text)
     output_dict = dict(zip(keys_as_text.split("\n"), new_keys_as_text.split("\n")))
     return output_dict
-
-
-def split_tensor(tensor, key):
-    """Splits a merged tensor (qkv or kv) into separate tensors and creates keys for each part."""
-
-    if "qkv" in key:
-        prefix_to_replace = "qkv"
-        num_splits = 3
-        new_keys = ["q_proj", "k_proj", "v_proj"]
-    else:
-        raise ValueError(f"Unrecognized tensor type in key: {key}")
-
-    split_size = tensor.shape[0] // num_splits
-    tensors = torch.split(tensor, split_size, dim=0)
-    return {key.replace(prefix_to_replace, new_keys[i]): tensors[i] for i in range(num_splits)}
-
 
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
@@ -220,21 +204,23 @@ def convert_model(
             "Please ensure you have downloaded all necessary model files."
         )
 
-    with open(os.path.join(input_path, "config.json"), "r") as f:
-        config_data = json.load(f)
-    with open(os.path.join(input_path, "preprocessor_config.json"), "r") as f:
-        preprocessor_config = json.load(f)
-    with open(os.path.join(input_path, "special_tokens_map.json"), "r") as f:
-        special_tokens_map = json.load(f)
+    with open(os.path.join(input_path, "llm_config.json"), "r") as f:
+        llm_config = json.load(f)
+    with open(os.path.join(input_path, "vit_config.json"), "r") as f:
+        vit_config = json.load(f)
     with open(os.path.join(input_path, "tokenizer_config.json"), "r") as f:
         tokenizer_config = json.load(f)
+
+    _ = llm_config.pop("architectures", None)
+    _ = vit_config.pop("architectures", None)
 
     # Create tokenizer directly from tokenizer.json if it exists
     tokenizer_json_path = os.path.join(input_path, "tokenizer.json")
     special_image_tokens = {
-        "image_token": "<image_placeholder>",
-        "boi_token": "<begin_of_image>",
-        "eoi_token": "<end_of_image>",
+        "bos_token": "<|im_start|>",
+        "eos_token":"<|im_end|>",
+        "boi_token": "<|vision_start|>",
+        "eoi_token": "<|vision_end|>",
     }
 
     if os.path.exists(tokenizer_json_path) and not text_model_id:
@@ -247,34 +233,18 @@ def convert_model(
         # Fallback to creating from text_model_id with special tokens
         tokenizer = AutoTokenizer.from_pretrained(
             text_model_id,
-            bos_token=special_tokens_map["bos_token"],
-            eos_token=special_tokens_map["eos_token"],
-            pad_token=special_tokens_map["pad_token"],
-            additional_special_tokens=special_tokens_map["additional_special_tokens"],
             model_max_length=tokenizer_config["model_max_length"],
             extra_special_tokens=special_image_tokens,
         )
 
-    # Create image processor from config
-    image_processor_kwargs = {}
-    for key in ["do_normalize", "image_mean", "image_std", "min_size", "rescale_factor"]:
-        if key in preprocessor_config:
-            image_processor_kwargs[key] = preprocessor_config[key]
-
-    if "image_size" in preprocessor_config:
-        image_processor_kwargs["size"] = {
-            "height": preprocessor_config["image_size"],
-            "width": preprocessor_config["image_size"],
-        }
-
-    image_processor = JanusImageProcessor(**image_processor_kwargs)
+    # ToDo - how to have both vit and vae default in preprocessor_config.json?
+    image_processor = BagelImageProcessor()
 
     # Create processor with chat template
-    processor = JanusProcessor(
+    processor = BagelProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
         chat_template="",
-        use_default_system_prompt=True,
     )
 
     if output_dir:
@@ -284,61 +254,29 @@ def convert_model(
         print(f"Pushing processor to hub at {output_hub_path}...")
         processor.push_to_hub(output_hub_path)
 
-    # Create model configurations
-    text_config_kwargs = {}
-    for key in [
-        "vocab_size",
-        "hidden_size",
-        "intermediate_size",
-        "num_hidden_layers",
-        "num_attention_heads",
-        "num_key_value_heads",
-        "hidden_act",
-        "max_position_embeddings",
-        "torch_dtype",
-    ]:
-        if key in config_data["language_config"]:
-            text_config_kwargs[key] = config_data["language_config"][key]
-
     # Add token IDs from tokenizer
-    text_config_kwargs.update(
+    llm_config.update(
         {
             "pad_token_id": tokenizer.pad_token_id,
             "bos_token_id": tokenizer.bos_token_id,
             "eos_token_id": tokenizer.eos_token_id,
+            "boi_token_id": tokenizer.boi_token_id,
+            "eoi_token_id": tokenizer.eoi_token_id,
         }
     )
 
-    text_config = LlamaConfig(**text_config_kwargs)
+    text_config = Qwen2Config(**llm_config)
 
-    # Create vision config
-    vision_config_kwargs = {}
-    if "image_size" in config_data["vision_config"]["params"]:
-        vision_config_kwargs["image_size"] = config_data["vision_config"]["params"]["image_size"]
 
-    # Add aligner params if present
-    if "aligner_config" in config_data and "params" in config_data["aligner_config"]:
-        if "n_embed" in config_data["aligner_config"]["params"]:
-            vision_config_kwargs["projection_dim"] = config_data["aligner_config"]["params"]["n_embed"]
-        if "depth" in config_data["aligner_config"]["params"]:
-            vision_config_kwargs["depth"] = config_data["aligner_config"]["params"]["depth"]
+    vision_config = SiglipVisionConfig(**vit_config)
 
-    vision_config = JanusVisionConfig(**vision_config_kwargs)
-
-    vq_config = JanusVQVAEConfig(
-        embed_dim=config_data["gen_vision_config"]["params"]["n_embed"],
-        num_embeddings=config_data["gen_vision_config"]["params"]["image_token_size"],
-        projection_dim=config_data["gen_aligner_config"]["params"]["n_embed"],
-        depth=config_data["gen_aligner_config"]["params"]["depth"],
-        image_token_embed_dim=config_data["gen_head_config"]["params"]["image_token_embed"],
-    )
+    vq_config = BagelVQVAEConfig()
 
     # Create the main config
     config = BagelConfig(
         text_config=text_config,
         vision_config=vision_config,
         vq_config=vq_config,
-        image_token_id=tokenizer.vocab.get("<image_placeholder>"),
     )
 
     # Save the config
@@ -350,12 +288,12 @@ def convert_model(
     # Initialize model with empty weights
     print("Creating empty model...")
     with init_empty_weights():
-        model = JanusForConditionalGeneration(config)
+        model = BagelForConditionalGeneration(config)
 
-    model.generation_config.temperature = 1
-    model.generation_config.guidance_scale = 5
-    model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
-    model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
+    # model.generation_config.temperature = 1
+    # model.generation_config.guidance_scale = 5
+    # model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
+    # model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict
     print("Loading state dict...")
@@ -384,8 +322,7 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
-        JanusForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
+        BagelForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 
 

@@ -16,8 +16,9 @@
 Processor class for Bagel.
 """
 
+# ToDo: see if a chat template is needed for Bagel or not once end-to-end model is ready.
 
-from typing import List, Union
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -69,19 +70,21 @@ class BagelProcessor(ProcessorMixin):
     tokenizer_class = "Qwen2Tokenizer"
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
+        # Num image tokens is computed dynamically?
         self.num_image_tokens = 1024
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else "<image>"
-        self.start_of_image = tokenizer.convert_tokens_to_ids('<|vision_start|>')
-        self.end_of_image = tokenizer.convert_tokens_to_ids('<|vision_end|>')
+        self.image_token = tokenizer.image_token
+        self.image_start_token = tokenizer.boi_token
+        self.image_end_token = tokenizer.eoi_token
         self.use_default_system_prompt = use_default_system_prompt
 
-
+        # Dummy token for now
+        self.image_token = "[image_placeholder]"
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos=None,
         audio=None,
@@ -136,7 +139,7 @@ class BagelProcessor(ProcessorMixin):
 
         # Replace the image token with expanded image tokens.
         prompt_strings = []
-        one_img_tokens = self.start_of_image + (self.image_token * self.num_image_tokens) + self.end_of_image
+        one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
         for prompt in text:
             prompt = prompt.replace(self.image_token, one_img_tokens)
             if self.use_default_system_prompt and generation_mode == "text":
