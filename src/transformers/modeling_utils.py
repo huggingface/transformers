@@ -33,7 +33,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -1971,12 +1971,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
-    _supports_cache_class = False
+    # Has support `torch.compile(fullgraph=True)`
     _supports_static_cache = False
-
-    # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
-    _supports_quantized_cache = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
@@ -2063,6 +2059,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         :str: Identifies that this is a PyTorch model.
         """
         return "pt"
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # For BC we keep the original `config_class` definition in case
+        # there is a `config_class` attribute (e.g. remote code models),
+        # otherwise we derive it from the annotated `config` attribute.
+
+        # defined in this particular subclass
+        child_annotation = cls.__dict__.get("__annotations__", {}).get("config", None)
+        child_attribute = cls.__dict__.get("config_class", None)
+
+        # defined in the class (this subclass or any parent class)
+        full_annotation = get_type_hints(cls).get("config", None)
+        full_attribute = cls.config_class
+
+        # priority (child class_config -> child annotation -> global class_config -> global annotation)
+        if child_attribute is not None:
+            cls.config_class = child_attribute
+        elif child_annotation is not None:
+            cls.config_class = child_annotation
+        elif full_attribute is not None:
+            cls.config_class = full_attribute
+        elif full_annotation is not None:
+            cls.config_class = full_annotation
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()

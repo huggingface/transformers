@@ -112,6 +112,7 @@ from .utils import (
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
+    is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -152,6 +153,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -377,6 +379,14 @@ def require_apollo_torch(test_case):
     https://github.com/zhuhanqing/APOLLO
     """
     return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
+
+
+def require_torch_optimi(test_case):
+    """
+    Decorator marking a test that requires torch-optimi. These tests are skipped when torch-optimi isn't installed.
+    https://github.com/jxnl/torch-optimi
+    """
+    return unittest.skipUnless(is_torch_optimi_available(), "test requires torch-optimi")(test_case)
 
 
 def require_lomo(test_case):
@@ -1525,6 +1535,13 @@ def require_speech(test_case):
     Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
     """
     return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
+
+
+def require_openai(test_case):
+    """
+    Decorator marking a test that requires openai
+    """
+    return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
 
 
 def require_mistral_common(test_case):

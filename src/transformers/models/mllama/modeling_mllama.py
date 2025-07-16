@@ -841,7 +841,7 @@ class MllamaRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class MllamaPreTrainedModel(PreTrainedModel):
-    config_class = MllamaConfig
+    config: MllamaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -849,11 +849,10 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaCrossAttentionDecoderLayer",
         "MllamaSelfAttentionDecoderLayer",
     ]
-    _supports_cache_class = True
+
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
-    _supports_quantized_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -1020,7 +1019,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     """
 )
 class MllamaVisionModel(MllamaPreTrainedModel):
-    config_class = MllamaVisionConfig
+    config: MllamaVisionConfig
     base_model_prefix = "vision_model"
 
     def __init__(self, config: MllamaVisionConfig):
@@ -1251,7 +1250,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
     """
 )
 class MllamaTextModel(MllamaPreTrainedModel):
-    config_class = MllamaTextConfig
+    config: MllamaTextConfig
     base_model_prefix = "language_model.model"
 
     def __init__(self, config: MllamaTextConfig):
@@ -1455,7 +1454,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
     """
 )
 class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
-    config_class = MllamaTextConfig
+    config: MllamaTextConfig
     _supports_static_cache = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
@@ -1603,7 +1602,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 )
 class MllamaModel(MllamaPreTrainedModel):
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-    _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1763,7 +1761,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: MllamaConfig):

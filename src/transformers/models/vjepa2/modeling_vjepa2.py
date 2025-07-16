@@ -243,14 +243,6 @@ class VJEPA2RopeAttention(nn.Module):
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def _get_frame_pos(self, ids):
         tokens_per_frame = int(self.grid_size * self.grid_size)
         return ids // tokens_per_frame
@@ -309,11 +301,22 @@ class VJEPA2RopeAttention(nn.Module):
         output_attentions: bool = False,
         head_mask: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         pos_ids = self.get_position_ids(hidden_states, masks=position_mask)
         key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)
@@ -978,7 +981,7 @@ class VJEPA2AttentivePooler(nn.Module):
 
 @auto_docstring
 class VJEPA2PreTrainedModel(PreTrainedModel):
-    config_class = VJEPA2Config
+    config: VJEPA2Config
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True

@@ -261,11 +261,6 @@ class Data2VecVisionSelfAttention(nn.Module):
         if self.has_relative_position_bias:
             self.relative_position_bias = Data2VecVisionRelativePositionBias(config, window_size=window_size)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -275,11 +270,22 @@ class Data2VecVisionSelfAttention(nn.Module):
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -347,10 +353,22 @@ class Data2VecVisionSdpaSelfAttention(Data2VecVisionSelfAttention):
                 resolution=resolution,
             )
 
-        mixed_query_layer = self.query(hidden_states)
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         attn_bias = None
         if self.has_relative_position_bias:
@@ -718,7 +736,7 @@ class Data2VecVisionEncoder(nn.Module):
 @auto_docstring
 # Copied from transformers.models.beit.modeling_beit.BeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
 class Data2VecVisionPreTrainedModel(PreTrainedModel):
-    config_class = Data2VecVisionConfig
+    config: Data2VecVisionConfig
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

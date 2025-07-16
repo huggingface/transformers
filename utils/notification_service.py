@@ -1497,8 +1497,8 @@ if __name__ == "__main__":
 
     # Only for AMD at this moment.
     # TODO: put this into a method
+    diff_file_url = None
     if is_amd_daily_ci_workflow:
-        diff_file_url = None
         if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
             ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=None,
