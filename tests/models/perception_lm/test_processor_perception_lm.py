@@ -39,6 +39,7 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 @require_vision
 @require_read_token
+@unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
 
