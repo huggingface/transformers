@@ -822,14 +822,9 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
-        cache_params_not_initialized = cache_params is None
+        if use_cache and cache_params is None:
+            cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
         if use_cache:
-            if cache_params_not_initialized:
-                max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
-                cache_params = FalconMambaCache(
-                    self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
-                )
-                cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
                 raise ValueError(
@@ -850,10 +845,14 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
                 # the length of `cache_params.conv_states`, which is `config.conv_kernel`
                 cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
 
-        if inputs_embeds is not None and cache_params_not_initialized:
+        if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
+
+        if use_cache and cache_params is None:
+            max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
+            cache_params = FalconMambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
 
         model_inputs.update(
             {
