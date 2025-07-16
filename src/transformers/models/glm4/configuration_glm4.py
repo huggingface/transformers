@@ -22,7 +22,7 @@ class Glm4Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Glm4Model`]. It is used to instantiate an Glm4
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Glm4-4-9b-chat.
-    e.g. [THUDM/glm-4-0414-9b-chat-chat](https://huggingface.co/THUDM/glm-4-0414-9b-chat-chat)
+    e.g. [THUDM/GLM-4-9B-0414](https://huggingface.co/THUDM/GLM-4-9B-0414)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
@@ -42,8 +42,8 @@ class Glm4Config(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
         head_dim (`int`, *optional*, defaults to 128):

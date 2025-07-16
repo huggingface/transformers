@@ -18,7 +18,6 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Tuple
 
 import yaml
 from tqdm import tqdm
@@ -107,7 +106,7 @@ class TatoebaConverter:
             print(f"Three letter monolingual code: {code}")
             return [code]
 
-    def resolve_lang_code(self, src, tgt) -> Tuple[str, str]:
+    def resolve_lang_code(self, src, tgt) -> tuple[str, str]:
         src_tags = self.get_tags(src, self.tag2name[src])
         tgt_tags = self.get_tags(tgt, self.tag2name[tgt])
         return src_tags, tgt_tags

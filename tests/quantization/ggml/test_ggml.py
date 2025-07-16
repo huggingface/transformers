@@ -20,7 +20,7 @@ from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from transformers.testing_utils import (
     require_gguf,
     require_read_token,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -35,7 +35,7 @@ if is_gguf_available():
 
 
 @require_gguf
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class GgufQuantizationTests(unittest.TestCase):
     """
@@ -107,7 +107,7 @@ class GgufQuantizationTests(unittest.TestCase):
 
 
 @require_gguf
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class GgufIntegrationTests(unittest.TestCase):
     """
@@ -263,7 +263,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
 
 @require_gguf
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class GgufModelTests(unittest.TestCase):
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
@@ -301,6 +301,7 @@ class GgufModelTests(unittest.TestCase):
     gemma3_qat_model_id = "google/gemma-3-1b-it-qat-q4_0-gguf"
     gemma3_text_model_id = "unsloth/gemma-3-1b-it-GGUF"
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
+    qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -333,6 +334,7 @@ class GgufModelTests(unittest.TestCase):
     q4_0_gemma3_qat_model_id = "gemma-3-1b-it-q4_0.gguf"
     bf16_gemma3_text_model_id = "gemma-3-1b-it-BF16.gguf"
     bf16_gemma3_vision_model_id = "gemma-3-4b-it-BF16.gguf"
+    q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
 
     example_text = "Hello"
 
@@ -955,3 +957,19 @@ class GgufModelTests(unittest.TestCase):
                 torch.testing.assert_close(original_params, converted_state_dict[layer_name])
             else:
                 raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    @require_read_token
+    @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
+    def test_qwen3_q8_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.qwen3_model_id, gguf_file=self.q8_0_qwen3_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.qwen3_model_id,
+            gguf_file=self.q8_0_qwen3_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "HelloED\nI need to find the value of the"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)

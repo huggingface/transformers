@@ -15,7 +15,7 @@
 """PyTorch VitPose model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -37,31 +37,27 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VitPoseEstimatorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of pose estimation models.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Loss is not supported at this moment. See https://github.com/ViTAE-Transformer/ViTPose/tree/main/mmpose/models/losses for further detail.
-        heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
-            Heatmaps as predicted by the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
-            (also called feature maps) of the model at the output of each stage.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VitPoseEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Loss is not supported at this moment. See https://github.com/ViTAE-Transformer/ViTPose/tree/main/mmpose/models/losses for further detail.
+    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
+        Heatmaps as predicted by the model.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+        (also called feature maps) of the model at the output of each stage.
     """
 
     loss: Optional[torch.FloatTensor] = None
     heatmaps: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring

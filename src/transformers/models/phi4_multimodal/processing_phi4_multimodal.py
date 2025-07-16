@@ -17,7 +17,7 @@ Processor class for Phi4Multimodal
 """
 
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...audio_utils import AudioInput
 from ...image_processing_utils import BatchFeature
@@ -62,7 +62,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     tokenizer_class = "GPT2TokenizerFast"
     image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
-    valid_kwargs = ["chat_template"]
 
     def __init__(
         self,
@@ -79,7 +78,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, list[TextInput]],
         images: Optional[ImageInput] = None,
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
@@ -92,14 +91,14 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            audio (`List[Union[np.ndarray, torch.Tensor]]`):
+            audio (`list[Union[np.ndarray, torch.Tensor]]`):
                 List of the audios to be prepared.
 
         Returns:

@@ -22,7 +22,7 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -65,7 +65,7 @@ MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
 DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
 
 
-def tokenize_numbers(text_array: List[str]) -> List[str]:
+def tokenize_numbers(text_array: list[str]) -> list[str]:
     """
     Splits large comma-separated numbers and floating point values. This is done by replacing commas with ' @,@ ' and
     dots with ' @.@ '.
@@ -122,7 +122,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        special (`List[str]`, *optional*):
+        special (`list[str]`, *optional*):
             A list of special tokens (to be treated by the original implementation of this tokenizer).
         min_freq (`int`, *optional*, defaults to 0):
             The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
@@ -138,7 +138,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             File containing the vocabulary (from the original implementation).
         pretrained_vocab_file (`str`, *optional*):
             File containing the vocabulary as saved with the `save_pretrained()` method.
-        never_split (`List[str]`, *optional*):
+        never_split (`list[str]`, *optional*):
             List of tokens that should never be split. If no list is specified, will simply use the existing special
             tokens.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
@@ -146,7 +146,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             token instead.
         eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `['<formula>']`):
+        additional_special_tokens (`list[str]`, *optional*, defaults to `['<formula>']`):
             A list of additional special tokens (for the HuggingFace functionality).
         language (`str`, *optional*, defaults to `"en"`):
             The language of this tokenizer (used for mose preprocessing).
@@ -315,7 +315,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         else:
             raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement.")
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory,
@@ -425,7 +425,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             text, aggressive_dash_splits=True, return_str=False, escape=False, protected_patterns=self.never_split
         )
 
-    def moses_pipeline(self, text: str) -> List[str]:
+    def moses_pipeline(self, text: str) -> list[str]:
         """
         Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`] with
         *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally, large
@@ -693,7 +693,7 @@ class TransfoXLCorpus:
         # redirect to the cache, if necessary
         try:
             resolved_corpus_file = cached_file(pretrained_model_name_or_path, CORPUS_NAME, cache_dir=cache_dir)
-        except EnvironmentError:
+        except OSError:
             logger.error(
                 f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list"
                 f" ({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. We assumed '{pretrained_model_name_or_path}'"

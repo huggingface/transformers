@@ -17,7 +17,7 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -57,7 +57,6 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     """
 
     attributes = ["video_processor", "tokenizer", "qformer_tokenizer"]
-    valid_kwargs = ["num_query_tokens"]
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
@@ -74,7 +73,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: VideoInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -148,7 +147,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                     logger.warning_once(
                         "Expanding inputs for video tokens in InstructBLIPVideo should be done in processing. "
                         "Please follow instruction here (https://gist.github.com/zucchini-nlp/65f22892b054dc0d68228af56fbeaac2) to update your InstructBLIPVideo model. "
-                        "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                        "Using processors without these attributes in the config is deprecated and will throw an error in v4.54."
                     )
 
             # cast to desired return tensors type after concatenating

@@ -742,10 +742,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             module.masked_spec_embed.data.fill_(3)
 
     @unittest.skip(reason="Temporarily broken")  # TODO (joao, eustache): have a look at this test
-    def test_generate_with_head_masking(self):
-        pass
-
-    @unittest.skip(reason="Temporarily broken")  # TODO (joao, eustache): have a look at this test
     def test_generate_without_input_ids(self):
         pass
 
@@ -768,7 +764,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
@@ -1796,7 +1792,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
