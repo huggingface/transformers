@@ -21,7 +21,7 @@ from transformers import (
     AutoTokenizer,
     PerceptionLMProcessor,
 )
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_vision, require_read_token
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -38,6 +38,7 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 
 @require_vision
+@require_read_token
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
 
