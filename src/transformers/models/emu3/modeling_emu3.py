@@ -1097,8 +1097,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True

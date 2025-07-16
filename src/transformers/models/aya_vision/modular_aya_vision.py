@@ -90,7 +90,6 @@ class AyaVisionMultiModalProjector(nn.Module):
 
 
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
-    _supports_quantized_cache = False
     _supports_static_cache = False
 
     def _init_weights(self, module):

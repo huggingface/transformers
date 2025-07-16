@@ -496,7 +496,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MoonshineEncoderLayer", "MoonshineDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     # TODO arthur, how do we separate when it cross / self coming from different layer?
 

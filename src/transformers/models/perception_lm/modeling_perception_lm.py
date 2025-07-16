@@ -91,10 +91,10 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -130,10 +130,14 @@ class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -157,7 +161,10 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -166,6 +173,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
