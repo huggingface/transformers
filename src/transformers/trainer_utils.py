@@ -223,6 +223,7 @@ def get_last_checkpoint(folder):
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
+
 class IntervalStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
