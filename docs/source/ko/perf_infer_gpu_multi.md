@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # 분산 추론[[distributed-inference]]
 
-모델이 단일 GPU에 올라가지 않는 경우, [텐서 병렬화](./perf_train_gpu_many#tensor-parallelism)를 사용한 분산 추론이 도움이 될 수 있습니다. 텐서 병렬화는 모델을 다중 가속기(CUDA GPU, Intel XPU 등)에 분할하여 행렬 곱셈과 같은 계산을 병렬화합니다. 더 큰 모델을 메모리에 올릴 수 있게 하며, 각 가속기가 텐서 슬라이스를 처리할 수 있어 더 빠릅니다.
+모델이 단일 GPU에 올라가지 않는 경우, [텐서 병렬 처리](./perf_train_gpu_many#tensor-parallelism)를 사용한 분산 추론이 도움이 될 수 있습니다. 텐서 병렬화는 모델을 다중 가속기(CUDA GPU, Intel XPU 등)에 분할하여 행렬 곱셈과 같은 계산을 병렬화합니다. 더 큰 모델을 메모리에 올릴 수 있게 하며, 각 가속기가 텐서 슬라이스를 처리할 수 있어 더 빠릅니다.
 
 그러나 텐서 병렬화는 통신 오버헤드를 추가하므로 빠른 노드 내 통신을 활용하기 위해 다중 가속기가 있는 단일 머신 설정에서 사용해야 합니다. 다중 노드 훈련의 경우, 사용 사례에 따라 파이프라인 병렬화나 데이터 병렬화를 사용하는 것이 더 효율적일 수 있습니다.
 
@@ -45,7 +45,7 @@ rendered properly in your Markdown viewer.
 
 ## 모델 분할[[partitioning-a-model]]
 
-모델에 `tp_plan`이 있는 경우 Transformers는 텐서 병렬화를 지원합니다. 모델을 분할하는 두 가지 계획이 있습니다.
+Transformers는 `tp_plan`매개변수를 활용할 수 있는 모델에 대해 텐서 병렬 처리를 지원합니다. 모델 분할 방식은 두 가지가 있습니다.
 
 - `auto` 텐서 병렬화 계획은 사전 정의된 구성을 기반으로 모델(위의 지원되는 모델 참조)을 분할합니다.
 - 고유한 분할 계획을 수동으로 지정하고 [`~PreTrainedModel.from_pretrained`]의 `tp_plan` 매개변수에 전달할 수도 있습니다.
@@ -206,7 +206,7 @@ Readd this when I get the exact error message
 
 2. `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn` 메서드를 구현합니다.
 
-    `partition_tensor` 메서드는 텐서를 분할하고 분할된 텐서로 `empty_param`을 채웁니다. 유틸리티 함수 `get_tensor_shard`를 사용하여 주어진 순위에 대한 원본 매개변수의 올바른 분할을 얻고, 패킹된 가중치에 대해서는 `get_packed_weights`를 사용하세요.
+    `partition_tensor` 메서드는 텐서를 분할하고 분할된 텐서로 `empty_param`을 채웁니다. 유틸리티 함수 `get_tensor_shard`를 사용하여 주어진 랭크에 대한 원본 매개변수의 올바른 분할을 얻고, 패킹된 가중치에 대해서는 `get_packed_weights`를 사용하세요.
 
     ```python
     def partition_tensor(
@@ -216,7 +216,7 @@ Readd this when I get the exact error message
         param_type, # 매개변수 유형, `bias` 또는 `weight`
         param_casting_dtype, # 매개변수를 캐스팅할 유형
         to_contiguous, # 텐서를 연속적인 메모리 레이아웃으로 변환할지 여부
-        rank, # 현재 기기의 순위
+        rank, # 현재 기기의 랭크
         device_mesh, # 기기 메시
     ) -> nn.Parameter: # 분할된 매개변수 반환
         ...
@@ -254,7 +254,7 @@ Readd this when I get the exact error message
 
 텐서 병렬화는 특히 큰 배치 크기나 긴 시퀀스를 가진 입력에 대해 추론을 상당히 가속화할 수 있습니다.
 
-시퀀스 길이가 512인 [Llama](./model_doc/llama)에서 단일 포워드 패스에 대한 예상 가속화는 아래 차트를 참조하세요.
+시퀀스 길이가 512인 [Llama](./model_doc/llama)에서 단일 포워드 패스에 대한 예상 속도 향상 수치는 아래 차트를 참조하세요.
 
 <div style="text-align: center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">
