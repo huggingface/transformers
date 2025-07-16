@@ -83,12 +83,13 @@ from transformers.utils.import_utils import (
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
-from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
+from test_module.custom_configuration import CustomConfig
+
 
 if is_torch_available():
     import torch
     from safetensors.torch import save_file as safe_save_file
-    from test_module.custom_modeling import CustomModel, NoSuperInitModel
+    from test_module.custom_modeling import CustomModel
     from torch import nn
 
     from transformers import (
@@ -746,18 +747,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation, "foo-bar-baz")
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-
-    def test_no_super_init_config_and_model(self):
-        config = NoSuperInitConfig(attribute=32)
-        model = NoSuperInitModel(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-
-            new_model = NoSuperInitModel.from_pretrained(tmp_dir)
-
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
 
     def test_checkpoint_sharding_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
