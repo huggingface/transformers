@@ -2094,6 +2094,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
         self.config = config
 
+        # Check the attention implementation is supported, or set it if not yet set
+        self.config._attn_implementation = self._check_and_adjust_attn_implementation(self.config._attn_implementation, is_early_check=True)
+
         # for initialization of the loss
         loss_type = self.__class__.__name__
         if loss_type not in LOSS_MAPPING:
@@ -2150,11 +2153,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                             f"{module} was specified in the `_keep_in_fp32_modules_strict` list, but is not part of the modules in"
                             f" {self.__class__.__name__}"
                         )
-
-        # The `hasattr` here is used as some Transformers tests for some reason do not call
-        # PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
-        if hasattr(self.config, "_attn_implementation_internal"):
-            self.set_attention_implementation(self.config._attn_implementation_internal)
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
@@ -2271,90 +2269,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Optional[str]) -> Optional[str]:
-        """
-        Checks that the requested attention implementation exists and tries to get the kernel from hub
-        if `attn_implementation` matches hf kernels pattern.
-        """
-        if isinstance(attn_implementation, str) and re.match(r"^[^/:]+/[^/:]+:[^/:]+$", attn_implementation):
-            if not is_kernels_available():
-                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-
-            # Extract repo_id and kernel_name from the string
-            repo_id, kernel_name = attn_implementation.split(":")
-            kernel_name = kernel_name.strip()
-            repo_id = repo_id.strip()
-
-            try:
-                kernel = get_kernel(repo_id)
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
-                attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
-            except FileNotFoundError as e:
-                logger.warning(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using default attention implementation instead."
-                )
-                attn_implementation = None  # try to dispatch SDPA and fallback eager if not available
-            except AttributeError:
-                raise ValueError(
-                    "the kernel function name or class specified in the attn_implementation argument is not valid. Please check "
-                    "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
-                )
-        if attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-            message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
-            # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
-            if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
-                message += (
-                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
-                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
-                )
-            if cls._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
-            if cls._supports_flex_attn:
-                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
-            raise ValueError(message + ".")
-
-        return attn_implementation
-
-    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
-        """
-        Checks and dispatches to the requested attention implementation.
-        """
-        current_implementation = (
-            attn_implementation if not isinstance(attn_implementation, dict) else attn_implementation.get("", None)
-        )
-
-        requested_attn_implementation = self._check_attn_implementation(current_implementation)
-
-        if requested_attn_implementation == "flash_attention_3" and self._flash_attn_3_can_dispatch():
-            self.config._attn_implementation = "flash_attention_3"
-        elif requested_attn_implementation == "flash_attention_2" and self._flash_attn_2_can_dispatch():
-            self.config._attn_implementation = "flash_attention_2"
-        elif requested_attn_implementation == "flex_attention" and self._flex_attn_can_dispatch():
-            self.config._attn_implementation = "flex_attention"
-        elif (
-            requested_attn_implementation in [None, "sdpa"]
-            and not is_torch_xla_available()
-            and self._sdpa_can_dispatch(hard_check_only=requested_attn_implementation is not None)
-        ):
-            self.config._attn_implementation = "sdpa"
-        elif requested_attn_implementation in ALL_ATTENTION_FUNCTIONS.valid_keys():
-            self.config._attn_implementation = requested_attn_implementation
-        else:
-            self.config._attn_implementation = "eager"
-
-        # Apply it to all submodels as well
-        for submodule in self.modules():
-            # self is returned by modules() -> we need to skip it of course
-            if submodule is not self and isinstance(submodule, PreTrainedModel):
-                sub_implementation = attn_implementation
-                if isinstance(attn_implementation, dict):
-                    for subconfig_key in self.config.sub_configs:
-                        if getattr(self.config, subconfig_key).__class__ == submodule.config_class:
-                            sub_implementation = attn_implementation.get(subconfig_key, None)
-                            break
-                submodule.set_attention_implementation(sub_implementation)
-
-    @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
         Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
@@ -2426,7 +2340,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Otherwise, can't generate
         return False
 
-    def _flash_attn_2_can_dispatch(self) -> bool:
+    def _flash_attn_2_can_dispatch(self, is_early_check: bool = False) -> bool:
         """
         Checks the availability of Flash Attention 2 and compatibility with the current model.
 
@@ -2471,12 +2385,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     else:
                         raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
 
-        _is_bettertransformer = getattr(self, "use_bettertransformer", False)
-        if _is_bettertransformer:
-            raise ValueError(
-                "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
-            )
-
         if torch_dtype is None:
             logger.warning_once(
                 "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour"
@@ -2488,29 +2396,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
             )
 
-        param_devices = list({param.device for param in self.parameters()})
-        if len(param_devices) == 1 and param_devices[0].type == "cpu":
-            if torch.cuda.is_available():
-                logger.warning_once(
-                    "You are attempting to use Flash Attention 2 with a model not initialized on GPU. Make sure to move the model to GPU"
-                    " after initializing it on CPU with `model.to('cuda')`."
-                )
-            elif is_torch_mlu_available():
-                logger.warning_once(
-                    "You are attempting to use Flash Attention 2 with a model not initialized on MLU. Make sure to move the model to MLU"
-                    " after initializing it on CPU with `model.to('mlu')`."
-                )
-            else:
+        # With the early check, the parameters are not yet initalized correctly
+        if not is_early_check:
+            if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
-                    "You are attempting to use Flash Attention 2 with a model not initialized on GPU and with no GPU available. "
-                    "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                    "or initialising the model on CPU and then moving it to GPU."
+                    "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
                 )
+
+            param_devices = list({param.device for param in self.parameters()})
+            if len(param_devices) == 1 and param_devices[0].type == "cpu":
+                if torch.cuda.is_available():
+                    logger.warning_once(
+                        "You are attempting to use Flash Attention 2 with a model not initialized on GPU. Make sure to move the model to GPU"
+                        " after initializing it on CPU with `model.to('cuda')`."
+                    )
+                elif is_torch_mlu_available():
+                    logger.warning_once(
+                        "You are attempting to use Flash Attention 2 with a model not initialized on MLU. Make sure to move the model to MLU"
+                        " after initializing it on CPU with `model.to('mlu')`."
+                    )
+                else:
+                    raise ValueError(
+                        "You are attempting to use Flash Attention 2 with a model not initialized on GPU and with no GPU available. "
+                        "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                        "or initialising the model on CPU and then moving it to GPU."
+                    )
 
         # If no error raise by this point, we can return `True`
         return True
 
-    def _flash_attn_3_can_dispatch(self) -> bool:
+    def _flash_attn_3_can_dispatch(self, is_early_check: bool = False) -> bool:
         """
         Checks the availability of Flash Attention 3 and compatibility with the current model.
 
@@ -2563,40 +2478,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             raise ValueError(
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
-
-        param_devices = list({param.device for param in self.parameters()})
-        if len(param_devices) == 1 and param_devices[0].type == "cpu":
-            if torch.cuda.is_available():
-                logger.warning_once(
-                    "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
-                    " after initializing it on CPU with `model.to('cuda')`."
-                )
-            else:
-                raise ValueError(
-                    "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
-                    "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                    "or initialising the model on CPU and then moving it to GPU."
-                )
+        
+        # With the early check, the parameters are not yet initalized correctly
+        if not is_early_check:
+            param_devices = list({param.device for param in self.parameters()})
+            if len(param_devices) == 1 and param_devices[0].type == "cpu":
+                if torch.cuda.is_available():
+                    logger.warning_once(
+                        "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
+                        " after initializing it on CPU with `model.to('cuda')`."
+                    )
+                else:
+                    raise ValueError(
+                        "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
+                        "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                        "or initialising the model on CPU and then moving it to GPU."
+                    )
 
         return True
 
-    def _sdpa_can_dispatch(self, hard_check_only: bool = False) -> bool:
+    def _sdpa_can_dispatch(self, is_early_check: bool = False) -> bool:
         """
         Checks the availability of SDPA for a given model.
-
-        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "sdpa" so that the model can initialize the correct attention module.
         """
-        if hard_check_only:
-            if not self._supports_sdpa:
-                raise ValueError(
-                    f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
-                    " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
-                    ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
-                )
-            if not is_torch_sdpa_available():
-                raise ImportError(
-                    "PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1."
-                )
+        if not self._supports_sdpa:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+                " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
+                ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
+            )
+        if not is_torch_sdpa_available():
+            raise ImportError(
+                "PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1."
+            )
 
         if (
             torch.version.hip is not None
@@ -2608,10 +2522,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
             torch.backends.cuda.enable_flash_sdp(False)
 
-        # This means we have `hard_check_only=False` and fallback to eager if SDPA isn't supported
-        _is_bettertransformer = getattr(self, "use_bettertransformer", False)
-        if not is_torch_sdpa_available() or not self._supports_sdpa or _is_bettertransformer:
-            return False
+        if not is_early_check:
+            if getattr(self, "use_bettertransformer", False):
+                raise ValueError(
+                    "SDPA and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
+                )
 
         return True
 
@@ -2636,6 +2551,122 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # If no error raise by this point, we can return `True`
         return True
+    
+    def _check_and_adjust_attn_implementation(self, attn_implementation: Optional[str], is_early_check: bool = False) -> str:
+        """
+        Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
+        it matches hf kernels pattern.
+
+        Args:
+            attn_implementation (`str` or `None`):
+                The attention implementation to check for existence/validity.
+            is_early_check (`bool`, *optional*):
+                Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
+                fully instantiated. This is needed as some checks for FA/sdpa also check the devices of the weights, and/or
+                if the model uses BetterTransformer, which are only available later after __init__. This allows to raise
+                proper exceptions early before instantiating the full models if we know that the model does not support
+                the requested attention.
+
+        Returns:
+            `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
+            None to sdpa (to potentially eager).
+        """
+        applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
+        if re.match(r"^[^/:]+/[^/:]+:[^/:]+$", applicable_attn_implementation):
+            if not is_kernels_available():
+                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
+
+            # Extract repo_id and kernel_name from the string
+            repo_id, kernel_name = applicable_attn_implementation.split(":")
+            kernel_name = kernel_name.strip()
+            repo_id = repo_id.strip()
+
+            try:
+                kernel = get_kernel(repo_id)
+                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
+                applicable_attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+            except FileNotFoundError as e:
+                logger.warning_once(
+                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using default attention implementation instead."
+                )
+                applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
+            except AttributeError:
+                raise ValueError(
+                    "the kernel function name or class specified in the attn_implementation argument is not valid. Please check "
+                    "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
+                )
+        if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+            message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+            # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
+            if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
+                message += (
+                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
+                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
+                )
+            if cls._supports_sdpa:
+                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+            if cls._supports_flex_attn:
+                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
+            raise ValueError(message + ".")
+        
+        # Perform relevant checks
+        if applicable_attn_implementation == "flash_attention_2":
+            self._flash_attn_2_can_dispatch(is_early_check)
+        elif applicable_attn_implementation == "flash_attention_3":
+            self._flash_attn_3_can_dispatch(is_early_check)
+        elif applicable_attn_implementation == "flex_attention":
+            self._flex_attn_can_dispatch()
+        elif applicable_attn_implementation == "sdpa":
+            # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
+            try:
+                self._sdpa_can_dispatch(is_early_check)
+            except (ValueError, ImportError):
+                # In this case, sdpa was requested explicitly but we can't use it, se let's warn
+                if attn_implementation is not None:
+                    logger.warning_once(
+                        f"{self.__class__.__name__} does not support an attention implementation through SDPA. Falling back to "
+                        "eager attention"
+                    )
+                applicable_attn_implementation = "eager"
+
+        return applicable_attn_implementation
+
+    def set_attn_implementation(self, attn_implementation: Union[str, dict]):
+        """
+        Set the requested `attn_implementation` for this model.
+
+        Args:
+            attn_implementation (`str` or `dict`):
+                The attention implementation to set for this model. It can be either a `str`, in which case it will be
+                dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
+                submodel will dispatch the corresponding value.
+        """
+        current_implementation = (
+            attn_implementation if not isinstance(attn_implementation, dict) else attn_implementation.get("", None)
+        )
+
+        # It can sometimes change the attn, mostly from sdpa (default) to eager if sdpa is not supported
+        # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
+        # warn the user that the requested value is not working
+        try:
+            applicable_attn_implementation = self._check_and_adjust_attn_implementation(current_implementation, is_early_check=False)
+            # Apply the change
+            self.config._attn_implementation = applicable_attn_implementation
+        except (ValueError, ImportError) as e:
+            logger.warning(f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}")
+
+        # Apply it to all submodels as well
+        for submodule in self.modules():
+            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
+            # e.g. ForCausalLM has a Model inside, but no need to check it again)
+            if submodule is not self and isinstance(submodule, PreTrainedModel) and submodule.config.__class__ != self.config.__class__:
+                sub_implementation = attn_implementation
+                if isinstance(attn_implementation, dict):
+                    for subconfig_key in self.config.sub_configs:
+                        if getattr(self.config, subconfig_key).__class__ == submodule.config_class:
+                            sub_implementation = attn_implementation.get(subconfig_key, None)
+                            break
+                submodule.set_attn_implementation(sub_implementation)
 
     def enable_input_require_grads(self):
         """
