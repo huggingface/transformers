@@ -563,6 +563,8 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
+      - local: model_doc/modernbert-decoder
+        title: ModernBERTDecoder
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -1039,6 +1041,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
       - local: model_doc/pix2struct
