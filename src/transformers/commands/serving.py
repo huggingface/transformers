@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import copy
 import functools
+import io
 import json
 import re
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Generator, Optional, Annotated
-import numpy as np
+from typing import Annotated, Generator, Optional
 
+import numpy as np
 from huggingface_hub import ModelInfo, model_info
 
 from transformers.utils.import_utils import (
@@ -41,6 +41,7 @@ from . import BaseTransformersCLICommand
 
 if is_torch_available():
     import torch
+    from pydub import AudioSegment  # TODO: use librosa instead?
 
     from transformers import (
         AutoModelForCausalLM,
@@ -52,14 +53,12 @@ if is_torch_available():
         PreTrainedModel,
     )
 
-    from pydub import AudioSegment  # TODO: use librosa instead?
-
 serve_dependencies_available = (
     is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
 )
 if serve_dependencies_available:
     import uvicorn
-    from fastapi import FastAPI, HTTPException, File, Form
+    from fastapi import FastAPI, File, Form, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
@@ -152,9 +151,13 @@ if serve_dependencies_available:
         "web_search_options",
     }
     UNUSED_TRANSCRIPTION_FIELDS = {
-        "chunking_strategy", "include", "language", "prompt", "response_format", "timestamp_granularities"
+        "chunking_strategy",
+        "include",
+        "language",
+        "prompt",
+        "response_format",
+        "timestamp_granularities",
     }
-
 
 
 logger = logging.get_logger(__name__)
@@ -443,7 +446,7 @@ class ServeCommand(BaseTransformersCLICommand):
             validator=completion_validator,
             unused_fields=UNUSED_CHAT_COMPLETION_FIELDS,
         )
-        
+
     def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
@@ -766,21 +769,70 @@ class ServeCommand(BaseTransformersCLICommand):
                                 request_id=_request_id, role=None, finish_reason="tool_calls"
                             )
                             continue
-                        else:
-                            queue_is_flushed = True
+                        # Inside a tool call
+                        if tool_state.inside_tool_call:
+                            tool_state.buffer += result
 
-                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                    if result.status == RequestStatus.FINISHED:
-                        yield self.build_chat_completion_chunk(request_id, finish_reason=finish_reason)
-                        break
-                    else:
-                        yield self.build_chat_completion_chunk(request_id=request_id, content=result.next_token)
+                            # First step: extract the tool name (may need several tokens, and we can't emit a delta
+                            # until we have the full name)
+                            if not tool_state.has_tool_name_defined:
+                                tool_name = re.search(r"\"name\": \"(.*?)\"", tool_state.buffer)
+                                if tool_name is None:
+                                    continue
+                                else:
+                                    tool_name = tool_name.group(1)
+                                tool_state.has_tool_name_defined = True
+                                tool = ChoiceDeltaToolCall(
+                                    function=ChoiceDeltaToolCallFunction(name=tool_name),
+                                    index=0,
+                                    type="function",
+                                    id=_request_id + "_tool_call",  # Only the first tool call delta has an id
+                                )
 
+                            # Second step: extract tool arguments. The tool arguments can be seen as a json string
+                            # within the tool json string. We emit a delta for the arguments.
+                            else:
+                                # Empty text: skip
+                                if result == "":
+                                    continue
+                                # Until we see the `"arguments": {` in the buffer, we skip
+                                # TODO: other models will likely need more elaborate processing here
+                                if '"arguments": {' not in tool_state.buffer:
+                                    continue
+
+                                # Handle nesting. We want to exclude the last } from the emitted arguments (it's
+                                # closing the outermost nesting level, outside the arguments block)
+                                tool_state.arg_nesting_level += result.count("{")
+                                tool_state.arg_nesting_level -= result.count("}")
+                                if tool_state.arg_nesting_level < 0:
+                                    result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
+
+                                tool = ChoiceDeltaToolCall(
+                                    function=ChoiceDeltaToolCallFunction(arguments=result),
+                                    index=0,
+                                    type="function",
+                                )
+
+                            yield self.build_chat_completion_chunk(
+                                request_id=_request_id, role=None, tool_calls=[tool]
+                            )
+                            continue
+                    # ====== END OF TOOL CALL LOGIC ======
+
+                    # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
+                    if result != "":
+                        yield self.build_chat_completion_chunk(_request_id, content=result)
+                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop")
+
+                thread.join()
             except Exception as e:
                 logger.error(str(e))
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        return stream_chat_completion(inputs[0])
+            finally:
+                thread.join()
+
+        return stream_chat_completion(generation_streamer, request_id)
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """
@@ -1038,7 +1090,9 @@ class ServeCommand(BaseTransformersCLICommand):
             self.audio_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name, device_map="auto")
             self.audio_processor = AutoProcessor.from_pretrained(model_name)
 
-        generation_streamer = TextIteratorStreamer(self.audio_processor.tokenizer, skip_special_tokens=True, skip_prompt=True)
+        generation_streamer = TextIteratorStreamer(
+            self.audio_processor.tokenizer, skip_special_tokens=True, skip_prompt=True
+        )
         generation_config = create_generation_config_from_req(
             req, model_generation_config=self.audio_model.generation_config
         )
@@ -1054,7 +1108,9 @@ class ServeCommand(BaseTransformersCLICommand):
         if audio_array.max() > 0:
             audio_array = audio_array / audio_array.max()
 
-        audio_inputs = self.audio_processor(audio_array, sampling_rate=16000, return_tensors="pt").to(self.audio_model.device)
+        audio_inputs = self.audio_processor(audio_array, sampling_rate=16000, return_tensors="pt").to(
+            self.audio_model.device
+        )
         audio_inputs = {k: v.to(self.audio_model.device) for k, v in audio_inputs.items()}
 
         generation_kwargs = {
@@ -1068,255 +1124,15 @@ class ServeCommand(BaseTransformersCLICommand):
             generated_ids = self.audio_model.generate(**audio_inputs, **generation_kwargs)
 
             # Decode the generated ids to text
-            transcription_text = self.audio_processor.batch_decode(generated_ids.sequences, skip_special_tokens=True)[0]
+            transcription_text = self.audio_processor.batch_decode(generated_ids.sequences, skip_special_tokens=True)[
+                0
+            ]
             transcription = Transcription(text=transcription_text)
             print(transcription.model_dump_json(exclude_none=True))
 
             yield f"{transcription.model_dump_json(exclude_none=True)}"
 
         return _generate_transcription()
-
-        return stream_chat_completion(generation_streamer, request_id)
-
-    def generate_response(self, req: dict) -> Generator[str, None, None]:
-        """
-        Generates an OpenAI Response using `generate`.
-
-        Args:
-            req (`dict`): The request to generate an OpenAI Response for.
-
-        Returns:
-            `Generator[str, None, None]`: A generator that yields the OpenAI Response events.
-        """
-        # TODO -- Implement non-streaming mode
-        if self.args.force_model is not None:
-            req["model"] = self.args.force_model
-
-        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
-        if update_model:
-            self.load_model_and_tokenizer(req["model"], self.args)
-
-        text = self.tokenizer.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
-        request_id = req.get("previous_response_id", "req_0")
-
-        generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config = create_generation_config_from_req(
-            req, model_generation_config=self.model.generation_config
-        )
-
-        last_kv_cache = None
-        if self.is_continuation(req) and not update_model:
-            last_kv_cache = self.last_kv_cache
-
-        generation_kwargs = {
-            "inputs": inputs,
-            "attention_mask": torch.ones_like(inputs),
-            "streamer": generation_streamer,
-            "generation_config": generation_config,
-            "return_dict_in_generate": True,
-            "past_key_values": last_kv_cache,
-        }
-
-        def stream_response(streamer, _request_id):
-            thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
-            sequence_number = 0
-            output_index = 0
-            content_index = 0
-
-            try:
-                thread.start()
-                created_at = time.time()  # the spec expects a unix timestamp in seconds
-
-                # We start by acknowledging the request (the request has `status="queued"`), and then by moving it to
-                # in progress (`status="in_progress"`)
-                response_created = ResponseCreatedEvent(
-                    type="response.created",
-                    sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="queued",
-                        model=self.loaded_model,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        object="response",
-                        tools=[],
-                        output=[],
-                        parallel_tool_calls=req.get("parallel_tool_calls", False),
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
-                    ),
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_created)
-
-                response_in_progress = ResponseInProgressEvent(
-                    type="response.in_progress",
-                    sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="in_progress",
-                        model=self.loaded_model,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        object="response",
-                        tools=[],
-                        output=[],
-                        parallel_tool_calls=req.get("parallel_tool_calls", False),
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
-                    ),
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_in_progress)
-
-                # Start the output item. Emit the assistant role to start the stream. Other chunks won't have a role,
-                # as it is implicit
-                response_output_item_added = ResponseOutputItemAddedEvent(
-                    type="response.output_item.added",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    item=ResponseOutputMessage(
-                        id=f"msg_{request_id}", type="message", status="in_progress", role="assistant", content=[]
-                    ),
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_output_item_added)
-
-                # Start the content part of the event
-                response_content_part_added = ResponseContentPartAddedEvent(
-                    type="response.content_part.added",
-                    item_id=f"msg_{request_id}",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    content_index=content_index,
-                    part=ResponseOutputText(type="output_text", text="", annotations=[]),
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_content_part_added)
-
-                # Stream the actual generated text
-                results = ""
-                for result in streamer:
-                    results += result
-                    response_output_text_delta = ResponseTextDeltaEvent(
-                        type="response.output_text.delta",
-                        item_id=f"msg_{request_id}",
-                        sequence_number=sequence_number,
-                        output_index=output_index,
-                        content_index=content_index,
-                        delta=result,
-                    )
-                    sequence_number += 1
-                    yield self.build_response_event(response_output_text_delta)
-
-                # Signal the end of the text generation
-                response_output_text_done = ResponseTextDoneEvent(
-                    type="response.output_text.done",
-                    item_id=f"msg_{request_id}",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    content_index=0,
-                    text=results,
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_output_text_done)
-
-                # Complete the content part
-                response_content_part_done = ResponseContentPartDoneEvent(
-                    type="response.content_part.done",
-                    item_id=f"msg_{request_id}",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    content_index=content_index,
-                    part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
-                )
-                sequence_number += 1
-                content_index += 1
-                yield self.build_response_event(response_content_part_done)
-
-                # Complete the output item
-                response_output_item_done = ResponseOutputItemDoneEvent(
-                    type="response.output_item.done",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    item=ResponseOutputMessage(
-                        id=f"msg_{request_id}",
-                        type="message",
-                        status="completed",
-                        role="assistant",
-                        content=[response_content_part_done.part],
-                        annotations=[],
-                    ),
-                )
-                sequence_number += 1
-                output_index += 1
-                yield self.build_response_event(response_output_item_done)
-
-                # Finally, Complete the event
-                response_completed = ResponseCompletedEvent(
-                    type="response.completed",
-                    sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="completed",
-                        model=self.loaded_model,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        output=[response_output_item_done.item],
-                        object="response",
-                        tools=[],
-                        parallel_tool_calls=req.get("parallel_tool_calls", False),
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
-                    ),
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_completed)
-
-                thread.join()
-            except Exception as e:
-                logger.error(f"Exception in response generation: {str(e)}")
-                error_event = ResponseErrorEvent(
-                    type="error",
-                    sequence_number=sequence_number,
-                    message=str(e),
-                )
-                sequence_number += 1
-                yield self.build_response_event(error_event)
-
-                response_failed = ResponseFailedEvent(
-                    type="response.failed",
-                    sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="failed",
-                        model=self.loaded_model,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        output=[],
-                        object="response",
-                        tools=[],
-                        parallel_tool_calls=False,
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
-                        error=ResponseError(
-                            code="server_error",
-                            message=str(e),
-                        ),
-                    ),
-                )
-                sequence_number += 1
-                yield self.build_response_event(response_failed)
-
-            finally:
-                thread.join()
-
-        return stream_response(generation_streamer, request_id)
 
     def is_continuation(self, req: dict) -> bool:
         """
