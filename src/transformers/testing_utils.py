@@ -1534,7 +1534,7 @@ def require_openai(test_case):
     """
     return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
 
-  
+
 def require_mistral_common(test_case):
     """
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
