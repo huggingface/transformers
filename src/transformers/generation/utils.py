@@ -1559,6 +1559,9 @@ class GenerationMixin(ContinuousMixin):
 
     def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        if is_torchdynamo_compiling():
+            return
+
         # If a `Cache` instance is passed, checks whether the model is compatible with it
         if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
             raise ValueError(
