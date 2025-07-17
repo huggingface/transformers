@@ -1963,7 +1963,15 @@ class EmbeddingAccessMixin:
             `nn.Module`: A torch module mapping hidden states to vocabulary.
         """
 
-        return getattr(self, "lm_head", None)
+        if not hasattr(self, "lm_head"):
+            return None
+        try:
+            # Speech / vision backbones raise here, so we return None.
+            # Legit use of get_input_embs?
+            self.get_input_embeddings()
+        except NotImplementedError:
+            return None
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         """
