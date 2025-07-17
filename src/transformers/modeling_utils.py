@@ -2720,7 +2720,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 sub_implementation = attn_implementation
                 if isinstance(attn_implementation, dict):
                     for subconfig_key in self.config.sub_configs:
-                        # We check for exact object match here, with `is`
+                        # We need to check for exact object match here, with `is`
                         if getattr(self.config, subconfig_key) is submodule.config:
                             sub_implementation = attn_implementation.get(
                                 subconfig_key, submodule.config._attn_implementation
