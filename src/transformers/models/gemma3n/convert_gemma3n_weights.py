@@ -18,9 +18,9 @@ r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
 python src/transformers/models/gemma3n/convert_gemma3n_weights.py \
     --variant='gemma3n_e4b' \
-    --tokenizer_path="$HOME/nano3/checkpoints/tokenizer/gemma-3n-tokenizer.model" \
-    --checkpoint_path="$HOME/nano3/checkpoints/g251_orbax/" \
-    --output_path="$HOME/nano3/checkpoints/g251_vision_encoder/"
+    --tokenizer_path="$HOME/tokenizers/gemma-3n-tokenizer.model" \
+    --checkpoint_path="$HOME/checkpoints/gemma-3n-orbax/" \
+    --output_path="$HOME/checkpoints/gemma-3n-safetensors/"
 """
 
 import json
@@ -552,8 +552,9 @@ def convert_vision_weights(
             converted_weight = weights
     elif _MOBILE_NET_CONV in path:
         if "Conv_0" in path:
-            converted_path = "conv_stem.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_path = ("conv_stem.conv.weight", "conv_stem.conv.bias")
+            converted_weight = weights.transpose(3, 2, 0, 1)
+            converted_weight = (converted_weight, np.zeros(converted_weight.shape[0]))
         elif "Normalize_0" in path:
             converted_path = "conv_stem.bn.weight"
             converted_weight = weights
@@ -567,7 +568,7 @@ def convert_vision_weights(
             converted_weight = weights
         elif "expand_conv" in path:
             converted_path += ".conv_exp.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         else:
             converted_path += ".conv_pwl.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -588,7 +589,7 @@ def convert_vision_weights(
             converted_weight = weights
         elif "key_dwconv" in path:
             converted_path += ".attn.key.down_conv.weight"
-            converted_weight = weights.transpose()
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "key_proj" in path:
             converted_path += ".attn.key.proj.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -600,7 +601,7 @@ def convert_vision_weights(
             converted_weight = weights.transpose()[:, :, None, None]
         elif "value_dwconv" in path:
             converted_path += ".attn.value.down_conv.weight"
-            converted_weight = weights.transpose()
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "value_proj" in path:
             converted_path += ".attn.value.proj.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -630,15 +631,18 @@ def convert_vision_weights(
             converted_weight = weights.transpose()[:, :, None, None]
         elif "middle_dwconv" in path:
             converted_path += ".dw_mid.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "project" in path:
             converted_path += ".pw_proj.conv.weight"
             converted_weight = weights.transpose()[:, :, None, None]
         elif "start_dwconv" in path:
             converted_path += ".dw_start.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
 
-    return [(converted_path, converted_weight)]
+    if isinstance(converted_path, (tuple, list)):
+        return zip(converted_path, converted_weight)
+    else:
+        return [(converted_path, converted_weight)]
 
 
 def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tensor]:
