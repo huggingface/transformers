@@ -21,6 +21,8 @@
     title: 🤗 Accelerate로 분산 학습 구성하기
   - local: peft
     title: 🤗 PEFT로 어댑터 로드 및 학습하기
+  - local: how_to_hack_models
+    title: 모델 구성 요소 맞춤 설정하기
   - local: model_sharing
     title: 만든 모델 공유하기
   - local: llm_tutorial
