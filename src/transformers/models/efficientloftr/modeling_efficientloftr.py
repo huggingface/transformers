@@ -75,30 +75,28 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.rope_type = config.rope_scaling["rope_type"]
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        self.inv_freq: torch.Tensor
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        inv_freq, _ = self.rope_init_fn(self.config, device)
+        inv_freq_expanded = inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
+
+        embed_height, embed_width = config.embedding_size
+        i_indices = torch.ones(embed_height, embed_width).cumsum(0).float().unsqueeze(-1)
+        j_indices = torch.ones(embed_height, embed_width).cumsum(1).float().unsqueeze(-1)
+
+        emb = torch.zeros(1, embed_height, embed_width, self.config.hidden_size // 2)
+        emb[:, :, :, 0::2] = i_indices * inv_freq_expanded
+        emb[:, :, :, 1::2] = j_indices * inv_freq_expanded
+
+        self.register_buffer("inv_freq", emb, persistent=False)
 
     @torch.no_grad()
     def forward(
         self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        _, _, height, width = x.shape
-        height = (height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
-        width = (width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
-
-        i_position_indices = torch.ones(height, width, device=x.device).cumsum(0).float().unsqueeze(-1)
-        j_position_indices = torch.ones(height, width, device=x.device).cumsum(1).float().unsqueeze(-1)
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, None, None, :].float().expand(1, 1, 1, -1).to(x.device)
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        emb = torch.zeros(1, height, width, self.config.hidden_size // 2)
-        emb[:, :, :, 0::2] = i_position_indices * inv_freq_expanded
-        emb[:, :, :, 1::2] = j_position_indices * inv_freq_expanded
-
-        sin = emb.sin()
-        cos = emb.cos()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            emb = self.inv_freq
+            sin = emb.sin()
+            cos = emb.cos()
 
         sin = sin.repeat_interleave(2, dim=-1)
         cos = cos.repeat_interleave(2, dim=-1)
