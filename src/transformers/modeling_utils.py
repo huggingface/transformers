@@ -2731,7 +2731,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 submodule.set_attn_implementation(sub_implementation)
                 subconfigs_changed.add(submodule.config.__class__)
 
-        # We need this as some old, badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
+        # We need this as some old, badly designed, models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
             subconfig = getattr(self.config, subconfig_key)
             requested_implementation = (
