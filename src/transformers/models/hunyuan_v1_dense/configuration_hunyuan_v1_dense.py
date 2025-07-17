@@ -130,6 +130,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
         class_num=0,
         pool_type="last",
         pad_id=-1,
+        head_dim=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -140,11 +141,12 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
 
+        self.head_dim = head_dim
         if attention_head_dim is not None:
             self.attention_head_dim = attention_head_dim
         else:
             self.attention_head_dim = self.hidden_size // num_attention_heads
-
+        assert self.head_dim == self.attention_head_dim
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
