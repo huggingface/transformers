@@ -265,7 +265,6 @@ def _lazy_imports(impl: Optional[str]):
     if impl == "flash_attention_2" or (impl is None and is_fa2 and not is_fa3):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
-        from flash_attn.layers.rotary import apply_rotary_emb
 
         return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, False
     if impl == "flash_attention_3" or (impl is None and is_fa3):
