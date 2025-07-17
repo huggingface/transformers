@@ -1055,6 +1055,8 @@
         title: Qwen2.5-VL
       - local: model_doc/qwen2_audio
         title: Qwen2Audio
+      - local: model_doc/voxtral
+        title: Voxtral
       - local: model_doc/qwen2_vl
         title: Qwen2VL
       - local: model_doc/sam
