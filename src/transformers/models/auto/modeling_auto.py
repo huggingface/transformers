@@ -1193,6 +1193,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForSequenceClassification"),
         ("stablelm", "StableLmForSequenceClassification"),
         ("starcoder2", "Starcoder2ForSequenceClassification"),
+        ("state", "StateEmbeddingForSequenceClassification"),
         ("t5", "T5ForSequenceClassification"),
         ("t5gemma", "T5GemmaForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
