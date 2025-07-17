@@ -5719,7 +5719,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
         else:
-            self.initialize_weights()
+            try:
+                all_params = [p for p in self.parameters() if p is not None]
+                if all_params and not any(p.dtype.is_floating_point for p in all_params):
+                    logger.info("Skipping weight initialization for quantized model (non-floating-point dtype).")
+                    skip_weight_initialization = True
+                else:
+                    skip_weight_initialization = False
+            except Exception:
+                skip_weight_initialization = False
+
+            if not skip_weight_initialization:
+                self.initialize_weights()
+            else:
+                logger.info("Weight initialization skipped.")
+
 
     def get_parameter_or_buffer(self, target: str):
         """
