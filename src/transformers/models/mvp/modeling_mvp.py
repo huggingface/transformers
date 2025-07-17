@@ -486,7 +486,7 @@ class MvpPrompt(nn.Module):
 
 @auto_docstring
 class MvpPreTrainedModel(PreTrainedModel):
-    config_class = MvpConfig
+    config: MvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 

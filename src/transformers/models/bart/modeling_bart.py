@@ -484,7 +484,7 @@ class BartClassificationHead(nn.Module):
 
 @auto_docstring
 class BartPreTrainedModel(PreTrainedModel):
-    config_class = BartConfig
+    config: BartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]

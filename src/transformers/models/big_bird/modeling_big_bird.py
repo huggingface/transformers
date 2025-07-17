@@ -1709,7 +1709,7 @@ class BigBirdPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class BigBirdPreTrainedModel(PreTrainedModel):
-    config_class = BigBirdConfig
+    config: BigBirdConfig
     load_tf_weights = load_tf_weights_in_big_bird
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True

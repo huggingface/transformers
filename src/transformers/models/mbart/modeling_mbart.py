@@ -485,7 +485,7 @@ class MBartClassificationHead(nn.Module):
 
 @auto_docstring
 class MBartPreTrainedModel(PreTrainedModel):
-    config_class = MBartConfig
+    config: MBartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MBartDecoderLayer", "MBartEncoderLayer", "MBartAttention"]

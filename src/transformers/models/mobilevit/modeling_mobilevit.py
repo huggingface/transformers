@@ -623,7 +623,7 @@ class MobileViTEncoder(nn.Module):
 
 @auto_docstring
 class MobileViTPreTrainedModel(PreTrainedModel):
-    config_class = MobileViTConfig
+    config: MobileViTConfig
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

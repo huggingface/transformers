@@ -435,7 +435,7 @@ class SegformerEncoder(nn.Module):
 
 @auto_docstring
 class SegformerPreTrainedModel(PreTrainedModel):
-    config_class = SegformerConfig
+    config: SegformerConfig
     base_model_prefix = "segformer"
     main_input_name = "pixel_values"
 

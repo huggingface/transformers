@@ -113,7 +113,7 @@ class KyutaiSpeechToTextFlexibleLinear(nn.Module):
 
 @auto_docstring
 class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
-    config_class = KyutaiSpeechToTextConfig
+    config: KyutaiSpeechToTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["KyutaiSpeechToTextDecoderLayer", "MimiTransformerLayer"]
