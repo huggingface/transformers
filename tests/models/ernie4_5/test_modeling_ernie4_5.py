@@ -32,10 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         Ernie4_5Config,
         Ernie4_5ForCausalLM,
         Ernie4_5Model,
-        Ernie4_5Tokenizer,
     )
     from transformers.models.ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding
 
@@ -99,7 +99,7 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
 
-        tokenizer = Ernie4_5Tokenizer.from_pretrained("baidu/ERNIE-4.5-0.3B-PT")
+        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-0.3B-PT")
         model = Ernie4_5ForCausalLM.from_pretrained(
             "baidu/ERNIE-4.5-0.3B-PT", device_map="auto", torch_dtype=torch.bfloat16
         )

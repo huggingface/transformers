@@ -37,9 +37,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         Ernie4_5_MoEForCausalLM,
         Ernie4_5_MoEModel,
-        Ernie4_5Tokenizer,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -181,7 +181,7 @@ class Ernie4_5_MoEIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant:  I don't have consciousness in the way humans do. I'm a text-based AI created to process and generate responses based on patterns in data."  # fmt: skip
 
         model = self.get_model()
-        tokenizer = Ernie4_5Tokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT", use_fast=False)
         prompt = "Hey, are you conscious? Can you talk to me?"
         messages = [{"role": "user", "content": prompt}]
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
