@@ -1704,7 +1704,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConverter,
     "Phi3Tokenizer": LlamaConverter,
-    "Ernie4_5Tokenizer": LlamaConverter,
 }
 
 
