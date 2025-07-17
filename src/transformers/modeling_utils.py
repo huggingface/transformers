@@ -2739,15 +2739,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if not isinstance(attn_implementation, dict)
                 else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
             )
-            # This means we did not perform any check above for this particular subconfig
+            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
             if (
                 subconfig.__class__ not in subconfigs_changed
                 and requested_implementation != subconfig._attn_implementation
+                and requested_implementation in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
             ):
                 subconfig._attn_implementation_internal = requested_implementation
                 logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` without "
-                    "finding the associated sub-model. For this reason we could not check if it is valid and the model supports it. "
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` "
+                    "without finding the associated sub-model. For this reason we could not check if the model supports it. "
                     "You may encounter undefined behavior."
                 )
 
