@@ -55,15 +55,14 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class JanusPreTrainedModel(PreTrainedModel):
-    config_class = JanusConfig
+    config: JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
 
@@ -514,7 +513,7 @@ class JanusVisionEncoder(nn.Module):
 @auto_docstring
 class JanusVisionModel(JanusPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = JanusVisionConfig
+    config: JanusVisionConfig
 
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
@@ -933,7 +932,7 @@ class JanusVQVAEDecoder(nn.Module):
     """
 )
 class JanusVQVAE(JanusPreTrainedModel):
-    config_class = JanusVQVAEConfig
+    config: JanusVQVAEConfig
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",

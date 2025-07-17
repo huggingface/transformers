@@ -809,7 +809,7 @@ class DabDetrMLP(nn.Module):
 # Modified from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DabDetr
 @auto_docstring
 class DabDetrPreTrainedModel(PreTrainedModel):
-    config_class = DabDetrConfig
+    config: DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]

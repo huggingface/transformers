@@ -133,7 +133,7 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+    for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 

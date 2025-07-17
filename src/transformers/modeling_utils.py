@@ -33,7 +33,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -231,6 +231,7 @@ TORCH_INIT_FUNCTIONS = {
 VLMS = [
     "aria",
     "ayavision",
+    "colpali",
     "emu3",
     "fuyu",
     "gotocr2",
@@ -1394,7 +1395,7 @@ def _get_torch_dtype(
 
 def _get_device_map(
     model: "PreTrainedModel",
-    device_map: Optional[Union[str, dict]],
+    device_map: Optional[Union[dict, str]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
@@ -1970,12 +1971,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
-    _supports_cache_class = False
+    # Has support `torch.compile(fullgraph=True)`
     _supports_static_cache = False
-
-    # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
-    _supports_quantized_cache = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
@@ -2063,6 +2060,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         return "pt"
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # For BC we keep the original `config_class` definition in case
+        # there is a `config_class` attribute (e.g. remote code models),
+        # otherwise we derive it from the annotated `config` attribute.
+
+        # defined in this particular subclass
+        child_annotation = cls.__dict__.get("__annotations__", {}).get("config", None)
+        child_attribute = cls.__dict__.get("config_class", None)
+
+        # defined in the class (this subclass or any parent class)
+        full_annotation = get_type_hints(cls).get("config", None)
+        full_attribute = cls.config_class
+
+        # priority (child class_config -> child annotation -> global class_config -> global annotation)
+        if child_attribute is not None:
+            cls.config_class = child_attribute
+        elif child_annotation is not None:
+            cls.config_class = child_annotation
+        elif full_attribute is not None:
+            cls.config_class = full_attribute
+        elif full_annotation is not None:
+            cls.config_class = full_annotation
+
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
@@ -2145,7 +2166,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-            for _, v in self._tp_plan.items():
+            for v in self._tp_plan.values():
                 if v not in ALL_PARALLEL_STYLES:
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
@@ -2252,7 +2273,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
+    def _check_attn_implementation(cls, attn_implementation: Union[dict, str]) -> Union[dict, str]:
         """
         Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
@@ -2300,7 +2321,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         return attn_implementation
 
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
         """
         Checks and dispatches to the requested attention implementation.
         """
@@ -2824,7 +2845,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
-                for name, module in decoder_modules.items():
+                for name in decoder_modules.keys():
                     if name.isdigit():
                         encoder_name = str(int(name) + encoder_layer_pos)
                         decoder_name = name
@@ -3899,12 +3920,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 # init state_dict for this shard
                 shard_state_dict = dict.fromkeys(shard, "")
                 for module_name in shard:
-                    # skip to collect this weight again
-                    if shard_state_dict.get(module_name) != "":
-                        continue
-                    module = module_map[module_name]
-                    # update state dict with onloaded parameters
-                    shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
+                    # note that get_state_dict_from_offload can update with meta tensors
+                    # if both a parent module and its descendant are offloaded
+                    tensor = shard_state_dict[module_name]
+                    if tensor == "" or (isinstance(tensor, torch.Tensor) and tensor.device.type == "meta"):
+                        # update state dict with onloaded parameters
+                        module = module_map[module_name]
+                        shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
 
                 # assign shard to be the completed state dict
                 shard = shard_state_dict
@@ -5808,7 +5830,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if is_accelerator_device(device)
     }
-    if not len(accelerator_device_map):
+    if not accelerator_device_map:
         return
 
     tp_plan_regex = (

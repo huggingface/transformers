@@ -349,8 +349,8 @@ class Pix2StructVisionEncoder(nn.Module):
 
 @auto_docstring
 class Pix2StructPreTrainedModel(PreTrainedModel):
-    config_class = Pix2StructConfig
-    _supports_cache_class = True
+    config: Pix2StructConfig
+
     _supports_static_cache = False
 
     @property
@@ -474,7 +474,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
-    config_class = Pix2StructVisionConfig
+    config: Pix2StructVisionConfig
     main_input_name = "flattened_patches"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
@@ -1013,7 +1013,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
     """
 )
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
-    config_class = Pix2StructTextConfig
+    config: Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
     _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
@@ -1036,37 +1036,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
         self.gradient_checkpointing = False
-
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._reorder_cache
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past_key_values
-
-        reordered_decoder_past = ()
-        for layer_past_states in past_key_values:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
-                )
-
-            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
-                raise ValueError(
-                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
-                )
-            if len(reordered_layer_past_states) != len(layer_past_states):
-                raise ValueError(
-                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
-                )
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1427,7 +1396,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     """
 )
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMixin):
-    config_class = Pix2StructConfig
+    config: Pix2StructConfig
     main_input_name = "flattened_patches"
     _tied_weights_keys = ["decoder.lm_head.weight"]
 
