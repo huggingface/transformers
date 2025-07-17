@@ -310,15 +310,21 @@ class VoxtralProcessor(ProcessorMixin):
         audio_kwargs = output_kwargs["audio_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
 
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors."
-            )
-        elif sampling_rate != audio_kwargs["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
+        is_str = isinstance(audio, str)
+        is_list_of_str = all(isinstance(el, str) for el in audio)
+        is_list_of_audio = not (is_str or is_list_of_str)
 
+        if is_list_of_audio:
+            if sampling_rate is None:
+                logger.warning_once(
+                    f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors."
+                )
+            elif sampling_rate != audio_kwargs["sampling_rate"]:
+                raise ValueError(
+                    f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+                )
+
+        sampling_rate = audio_kwargs["sampling_rate"]
         return_dict = common_kwargs.pop("return_dict", False)
         tokenize = common_kwargs.pop("tokenize", False)
 
@@ -332,10 +338,10 @@ class VoxtralProcessor(ProcessorMixin):
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         # validate audio input
-        if isinstance(audio, str):
-            audio = [load_audio_as(audio, return_format="buffer", force_mono=True)]
-        elif all(isinstance(el, str) for el in audio):
-            audio = [load_audio_as(el, return_format="buffer", force_mono=True) for el in audio]
+        if is_str:
+            audio = [load_audio_as(audio, return_format="buffer", force_mono=True, sampling_rate=sampling_rate)]
+        elif is_list_of_str:
+            audio = [load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio]
         else:
             audio = make_list_of_audio(audio)
             if len(audio) != len(format):

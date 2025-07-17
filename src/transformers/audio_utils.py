@@ -80,6 +80,7 @@ def load_audio_as(
     return_format: str,
     timeout: Optional[int] = None,
     force_mono: bool = False,
+    sampling_rate: Optional[int] = None,
 ) -> Union[str, dict[str, Any], io.BytesIO, None]:
     """
     Load audio from either a local file path or URL and return in specified format.
@@ -92,6 +93,7 @@ def load_audio_as(
             - "buffer": BytesIO object
         timeout (`int`, *optional*): Timeout for URL requests in seconds
         force_mono (`bool`): Whether to convert stereo audio to mono
+        sampling_rate (`int`, *optional*): If provided, the audio will be resampled to the specified sampling rate.
 
     Returns:
         `Union[str, Dict[str, Any], io.BytesIO, None]`:
@@ -119,8 +121,17 @@ def load_audio_as(
         with io.BytesIO(audio_bytes) as audio_file:
             with sf.SoundFile(audio_file) as f:
                 audio_array = f.read(dtype="float32")
-                sampling_rate = f.samplerate
+                original_sr = f.samplerate
                 audio_format = f.format
+                if sampling_rate is not None and sampling_rate != original_sr:
+                    # Resample audio to target sampling rate
+                    audio_array = librosa.resample(
+                        y=audio_array,
+                        orig_sr=original_sr,
+                        target_sr=sampling_rate
+                    )
+                else:
+                    sampling_rate = original_sr
 
         # Convert to mono if needed
         if force_mono and audio_array.ndim != 1:
