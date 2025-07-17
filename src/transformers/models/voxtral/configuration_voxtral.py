@@ -42,9 +42,9 @@ class VoxtralEncoderConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*):
             Number of key and value heads for each attention layer. If None, defaults to `num_attention_heads`.
-        scale_embedding (`bool`, *optional*, defaults to False):
+        scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by dividing by sqrt(hidden_size) if True.
-        activation_function (`str`, *optional*, defaults to "gelu"):
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel features used per input features. Should correspond to the value used in the
@@ -57,8 +57,6 @@ class VoxtralEncoderConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         head_dim (`int`, *optional*):
             Dimensionality of each attention head. If not set, defaults to hidden_size // num_attention_heads.
-
-    Example:
 
     ```python
     >>> from transformers import VoxtralEncoderConfig, VoxtralEncoder
@@ -148,10 +146,8 @@ class VoxtralConfig(PretrainedConfig):
             The config object or dictionary of the text model.
         audio_token_id (`int`, *optional*):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to "gelu"):
+        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function (function or string) in the multi-modal projector.
-
-    Example:
 
     ```python
     >>> from transformers import VoxtralForConditionalGeneration, VoxtralConfig
