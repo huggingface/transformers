@@ -1395,7 +1395,7 @@ def _get_torch_dtype(
 
 def _get_device_map(
     model: "PreTrainedModel",
-    device_map: Optional[Union[str, dict]],
+    device_map: Optional[Union[dict, str]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
@@ -2166,7 +2166,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-            for _, v in self._tp_plan.items():
+            for v in self._tp_plan.values():
                 if v not in ALL_PARALLEL_STYLES:
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
@@ -2273,7 +2273,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
+    def _check_attn_implementation(cls, attn_implementation: Union[dict, str]) -> Union[dict, str]:
         """
         Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
@@ -2321,7 +2321,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         return attn_implementation
 
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
         """
         Checks and dispatches to the requested attention implementation.
         """
@@ -2845,7 +2845,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
-                for name, module in decoder_modules.items():
+                for name in decoder_modules.keys():
                     if name.isdigit():
                         encoder_name = str(int(name) + encoder_layer_pos)
                         decoder_name = name
@@ -5830,7 +5830,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if is_accelerator_device(device)
     }
-    if not len(accelerator_device_map):
+    if not accelerator_device_map:
         return
 
     tp_plan_regex = (
