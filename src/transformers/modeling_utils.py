@@ -2681,13 +2681,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
                 submodel will dispatch the corresponding value.
         """
-        if not self._can_set_attn_implementation():
-            raise ValueError(
-                f"{self.__class__.__name__} does not support setting its attention implementation dynamically, because it "
-                "does not follow the functional approach based on AttentionInterface "
-                "(see https://huggingface.co/docs/transformers/en/attention_interface)"
-            )
-
         requested_implementation = (
             attn_implementation
             if not isinstance(attn_implementation, dict)
@@ -2697,17 +2690,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
         # warn the user that the requested value is not working
         if requested_implementation != self.config._attn_implementation:
-            try:
-                applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False
-                )
-                # Apply the change (on the internal attr, to avoid setting it recursively)
-                self.config._attn_implementation_internal = applicable_attn_implementation
-            except (ValueError, ImportError) as e:
+            # In this case, raise
+            if not self._can_set_attn_implementation():
                 logger.warning(
-                    f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
+                    f"{self.__class__.__name__} does not support setting its attention implementation dynamically, because it "
+                    "does not follow the functional approach based on AttentionInterface "
+                    "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                 )
+            else:
+                try:
+                    applicable_attn_implementation = self._check_and_adjust_attn_implementation(
+                        requested_implementation, is_init_check=False
+                    )
+                    # Apply the change (on the internal attr, to avoid setting it recursively)
+                    self.config._attn_implementation_internal = applicable_attn_implementation
+                except (ValueError, ImportError) as e:
+                    logger.warning(
+                        f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
+                    )
 
+        subconfigs_changed = set()
         # Apply it to all submodels as well
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
@@ -2727,6 +2729,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                             )
                             break
                 submodule.set_attn_implementation(sub_implementation)
+                subconfigs_changed.add(submodule.config.__class__)
+
+        # We need this as some old, badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
+        for subconfig_key in self.config.sub_configs:
+            subconfig = getattr(self.config, subconfig_key)
+            requested_implementation = (
+                attn_implementation
+                if not isinstance(attn_implementation, dict)
+                else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
+            )
+            if subconfig.__class__ not in subconfigs_changed and requested_implementation != subconfig._attn_implementation:
+                subconfig._attn_implementation_internal = requested_implementation
+                logger.warning(
+                    f"We set the attention implementation for the sub-config {subconfig_key} without finding the associated "
+                    "sub-model. For this reason we could not check if the model supports it. You may encounter undefined behavior."
+                )
 
     def enable_input_require_grads(self):
         """
