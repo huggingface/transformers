@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, torch_int
+from ...utils import TransformersKwargs, auto_docstring, torch_int
 from .configuration_mlcd import MLCDVisionConfig
 
 
@@ -171,7 +171,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -223,12 +223,11 @@ def apply_rotary_pos_emb_vision(
 
 
 class MLCDAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper
-    Multi-headed attention with RoPE. Refer to papers:
-        - Attention is all you need:
-            https://huggingface.co/papers/1706.03762
-        - RoFormer: Enhanced Transformer with Rotary Position Embedding:
-            https://huggingface.co/papers/2104.09864
+    """Multi-headed attention with RoPE. Refer to papers:
+    - Attention is all you need:
+        https://huggingface.co/papers/1706.03762
+    - RoFormer: Enhanced Transformer with Rotary Position Embedding:
+        https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config: MLCDVisionConfig):
@@ -370,7 +369,6 @@ class MLCDEncoder(nn.Module):
         self.layers = nn.ModuleList([MLCDEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -507,10 +505,10 @@ class MLCDVisionTransformer(nn.Module):
 
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -551,7 +549,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     """
 )
 class MLCDVisionModel(MLCDPreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MLCDEncoderLayer"]
 

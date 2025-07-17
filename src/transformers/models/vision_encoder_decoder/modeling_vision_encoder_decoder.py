@@ -63,12 +63,12 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
-    config_class = VisionEncoderDecoderConfig
+    config: VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
@@ -596,10 +596,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
 
 __all__ = ["VisionEncoderDecoderModel"]

@@ -21,7 +21,6 @@ from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.init import _calculate_fan_in_and_fan_out
@@ -31,11 +30,8 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, torch_int
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 def _trunc_normal_(tensor, mean, std, a, b):
@@ -372,7 +368,7 @@ class SiglipAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -388,13 +384,7 @@ class SiglipAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -409,9 +399,6 @@ class SiglipAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -482,18 +469,17 @@ class SiglipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class SiglipPreTrainedModel(PreTrainedModel):
-    config_class = SiglipConfig
+    config: SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
         "SiglipTextEmbeddings",
-        "SiglipEncoderLayer",
         "SiglipVisionEmbeddings",
         "SiglipEncoderLayer",
         "SiglipMultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -677,7 +663,7 @@ class SiglipTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # Assuming "sticky" EOS tokenization, last token is always EOS.
+        # The model uses the last token's hidden state, which may be padding.
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
 
@@ -695,7 +681,7 @@ class SiglipTextTransformer(nn.Module):
     """
 )
 class SiglipTextModel(SiglipPreTrainedModel):
-    config_class = SiglipTextConfig
+    config: SiglipTextConfig
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -823,7 +809,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
     """
 )
 class SiglipVisionModel(SiglipPreTrainedModel):
-    config_class = SiglipVisionConfig
+    config: SiglipVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SiglipVisionConfig):
@@ -877,7 +863,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
 @auto_docstring
 class SiglipModel(SiglipPreTrainedModel):
-    config_class = SiglipConfig
+    config: SiglipConfig
 
     def __init__(self, config: SiglipConfig):
         super().__init__(config)

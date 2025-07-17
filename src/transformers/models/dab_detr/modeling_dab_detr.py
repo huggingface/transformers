@@ -809,7 +809,7 @@ class DabDetrMLP(nn.Module):
 # Modified from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DabDetr
 @auto_docstring
 class DabDetrPreTrainedModel(PreTrainedModel):
-    config_class = DabDetrConfig
+    config: DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
@@ -829,6 +829,9 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -841,6 +844,8 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias_value = -math.log((1 - prior_prob) / prior_prob)
             module.class_embed.bias.data.fill_(bias_value)
+        elif isinstance(module, nn.PReLU):
+            module.reset_parameters()
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DabDetr,DETR->ConditionalDETR
