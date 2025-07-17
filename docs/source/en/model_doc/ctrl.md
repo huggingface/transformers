@@ -1,26 +1,13 @@
-<!--
-Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
--->
-
-<!-- Add badges -->
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/huggingface/transformers.svg" />
-        <img alt="Model: CTRL" src="https://img.shields.io/badge/model-ctrl-blue.svg" />
-    </div>
-</div>
+---
+license: apache-2.0
+tags:
+- text-generation
+- causal-lm
+- control-codes
+library_name: transformers
+model_type: ctrl
+pipeline_tag: text-generation
+---
 
 # [CTRL](https://arxiv.org/abs/1909.05858)
 
@@ -35,12 +22,13 @@ You can find all the original CTRL checkpoints under the [CTRL model page on Hug
 > This model was contributed by [salesforce](https://huggingface.co/salesforce).  
 > Click on the [CTRL](https://huggingface.co/ctrl) model in the right sidebar for more examples of how to apply CTRL to different text generation tasks.
 
-The example below demonstrates how to use CTRL for text generation using `pipeline`, `AutoModel`, and `transformers-cli`.
+## Usage
 
-<hfoptions id="usage">
-<hfoption id="Pipeline">
+<hfoptions>
 
-```py
+<hfoption id="pipeline">
+
+```python
 from transformers import pipeline
 
 generator = pipeline("text-generation", model="ctrl")
