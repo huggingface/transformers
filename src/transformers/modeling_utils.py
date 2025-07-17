@@ -2746,8 +2746,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             ):
                 subconfig._attn_implementation_internal = requested_implementation
                 logger.warning(
-                    f"We set the attention implementation for the sub-config {subconfig_key} without finding the associated "
-                    "sub-model. For this reason we could not check if the model supports it. You may encounter undefined behavior."
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` without "
+                    "finding the associated sub-model. For this reason we could not check if it is valid and the model supports it. "
+                    "You may encounter undefined behavior."
                 )
 
     def enable_input_require_grads(self):
