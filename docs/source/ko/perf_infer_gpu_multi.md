@@ -292,7 +292,7 @@ DTensor의 가장 중요한 부분은 `placement` 속성입니다. 이는 PyTorc
     bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Shard(-1)]) # 유일한 차원에 걸쳐 분할
     ```
 
-    이 예시는 행 방향 분할을 위해 다양한 차원에 걸쳐 가중치를 분할하는 방법을 보여줍니다.
+    이 예시는 행 방향 분할을 위해 여러 차원에 걸쳐 가중치를 분할하는 방법을 보여줍니다.
 
     ```python
     weight = ...
