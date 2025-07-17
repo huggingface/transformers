@@ -1,34 +1,30 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "torch",
+#     "transformers"
+# ]
+#
+# [tool.uv.sources]
+# transformers = { path = ".", editable = true }
+# ///
 import torch
-from transformers import StateEmbeddingModel, StateEmbeddingConfig
-
-# Make reproducible
-torch.manual_seed(42)
-
-# Initializing a State Embedding style configuration
-configuration = StateEmbeddingConfig()
-
-# # Initializing a model from the State Embedding style configuration
-model = StateEmbeddingModel(configuration)
-
-# # Accessing the model configuration
-configuration = model.config
-
-print(configuration)
-print(model)
-
-# Example input for the model
-input_ids = torch.ones((1, 1, 5120), dtype=torch.float32)
-outputs = model(input_ids)
-print(outputs["gene_output"].sum()) # tensor(3.4709, grad_fn=<SumBackward0>)
+from transformers import StateEmbeddingModel
 
 
-#### TODO
+model_name = "arcinstitute/SE-600M"
+model = StateEmbeddingModel.from_pretrained(model_name)
 
-# from transformers import AutoTokenizer, StateModel, set_seed
+torch.manual_seed(0)
+input_ids = torch.randn((1, 1, 5120), dtype=torch.float32)
+mask = torch.ones((1, 1, 5120), dtype=torch.bool)
+mask[:, :, 2560:] = False
+print("Input sum:\t", input_ids.sum())
+print("Mask sum:\t", mask.sum())
 
-# from transformers import AutoModelForSequenceClassification
+outputs = model(input_ids, mask)
+print("Output sum:\t", outputs["gene_output"].sum())
 
-# model = AutoModelForSequenceClassification.from_pretrained("arcinstitute/SE-600M")
-
-# print(model)
-
+# Input sum:	tensor(-38.6611)
+# Mask sum:	    tensor(2560)
+# Output sum:	tensor(-19.6819, grad_fn=<SumBackward0>)
