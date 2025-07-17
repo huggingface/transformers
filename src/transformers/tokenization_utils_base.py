@@ -2750,6 +2750,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         truncation: Union[bool, str, TruncationStrategy, None] = None,
         verbose: bool = True,
     ) -> PaddingStrategy:
+        """
+        Convert the padding argument to a PaddingStrategy.
+
+        Args:
+            padding : (`bool`, `str`, or [`~utils.PaddingStrategy`])
+                Padding strategy to convert to a PaddingStrategy enum.
+                If `True`, defaults to `PaddingStrategy.LONGEST`.
+            max_length : (`int`, *optional*, defaults to `None`)
+                Maximum length to pad to.
+            truncation : (`bool`, `str`, [`~utils.TruncationStrategy`], *optional*, defaults to `None`)
+                Truncation strategy to use, by default None
+            verbose : (`bool`, *optional*, defaults to `True`)
+                Whether to print warnings, by default True
+
+        Returns:
+            [`~utils.PaddingStrategy`]: The padding strategy to use.
+        """
         if padding is not False:
             if padding is True:
                 if verbose:
@@ -2772,6 +2789,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @staticmethod
     def convert_to_truncation_strategy(truncation: Union[bool, str, TruncationStrategy, None]) -> TruncationStrategy:
+        """
+        Convert the truncation argument to a [`~utils.TruncationStrategy`].
+
+        Args:
+            truncation : (`bool`, `str`, [`~utils.TruncationStrategy`], *optional*, defaults to `None`)
+                Truncation strategy to convert to a [`~utils.TruncationStrategy`].
+                If `True`, defaults to `TruncationStrategy.LONGEST_FIRST`.
+
+        Returns:
+            [`~utils.TruncationStrategy`]: The truncation strategy to use.
+        """
         if truncation is not False and truncation is not None:
             if truncation is True:
                 truncation_strategy = (

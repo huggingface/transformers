@@ -445,20 +445,14 @@ def _torch_collate_batch(
     # Check if padding is necessary.
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
 
-    if (
-        not are_tensors_same_length
-        and padding == PaddingStrategy.DO_NOT_PAD
-    ):
+    if not are_tensors_same_length and padding == PaddingStrategy.DO_NOT_PAD:
         raise ValueError(
             "You are trying to collate a batch of examples with different lengths, but the padding strategy is set to"
             " 'do_not_pad'. Please set the padding strategy to 'longest' or 'max_length' or provide inputs of the"
             " same length."
         )
 
-    if (
-        are_tensors_same_length
-        and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
-    ):
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         if not isinstance(examples, torch.Tensor):
             return torch.stack(examples, dim=0)
 
@@ -484,12 +478,12 @@ def _torch_collate_batch(
 
 
 def _tf_collate_batch(
-        examples, 
-        tokenizer: PreTrainedTokenizerBase, 
-        padding: PaddingStrategy = PaddingStrategy.LONGEST, 
-        pad_to_multiple_of: Optional[int] = None,
-        max_length: Optional[int] = None
-    ):
+    examples,
+    tokenizer: PreTrainedTokenizerBase,
+    padding: PaddingStrategy = PaddingStrategy.LONGEST,
+    pad_to_multiple_of: Optional[int] = None,
+    max_length: Optional[int] = None,
+):
     import tensorflow as tf
 
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
@@ -500,20 +494,14 @@ def _tf_collate_batch(
     # Check if padding is necessary.
     length_of_first = len(examples[0])
     are_tensors_same_length = all(len(x) == length_of_first for x in examples)
-    if (
-        not are_tensors_same_length
-        and padding == PaddingStrategy.DO_NOT_PAD
-    ):
+    if not are_tensors_same_length and padding == PaddingStrategy.DO_NOT_PAD:
         raise ValueError(
             "You are trying to collate a batch of examples with different lengths, but the padding strategy is set to"
             " 'do_not_pad'. Please set the padding strategy to 'longest' or 'max_length' or provide inputs of the"
             " same length."
         )
 
-    if (
-        are_tensors_same_length 
-        and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
-    ):
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return tf.stack(examples, axis=0)
 
     # If yes, check if we have a `pad_token`.
@@ -542,12 +530,12 @@ def _tf_collate_batch(
 
 
 def _numpy_collate_batch(
-        examples, 
-        tokenizer: PreTrainedTokenizerBase,
-        padding: PaddingStrategy = PaddingStrategy.LONGEST,
-        pad_to_multiple_of: Optional[int] = None,
-        max_length: Optional[int] = None
-    ):
+    examples,
+    tokenizer: PreTrainedTokenizerBase,
+    padding: PaddingStrategy = PaddingStrategy.LONGEST,
+    pad_to_multiple_of: Optional[int] = None,
+    max_length: Optional[int] = None,
+):
     """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple)):
@@ -556,20 +544,14 @@ def _numpy_collate_batch(
     # Check if padding is necessary.
     length_of_first = len(examples[0])
     are_tensors_same_length = all(len(x) == length_of_first for x in examples)
-    if (
-        not are_tensors_same_length
-        and padding == PaddingStrategy.DO_NOT_PAD
-    ):
+    if not are_tensors_same_length and padding == PaddingStrategy.DO_NOT_PAD:
         raise ValueError(
             "You are trying to collate a batch of examples with different lengths, but the padding strategy is set to"
             " 'do_not_pad'. Please set the padding strategy to 'longest' or 'max_length' or provide inputs of the"
             " same length."
         )
 
-    if (
-        are_tensors_same_length 
-        and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0)
-    ):
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return np.stack(examples, axis=0)
 
     # If yes, check if we have a `pad_token`.
@@ -882,6 +864,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             Whether or not to use masked language modeling. If set to `False`, the labels are the same as the inputs
             with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for non-masked
             tokens and the value to predict for the masked token.
+        whole_word_mask (`bool`, *optional*, defaults to `False`):
+            Whether or not to use whole word masking. If set to `True`, all tokens in a word are masked together.
+            Depends on offset mappings which are only natively available with fast tokenizers.
+            Only works when `mlm` is set to `True`.
         mlm_probability (`float`, *optional*, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input, when `mlm` is set to `True`.
         mask_replace_prob (`float`, *optional*, defaults to 0.8):
@@ -1273,7 +1259,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             ]
 
         if self.whole_word_mask:
-            word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(tolist(offset_mapping), tolist(special_tokens_mask))
+            word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(
+                tolist(offset_mapping), tolist(special_tokens_mask)
+            )
             no_mask_mask = np.array(no_mask_mask, dtype=bool)
         else:
             no_mask_mask = (
@@ -1406,7 +1394,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 if word_idx == 0:
                     continue
 
-                # If the current token is the same as the previous token's word id 
+                # If the current token is the same as the previous token's word id
                 # and the previous token is masked, then mask the current token too
                 if (id == word_ids[word_idx - 1]) and (mask_values[word_idx - 1]):
                     # Previous token for same word is masked, so this one should be too
@@ -1420,15 +1408,21 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     """
     Data collator used for language modeling that masks entire words.
 
-    - collates batches of tensors, honoring their tokenizer's pad_token
-    - preprocesses batches for masked language modeling
+    - Collates batches of tensors, honoring their tokenizer's pad_token
+    - Preprocesses batches for masked language modeling with whole word masking
+
+    <Tip>
+    This implementation depends on offset mappings, which only natively available with fast tokenizers.
+    If you are using a slow tokenizer, please ensure that you have preprocessed your dataset to
+    include the `offset_mapping` field in each example.
+    </Tip>
     """
 
     def __init__(self, *args, **kwargs):
         warnings.warn(
             "DataCollatorForWholeWordMask is deprecated and will be removed in a future version, you can now use "
             "DataCollatorForLanguageModeling with whole_word_mask=True instead.",
-            FutureWarning,
+            DeprecationWarning,
         )
         super().__init__(*args, **kwargs)
         self.mlm = True  # Force masked language modeling

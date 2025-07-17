@@ -30,8 +30,8 @@ from transformers import (
     DataCollatorWithFlattening,
     DataCollatorWithPadding,
     default_data_collator,
-    is_torch_available,
     is_tf_available,
+    is_torch_available,
     set_seed,
 )
 from transformers.testing_utils import require_torch
@@ -531,9 +531,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
         input_tokens = [f"token_{i}" for i in range(8)]
         tokenizer.add_tokens(input_tokens)
-        features = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
 
         data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
 
@@ -543,8 +541,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
         # Features can already be tensors
         features = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("np") 
-            for _ in range(2)
+            tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("np") for _ in range(2)
         ]
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 10))
@@ -553,7 +550,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         if is_torch_available():
             # Features can already be tensors
             features = [
-                tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("pt") 
+                tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("pt")
                 for _ in range(2)
             ]
             data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
@@ -563,9 +560,10 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
         if is_tf_available():
             import tensorflow as tf
+
             # Features can already be tensors
             features = [
-                tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("tf") 
+                tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("tf")
                 for _ in range(2)
             ]
             data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="tf")
@@ -578,9 +576,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
         input_tokens = [f"token_{i}" for i in range(998)]
         tokenizer.add_tokens(input_tokens)
-        features = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
 
         # check if seed is respected between two different DataCollatorForWholeWordMask instances
         data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="np")
@@ -598,9 +594,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
         # check if seed is respected in multiple workers situation
         if is_torch_available():
-            features = [
-                tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(10)
-            ]
+            features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(10)]
             dataloader = torch.utils.data.DataLoader(
                 features,
                 batch_size=2,
@@ -765,7 +759,7 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                     self.assertEqual(original_val.tolist(), batch_val.tolist())
                 else:
                     self.assertEqual(original_val, batch_val)
-    
+
     def _validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
         self, collator, base_data, input_key, input_datatype, label_key, label_datatype, ignore_label=False
     ):
@@ -975,17 +969,13 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
 
         input_tokens = [f"token_{i}" for i in range(8)]
         tokenizer.add_tokens(input_tokens)
-        original_data = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        original_data = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
         for feature in original_data:
-            feature['labels'] = (1,)
+            feature["labels"] = (1,)
 
-        batch_data = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        batch_data = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
         for feature in batch_data:
-            feature['labels'] = (1,)
+            feature["labels"] = (1,)
 
         whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer)
 
@@ -1450,10 +1440,8 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
         input_tokens = [f"token_{i}" for i in range(8)]
         tokenizer.add_tokens(input_tokens)
-        features = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
-        
+        features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
+
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 10))
         self.assertEqual(batch["labels"].shape, (2, 10))
@@ -1468,12 +1456,10 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
     def test_data_collator_for_whole_word_mask_with_seed(self):
         tokenizer = BertTokenizerFast(self.vocab_file)
-        
+
         input_tokens = [f"token_{i}" for i in range(998)]
         tokenizer.add_tokens(input_tokens)
-        features = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
 
         # check if seed is respected between two different DataCollatorForWholeWordMask instances
         data_collator = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="np")
@@ -1816,17 +1802,13 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
 
         input_tokens = [f"token_{i}" for i in range(8)]
         tokenizer.add_tokens(input_tokens)
-        original_data = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        original_data = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
         for feature in original_data:
-            feature['labels'] = (1,)
+            feature["labels"] = (1,)
 
-        batch_data = [
-            tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)
-        ]
+        batch_data = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
         for feature in batch_data:
-            feature['labels'] = (1,)
+            feature["labels"] = (1,)
 
         whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
 
