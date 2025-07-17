@@ -1618,7 +1618,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
+            logger.warning(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
@@ -1847,7 +1847,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         ```"""
 
         if self.training and self.config._attn_implementation != "eager":
-            logger.warning_once(
+            logger.warning(
                 "It is strongly recommended to train Gemma3n models with the `eager` attention implementation "
                 f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
             )

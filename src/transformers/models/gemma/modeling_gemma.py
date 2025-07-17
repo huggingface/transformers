@@ -601,7 +601,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
-            logger.warning_once(
+            logger.warning(
                 f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                 "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
             )
