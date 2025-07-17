@@ -696,8 +696,8 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         >>> image2 = Image.open(requests.get(url, stream=True).raw)
         >>> images = [image1, image2]
 
-        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficient_loftr")
-        >>> model = AutoModel.from_pretrained("stevenbucaille/efficient_loftr")
+        >>> processor = AutoImageProcessor.from_pretrained("zju-community/efficient_loftr")
+        >>> model = AutoModel.from_pretrained("zju-community/efficient_loftr")
 
         >>> with torch.no_grad():
         >>>     inputs = processor(images, return_tensors="pt")
@@ -1257,8 +1257,8 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         >>> image2 = Image.open(requests.get(url, stream=True).raw)
         >>> images = [image1, image2]
 
-        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficient_loftr")
-        >>> model = AutoModel.from_pretrained("stevenbucaille/efficient_loftr")
+        >>> processor = AutoImageProcessor.from_pretrained("zju-community/efficient_loftr")
+        >>> model = AutoModel.from_pretrained("zju-community/efficient_loftr")
 
         >>> with torch.no_grad():
         >>>     inputs = processor(images, return_tensors="pt")

@@ -22,7 +22,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`EffientLoFTRFromKeypointMatching`].
     It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    EfficientLoFTR [stevenbucaille/efficientloftr](https://huggingface.co/stevenbucaille/efficientloftr) architecture.
+    EfficientLoFTR [zju-community/efficientloftr](https://huggingface.co/zju-community/efficientloftr) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

@@ -243,7 +243,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--organization",
-        default="stevenbucaille",
+        default="zju-community",
         type=str,
         help="Hub organization in which you want the model to be uploaded.",
     )
