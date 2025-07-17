@@ -39,7 +39,6 @@ The example below demonstrates how to transcribe audio using [`Pipeline`] or the
 ```
 python
 from transformers import pipeline
-
 pipe = pipeline(model="facebook/data2vec-audio-base-960h", task="automatic-speech-recognition")
 pipe("path/to/audio.wav")
 ```
@@ -52,7 +51,6 @@ python
 from transformers import AutoProcessor, AutoModelForAudioClassification
 import torch
 import torchaudio
-
 processor = AutoProcessor.from_pretrained("facebook/data2vec-audio-base-960h")
 model = AutoModelForAudioClassification.from_pretrained("facebook/data2vec-audio-base-960h")
 
