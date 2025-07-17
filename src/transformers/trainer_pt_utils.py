@@ -149,7 +149,7 @@ def find_batch_size(tensors):
             if result is not None:
                 return result
     elif isinstance(tensors, Mapping):
-        for key, value in tensors.items():
+        for value in tensors.values():
             result = find_batch_size(value)
             if result is not None:
                 return result
