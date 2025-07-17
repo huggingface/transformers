@@ -36,39 +36,23 @@ from ..mamba.modeling_mamba import (
 )
 
 
+if is_mambapy_available():
+    from mambapy.pscan import pscan
+else:
+    pscan = None
+
+if is_mamba_ssm_available():
+    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+else:
+    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
+
 logger = logging.get_logger(__name__)
-
-
-def is_fast_path_available():
-    if is_mamba_ssm_available():
-        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    else:
-        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-    if is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-    else:
-        causal_conv1d_update, causal_conv1d_fn = None, None
-
-    return (
-        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
-        selective_state_update,
-        selective_scan_fn,
-        mamba_inner_fn,
-        causal_conv1d_update,
-        causal_conv1d_fn,
-    )
-
-
-(
-    is_fast_path_available,
-    selective_state_update,
-    selective_scan_fn,
-    mamba_inner_fn,
-    causal_conv1d_update,
-    causal_conv1d_fn,
-) = is_fast_path_available()
 
 
 class FalconMambaConfig(MambaConfig):
@@ -232,6 +216,9 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
         if not is_fast_path_available:
             if self.use_mambapy:
                 if is_mambapy_available():
@@ -269,17 +256,6 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mamba_ssm_available():
-            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-        else:
-            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-        if is_causal_conv1d_available():
-            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-        else:
-            causal_conv1d_update, causal_conv1d_fn = None, None
-
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -395,10 +371,6 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mambapy_available():
-            from mambapy.pscan import pscan
-        else:
-            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -494,6 +466,20 @@ class FalconMambaMixer(MambaMixer):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
+
+    def forward(
+        self,
+        hidden_states,
+        cache_params: Optional[FalconMambaCache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+    ):
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
 
 class FalconMambaRMSNorm(MambaRMSNorm):

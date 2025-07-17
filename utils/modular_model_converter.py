@@ -141,7 +141,12 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node
 
     def leave_ImportFrom(self, original_node, updated_node):
-        """The imports from other file types (configuration, processing etc) should use original model name."""
+        """
+        The imports from other file types (configuration, processing etc) should use original model name.
+        Also, no replaces on absolute imports (e.g. `from mamba_ssm import ...`)
+        """
+        if len(original_node.relative) == 0:  # no replaces on absolute imports
+            return original_node
         if self.original_new_model_name != self.new_name and m.matches(updated_node.module, m.Name()):
             patterns = "|".join(ALL_FILE_TYPES)
             regex = rf"({patterns})_{self.new_name}"
@@ -1304,7 +1309,7 @@ class ModularFileMapper(ModuleMapper):
             file_model_name = file.split(".")[-2]
             new_name = name_prefixes[file]
             renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name)
-            renamed_module = module.visit(renamer)
+            renamed_module = MetadataWrapper(module).visit(renamer)
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
                 self.classes,
