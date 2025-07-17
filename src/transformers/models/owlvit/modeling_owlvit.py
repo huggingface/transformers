@@ -542,7 +542,7 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class OwlViTPreTrainedModel(PreTrainedModel):
-    config_class = OwlViTConfig
+    config: OwlViTConfig
     base_model_prefix = "owlvit"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OwlViTEncoderLayer"]
@@ -745,7 +745,7 @@ class OwlViTTextTransformer(nn.Module):
 
 
 class OwlViTTextModel(OwlViTPreTrainedModel):
-    config_class = OwlViTTextConfig
+    config: OwlViTTextConfig
 
     def __init__(self, config: OwlViTTextConfig):
         super().__init__(config)
@@ -854,7 +854,7 @@ class OwlViTVisionTransformer(nn.Module):
 
 
 class OwlViTVisionModel(OwlViTPreTrainedModel):
-    config_class = OwlViTVisionConfig
+    config: OwlViTVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: OwlViTVisionConfig):
@@ -904,7 +904,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
 
 @auto_docstring
 class OwlViTModel(OwlViTPreTrainedModel):
-    config_class = OwlViTConfig
+    config: OwlViTConfig
 
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
@@ -1187,7 +1187,7 @@ class OwlViTClassPredictionHead(nn.Module):
 
 
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
-    config_class = OwlViTConfig
+    config: OwlViTConfig
 
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)

@@ -468,16 +468,15 @@ class Idefics3Connector(nn.Module):
 
 @auto_docstring
 class Idefics3PreTrainedModel(PreTrainedModel):
-    config_class = Idefics3Config
+    config: Idefics3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -504,10 +503,9 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
-    config_class = Idefics3VisionConfig
+    config: Idefics3VisionConfig
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
 
     def __init__(self, config: Idefics3VisionConfig):

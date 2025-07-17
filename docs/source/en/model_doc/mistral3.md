@@ -227,6 +227,10 @@ This example also how to use `BitsAndBytes` to load the model in 4bit quantizati
 
 [[autodoc]] Mistral3Config
 
+## MistralCommonTokenizer
+
+[[autodoc]] MistralCommonTokenizer
+
 ## Mistral3Model
 
 [[autodoc]] Mistral3Model

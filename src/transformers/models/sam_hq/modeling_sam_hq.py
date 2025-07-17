@@ -475,7 +475,7 @@ class SamHQVisionNeck(nn.Module):
 
 @auto_docstring
 class SamHQPreTrainedModel(PreTrainedModel):
-    config_class = SamHQConfig
+    config: SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
     _no_split_modules = ["SamHQVisionAttention"]
@@ -1067,7 +1067,7 @@ class SamHQMaskDecoder(nn.Module):
     """
 )
 class SamHQVisionModel(SamHQPreTrainedModel):
-    config_class = SamHQVisionConfig
+    config: SamHQVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SamHQVisionConfig):

@@ -85,7 +85,7 @@ def video_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in VIDEO_PROCESSOR_MAPPING._extra_content.items():
+    for extractor in VIDEO_PROCESSOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
