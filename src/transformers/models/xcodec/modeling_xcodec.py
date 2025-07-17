@@ -23,18 +23,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring
 from ..auto import AutoModel
 from .configuration_xcodec import XcodecConfig
-
-
-# General docstring
-_CONFIG_FOR_DOC = "XcodecConfig"
 
 
 @dataclass
@@ -320,6 +311,7 @@ class XcodecResidualVectorQuantization(nn.Module):
         return quantized_out
 
 
+@auto_docstring
 class XcodecPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -383,40 +375,7 @@ class XcodecPreTrainedModel(PreTrainedModel):
                     torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
 
 
-XCODEC_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`XcodecConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-XCODEC_INPUTS_DOCSTRING = r"""
-    args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
-            The raw float values of the input audio waveform.
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
-            Discrete code indices computed using `model.encode`.
-        bandwidth (`float`, *optional*):
-            The target bandwidth in (kbps) supports only values in `config.target_bandwidths`.
-            Defaults to the highest available bandwidth `4.0` kbps.
-        return_dict (`bool`, *optional*):
-            whether to return a `XcodecOutput` or a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The Xcodec neural audio codec model.",
-    XCODEC_START_DOCSTRING,
-)
+@auto_docstring(custom_intro="""The Xcodec neural audio codec model.""")
 class XcodecModel(XcodecPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -458,6 +417,7 @@ class XcodecModel(XcodecPreTrainedModel):
         stacked = torch.stack(hidden_states, dim=1)
         return stacked.mean(dim=1)
 
+    @auto_docstring
     def encode(
         self,
         input_values: torch.Tensor,
@@ -475,7 +435,7 @@ class XcodecModel(XcodecPreTrainedModel):
                 The target bandwidth in (kbps) supports only values in `config.target_bandwidths`.
                 Defaults to the highest available bandwidth `4.0` kbps.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`].
 
         Returns:
             `torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)` containing the discrete encoded audio codes.
@@ -517,6 +477,7 @@ class XcodecModel(XcodecPreTrainedModel):
 
         return XcodecEncoderOutput(audio_codes)
 
+    @auto_docstring
     def decode(
         self, audio_codes: torch.Tensor, return_dict: Optional[bool] = None, **kwargs
     ) -> Union[torch.Tensor, XcodecDecoderOutput]:
@@ -530,7 +491,7 @@ class XcodecModel(XcodecPreTrainedModel):
                 Discrete code indices computed using `model.encode`.
 
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+                Whether or not to return a [`~utils.ModelOutput`]
 
         Returns:
             Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of Xcodec.
@@ -554,8 +515,7 @@ class XcodecModel(XcodecPreTrainedModel):
 
         return XcodecDecoderOutput(audio_values)
 
-    @add_start_docstrings_to_model_forward(XCODEC_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=XcodecOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor,
@@ -565,9 +525,24 @@ class XcodecModel(XcodecPreTrainedModel):
         **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
         r"""
-        Returns:
+        Encodes and quantizes the input audio into discrete codes, then decodes those codes back into an audio waveform.
+        Args:
+            input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+                The raw float values of the input audio waveform.
+            audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
+                Discrete code indices computed using `model.encode`.
+            bandwidth (`float`, *optional*):
+                Target bandwidth in kbps. Must be one of `config.target_bandwidths`.
+                Defaults to the highest available bandwidth.
+            return_dict (`bool`, *optional*):
+                Whether to return a [`XcodecOutput`] instead of a plain tuple.
 
-        Examples:
+        Returns:
+            `XcodecOutput` or tuple `(audio_codes, audio_values)`:
+            - `audio_codes` of shape `(batch_size, num_quantizers, codes_length)`: the quantized discrete codes.
+            - `audio_values` of shape `(batch_size, channels, num_samples)`: the reconstructed audio waveform given the codes.
+
+        Example:
 
         ```python
         >>> from datasets import load_dataset

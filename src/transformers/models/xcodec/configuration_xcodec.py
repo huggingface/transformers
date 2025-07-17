@@ -103,7 +103,6 @@ class XcodecConfig(PretrainedConfig):
         "acoustic_model_config": DacConfig,
         "semantic_model_config": HubertConfig,
     }
-    is_composition = True
 
     def __init__(
         self,
