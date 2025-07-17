@@ -362,9 +362,7 @@ class VoxtralProcessor(ProcessorMixin):
         if is_str:
             audio = [load_audio_as(audio, return_format="buffer", force_mono=True, sampling_rate=sampling_rate)]
         elif is_list_of_str:
-            audio = [
-                load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
-            ]
+            audio = [load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio]
         else:
             audio = make_list_of_audio(audio)
             if len(audio) != len(format):

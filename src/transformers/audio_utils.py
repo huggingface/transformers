@@ -40,6 +40,7 @@ if is_soundfile_available():
 
 if is_librosa_available():
     import librosa
+
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
 
