@@ -1991,6 +1991,7 @@ class Trainer:
         # Mixed precision training with apex
         if self.use_apex and training:
             from apex import amp
+
             model, self.optimizer = amp.initialize(
                 model, self.optimizer, opt_level=self.args.mixed_precision_config["fp16_opt_level"]
             )
