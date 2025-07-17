@@ -2688,7 +2688,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "(see https://huggingface.co/docs/transformers/en/attention_interface)"
             )
 
-        current_implementation = (
+        requested_implementation = (
             attn_implementation
             if not isinstance(attn_implementation, dict)
             else attn_implementation.get("", self.config._attn_implementation)
@@ -2696,10 +2696,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
         # warn the user that the requested value is not working
-        if current_implementation != self.config._attn_implementation:
+        if requested_implementation != self.config._attn_implementation:
             try:
                 applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                    current_implementation, is_init_check=False
+                    requested_implementation, is_init_check=False
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = applicable_attn_implementation
