@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -58,15 +59,15 @@ class VoxtralModelTester:
             "use_labels": True,
             "use_mrope": False,
             "vocab_size": 99,
+            "head_dim": 8,
         },
         is_training=True,
         audio_config={
             "model_type": "voxtral_encoder",
-            "d_model": 16,
-            "encoder_attention_heads": 4,
+            "hidden_size": 16,
+            "num_attention_heads": 4,
             "intermediate_size": 16,
-            "encoder_ffn_dim": 16,
-            "encoder_layers": 2,
+            "num_hidden_layers": 2,
             "num_mel_bins": 80,
             "max_source_positions": 30,
             "initializer_range": 0.02,
@@ -117,7 +118,6 @@ class VoxtralModelTester:
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         attention_mask[:, :1] = 0
 
-        # we are giving s
         input_ids[:, 1 : 1 + num_audio_tokens_per_batch_idx] = config.audio_token_id
         inputs_dict = {
             "input_ids": input_ids,
@@ -128,14 +128,17 @@ class VoxtralModelTester:
 
 
 @require_torch
-class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `VoxtralForConditionalGeneration`.
     """
 
     all_model_classes = (VoxtralForConditionalGeneration,) if is_torch_available() else ()
-    # Doesn't run generation tests. TODO eustache/joao: some generation tests are broken, the errors seem cache-related
-    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {"text-to-speech": VoxtralForConditionalGeneration, "audio-text-to-text": VoxtralForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -143,57 +146,6 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = VoxtralModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VoxtralConfig, has_text_modality=False)
-
-    @unittest.skip(reason="Compile not yet supported because in Voxtral models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Voxtral models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Voxtral does not support right padding.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @require_torch_sdpa
-    def test_sdpa_can_dispatch_composite_models(self):
-        # overwrite because Voxtral is audio+text model (not vision+text)
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
-
-                # `None` as it is the requested one which will be assigned to each sub-config
-
-                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.audio_tower.config._attn_implementation == vision_attn)
-
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
 
 
 @require_torch
