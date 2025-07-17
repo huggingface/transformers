@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -38,13 +38,13 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class EncodecOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
-            Decoded audio values, obtained using the decoder part of Encodec.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        Discret code embeddings computed using `model.encode`.
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -52,13 +52,13 @@ class EncodecOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class EncodecEncoderOutput(ModelOutput):
-    """
-    Args:
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
-            Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
+    r"""
+    audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        Discret code embeddings computed using `model.encode`.
+    audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
+        Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
@@ -66,11 +66,11 @@ class EncodecEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class EncodecDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Encodec.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -133,7 +133,7 @@ class EncodecConv1d(nn.Module):
         return ideal_length - length
 
     @staticmethod
-    def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+    def _pad1d(hidden_states: torch.Tensor, paddings: tuple[int, int], mode: str = "zero", value: float = 0.0):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happens.
         """
@@ -235,7 +235,7 @@ class EncodecLSTM(nn.Module):
     LSTM without worrying about the hidden state, nor the layout of the data. Expects input as convolutional layout.
     """
 
-    def __init__(self, config, dimension):
+    def __init__(self, config: EncodecConfig, dimension: int):
         super().__init__()
         self.lstm = nn.LSTM(dimension, dimension, config.num_lstm_layers)
 
@@ -251,7 +251,7 @@ class EncodecResnetBlock(nn.Module):
     Residual block from SEANet model as used by EnCodec.
     """
 
-    def __init__(self, config: EncodecConfig, dim: int, dilations: List[int]):
+    def __init__(self, config: EncodecConfig, dim: int, dilations: list[int]):
         super().__init__()
         kernel_sizes = (config.residual_kernel_size, 1)
         if len(kernel_sizes) != len(dilations):
@@ -446,17 +446,13 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
 @auto_docstring
 class EncodecPreTrainedModel(PreTrainedModel):
-    config_class = EncodecConfig
+    config: EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        if isinstance(module, nn.GroupNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -464,10 +460,8 @@ class EncodecPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
         elif isinstance(module, nn.LSTM):
             for name, param in module.named_parameters():
                 if "weight" in name:
@@ -506,7 +500,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def _encode_frame(
         self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
         normalized. The padding mask is required to compute the correct scale.
@@ -536,7 +530,7 @@ class EncodecModel(EncodecPreTrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
+    ) -> Union[tuple[torch.Tensor, Optional[torch.Tensor]], EncodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -603,7 +597,7 @@ class EncodecModel(EncodecPreTrainedModel):
         return EncodecEncoderOutput(encoded_frames, scales)
 
     @staticmethod
-    def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
+    def _linear_overlap_add(frames: list[torch.Tensor], stride: int):
         # Generic overlap add, with linear fade-in/fade-out, supporting complex scenario
         # e.g., more than 2 frames per position.
         # The core idea is to use a weight function that is a triangle,
@@ -659,11 +653,11 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def decode(
         self,
-        audio_codes: torch.Tensor,
+        audio_codes: torch.LongTensor,
         audio_scales: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -708,13 +702,13 @@ class EncodecModel(EncodecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        input_values: torch.FloatTensor,
+        padding_mask: Optional[torch.BoolTensor] = None,
         bandwidth: Optional[float] = None,
-        audio_codes: Optional[torch.Tensor] = None,
+        audio_codes: Optional[torch.LongTensor] = None,
         audio_scales: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float and padded to the appropriate length in order to be encoded using chunks

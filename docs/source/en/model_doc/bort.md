@@ -34,7 +34,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://arxiv.org/abs/2010.10499) by
+The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://huggingface.co/papers/2010.10499) by
 Adrian de Wynter and Daniel J. Perry. It is an optimal subset of architectural parameters for the BERT, which the
 authors refer to as "Bort".
 

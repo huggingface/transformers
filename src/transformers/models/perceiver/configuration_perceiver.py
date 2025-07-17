@@ -15,7 +15,8 @@
 """Perceiver model configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
@@ -84,7 +85,7 @@ class PerceiverConfig(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         image_size (`int`, *optional*, defaults to 56):
             Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
-        train_size (`List[int]`, *optional*, defaults to `[368, 496]`):
+        train_size (`list[int]`, *optional*, defaults to `[368, 496]`):
             Training size of the images for the optical flow model.
         num_frames (`int`, *optional*, defaults to 16):
             Number of video frames used for the multimodal autoencoding model.
@@ -92,7 +93,7 @@ class PerceiverConfig(PretrainedConfig):
             Number of audio samples per frame for the multimodal autoencoding model.
         samples_per_patch (`int`, *optional*, defaults to 16):
             Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
-        output_shape (`List[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
+        output_shape (`list[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
             Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
             autoencoding model. This excludes the channel dimension.
         output_num_channels (`int`, *optional*, defaults to 512):
