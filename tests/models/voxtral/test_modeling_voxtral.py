@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Voxtral model."""
 
-import tempfile
 import unittest
 
 from transformers import (
@@ -25,7 +24,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -147,44 +145,6 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         self.model_tester = VoxtralModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VoxtralConfig, has_text_modality=False)
 
-    @require_torch_sdpa
-    def test_sdpa_can_dispatch_composite_models(self):
-        # overwrite because Qwen2 is audio+text model (not vision+text)
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
-
-                # `None` as it is the requested one which will be assigned to each sub-config
-                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.audio_tower.config._attn_implementation == vision_attn)
-
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
 
 @require_torch
 class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -197,8 +157,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    def test_small_single_turn_audio_only(self):
-        # TODO: @eustlb, add a reproducer!!!
+    def test_mini_single_turn_audio_only(self):
+        """
+        reproducer: https://gist.github.com/eustlb/c5e0e0a12e84e3d575151ba63d17e4cf
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         conversation = [
             {
                 "role": "user",
@@ -220,15 +183,17 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
-
         EXPECTED_OUTPUT = [
-            "The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos."
+            'The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos. Here\'s a breakdown:\n\n1. **Initial Reaction**: One person (let\'s call him A) is surprised to see the other person (let\'s call him B) has a tattoo. A asks if B has a tattoo, and B confirms.\n\n2. **Tattoo Interpretation**: A then asks what B\'s tattoo says, and B responds with "sweet." This exchange is repeated multiple times, with A asking what B\'s tattoo says, and B always answering "sweet."\n\n3. **Confusion**: A seems confused and asks what B\'s tattoo says multiple times, each time getting the same response. This leads to a humorous back-and-forth.\n\n4. **Clarification**: Eventually, B clarifies that A\'s tattoo says "dude" and A\'s says "sweet." This is the punchline of the joke, as A had been asking about B\'s tattoo but not his own.\n\n5. **Final Exchange**: B then asks what A\'s tattoo says, and A responds with "sweet," leading to a final round of confusion.\n\nThe humor comes from the repetition of the word "sweet" and the confusion that arises from A\'s lack of self-awareness about his own tattoo.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
-    def test_small_single_turn_text_and_audio(self):
-        # TODO: @eustlb, add a reproducer!!!
+    def test_mini_single_turn_text_and_audio(self):
+        """
+        reproducer: https://gist.github.com/eustlb/c5e0e0a12e84e3d575151ba63d17e4cf
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         conversation = [
             {
                 "role": "user",
@@ -258,8 +223,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
-    def test_small_single_turn_text_and_multiple_audios(self):
-        # TODO: @eustlb, add a reproducer!!!
+    def test_mini_single_turn_text_and_multiple_audios(self):
+        """
+        reproducer: https://gist.github.com/eustlb/c5e0e0a12e84e3d575151ba63d17e4cf
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         conversation = [
             {
                 "role": "user",
@@ -288,13 +256,16 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            'What sport and what nursery rhyme are referenced?The audio references both baseball and a nursery rhyme. The baseball reference is about a home run hit by Edgar Martinez, and the nursery rhyme is "Mary Had a Little Lamb."'
+            'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is a playoff game between the Baltimore Orioles and the Oakland Athletics.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
-    def test_small_single_turn_text_only(self):
-        # TODO: @eustlb, add a reproducer!!!
+    def test_mini_single_turn_text_only(self):
+        """
+        reproducer: https://gist.github.com/eustlb/c5e0e0a12e84e3d575151ba63d17e4cf
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         conversation = [
             {
                 "role": "user",
@@ -315,13 +286,16 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            "Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going"
+            "Hello, how are you doing today?Hello! I'm functioning as intended, thank you. How about you? How's your day going?"
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
-    def test_small_single_turn_text_and_multiple_audios_batched(self):
-        # TODO: @eustlb, add a reproducer!!!
+    def test_mini_single_turn_text_and_multiple_audios_batched(self):
+        """
+        reproducer: https://gist.github.com/eustlb/c5e0e0a12e84e3d575151ba63d17e4cf
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         conversations = [
             [
                 {
@@ -366,16 +340,18 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        # fmt: off
         EXPECTED_OUTPUT = [
             "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona.",
-            'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is likely the Seattle Mariners, as the commentator refers to them as the "Mariners" and mentions the American League.\n- **Emotional Reaction**: The commentator expresses disbelief and excitement, using phrases like "I don\'t believe it" and "my, oh my."\n- **Game Outcome**: The game is still ongoing, as the commentator mentions that the Mariners are "going to play" for the championship.\n\nThe audio captures the thrill and excitement of a pivotal moment in a baseball game.'
+            'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is the Mariners, and the commentator is excited about their chances to win the championship.\n- **Emotional Tone**: The commentator expresses disbelief and excitement, using phrases like "I don\'t believe it" and "my, oh my."\n- **Player Involvement**: The commentator mentions Joy and Junior, likely referring to other players or commentators in the broadcast.',
         ]
-        # fmt: on
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
-    def test_small_multi_turn_text_and_audio(self):
+    def test_mini_multi_turn_text_and_audio(self):
+        """
+        reproducer: https://gist.github.com/eustlb/c5e0e0a12e84e3d575151ba63d17e4cf
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         conversations = [
             [
                 {
@@ -418,13 +394,19 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
+
         EXPECTED_OUTPUT = [
-            'Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation in contrast to the serious and reflective tone of the pr...'
+            'Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation in contrast to the serious and reflective tone of the previous audio.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
     def test_transcribe_mode_audio_input(self):
+        """
+        To test transcribe mode of the model, WER evaluation has been run to compare with the declared model performances.
+        see https://github.com/huggingface/transformers/pull/39429 PR's descrition.
+        disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
+        """
         model = VoxtralForConditionalGeneration.from_pretrained(
             self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
         )
@@ -436,25 +418,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        # fmt: off
         EXPECTED_OUTPUT = [
-            "lang:enThis week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. "
-            "It was an opportunity to say thank you. Whether we've seen eye-to-eye or rarely agreed at all, my conversations with you, the American people, in"
-            " living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept"
-            " me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over"
-            " the course of these eight years, I've seen the goodness, the resilience, and the hope of the American people. I've seen neighbors looking out for"
-            " each other as we rescued our economy from the worst crisis of our lifetimes. I've hugged cancer survivors who finally know the security of "
-            "affordable health care. I've seen communities like Joplin rebuild from disaster, and cities like Boston show the world that no terrorist will ever"
-            " break the American spirit. I've seen the hopeful faces of young graduates and our newest military officers. I've mourned with grieving families"
-            " searching for answers, and I found grace in a Charleston church. I've seen our scientists help a paralyzed man regain his sense of touch, and our"
-            " wounded warriors walk again. I've seen our doctors and volunteers rebuild after earthquakes and stop pandemics in their tracks. I've learned from"
-            " students who are building robots and curing diseases, and who will change the world in ways we can't even imagine. I've seen the youngest of children"
-            " remind us of our obligations to care for our refugees, to work in peace, and above all, to look out for each other. That's what's possible when we"
-            " come together in the slow, hard, sometimes frustrating, but always vital work of self-government. But we can't take our democracy for granted. "
-            "All of us, regardless of party, should throw ourselves into the work of citizenship. Not just when there's an election. Not just when our own narrow"
-            " interest is at stake. But over the full span of a lifetime. If you're tired of arguing with strangers on the Internet, try to talk with one in real"
-            " life. If something needs fixing, lace up your shoes and do some organizing. If you're disappointed by your elected officials, then grab a clipboard,"
-            " get some signatures, and run for office yourself. Our success depends on"
+            "lang:enThis week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye-to-eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American people. I've seen neighbors looking out for each other as we rescued our economy from the worst crisis of our lifetimes. I've hugged cancer survivors who finally know the security of affordable health care. I've seen communities like Joplin rebuild from disaster, and cities like Boston show the world that no terrorist will ever break the American spirit. I've seen the hopeful faces of young graduates and our newest military officers. I've mourned with grieving families searching for answers, and I found grace in a Charleston church. I've seen our scientists help a paralyzed man regain his sense of touch, and our wounded warriors walk again. I've seen our doctors and volunteers rebuild after earthquakes and stop pandemics in their tracks. I've learned from students who are building robots and curing diseases and who will change the world in ways we can't even imagine. I've seen the youngest of children remind us of our obligations to care for our refugees, to work in peace, and above all, to look out for each other. That's what's possible when we come together in the slow, hard, sometimes frustrating, but always vital work of self-government. But we can't take our democracy for granted. All of us, regardless of party, should throw ourselves into the work of citizenship. Not just when there's an election. Not just when our own narrow interest is at stake. But over the full span of a lifetime. If you're tired of arguing with strangers on the Internet, try to talk with one in real life. If something needs fixing, lace up your shoes and do some organizing. If you're disappointed by your elected officials, then grab a clipboard, get some signatures, and run for office yourself. Our success depends on our"
         ]
-        # fmt: on
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
