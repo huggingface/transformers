@@ -85,6 +85,8 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = x.shape
+        height = (height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
+        width = (width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
 
         i_position_indices = torch.ones(height, width, device=x.device).cumsum(0).float().unsqueeze(-1)
         j_position_indices = torch.ones(height, width, device=x.device).cumsum(1).float().unsqueeze(-1)
@@ -722,19 +724,11 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
 
         # 2. Coarse-level LoFTR module
-        position_embeddings = self.rotary_emb(coarse_features)
-        position_embeddings_height = (
-            coarse_height - self.config.q_aggregation_kernel_size
-        ) // self.config.q_aggregation_stride + 1
-        position_embeddings_width = (
-            coarse_width - self.config.q_aggregation_kernel_size
-        ) // self.config.q_aggregation_stride + 1
-        position_embeddings = tuple(
-            tensor[:, :position_embeddings_height, :position_embeddings_width, :]
-            .expand(batch_size * 2, -1, -1, -1)
-            .reshape(batch_size * 2, -1, coarse_embed_dim)
-            for tensor in position_embeddings
-        )
+        cos, sin = self.rotary_emb(coarse_features)
+        cos = cos.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, coarse_embed_dim)
+        sin = sin.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, coarse_embed_dim)
+        position_embeddings = (cos, sin)
+
         coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
         coarse_features = self.local_feature_transformer(
             coarse_features, position_embeddings=position_embeddings, **kwargs
