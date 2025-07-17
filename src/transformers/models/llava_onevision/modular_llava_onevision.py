@@ -500,16 +500,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, LlavaOnevisionModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
@@ -652,16 +644,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):

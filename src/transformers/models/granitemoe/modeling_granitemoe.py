@@ -584,16 +584,14 @@ class GraniteMoeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GraniteMoePreTrainedModel(PreTrainedModel):
-    config_class = GraniteMoeConfig
+    config: GraniteMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
@@ -1022,15 +1020,6 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["GraniteMoeForCausalLM", "GraniteMoeModel", "GraniteMoePreTrainedModel"]
