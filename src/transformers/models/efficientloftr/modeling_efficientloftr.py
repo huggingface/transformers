@@ -436,27 +436,26 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         aggregated_hidden_states, aggregated_encoder_hidden_states = self.aggregation(
             hidden_states, encoder_hidden_states
         )
-
-        attention_hidden_states = aggregated_hidden_states.reshape(batch_size, -1, embed_dim)
-        aggregated_encoder_hidden_states = aggregated_encoder_hidden_states.reshape(batch_size, -1, embed_dim)
+        _, aggregated_h, aggregated_w, _ = aggregated_hidden_states.shape
 
         # Multi-head attention
-        message, _ = self.attention(
-            attention_hidden_states,
+        aggregated_hidden_states = aggregated_hidden_states.reshape(batch_size, -1, embed_dim)
+        aggregated_encoder_hidden_states = aggregated_encoder_hidden_states.reshape(batch_size, -1, embed_dim)
+        attn_output, _ = self.attention(
+            aggregated_hidden_states,
             aggregated_encoder_hidden_states,
             position_embeddings=position_embeddings,
             **kwargs,
         )
 
         # Upsample features
-        _, aggregated_h, aggregated_w, _ = aggregated_hidden_states.shape
         # (batch_size, seq_len, embed_dim) -> (batch_size, embed_dim, h, w) with seq_len = h * w
-        message = message.permute(0, 2, 1)
-        message = message.reshape(batch_size, embed_dim, aggregated_h, aggregated_w)
-        message = torch.nn.functional.interpolate(
-            message, scale_factor=self.q_aggregation_kernel_size, mode="bilinear", align_corners=False
+        attn_output = attn_output.permute(0, 2, 1)
+        attn_output = attn_output.reshape(batch_size, embed_dim, aggregated_h, aggregated_w)
+        attn_output = torch.nn.functional.interpolate(
+            attn_output, scale_factor=self.q_aggregation_kernel_size, mode="bilinear", align_corners=False
         )
-        intermediate_states = torch.cat([hidden_states, message], dim=1)
+        intermediate_states = torch.cat([hidden_states, attn_output], dim=1)
         intermediate_states = intermediate_states.permute(0, 2, 3, 1)
         output_states = self.mlp(intermediate_states)
         output_states = output_states.permute(0, 3, 1, 2)
