@@ -127,7 +127,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         from triton_kernels.numerics_details.mxfp import downcast_to_mxfp, SwizzlingType
 
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_experts if hasattr(config, "num_experts") else config.num_local_experts
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
