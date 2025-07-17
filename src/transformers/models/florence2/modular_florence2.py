@@ -170,6 +170,8 @@ class Florence2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`AutoConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
+        image_token_id (`int`, *optional*, defaults to 51289):
+            The image token index to encode the image prompt.
 
     Example:
 
@@ -745,11 +747,11 @@ class Florence2VisionProjector(nn.Module):
 class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
-    A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
-    image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass

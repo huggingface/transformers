@@ -68,7 +68,12 @@ class Florence2Processor(ProcessorMixin):
     tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
 
     def __init__(
-        self, image_processor=None, tokenizer=None, image_token="<token>", num_additional_image_tokens=0, **kwargs
+        self,
+        image_processor=None,
+        tokenizer=None,
+        image_token="<image>",
+        num_additional_image_tokens=0,
+        **kwargs,
     ):
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
