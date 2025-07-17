@@ -1088,12 +1088,10 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                         ed_image = input_tokens.index(image_token_id, st)
                     else:
                         ed_image = len(input_tokens) + 1
-
                     if video_token_id in input_tokens and remain_videos > 0:
                         ed_video = input_tokens.index(video_token_id, st)
                     else:
                         ed_video = len(input_tokens) + 1
-
                     if ed_image < ed_video:
                         t, h, w = (
                             image_grid_thw[image_index][0],
@@ -1321,7 +1319,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
-                position_ids = position_ids.add(delta)
+                position_ids += delta.to(position_ids.device)
 
         outputs = self.language_model(
             input_ids=None,
@@ -1579,7 +1577,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             # models currently cannot do asssisted decoding
             if cache_position[0] == 0 or self.model.rope_deltas is None:
                 vision_positions, rope_deltas = self.model.get_rope_index(
-                    model_inputs["input_ids"],
+                    model_inputs.get("input_ids", None),
                     image_grid_thw=image_grid_thw,
                     video_grid_thw=video_grid_thw,
                     second_per_grid_ts=second_per_grid_ts,
