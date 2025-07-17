@@ -630,7 +630,7 @@ class BLTLocalEncoder(nn.Module):
                 )
 
                 layer_idx = idx if self.config.cross_attn_all_layers else 0
-                cross_attention_output, _, _ = self.cross_attn_layers[layer_idx](
+                cross_attention_output, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
                     attention_mask=cross_mask,
