@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 import warnings
 from abc import abstractmethod
@@ -2656,7 +2657,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 applicable_attn_implementation = "eager"
 
         return applicable_attn_implementation
-    
+
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
@@ -2666,7 +2667,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         with open(class_file, "r") as f:
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
-        return "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
+        return (
+            "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
+        )
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """
@@ -2684,7 +2687,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "does not follow the functional approach based on AttentionInterface "
                 "(see https://huggingface.co/docs/transformers/en/attention_interface)"
             )
-        
+
         current_implementation = (
             attn_implementation
             if not isinstance(attn_implementation, dict)
