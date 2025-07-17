@@ -80,7 +80,7 @@ class FalconMambaConfig(PretrainedConfig):
             Whether or not to rescale `out_proj` weights when initializing.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
-        use_mambapy (`bool`, *optional*, defaults to `False`):
+        use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
             Determines the fallback strategy during training if the CUDA-based official implementation of FalconMamba is not available. If `True`, the falcon_mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
@@ -128,7 +128,7 @@ class FalconMambaConfig(PretrainedConfig):
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
-        use_mambapy=False,
+        use_falcon_mambapy=False,
         mixer_rms_eps=1e-6,
         **kwargs,
     ):
@@ -157,7 +157,7 @@ class FalconMambaConfig(PretrainedConfig):
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
-        self.use_mambapy = use_mambapy  # modular: no_replace
+        self.use_falcon_mambapy = use_falcon_mambapy
         self.mixer_rms_eps = mixer_rms_eps
 
 
