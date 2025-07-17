@@ -48,7 +48,6 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForSpeechSeq2Seq,
         AutoProcessor,
-        AutoTokenizer,
         BitsAndBytesConfig,
         GenerationConfig,
         PreTrainedModel,
@@ -272,7 +271,7 @@ class ToolState:
 
 class TimedModel:
     """
-    A class that holds a PreTrainedModel instance and its associated processor/tokenizer.
+    A class that holds a PreTrainedModel instance and its associated processor (tokenizer, audio processor, etc.).
     Automatically deletes the instances after a specified timeout.
     """
 
@@ -280,13 +279,11 @@ class TimedModel:
         self,
         model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: Optional["ProcessorMixin"] = None,
-        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
+        processor: Optional[Union["ProcessorMixin", "PreTrainedTokenizerFast"]] = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
         self.processor = processor
-        self.tokenizer = tokenizer
         self.timeout_seconds = timeout_seconds
         self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
         self._timer.start()
@@ -298,15 +295,12 @@ class TimedModel:
         self._timer.start()
 
     def _delete_model(self):
-        """Delete the wrapped model and processor/tokenizer and clean up resources."""
+        """Delete the wrapped model and processor and clean up resources."""
         if hasattr(self, "model") and self.model is not None:
-            # Delete the model, processor, and tokenizer
             del self.model
             del self.processor
-            del self.tokenizer
             self.model = None
             self.processor = None
-            self.tokenizer = None
             gc.collect()
 
             # Clear CUDA cache if available
@@ -1289,11 +1283,8 @@ class ServeCommand(BaseTransformersCLICommand):
         return f"{model_id}@main"
 
     def _load_model_and_data_processor(
-        self,
-        model_id_and_revision: str,
-        model_cls: "PreTrainedModel",
-        processor_cls: Union[ProcessorMixin, "PreTrainedTokenizerFast"],
-    ):
+        self, model_id_and_revision: str, model_cls: type[PreTrainedModel]
+    ) -> tuple[PreTrainedModel, Union[ProcessorMixin, PreTrainedTokenizerFast]]:
         """
         Generic method to load a model and a data processor from a model ID and revision, making use of the serve CLI
         arguments.
@@ -1301,10 +1292,12 @@ class ServeCommand(BaseTransformersCLICommand):
         Args:
             model_id_and_revision (`str`):
                 The model ID and revision to load.
-            model_cls (`PreTrainedModel`):
+            model_cls (`type[PreTrainedModel]`):
                 The model class to load.
-            processor_cls (`ProcessorMixin` or `PreTrainedTokenizerFast`):
-                The data processor class to load.
+
+        Returns:
+            `tuple[PreTrainedModel, Union[ProcessorMixin, PreTrainedTokenizerFast]]`: The loaded model and
+            data processor (tokenizer, audio processor, etc.).
         """
         args = self.args
         logger.info(f"Loading {model_id_and_revision}")
@@ -1314,7 +1307,7 @@ class ServeCommand(BaseTransformersCLICommand):
         else:
             model_id, revision = model_id_and_revision, "main"
 
-        data_processor = processor_cls.from_pretrained(
+        data_processor = AutoProcessor.from_pretrained(
             model_id,
             revision=revision,
             trust_remote_code=args.trust_remote_code,
@@ -1363,18 +1356,16 @@ class ServeCommand(BaseTransformersCLICommand):
             `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and tokenizer.
         """
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            model, tokenizer = self._load_model_and_data_processor(
-                model_id_and_revision, AutoModelForCausalLM, AutoTokenizer
-            )
+            model, tokenizer = self._load_model_and_data_processor(model_id_and_revision, AutoModelForCausalLM)
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
                 timeout_seconds=self.args.model_timeout,
-                tokenizer=tokenizer,
+                processor=tokenizer,
             )
         else:
             self.loaded_models[model_id_and_revision].reset_timer()
             model = self.loaded_models[model_id_and_revision].model
-            tokenizer = self.loaded_models[model_id_and_revision].tokenizer
+            tokenizer = self.loaded_models[model_id_and_revision].processor
 
         return model, tokenizer
 
@@ -1391,7 +1382,7 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
             audio_model, audio_processor = self._load_model_and_data_processor(
-                model_id_and_revision, AutoModelForSpeechSeq2Seq, AutoProcessor
+                model_id_and_revision, AutoModelForSpeechSeq2Seq
             )
             self.loaded_models[model_id_and_revision] = TimedModel(
                 audio_model,
