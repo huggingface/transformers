@@ -30,6 +30,7 @@ from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+import re
 
 import numpy as np
 import packaging.version
@@ -1345,10 +1346,15 @@ class MLflowCallback(TrainerCallback):
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
 
+            sanitized_metrics = {
+                re.sub(r'[^0-9A-Za-z_\-\.\ :/]', '_', k): v
+                for k, v in metrics.items()
+            }
+
             if self._async_log:
-                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
+                self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step, synchronous=False)
             else:
-                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+                self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
