@@ -220,6 +220,7 @@ def write_model(
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 
+    del model.generation_config._from_model_config
     model.generation_config.pad_token_id = 11
 
     print("Saving the model.")

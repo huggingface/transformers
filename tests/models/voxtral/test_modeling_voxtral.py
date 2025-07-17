@@ -195,7 +195,7 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 @require_torch
 class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint_name = "/scratch/Voxtral-Mini-3B-2507"
+        self.checkpoint_name = "mistralai/Voxtral-Mini-3B-2507"
         self.dtype = torch.bfloat16
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
