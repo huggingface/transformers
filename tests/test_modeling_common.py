@@ -2535,7 +2535,7 @@ class ModelTesterMixin:
 
                 shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
 
-                for _, shared_names in shared_ptrs.items():
+                for shared_names in shared_ptrs.values():
                     reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
                     self.assertEqual(
                         len(reloaded_ptrs),

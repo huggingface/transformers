@@ -140,7 +140,7 @@ class BridgeTowerResidualAttention(nn.Module):
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
         hidden_state = self.ln_2(residual_state)
-        for _, layer in self.mlp.items():
+        for layer in self.mlp.values():
             hidden_state = layer(hidden_state)
         hidden_state = residual_state + hidden_state
         return hidden_state
