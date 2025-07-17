@@ -37,6 +37,8 @@ from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_avail
 from .configuration_mamba import MambaConfig
 
 
+logger = logging.get_logger(__name__)
+
 if is_mambapy_available():
     from mambapy.pscan import pscan
 else:
@@ -52,8 +54,6 @@ if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
-
-logger = logging.get_logger(__name__)
 
 
 class MambaCache:

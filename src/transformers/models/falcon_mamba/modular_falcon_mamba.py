@@ -36,14 +36,18 @@ from ..mamba.modeling_mamba import (
 )
 
 
+logger = logging.get_logger(__name__)
+
 if is_mambapy_available():
     from mambapy.pscan import pscan
 else:
     pscan = None
 
 if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+
+    from ...kernels.falcon_mamba import mamba_inner_fn
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
@@ -52,15 +56,13 @@ if is_causal_conv1d_available():
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-logger = logging.get_logger(__name__)
-
 
 class FalconMambaConfig(MambaConfig):
     """
     This is the configuration class to store the configuration of a [`FalconMambaModel`]. It is used to instantiate a FALCON_MAMBA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the FALCON_MAMBA
-    [state-spaces/falcon_mamba-2.8b](https://huggingface.co/state-spaces/falcon_mamba-2.8b) architecture.
+    [tiiuae/falcon-mamba-7b](https://huggingface.co/tiiuae/falcon-mamba-7b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -112,7 +114,8 @@ class FalconMambaConfig(MambaConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
         use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
-            Determines the fallback strategy during training if the CUDA-based official implementation of FalconMamba is not available. If `True`, the falcon_mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+            This argument corresponds to `use_mambapy` in MambaConfig.
+            Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
 
@@ -220,7 +223,7 @@ class FalconMambaMixer(MambaMixer):
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
         if not is_fast_path_available:
-            if self.use_mambapy:
+            if self.use_falcon_mambapy:
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
@@ -506,8 +509,22 @@ class FalconMambaCausalLMOutput(MambaCausalLMOutput):
     pass
 
 
-class FalconMambaModel(MambaModel):
-    pass
+class FalconMambaModel(MambaModel, FalconMambaPreTrainedModel):
+    def __init__(self, config):
+        FalconMambaPreTrainedModel.__init__(config)
+
+        self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.layers = nn.ModuleList(
+            [FalconMambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+        )
+
+        self.gradient_checkpointing = False
+        self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def load_hook(self, state_dict, prefix, *args):
+        raise AttributeError("Not needed for FalconMamba")
 
 
 class FalconMambaForCausalLM(MambaForCausalLM):
