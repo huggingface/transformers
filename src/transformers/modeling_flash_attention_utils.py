@@ -350,7 +350,6 @@ def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
     # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
     # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
     # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
-
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
     # for some models (e.g. qwen2-vl).
     max_length = cu_seq_lens.diff().max().item()
