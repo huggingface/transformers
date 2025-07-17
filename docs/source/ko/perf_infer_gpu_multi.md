@@ -266,7 +266,7 @@ Transformers 텐서 병렬화 구현은 프레임워크에 구애받지 않지�
 
 ### DeviceMesh[[devicemesh]]
 
-`DeviceMesh`를 함께 통신하는 기기의 다차원 그리드로 상상해보세요. 다양한 병렬화 전략은 다양한 유형의 통신 패턴을 필요로 하므로 여러 하위 메시가 있는 `DeviceMesh`를 만들 수 있습니다.
+`DeviceMesh`를 함께 통신하는 기기들의 다차원 그리드로 상상해보세요. 병렬 처리 전략마다 각기 다른 통신 패턴이 필요하므로, 여러 하위 메시를 가진 `DeviceMesh`를 만들 수 있습니다.
 
 ```python
 from torch.distributed.device_mesh import init_device_mesh
