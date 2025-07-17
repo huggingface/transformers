@@ -88,14 +88,12 @@ class VoxtralEncoderConfig(PretrainedConfig):
         intermediate_size=5120,
         num_hidden_layers=32,
         num_attention_heads=20,
-        num_key_value_heads=None,
         scale_embedding=False,
         activation_function="gelu",
         num_mel_bins=128,
         max_source_positions=1500,
         initializer_range=0.02,
         attention_dropout=0.0,
-        head_dim=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -106,11 +104,6 @@ class VoxtralEncoderConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
 
         self.num_attention_heads = num_attention_heads
-        if num_key_value_heads is None:
-            self.num_key_value_heads = num_attention_heads
-        else:
-            self.num_key_value_heads = num_key_value_heads
-
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True
         self.activation_function = activation_function
         self.num_mel_bins = num_mel_bins
@@ -125,7 +118,6 @@ class VoxtralEncoderConfig(PretrainedConfig):
         self.activation_dropout = 0.0
 
         self.attention_dropout = attention_dropout
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
 
 
 class VoxtralConfig(PretrainedConfig):
