@@ -3471,9 +3471,7 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
-            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
-                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
-            ):
+            if not model_class._supports_flash_attn and (attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4132,9 +4130,9 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not (
-                model_class._supports_flash_attn_2
-                if attn_implementation == "flash_attention_2"
-                else model_class._supports_flash_attn_3
+                model_class._supports_flash_attn
+                #if attn_implementation == "flash_attention_2"
+                #else model_class._supports_flash_attn_3
             ):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
@@ -4256,9 +4254,7 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
-            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
-                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
-            ):
+            if not model_class._supports_flash_attn and (attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
