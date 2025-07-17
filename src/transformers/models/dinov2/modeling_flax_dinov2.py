@@ -16,7 +16,7 @@
 
 import collections.abc
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -403,7 +403,7 @@ class FlaxDinov2SwiGLUFFN(nn.Module):
 
     def setup(self):
         hidden_features = int(self.config.hidden_size * self.config.mlp_ratio)
-        hidden_features = (int(self.hidden_features * 2 / 3) + 7) // 8 * 8
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
 
         self.weights_in = nn.Dense(
             2 * hidden_features,
@@ -568,7 +568,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
             input_shape = (1, config.image_size, config.image_size, config.num_channels)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
@@ -592,7 +592,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,

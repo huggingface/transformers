@@ -104,7 +104,7 @@ def convert_chinese_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, c
 
     hf_model = ChineseCLIPModel(config).eval()
 
-    pt_weights = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
+    pt_weights = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["state_dict"]
     pt_weights = {(name[7:] if name.startswith("module.") else name): value for name, value in pt_weights.items()}
 
     copy_text_model_and_projection(hf_model, pt_weights)

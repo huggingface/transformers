@@ -90,6 +90,18 @@ GGUF_CONFIG_MAPPING = {
         "expert_count": "num_experts",
         "expert_used_count": "num_experts_per_tok",
     },
+    "qwen3": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
     "falcon": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
@@ -204,6 +216,23 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "attention.sliding_window": "sliding_window",
+        "vocab_size": "vocab_size",
+    },
+    "gemma3": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        # NOTE: Gemma3 has key_length==value_length==head_dim
+        # See: https://github.com/ggml-org/llama.cpp/blob/fe5b78c89670b2f37ecb216306bed3e677b49d9f/convert_hf_to_gguf.py#L3495-L3496
+        "attention.key_length": "head_dim",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "attention.sliding_window": "sliding_window",
         "vocab_size": "vocab_size",
     },
 }
@@ -407,7 +436,7 @@ class GGUFLlamaConverter(LlamaConverter):
         if post_processor:
             tokenizer.post_processor = post_processor
 
-        # HACK: patch the llama-3 tokenizer to use the correspinding pre-tokenizer
+        # HACK: patch the llama-3 tokenizer to use the corresponding pre-tokenizer
         # and normalizer
         if self.is_llama_3_tokenizer:
             tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
@@ -659,6 +688,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
+    "qwen3": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
     "bloom": GGUFGPTConverter,
     "falcon": GGUFGPTConverter,
@@ -669,6 +699,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "mamba": GGUFGPTConverter,
     "nemotron": GGUFGPTConverter,
     "gemma2": GGUFGemmaConverter,
+    "gemma3_text": GGUFGemmaConverter,
 }
 
 

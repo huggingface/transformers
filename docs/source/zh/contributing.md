@@ -63,7 +63,7 @@ limitations under the License.
 想要自动获取操作系统和软件版本，请运行以下命令：
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 你也可以从代码仓库的根目录下运行相同的命令：

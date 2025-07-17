@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from parameterized import parameterized
 
@@ -44,8 +43,6 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
-    is_flax_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -54,7 +51,6 @@ from transformers.testing_utils import (
     get_tests_dir,
     require_jinja,
     require_read_token,
-    require_tf,
     require_tokenizers,
     require_torch,
     run_test_in_subprocess,
@@ -124,11 +120,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: Dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
-    tokenizer_mapping: Dict["PretrainedConfig", Tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
-) -> Dict[
+    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    Tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -174,7 +170,7 @@ def _test_subword_regularization_tokenizer(in_queue, out_queue, timeout):
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
-    text: str = None,
+    text: Optional[str] = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
     """
@@ -260,13 +256,13 @@ class TokenizerTesterMixin:
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_input_output_texts(self, tokenizer):
         input_txt = self.get_clean_sequence(tokenizer)[0]
         return input_txt, input_txt
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # the length of the tokenizer does not always represent the tokens that it can encode: what if there are holes?
         toks = [
             (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
@@ -294,7 +290,7 @@ class TokenizerTesterMixin:
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
         return output_txt, output_ids
 
-    def get_tokenizers(self, fast=True, **kwargs) -> List[PreTrainedTokenizerBase]:
+    def get_tokenizers(self, fast=True, **kwargs) -> list[PreTrainedTokenizerBase]:
         if fast and self.test_rust_tokenizer and self.test_slow_tokenizer:
             return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
         elif fast and self.test_rust_tokenizer:
@@ -320,11 +316,11 @@ class TokenizerTesterMixin:
 
     def tokenizer_integration_test_util(
         self,
-        expected_encoding: Dict,
+        expected_encoding: dict,
         model_name: str,
-        revision: str = None,
-        sequences: List[str] = None,
-        decode_kwargs: Dict[str, Any] = None,
+        revision: Optional[str] = None,
+        sequences: Optional[list[str]] = None,
+        decode_kwargs: Optional[dict[str, Any]] = None,
         padding: bool = True,
     ):
         """
@@ -1152,7 +1148,7 @@ class TokenizerTesterMixin:
                 tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    save_files = tokenizer.save_pretrained(tmp_dir_name)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
                     # Check we aren't saving a chat_template.jinja file
                     self.assertFalse(any(file.endswith("chat_template.jinja") for file in save_files))
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
@@ -1164,7 +1160,7 @@ class TokenizerTesterMixin:
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=True)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name)
                     # Check we are saving a chat_template.jinja file
                     self.assertTrue(any(file.endswith("chat_template.jinja") for file in save_files))
                     chat_template_file = Path(tmp_dir_name) / "chat_template.jinja"
@@ -1180,6 +1176,49 @@ class TokenizerTesterMixin:
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
                 # Check that no error raised
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    @require_jinja
+    def test_chat_template_save_loading(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            signature = inspect.signature(tokenizer.__init__)
+            if "chat_template" not in {*signature.parameters.keys()}:
+                self.skipTest("tokenizer doesn't accept chat templates at input")
+            tokenizer.chat_template = "test template"
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tokenizer.save_pretrained(tmpdirname)
+                self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+                self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+                self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
+                reloaded_tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+                # When we save as single files, tokenizers and tokenizers share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_tokenizer.chat_template, reloaded_tokenizer.tokenizer.chat_template)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tokenizer.chat_template = {"default": "a", "secondary": "b"}
+                tokenizer.save_pretrained(tmpdirname)
+                self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+                self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+                self.assertTrue(Path(tmpdirname, "additional_chat_templates").is_dir())
+                reloaded_tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+                # When we save as single files, tokenizers and tokenizers share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_tokenizer.chat_template, reloaded_tokenizer.tokenizer.chat_template)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tokenizer.chat_template = {"default": "a", "secondary": "b"}
+                tokenizer.save_pretrained(tmpdirname, save_jinja_files=False)
+                self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+                self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+                self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
+                reloaded_tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+                # When we save as single files, tokenizers and tokenizers share a chat template, which means
+                # the reloaded tokenizer should get the chat template as well
+                self.assertEqual(reloaded_tokenizer.chat_template, reloaded_tokenizer.tokenizer.chat_template)
 
     @require_jinja
     def test_chat_template_batched(self):
@@ -1670,21 +1709,29 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                for save_raw_chat_template in (True, False):
-                    tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                for save_jinja_files in (True, False):
+                    tokenizer.chat_template = {"default": dummy_template_1, "template2": dummy_template_2}
                     with tempfile.TemporaryDirectory() as tmp_dir_name:
-                        # Test that save_raw_chat_template is ignored when there's a dict of multiple templates
-                        tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=save_raw_chat_template)
-                        config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
-                        # Assert that chat templates are correctly serialized as lists of dictionaries
-                        self.assertEqual(
-                            config_dict["chat_template"],
-                            [
-                                {"name": "template1", "template": "{{'a'}}"},
-                                {"name": "template2", "template": "{{'b'}}"},
-                            ],
-                        )
-                        self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
+                        # Test that save_jinja_files is ignored when there's a dict of multiple templates
+                        tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=save_jinja_files)
+                        if save_jinja_files:
+                            config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                            self.assertNotIn("chat_template", config_dict)
+                            self.assertTrue(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
+                            self.assertTrue(
+                                os.path.exists(os.path.join(tmp_dir_name, "additional_chat_templates/template2.jinja"))
+                            )
+                        else:
+                            config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                            # Assert that chat templates are correctly serialized as lists of dictionaries
+                            self.assertEqual(
+                                config_dict["chat_template"],
+                                [
+                                    {"name": "default", "template": "{{'a'}}"},
+                                    {"name": "template2", "template": "{{'b'}}"},
+                                ],
+                            )
+                            self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
                         new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
                     # Assert that the serialized list is correctly reconstructed as a single dict
                     self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
@@ -1698,7 +1745,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.chat_template = dummy_template1
-                    tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
+                    tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
                     with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
                         f.write(dummy_template2)
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
@@ -2425,41 +2472,6 @@ class TokenizerTesterMixin:
                 self.assertEqual(sequence_length, truncated_sequence_left_length)
                 self.assertEqual(encoded_sequence, truncated_sequence_left)
 
-    def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` is deprecated."""
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                sequence = "Sequence"
-                padding_size = 10
-
-                # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, sequence)
-
-                padding_idx = tokenizer.pad_token_id
-
-                # Check that it correctly pads when a maximum length is specified along with the padding flag set to True
-                tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(sequence)
-                sequence_length = len(encoded_sequence)
-                # FIXME: the next line should be padding(max_length) to avoid warning
-                padded_sequence = tokenizer.encode(
-                    sequence, max_length=sequence_length + padding_size, pad_to_max_length=True
-                )
-                padded_sequence_length = len(padded_sequence)
-                self.assertEqual(sequence_length + padding_size, padded_sequence_length)
-                self.assertEqual(encoded_sequence + [padding_idx] * padding_size, padded_sequence)
-
-                # Check that nothing is done when a maximum length is not specified
-                encoded_sequence = tokenizer.encode(sequence)
-                sequence_length = len(encoded_sequence)
-
-                tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(sequence, pad_to_max_length=True)
-                padded_sequence_right_length = len(padded_sequence_right)
-                self.assertEqual(sequence_length, padded_sequence_right_length)
-                self.assertEqual(encoded_sequence, padded_sequence_right)
-
     def test_padding_to_multiple_of(self):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -3091,41 +3103,6 @@ class TokenizerTesterMixin:
         #     model(**encoded_sequence_fast)
         #     model(**batch_encoded_sequence_fast)
 
-    @require_tf
-    @slow
-    def test_tf_encode_plus_sent_to_model(self):
-        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__.__name__} is not in the MODEL_TOKENIZER_MAPPING")
-
-                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-                config = config_class()
-
-                if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is not an encoder-decoder model or has no set pad token id")
-
-                model = model_class(config)
-
-                # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                self.assertGreaterEqual(model.config.vocab_size, len(tokenizer))
-
-                # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
-                encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="tf")
-                batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
-
-                # This should not fail
-                model(encoded_sequence)
-                model(batch_encoded_sequence)
-
-    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
     @require_torch
     @slow
     def test_np_encode_plus_sent_to_model(self):
@@ -3151,7 +3128,6 @@ class TokenizerTesterMixin:
                 encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
                 batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
-                # TODO: add forward through JAX/Flax when PR is merged
                 # This is currently here to make ruff happy !
                 if encoded_sequence is None:
                     raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
@@ -3166,7 +3142,6 @@ class TokenizerTesterMixin:
                         [sequence, sequence], return_tensors="np"
                     )
 
-                    # TODO: add forward through JAX/Flax when PR is merged
                     # This is currently here to make ruff happy !
                     if encoded_sequence_fast is None:
                         raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
@@ -3637,12 +3612,8 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
                 if is_torch_available():
                     returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                elif is_flax_available():
-                    returned_tensor = "jax"
                 else:
-                    self.skipTest(reason="No expected framework from PT, TF or JAX found")
+                    self.skipTest(reason="No expected framework (PT) found")
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
                     self.skipTest(reason="This tokenizer has no padding token set, or pad_token_id < 0")
@@ -3850,9 +3821,6 @@ class TokenizerTesterMixin:
                 pad_token_id = tokenizer_p.pad_token_id
 
                 # Encode - Simple input
-                input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -3862,13 +3830,6 @@ class TokenizerTesterMixin:
                 self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
 
                 # Encode - Pair input
-                input_r = tokenizer_r.encode(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(
                     "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
                 )
@@ -3881,14 +3842,6 @@ class TokenizerTesterMixin:
                 self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
 
                 # Encode_plus - Simple input
-                input_r = tokenizer_r.encode_plus(
-                    "This is a simple input", max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    "This is a simple input", max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(
                     "This is a simple input", max_length=max_length, padding="max_length"
                 )
@@ -3908,14 +3861,6 @@ class TokenizerTesterMixin:
 
                 # Encode_plus - Pair input
                 input_r = tokenizer_r.encode_plus(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(
                     "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
                 )
                 input_p = tokenizer_p.encode_plus(
@@ -3931,18 +3876,6 @@ class TokenizerTesterMixin:
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
                 # Batch_encode_plus - Simple input
-                input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                input_p = tokenizer_p.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
-
                 input_r = tokenizer_r.batch_encode_plus(
                     ["This is a simple input 1", "This is a simple input 2"],
                     max_length=max_length,
@@ -4485,7 +4418,7 @@ class TokenizerTesterMixin:
                             AlbertTokenizer.from_pretrained(pretrained_name)
                         else:
                             BertTokenizer.from_pretrained(pretrained_name)
-                    except EnvironmentError as e:
+                    except OSError as e:
                         # Some tokenizer will raised an error before reaching the logged warning because there are no
                         # corresponding files to load
                         error_message = str(e)

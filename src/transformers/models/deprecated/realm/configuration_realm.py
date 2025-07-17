@@ -164,3 +164,6 @@ class RealmConfig(PretrainedConfig):
         # Retrieval config
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
+
+
+__all__ = ["RealmConfig"]

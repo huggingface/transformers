@@ -16,7 +16,7 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -27,7 +27,6 @@ from ...processing_utils import (
     ProcessorMixin,
     TextKwargs,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
@@ -45,9 +44,9 @@ IMAGE_TOKEN = "<image>"
 
 class IdeficsImagesKwargs(ImagesKwargs, total=False):
     transform: Optional[Callable]
-    image_size: Optional[Dict[str, int]]
-    image_mean: Optional[Union[float, List[float]]]
-    image_std: Optional[Union[float, List[float]]]
+    image_size: Optional[dict[str, int]]
+    image_mean: Optional[Union[float, list[float]]]
+    image_std: Optional[Union[float, list[float]]]
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
@@ -211,7 +210,6 @@ class IdeficsProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["image_size", "add_end_of_utterance_token"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
@@ -244,14 +242,14 @@ class IdeficsProcessor(ProcessorMixin):
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]] = None,
+        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
         text: Union[
             TextInput,
             PreTokenizedInput,
-            List[TextInput],
-            List[PreTokenizedInput],
-            List[List[TextInput]],
-            List[List[PreTokenizedInput]],
+            list[TextInput],
+            list[PreTokenizedInput],
+            list[list[TextInput]],
+            list[list[PreTokenizedInput]],
         ] = None,
         audio=None,
         videos=None,
@@ -261,10 +259,10 @@ class IdeficsProcessor(ProcessorMixin):
         the model was trained on and prepares the image pixel values for the model to process.
 
         Args:
-            images (`Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]]`):
+            images (`Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]]`):
                 either a single image or a batched list of images - can be passed in when text contains only text prompts,
                 in order to use the image-text-to-text behavior.
-            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
+            text (`Union[list[TextInput], [list[list[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
@@ -318,7 +316,7 @@ class IdeficsProcessor(ProcessorMixin):
         and the two images will be massaged using [`IdeficsImageProcessor.__call__`] method and placed inside the
         `pixel_values` dict entry of the return value.
 
-        This example also examplifies that images can be passed as objects or as text urls. It can be seen that the
+        This example also exemplifies that images can be passed as objects or as text urls. It can be seen that the
         first image is passed as object and the second one as a url.
 
         To do training do:
@@ -341,8 +339,6 @@ class IdeficsProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You need to specify either `text` or `images` and `text`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         if images is None:
             # assuming the user wants to use the old behavior with prompts as the only argument
@@ -377,7 +373,7 @@ class IdeficsProcessor(ProcessorMixin):
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
         add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
 
-        # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
+        # if the value isn't overridden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
             add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
         # turn non-batched prompts into batched

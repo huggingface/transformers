@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -439,7 +438,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
 
-    # override as the `logit_scale` parameter initilization is different for BRIDGE TOWER
+    # override as the `logit_scale` parameter initialization is different for BRIDGE TOWER
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

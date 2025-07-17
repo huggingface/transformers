@@ -15,7 +15,7 @@
 """Processor class for Pop2Piano."""
 
 import os
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -23,8 +23,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import requires
 
 
+@requires(backends=("essentia", "librosa", "pretty_midi", "scipy", "torch"))
 class Pop2PianoProcessor(ProcessorMixin):
     r"""
     Constructs an Pop2Piano processor which wraps a Pop2Piano Feature Extractor and Pop2Piano Tokenizer into a single
@@ -49,11 +51,11 @@ class Pop2PianoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray]] = None,
-        sampling_rate: Union[int, List[int]] = None,
+        audio: Union[np.ndarray, list[float], list[np.ndarray]] = None,
+        sampling_rate: Optional[Union[int, list[int]]] = None,
         steps_per_beat: int = 2,
         resample: Optional[bool] = True,
-        notes: Union[List, TensorType] = None,
+        notes: Union[list, TensorType] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
