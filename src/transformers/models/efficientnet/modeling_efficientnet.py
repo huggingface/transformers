@@ -432,7 +432,7 @@ class EfficientNetEncoder(nn.Module):
 
 @auto_docstring
 class EfficientNetPreTrainedModel(PreTrainedModel):
-    config_class = EfficientNetConfig
+    config: EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
     _no_split_modules = []

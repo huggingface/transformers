@@ -1400,7 +1400,7 @@ class ClapTextPooler(nn.Module):
 
 @auto_docstring
 class ClapPreTrainedModel(PreTrainedModel):
-    config_class = ClapConfig
+    config: ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
 
@@ -1429,7 +1429,7 @@ class ClapPreTrainedModel(PreTrainedModel):
 
 
 class ClapAudioModel(ClapPreTrainedModel):
-    config_class = ClapAudioConfig
+    config: ClapAudioConfig
     main_input_name = "input_features"
 
     def __init__(self, config: ClapAudioConfig):
@@ -1451,9 +1451,6 @@ class ClapAudioModel(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
@@ -1505,7 +1502,7 @@ class ClapAudioModel(ClapPreTrainedModel):
     """
 )
 class ClapTextModel(ClapPreTrainedModel):
-    config_class = ClapTextConfig
+    config: ClapTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1615,7 +1612,7 @@ class ClapTextModel(ClapPreTrainedModel):
 
 @auto_docstring
 class ClapModel(ClapPreTrainedModel):
-    config_class = ClapConfig
+    config: ClapConfig
 
     def __init__(self, config: ClapConfig):
         super().__init__(config)
@@ -1708,9 +1705,6 @@ class ClapModel(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
@@ -1765,9 +1759,6 @@ class ClapModel(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ClapOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
@@ -1853,7 +1844,7 @@ class ClapModel(ClapPreTrainedModel):
 
 @auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
-    config_class = ClapTextConfig
+    config: ClapTextConfig
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1918,7 +1909,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
 
 @auto_docstring
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
-    config_class = ClapAudioConfig
+    config: ClapAudioConfig
     main_input_name = "input_features"
 
     def __init__(self, config: ClapAudioConfig):
@@ -1942,9 +1933,6 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ClapAudioModelOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.

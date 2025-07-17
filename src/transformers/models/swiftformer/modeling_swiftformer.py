@@ -388,7 +388,7 @@ class SwiftFormerEncoder(nn.Module):
 
 @auto_docstring
 class SwiftFormerPreTrainedModel(PreTrainedModel):
-    config_class = SwiftFormerConfig
+    config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

@@ -248,6 +248,7 @@ class HfQuantizer(ABC):
         del model.hf_quantizer
         del model.config.quantization_config
         del model.config._pre_quantization_dtype
+        del model.quantization_method
         model.is_quantized = False
 
         return model

@@ -469,7 +469,7 @@ class SiglipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class SiglipPreTrainedModel(PreTrainedModel):
-    config_class = SiglipConfig
+    config: SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
 
@@ -681,7 +681,7 @@ class SiglipTextTransformer(nn.Module):
     """
 )
 class SiglipTextModel(SiglipPreTrainedModel):
-    config_class = SiglipTextConfig
+    config: SiglipTextConfig
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)
@@ -809,7 +809,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
     """
 )
 class SiglipVisionModel(SiglipPreTrainedModel):
-    config_class = SiglipVisionConfig
+    config: SiglipVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SiglipVisionConfig):
@@ -863,7 +863,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
 @auto_docstring
 class SiglipModel(SiglipPreTrainedModel):
-    config_class = SiglipConfig
+    config: SiglipConfig
 
     def __init__(self, config: SiglipConfig):
         super().__init__(config)
