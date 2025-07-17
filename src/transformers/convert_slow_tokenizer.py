@@ -1540,12 +1540,6 @@ class HeliumConverter(SpmConverter):
         )
 
 
-class Ernie4_5Converter(LlamaConverter):
-    def vocab(self, proto):
-        # slow tokenizer already has correct proto pieces
-        return [(piece.piece, piece.score) for piece in proto.pieces]
-
-
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -1710,7 +1704,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "CodeLlamaTokenizer": LlamaConverter,
     "GemmaTokenizer": GemmaConverter,
     "Phi3Tokenizer": LlamaConverter,
-    "Ernie4_5Tokenizer": Ernie4_5Converter,
+    "Ernie4_5Tokenizer": LlamaConverter,
 }
 
 

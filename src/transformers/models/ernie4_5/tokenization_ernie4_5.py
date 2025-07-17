@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for Ernie 4.5"""
 
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from ...tokenization_utils import AddedToken
 from ...utils import logging
@@ -24,57 +24,37 @@ from ..llama import LlamaTokenizer
 logger = logging.get_logger(__name__)
 
 
-SPIECE_UNDERLINE = "▁"
 DEFAULT_CHAT_TEMPLATE = '{%- if not add_generation_prompt is defined -%}\n    {%- set add_generation_prompt = true -%}\n{%- endif -%}\n{%- if not cls_token is defined -%}\n    {%- set cls_token = "<|begin_of_sentence|>" -%}\n{%- endif -%}\n{%- if not sep_token is defined -%}\n    {%- set sep_token = "<|end_of_sentence|>" -%}\n{%- endif -%}\n{{- cls_token -}}\n{%- for message in messages -%}\n    {%- if message["role"] == "user" -%}\n        {{- "User: " + message["content"] + "\n" -}}\n    {%- elif message["role"] == "assistant" -%}\n        {{- "Assistant: " + message["content"] + sep_token -}}\n    {%- elif message["role"] == "system" -%}\n        {{- message["content"] + "\n" -}}\n    {%- endif -%}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- "Assistant: " -}}\n{%- endif -%}'
 
 
 @requires(backends=("sentencepiece",))
 class Ernie4_5Tokenizer(LlamaTokenizer):
+    # NOTE: Wrapper around Llama to enable different default values and warn
+    # if unintended behavior might be encounters, e.g. `add_prefix_space`.
+    #
+    # The `Ernie4_5Tokenizer` has to overwrite the `Llama` counterparts due
+    # to the way the original tokenizer treats spacing as well as how special
+    # tokens are treated. As many tokens have been added through other legacy
+    # methods, we need to circumvent those behaviors here. See the docstrings
+    # on the overwritten methods with example strings that would fail otherwise.
+
     legacy = True
     padding_side = "left"
     add_prefix_space = False
 
-    # overwriting to be compatible with the original ernie tokenizers
-    SPECIAL_TOKENS_ATTRIBUTES = [
-        "bos_token",
-        "eos_token",
-        "unk_token",
-        "sep_token",
-        "pad_token",
-        "cls_token",
-        "mask_token",
-        "sys_start_token",
-        "sys_end_token",
-        "header_start_token",
-        "header_end_token",
-        "additional_special_tokens",
-    ]
-
     def __init__(
         self,
         vocab_file,
-        bos_token="<s>",
-        eos_token="</s>",
         pad_token="<unk>",
-        unk_token="<unk>",
         cls_token="<|begin_of_sentence|>",
         sep_token="<|end_of_sentence|>",
         mask_token="<mask:1>",
-        sys_start_token="<mask:4>",
-        sys_end_token="<mask:5>",
-        header_start_token="<mask:6>",
-        header_end_token="<mask:7>",
         add_bos_token=False,
-        add_eos_token=False,
-        chat_template=DEFAULT_CHAT_TEMPLATE,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
-        clean_up_tokenization_spaces=False,
-        spaces_between_special_tokens=False,
         add_prefix_space=False,
+        chat_template=DEFAULT_CHAT_TEMPLATE,
         legacy=True,
         **kwargs,
     ):
-        # observed during `test_special_token_special_word`, also in llama tests (when exchanging tokenizers there)
         if add_prefix_space:
             logger.warning_once(
                 "The Ernie 4.5 Tokenizer does not support `add_prefix_space` so it may lead to unexpected behavior between "
@@ -87,31 +67,16 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
         cls_token = convert_to_added_token(cls_token)
         sep_token = convert_to_added_token(sep_token)
         mask_token = convert_to_added_token(mask_token)
-        sys_start_token = convert_to_added_token(sys_start_token)
-        sys_end_token = convert_to_added_token(sys_end_token)
-        header_start_token = convert_to_added_token(header_start_token)
-        header_end_token = convert_to_added_token(header_end_token)
 
         super().__init__(
             vocab_file,
-            bos_token=bos_token,
-            eos_token=eos_token,
             pad_token=pad_token,
-            unk_token=unk_token,
             cls_token=cls_token,
             sep_token=sep_token,
             mask_token=mask_token,
-            sys_start_token=sys_start_token,
-            sys_end_token=sys_end_token,
-            header_start_token=header_start_token,
-            header_end_token=header_end_token,
             add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
-            chat_template=chat_template,
-            sp_model_kwargs=sp_model_kwargs,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            spaces_between_special_tokens=spaces_between_special_tokens,
             add_prefix_space=add_prefix_space,
+            chat_template=chat_template,
             legacy=legacy,
             **kwargs,
         )
@@ -145,7 +110,8 @@ class Ernie4_5Tokenizer(LlamaTokenizer):
     ) -> str:
         """
         Overwritten as we want to handle the legacy-added tokens as normal tokens instead.
-        The easiest way to see the issue is by decoding sequences of numbers (e.g. "15 663").
+        The easiest way to see the issue is by decoding sequences of numbers or additional special
+        tokens (e.g. "15 663" or "<|LOC_BEGIN|>test<|LOC_END|>").
         """
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
