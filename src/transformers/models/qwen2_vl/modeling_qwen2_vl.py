@@ -1473,7 +1473,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                 (cache_position is not None and cache_position[0] == 0)
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.model.rope_deltas is None:
                 vision_positions, rope_deltas = self.model.get_rope_index(
                     model_inputs.get("input_ids", None),
                     image_grid_thw=image_grid_thw,
