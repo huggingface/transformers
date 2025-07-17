@@ -210,10 +210,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     valid_kwargs = DefaultFastImageProcessorKwargs
     unused_kwargs = None
 
-    def __init__(
-        self,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):
         super().__init__(**kwargs)
         kwargs = self.filter_out_unused_kwargs(kwargs)
         size = kwargs.pop("size", self.size)

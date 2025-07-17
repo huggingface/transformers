@@ -462,6 +462,14 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     pad_size = None
     mask_pad_size = None
 
+    def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+        if torch.cuda.is_available():
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                raise Exception(f"Could not load custom CUDA kernels for postprocessing: {e}")
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -791,11 +799,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                     mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
                 else:
                     raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-                if torch.cuda.is_available():
-                    try:
-                        load_cuda_kernels()
-                    except Exception as e:
-                        raise Exception(f"Could not load custom CUDA kernels for postprocessing: {e}")
                 try:
                     if max_hole_area > 0:
                         mask = _fill_holes(mask_flat, mask, max_hole_area, mask_threshold)

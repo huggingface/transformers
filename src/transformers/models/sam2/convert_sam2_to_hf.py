@@ -32,9 +32,9 @@ from transformers import (
     Sam2HieraDetConfig,
     Sam2ImageProcessorFast,
     Sam2MaskDecoderConfig,
-    Sam2Model,
     Sam2Processor,
     Sam2PromptEncoderConfig,
+    Sam2VideoModel,
     Sam2VideoProcessor,
     Sam2VisionConfig,
 )
@@ -216,7 +216,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     image_processor = Sam2ImageProcessorFast()
     video_processor = Sam2VideoProcessor()
     processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
-    hf_model = Sam2Model(config)
+    hf_model = Sam2VideoModel(config)
     hf_model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -237,7 +237,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     ).to(device)
 
     with torch.no_grad():
-        output = hf_model(**inputs)
+        output = hf_model.sam2_forward(**inputs)
     scores = output.iou_scores.squeeze()
 
     # commented scores are from original sam2.1 model with Sam2Processor input, changes might be from bfloat16

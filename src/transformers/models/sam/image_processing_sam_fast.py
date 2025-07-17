@@ -101,6 +101,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     pad_size = {"height": 1024, "width": 1024}
     mask_pad_size = {"height": 256, "width": 256}
 
+    def __init__(self, **kwargs: Unpack[SamFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
     def pad_image(self, images: "torch.Tensor", pad_size: SizeDict):
         """Pad images to the specified size."""
         output_height, output_width = pad_size.height, pad_size.width

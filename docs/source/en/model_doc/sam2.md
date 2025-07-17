@@ -129,8 +129,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - __call__
     - post_process_masks
     - init_video_session
-    - process_new_points_or_box_for_video_frame
-    - process_new_mask_for_video_frame
+    - add_inputs_to_inference_session
 
 ## Sam2ImageProcessorFast
 
@@ -163,6 +162,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2VideoModel
     - forward
-    - infer_on_video_frame_with_new_inputs
-    - propagate_in_video
-    - propagate_in_frame
+    - propagate_in_video_async

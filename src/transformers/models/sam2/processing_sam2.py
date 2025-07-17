@@ -499,10 +499,12 @@ class Sam2Processor(ProcessorMixin):
         inference_state_device: Union[str, "torch.device"] = None,
         processing_device: Union[str, "torch.device"] = None,
         video_storage_device: Union[str, "torch.device"] = None,
+        max_vision_features_cache_size: int = 1,
         torch_dtype: torch.dtype = torch.float32,
     ):
         """
         Initializes a video session for inference.
+        If a video is provided (async inference), the video will be processed and stored on the `video_storage_device`.
 
         Args:
             video (`VideoInput`, *optional*):
@@ -515,6 +517,8 @@ class Sam2Processor(ProcessorMixin):
                 The device to use for video processing.
             video_storage_device (`str` or `torch.device`, *optional*):
                 The device to store the processed video frames on.
+            max_vision_features_cache_size (`int`, *optional*, defaults to 1):
+                The maximum number of vision features to cache.
             torch_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the whole session.
         """
@@ -525,17 +529,11 @@ class Sam2Processor(ProcessorMixin):
         video_height = None
         video_width = None
         if video is not None:
-            processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt").to(
-                torch_dtype
-            )
-            if video_storage_device != inference_device:
-                processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(video_storage_device)
-            elif processing_device != inference_device:
-                processed_video.pixel_values_videos = processed_video.pixel_values_videos.to(inference_device)
+            processed_video = self.video_processor(videos=video, device=processing_device, return_tensors="pt")
             pixel_values_video = processed_video.pixel_values_videos[0]
             video_height = processed_video.original_sizes[0][0]
             video_width = processed_video.original_sizes[0][1]
-        inference_state = Sam2VideoInferenceSession(
+        inference_session = Sam2VideoInferenceSession(
             video=pixel_values_video,
             video_height=video_height,
             video_width=video_width,
@@ -543,12 +541,77 @@ class Sam2Processor(ProcessorMixin):
             video_storage_device=video_storage_device,
             inference_state_device=inference_state_device,
             torch_dtype=torch_dtype,
+            max_vision_features_cache_size=max_vision_features_cache_size,
         )
-        return inference_state
+        return inference_session
 
-    def process_new_points_or_box_for_video_frame(
+    def add_inputs_to_inference_session(
         self,
-        inference_state: Sam2VideoInferenceSession,
+        inference_session: Sam2VideoInferenceSession,
+        frame_idx: int,
+        obj_ids: Union[list[int], int],
+        input_points: Optional[
+            Union[list[float], list[list[float]], list[list[list[float]]], list[list[list[list[float]]]], torch.Tensor]
+        ] = None,
+        input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
+        input_masks: Optional[Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]] = None,
+        original_size: Optional[tuple[int, int]] = None,
+        clear_old_inputs: bool = True,
+    ) -> Sam2VideoInferenceSession:
+        """
+        Process new points, boxes, or masks for a video frame and add them to the inference session.
+
+        Args:
+            inference_session (`Sam2VideoInferenceSession`):
+                The inference session for the video.
+            frame_idx (`int`):
+                The index of the frame to process.
+            obj_ids (`list[int]` or `int`):
+                The object ID(s) to associate with the points or box.
+                These can be any integers and can be reused later on to specify an object.
+            input_points (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
+                The points to add to the frame.
+            input_labels (`int`, `list[int]`, `list[list[int]]`, `list[list[list[int]]]`, `torch.Tensor`, *optional*):
+                The labels for the points.
+            input_boxes (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `torch.Tensor`, *optional*):
+                The bounding boxes to add to the frame.
+            input_masks (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, or `list[torch.Tensor]`, *optional*):
+                The mask(s) to add to the frame.
+            original_size (`tuple[int, int]`, *optional*):
+                The original size of the video. Provide when streaming.
+            clear_old_inputs (`bool`, *optional*, defaults to `True`):
+                Whether to clear old inputs for the object.
+        """
+
+        if isinstance(obj_ids, int):
+            obj_ids = [obj_ids]
+
+        # Validate inputs
+        if (input_points is not None) != (input_labels is not None):
+            raise ValueError("points and labels must be provided together")
+        if input_points is None and input_boxes is None and input_masks is None:
+            raise ValueError("at least one of points, boxes, or masks must be provided as input")
+        if input_masks is not None and (input_points is not None or input_boxes is not None):
+            raise ValueError("masks cannot be provided together with points or boxes")
+
+        if input_masks is not None:
+            return self.process_new_mask_for_video_frame(inference_session, frame_idx, obj_ids, input_masks)
+        else:
+            return self.process_new_points_or_boxes_for_video_frame(
+                inference_session,
+                frame_idx,
+                obj_ids,
+                input_points,
+                input_labels,
+                input_boxes,
+                original_size,
+                clear_old_inputs,
+            )
+
+    def process_new_points_or_boxes_for_video_frame(
+        self,
+        inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: Union[list[int], int],
         input_points: Optional[
@@ -560,14 +623,14 @@ class Sam2Processor(ProcessorMixin):
         clear_old_inputs: bool = True,
     ) -> Sam2VideoInferenceSession:
         """
-        Process new points or box for a video frame and return preprocessed inputs for model.
+        Process new points or boxes for a video frame and add them to the inference session.
 
         Args:
-            inference_state (`Sam2VideoSessionState`):
-                The inference state for the video session.
+            inference_session (`Sam2VideoInferenceSession`):
+                The inference session for the video.
             frame_idx (`int`):
                 The index of the frame to process.
-            obj_ids (`list[int]` or `int`):
+            obj_ids (`list[int]`):
                 The object ID(s) to associate with the points or box.
                 These can be any integers and can be reused later on to specify an object.
             input_points (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
@@ -581,24 +644,13 @@ class Sam2Processor(ProcessorMixin):
             clear_old_inputs (`bool`, *optional*, defaults to `True`):
                 Whether to clear old inputs for the object.
         """
-
-        if isinstance(obj_ids, int):
-            obj_ids = [obj_ids]
-
-        # Validate inputs
-        if (input_points is not None) != (input_labels is not None):
-            raise ValueError("points and labels must be provided together")
-        if input_points is None and input_boxes is None:
-            raise ValueError("at least one of points or box must be provided as input")
-
-        device = inference_state.inference_device
         if original_size is not None:
-            inference_state.video_height = original_size[0]
-            inference_state.video_width = original_size[1]
-        elif inference_state.video_height is None or inference_state.video_width is None:
-            raise ValueError("original_size must be provided when adding inputs on a streamed frame")
+            inference_session.video_height = original_size[0]
+            inference_session.video_width = original_size[1]
+        elif inference_session.video_height is None or inference_session.video_width is None:
+            raise ValueError("original_size must be provided when adding points or boxes on a first streamed frame")
 
-        original_sizes = [[inference_state.video_height, inference_state.video_width]]
+        original_sizes = [[inference_session.video_height, inference_session.video_width]]
 
         encoded_inputs = self(
             input_points=input_points,
@@ -606,7 +658,7 @@ class Sam2Processor(ProcessorMixin):
             input_boxes=input_boxes,
             original_sizes=original_sizes,
             return_tensors="pt",
-        ).to(device)
+        )
         input_points = encoded_inputs.get("input_points", None)
         input_labels = encoded_inputs.get("input_labels", None)
         input_boxes = encoded_inputs.get("input_boxes", None)
@@ -617,14 +669,14 @@ class Sam2Processor(ProcessorMixin):
                     f"Number of object ids ({len(obj_ids)}) does not match number of points ({input_points.shape[1]})"
                 )
         else:
-            input_points = torch.zeros(1, len(obj_ids), 0, 2, dtype=torch.float32, device=device)
+            input_points = torch.zeros(1, len(obj_ids), 0, 2, dtype=torch.float32)
         if input_labels is not None:
             if input_labels.shape[1] != len(obj_ids):
                 raise ValueError(
                     f"Number of object ids ({len(obj_ids)}) does not match number of labels ({input_labels.shape[1]})"
                 )
         else:
-            input_labels = torch.zeros(1, len(obj_ids), 0, dtype=torch.int32, device=device)
+            input_labels = torch.zeros(1, len(obj_ids), 0, dtype=torch.int32)
         if input_boxes is not None:
             if input_boxes.shape[1] != len(obj_ids):
                 raise ValueError(
@@ -639,18 +691,18 @@ class Sam2Processor(ProcessorMixin):
                     "(please use clear_old_points=True instead)"
                 )
             box_coords = input_boxes.reshape(1, -1, 2, 2)
-            box_labels = torch.tensor([2, 3], dtype=torch.int32, device=input_labels.device)
+            box_labels = torch.tensor([2, 3], dtype=torch.int32)
             box_labels = box_labels.reshape(1, -1, 2)
             input_points = torch.cat([box_coords, input_points], dim=2)
             input_labels = torch.cat([box_labels, input_labels], dim=2)
 
         for obj_id, idx in zip(obj_ids, range(len(obj_ids))):
-            obj_idx = inference_state._obj_id_to_idx(obj_id)
+            obj_idx = inference_session._obj_id_to_idx(obj_id)
             input_points_for_obj = input_points[:, idx, :, :].unsqueeze(1)
             input_labels_for_obj = input_labels[:, idx, :].unsqueeze(1)
             # Handle existing points
             if not clear_old_inputs:
-                existing_points = inference_state.point_inputs_per_obj[obj_idx].get(frame_idx, None)
+                existing_points = inference_session.point_inputs_per_obj[obj_idx].get(frame_idx, None)
                 if existing_points is not None:
                     # Concatenate with existing points
                     input_points_for_obj = torch.cat([existing_points["point_coords"], input_points_for_obj], dim=2)
@@ -660,36 +712,32 @@ class Sam2Processor(ProcessorMixin):
                 "point_labels": input_labels_for_obj,
             }
 
-            inference_state.point_inputs_per_obj[obj_idx][frame_idx] = point_inputs
-            inference_state.mask_inputs_per_obj[obj_idx].pop(frame_idx, None)  # Clear any mask inputs
+            inference_session.add_point_inputs(obj_idx, frame_idx, point_inputs)
+            inference_session.remove_mask_inputs(obj_idx, frame_idx)  # Clear any mask inputs
 
-        inference_state.new_inputs_added = True
-
-        return inference_state
+        inference_session.obj_with_new_inputs = obj_ids
 
     def process_new_mask_for_video_frame(
         self,
-        inference_state: Sam2VideoInferenceSession,
+        inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
-        obj_ids: Union[list[int], int],
+        obj_ids: list[int],
         input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
-    ) -> Sam2VideoInferenceSession:
+    ):
         """
-        Add new mask to a frame and return preprocessed inputs for model.
+        Add new mask to a frame and add them to the inference session.
 
         Args:
-            inference_state (`Sam2VideoSessionState`):
-                The inference state for the video session.
+            inference_session (`Sam2VideoInferenceSession`):
+                The inference session for the video.
             frame_idx (`int`):
                 The index of the frame to process.
-            obj_ids (`list[int]` or `int`):
+            obj_ids (`list[int]`):
                 The object ID(s) to associate with the mask.
                 These can be any integers and can be reused later on to specify an object.
             input_masks (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, or `list[torch.Tensor]`):
                 The mask(s) to add to the frame.
         """
-        if isinstance(obj_ids, int):
-            obj_ids = [obj_ids]
         if not isinstance(input_masks, list):
             input_masks = [input_masks]
         if len(input_masks) != len(obj_ids):
@@ -698,9 +746,9 @@ class Sam2Processor(ProcessorMixin):
             )
 
         for obj_id, mask in zip(obj_ids, input_masks):
-            obj_idx = inference_state._obj_id_to_idx(obj_id)
+            obj_idx = inference_session._obj_id_to_idx(obj_id)
 
-            device = inference_state.inference_device
+            device = inference_session.inference_device
 
             # Process mask
             if not isinstance(mask, torch.Tensor):
@@ -728,10 +776,10 @@ class Sam2Processor(ProcessorMixin):
             else:
                 mask_inputs = mask_inputs_orig
 
-            inference_state.mask_inputs_per_obj[obj_idx][frame_idx] = mask_inputs.to(inference_state.torch_dtype)
-            inference_state.point_inputs_per_obj[obj_idx].pop(frame_idx, None)  # Clear any point inputs
+            inference_session.add_mask_inputs(obj_idx, frame_idx, mask_inputs)
+            inference_session.remove_point_inputs(obj_idx, frame_idx)  # Clear any point inputs
 
-        return inference_state
+        inference_session.obj_with_new_inputs = obj_ids
 
 
 __all__ = ["Sam2Processor"]

@@ -1011,24 +1011,24 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_mask_generation_video_one_point(self):
         raw_video = prepare_video()
-        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-        inference_state = self.processor.process_new_points_or_box_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_points=[[[[210, 350]]]],
             input_labels=[[[1]]],
         )
-        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
-            inference_state=inference_state,
+        outputs = self.video_model(
+            inference_state=inference_session,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_id,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks, video_res_masks = outputs
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1042,12 +1042,47 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
-            inference_state=inference_state,
+        for sam2_video_output in self.video_model.propagate_in_video_async(
+            inference_state=inference_session,
+            max_frame_num_to_track=2,
+        ):
+            frames.append(sam2_video_output.video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-21.4113, -21.4113], [-23.3089, -23.3089]]]],
+                    [[[[-20.0937, -20.0937], [-21.2233, -21.2233]]]],
+                    [[[[-19.9581, -19.9581], [-21.3028, -21.3028]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_video_one_point_propagate_in_video_directly(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_id,
+            input_points=[[[[210, 350]]]],
+            input_labels=[[[1]]],
+        )
+        # test propagate in video frames
+        frames = []
+        for sam2_video_output in self.video_model.propagate_in_video_async(
+            inference_state=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(out_mask_logits)
+            frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1069,20 +1104,20 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-        inference_state = self.processor.process_new_points_or_box_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
-        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_id,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks, video_res_masks = outputs
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1096,12 +1131,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
+        for sam2_video_output in self.video_model.propagate_in_video_async(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(out_mask_logits)
+            frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1123,19 +1158,19 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-        inference_state = self.processor.process_new_points_or_box_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_boxes=[[[[300, 0, 500, 400]]]],
         )
-        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_id,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks, video_res_masks = outputs
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1149,12 +1184,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
+        for sam2_video_output in self.video_model.propagate_in_video_async(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(out_mask_logits)
+            frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1176,21 +1211,21 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
-        inference_state = self.processor.process_new_points_or_box_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_boxes=[[[[300, 0, 500, 400]]]],
             input_points=[[[[460, 60]]]],
             input_labels=[[[1]]],
         )
-        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_id,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks, video_res_masks = outputs
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1204,12 +1239,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
+        for sam2_video_output in self.video_model.propagate_in_video_async(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(out_mask_logits)
+            frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1231,20 +1266,20 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_ids = [2, 3]  # give a unique id to each object we interact with (it can be any integers)
 
-        inference_state = self.processor.process_new_points_or_box_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_ids,
             input_points=[[[[200, 300], [230, 250], [275, 175]], [[400, 150]]]],
             input_labels=[[[1, 1, 0], [1]]],
         )
-        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_ids,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks, video_res_masks = outputs
+        low_res_masks = outputs.consolidated_res_masks
+        video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (2, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (2, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1258,12 +1293,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
+        for sam2_video_output in self.video_model.propagate_in_video_async(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(out_mask_logits)
+            frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 2, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1286,34 +1321,33 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
         # get input_mask
-        inference_state = self.processor.process_new_points_or_box_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
-        video_res_masks = self.video_model.infer_on_video_frame_with_new_inputs(
+        sam2_video_output = self.video_model(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_id,
             consolidate_at_video_res=True,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
 
         # set mask as input
-        inference_state = self.processor.process_new_mask_for_video_frame(
-            inference_state=inference_state,
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
-            input_masks=video_res_masks,
+            input_masks=sam2_video_output.video_res_masks,
         )
-        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
+        sam2_video_output = self.video_model(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
-            obj_ids=ann_obj_id,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks, video_res_masks = outputs
+        low_res_masks = sam2_video_output.consolidated_res_masks
+        video_res_masks = sam2_video_output.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1327,12 +1361,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
+        for sam2_video_output in self.video_model.propagate_in_video_async(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(out_mask_logits)
+            frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -1357,9 +1391,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         for frame_idx, frame in enumerate(raw_video):
             if frame_idx >= max_frame_num_to_track:
                 break
+            inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
             if frame_idx == 0:
-                inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
-                inference_state = self.processor.process_new_points_or_box_for_video_frame(
+                self.processor.add_inputs_to_inference_session(
                     inference_state,
                     frame_idx=0,
                     obj_ids=1,
@@ -1367,28 +1401,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
                     input_labels=[[[1, 1]]],
                     original_size=inputs.original_sizes[0],
                 )
-                video_res_mask = self.video_model.infer_on_video_frame_with_new_inputs(
-                    inference_state=inference_state,
-                    frame=inputs.pixel_values[0],
-                    obj_ids=1,
-                )
-                video_res_masks.append(video_res_mask)
-            else:
-                inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
-                video_res_mask = self.video_model.propagate_in_frame(inference_state, frame=inputs.pixel_values[0])
-                video_res_masks.append(video_res_mask)
+            sam2_video_output = self.video_model(inference_state=inference_state, frame=inputs.pixel_values[0])
+            video_res_masks.append(sam2_video_output.video_res_masks)
 
         video_res_masks = torch.stack(video_res_masks, dim=0)
         self.assertEqual(
             video_res_masks.shape, (max_frame_num_to_track, 1, 1, raw_video.shape[-3], raw_video.shape[-2])
-        )
-        torch.testing.assert_close(
-            video_res_masks[0, 0, 0, :3, :3],
-            torch.tensor(
-                [[-11.1491, -11.1491, -11.4204], [-11.6524, -11.6524, -11.8057], [-12.7825, -12.7825, -12.6707]],
-            ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
         )
         torch.testing.assert_close(
             video_res_masks[:3, :, :, :2, :2],
