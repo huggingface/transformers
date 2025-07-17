@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from .modeling_sam2 import Sam2VideoSessionState
+    from .modeling_sam2 import Sam2VideoInferenceSession
 
 if is_tf_available():
     pass
@@ -535,7 +535,7 @@ class Sam2Processor(ProcessorMixin):
             pixel_values_video = processed_video.pixel_values_videos[0]
             video_height = processed_video.original_sizes[0][0]
             video_width = processed_video.original_sizes[0][1]
-        inference_state = Sam2VideoSessionState(
+        inference_state = Sam2VideoInferenceSession(
             video=pixel_values_video,
             video_height=video_height,
             video_width=video_width,
@@ -548,7 +548,7 @@ class Sam2Processor(ProcessorMixin):
 
     def process_new_points_or_box_for_video_frame(
         self,
-        inference_state: Sam2VideoSessionState,
+        inference_state: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: Union[list[int], int],
         input_points: Optional[
@@ -558,7 +558,7 @@ class Sam2Processor(ProcessorMixin):
         input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
         original_size: Optional[tuple[int, int]] = None,
         clear_old_inputs: bool = True,
-    ) -> Sam2VideoSessionState:
+    ) -> Sam2VideoInferenceSession:
         """
         Process new points or box for a video frame and return preprocessed inputs for model.
 
@@ -663,15 +663,17 @@ class Sam2Processor(ProcessorMixin):
             inference_state.point_inputs_per_obj[obj_idx][frame_idx] = point_inputs
             inference_state.mask_inputs_per_obj[obj_idx].pop(frame_idx, None)  # Clear any mask inputs
 
+        inference_state.new_inputs_added = True
+
         return inference_state
 
     def process_new_mask_for_video_frame(
         self,
-        inference_state: Sam2VideoSessionState,
+        inference_state: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: Union[list[int], int],
         input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
-    ) -> Sam2VideoSessionState:
+    ) -> Sam2VideoInferenceSession:
         """
         Add new mask to a frame and return preprocessed inputs for model.
 

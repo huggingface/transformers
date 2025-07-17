@@ -140,9 +140,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2VideoProcessor
 
-## Sam2VideoSessionState
+## Sam2VideoSession
 
-[[autodoc]] Sam2VideoSessionState
+[[autodoc]] Sam2VideoInferenceSession
 
 ## Sam2HieraDetModel
 
@@ -157,6 +157,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## Sam2Model
 
 [[autodoc]] Sam2Model
+    - forward
+
+## Sam2VideoModel
+
+[[autodoc]] Sam2VideoModel
     - forward
     - infer_on_video_frame_with_new_inputs
     - propagate_in_video

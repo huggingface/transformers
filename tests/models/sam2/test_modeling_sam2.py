@@ -48,7 +48,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Sam2Model, Sam2Processor, Sam2VisionModel
+    from transformers import Sam2Model, Sam2Processor, Sam2VideoModel, Sam2VisionModel
 
 
 if is_vision_available():
@@ -746,35 +746,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf").to(torch.float32)
+        self.video_model = Sam2VideoModel.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf").to(torch.float32)
         self.processor = Sam2Processor.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()
+        self.video_model.to(torch_device)
+        self.video_model.eval()
 
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         backend_empty_cache(torch_device)
-
-    def test_inference_mask_generation_no_point(self):
-        pass
-
-        # model = Sam2Model.from_pretrained("facebook/sam2-vit-base")
-
-    #     processor = SamProcessor.from_pretrained("facebook/sam2-vit-base")
-
-    #     model.to(torch_device)
-    #     model.eval()
-
-    #     raw_image = prepare_image()
-    #     inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
-
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #     scores = outputs.iou_scores.squeeze()
-    #     masks = outputs.pred_masks[0, 0, 0, 0, :3]
-    #     self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
-    #     self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
 
     def test_inference_mask_generation_one_point_multimask(self):
         raw_image = prepare_image()
@@ -1039,7 +1022,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_points=[[[[210, 350]]]],
             input_labels=[[[1]]],
         )
-        outputs = self.model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
@@ -1059,7 +1042,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1093,7 +1076,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
-        outputs = self.model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
@@ -1113,7 +1096,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1146,7 +1129,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             obj_ids=ann_obj_id,
             input_boxes=[[[[300, 0, 500, 400]]]],
         )
-        outputs = self.model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
@@ -1166,7 +1149,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1201,7 +1184,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_points=[[[[460, 60]]]],
             input_labels=[[[1]]],
         )
-        outputs = self.model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
@@ -1221,7 +1204,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1255,7 +1238,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_points=[[[[200, 300], [230, 250], [275, 175]], [[400, 150]]]],
             input_labels=[[[1, 1, 0], [1]]],
         )
-        outputs = self.model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_ids,
@@ -1275,7 +1258,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1310,7 +1293,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
-        video_res_masks = self.model.infer_on_video_frame_with_new_inputs(
+        video_res_masks = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
@@ -1324,7 +1307,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             obj_ids=ann_obj_id,
             input_masks=video_res_masks,
         )
-        outputs = self.model.infer_on_video_frame_with_new_inputs(
+        outputs = self.video_model.infer_on_video_frame_with_new_inputs(
             inference_state=inference_state,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
@@ -1344,7 +1327,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for frame_idx, out_mask_logits in self.model.propagate_in_video(
+        for frame_idx, out_mask_logits in self.video_model.propagate_in_video(
             inference_state=inference_state,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1384,7 +1367,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
                     input_labels=[[[1, 1]]],
                     original_size=inputs.original_sizes[0],
                 )
-                video_res_mask = self.model.infer_on_video_frame_with_new_inputs(
+                video_res_mask = self.video_model.infer_on_video_frame_with_new_inputs(
                     inference_state=inference_state,
                     frame=inputs.pixel_values[0],
                     obj_ids=1,
@@ -1392,7 +1375,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
                 video_res_masks.append(video_res_mask)
             else:
                 inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
-                video_res_mask = self.model.propagate_in_frame(inference_state, frame=inputs.pixel_values[0])
+                video_res_mask = self.video_model.propagate_in_frame(inference_state, frame=inputs.pixel_values[0])
                 video_res_masks.append(video_res_mask)
 
         video_res_masks = torch.stack(video_res_masks, dim=0)
