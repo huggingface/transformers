@@ -190,12 +190,14 @@ def _prepare_from_posids(query, key, value, position_ids):
     query = query.contiguous().view(-1, query.size(-2), query.size(-1))
     key = key.contiguous().view(-1, key.size(-2), key.size(-1))
     value = value.contiguous().view(-1, value.size(-2), value.size(-1))
+    cu_seqlens_k = torch.cat([torch.tensor([0], device=query.device), position_ids[:, -1].cumsum(dim=0) + 1], dim=0)
+    max_k = torch.max(position_ids, dim=1).values.max().item() + 1
     position_ids = position_ids.flatten()
     indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
 
     cu_seq_lens = torch.cat(
         (
-            indices_q[position_ids == 0],
+            torch.tensor([0], device=position_ids.device, dtype=torch.int32),
             torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
         )
     )
@@ -208,7 +210,7 @@ def _prepare_from_posids(query, key, value, position_ids):
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
     # for some models (e.g. qwen2-vl).
     max_length = cu_seq_lens.diff().max().item()
-    return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
+    return (query, key, value, indices_q, (cu_seq_lens, cu_seqlens_k), (max_length, max_k))
 
 
 def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
@@ -321,6 +323,13 @@ def _flash_attention_forward(
         q, k, v, idx, (cu_q, cu_k), (mq, mk) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
+        if kwargs.get("layer_idx", 0) == 0:
+            print(
+                cu_q,
+                cu_k,
+                mq,
+                mk,
+            )
         out_unpad = flash_varlen_fn(
             q,
             k,
@@ -349,6 +358,13 @@ def _flash_attention_forward(
             v = value_states.view(-1, value_states.size(-2), value_states.size(-1))
             mq, mk = max_length_q, max_length_k
             cu_q, cu_k = cu_seq_lens_q, cu_seq_lens_k
+        if kwargs.get("layer_idx", 0) == 0:
+            print(
+                cu_q,
+                cu_k,
+                mq,
+                mk,
+            )
         out = flash_varlen_fn(
             q,
             k,
