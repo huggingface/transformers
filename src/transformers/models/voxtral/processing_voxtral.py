@@ -142,7 +142,7 @@ class VoxtralProcessor(ProcessorMixin):
             },
         ]
 
-        processor = VoxtralProcessor.from_pretrained("/home/eustache_lebihan/add-moshi-asr/Voxtral-Mini-3B-2507")
+        processor = VoxtralProcessor.from_pretrained("mistralai/Voxtral-Mini-3B-2507")
         inputs = processor.apply_chat_template(conversation)
         ```
 

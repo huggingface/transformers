@@ -210,7 +210,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         >>> import torch
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> repo_id = "/home/eustache_lebihan/add-moshi-asr/Voxtral-Mini-3B-2507"
+        >>> repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
         >>> processor = AutoProcessor.from_pretrained(repo_id)
         >>> model = VoxtralForConditionalGeneration.from_pretrained(repo_id, torch_dtype=torch.bfloat16, device_map=device)
@@ -221,7 +221,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
                     },
                     {"type": "text", "text": "What can you tell me about this audio?"},
                 ],
@@ -273,4 +273,4 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["VoxtralEncoder", "VoxtralForConditionalGeneration"]
+__all__ = ["VoxtralPreTrainedModel", "VoxtralEncoder", "VoxtralForConditionalGeneration"]
