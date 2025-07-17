@@ -71,6 +71,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,

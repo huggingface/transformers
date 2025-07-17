@@ -38,7 +38,6 @@ def flash_attention_forward(
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
         )
-
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
