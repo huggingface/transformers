@@ -1309,7 +1309,7 @@ class ModularFileMapper(ModuleMapper):
             file_model_name = file.split(".")[-2]
             new_name = name_prefixes[file]
             renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name)
-            renamed_module = MetadataWrapper(module).visit(renamer)
+            renamed_module = module.visit(renamer)
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
                 self.classes,

@@ -247,7 +247,7 @@ class FalconMambaMixer(nn.Module):
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
         if not is_fast_path_available:
-            if self.use_mambapy:
+            if self.use_falcon_mambapy:
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
@@ -673,9 +673,6 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
         self.post_init()
-
-    def load_hook(self, state_dict, prefix, *args):
-        raise AttributeError("Not needed for FalconMamba")
 
     def get_input_embeddings(self):
         return self.embeddings
