@@ -4931,7 +4931,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             ):
                 device_map_kwargs["offload_buffers"] = True
 
-            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+            # Check if model is quantized with bitsandbytes
+            is_quantized_bnb = (
+                hf_quantizer is not None and 
+                hf_quantizer.quantization_config.quant_method == QuantizationMethod.BITS_AND_BYTES
+            )
+
+            # Skip dispatch_model for quantized models as they're already on correct devices
+            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled() and not is_quantized_bnb:
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
