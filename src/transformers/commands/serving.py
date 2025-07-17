@@ -23,7 +23,7 @@ import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Annotated, Generator, Optional, Union
+from typing import Generator, Optional, Union
 
 from huggingface_hub import ModelInfo, model_info
 
@@ -62,10 +62,11 @@ serve_dependencies_available = (
 )
 if serve_dependencies_available:
     import uvicorn
-    from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+    from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
+    from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         Choice,
@@ -109,9 +110,19 @@ if serve_dependencies_available:
 
         generation_config: str
 
+    class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
+        """
+        OpenAI's TranscriptionCreateParamsBase with an additional field for the generation config (as a json string).
+        """
+
+        file: bytes  # Overwritten -- pydantic isn't happy with `typing.IO[bytes]`, present in the original type
+        generation_config: str
+        stream: Optional[bool] = False
+
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
     completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
+    transcription_validator = TypeAdapter(TransformersTranscriptionCreateParams)
 
     # Define request fields that are not yet used in `transformers serve`. Receiving these fields will raise an
     # HTTPException.
@@ -500,6 +511,14 @@ class ServeCommand(BaseTransformersCLICommand):
             unused_fields=UNUSED_CHAT_COMPLETION_FIELDS,
         )
 
+    def validate_transcription_request(self, request: dict):
+        self._validate_request(
+            request=request,
+            schema=TransformersTranscriptionCreateParams,
+            validator=transcription_validator,
+            unused_fields=UNUSED_TRANSCRIPTION_FIELDS,
+        )
+
     def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
@@ -599,19 +618,24 @@ class ServeCommand(BaseTransformersCLICommand):
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
+        from fastapi import Request
+
         @app.post("/v1/audio/transcriptions")
-        def audio_transcriptions(
-            file: Annotated[UploadFile, File()],
-            model: Annotated[str, Form()],
-        ):
-            logger.debug(
-                f"Received file: {file.filename}; MIME type: {file.content_type}; size: {file.size / 1024:.2f} KiB"
-            )
-            request = {
-                "file_data": file.file.read(),
-                "model": model,
-            }
-            output = self.generate_transcription(request)
+        async def audio_transcriptions(request: Request):
+            # Parses the multipart/form-data request into the request format used by other endpoints
+            async with request.form() as form:
+                parsed_request = TransformersTranscriptionCreateParams(
+                    file=await form["file"].read(),
+                    model=form["model"],
+                    # TODO: add other fields
+                )
+                logger.debug(
+                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
+                    f"size: {form['file'].size / 1024:.2f} KiB"
+                )
+            self.validate_transcription_request(request=parsed_request)
+
+            output = self.generate_transcription(parsed_request)
             return StreamingResponse(output, media_type="text/event-stream")
 
         @app.get("/v1/models")
@@ -1167,7 +1191,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         # Read the binary audio file using librosa
         model_sampling_rate = audio_processor.feature_extractor.sampling_rate
-        audio_bytes = io.BytesIO(req["file_data"])
+        audio_bytes = io.BytesIO(req["file"])
         audio_array, _ = librosa.load(audio_bytes, sr=model_sampling_rate, mono=True)
         audio_inputs = audio_processor(audio_array, sampling_rate=model_sampling_rate, return_tensors="pt").to(
             audio_model.device
