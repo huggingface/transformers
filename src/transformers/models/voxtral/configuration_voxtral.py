@@ -40,8 +40,6 @@ class VoxtralEncoderConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 20):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*):
-            Number of key and value heads for each attention layer. If None, defaults to `num_attention_heads`.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by dividing by sqrt(hidden_size) if True.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
@@ -55,8 +53,6 @@ class VoxtralEncoderConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        head_dim (`int`, *optional*):
-            Dimensionality of each attention head. If not set, defaults to hidden_size // num_attention_heads.
 
     ```python
     >>> from transformers import VoxtralEncoderConfig, VoxtralEncoder

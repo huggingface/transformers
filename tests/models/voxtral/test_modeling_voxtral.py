@@ -147,6 +147,12 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         self.model_tester = VoxtralModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VoxtralConfig, has_text_modality=False)
 
+    @unittest.skip(
+        reason="This test does not apply to Voxtral since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
+    )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Voxtral is audio+text model (not vision+text)
@@ -189,9 +195,9 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 @require_torch
 class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.check_model_name = "mistralai/Voxtral-Mini-3B-2507"
+        self.checkpoint_name = "/scratch/Voxtral-Mini-3B-2507"
         self.dtype = torch.bfloat16
-        self.processor = AutoProcessor.from_pretrained(self.check_model_name)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -215,7 +221,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -248,7 +254,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -286,7 +292,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -316,7 +322,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -371,7 +377,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversations)
@@ -426,7 +432,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversations)
@@ -448,11 +454,12 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
         """
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
         inputs = self.processor.apply_transcrition_request(
             language="en",
             audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+            model_id=self.checkpoint_name,
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
