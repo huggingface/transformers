@@ -4783,6 +4783,96 @@ class ModelTesterMixin:
                 f"All parameters should be on meta device, but found {unique_devices}.",
             )
 
+    def test_internal_model_config_and_subconfig_are_same(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        subconfig_keys = list(config.sub_configs.keys())
+        for model_class in self.all_model_classes:
+            if len(config.sub_configs) == 0:
+                self.skipTest(reason="No subconfigs so the test does not make sense")
+            # Need to deepcopy here to avoid changing the _attn_implementation in-place
+            model = model_class(copy.deepcopy(config))
+
+            for submodule in model.modules():
+                # This is a submodel
+                if isinstance(submodule, PreTrainedModel) and submodule.config.__class__ != model.config.__class__:
+                    for subconfig_key in subconfig_keys:
+                        # Get the subconfig from the model config
+                        subconfig_from_model_config = getattr(model.config, subconfig_key)
+                        if subconfig_from_model_config.__class__ == submodule.config_class:
+                            subconfig_from_model_internal = submodule.config
+
+                            # Both should be exactly the same object, that is when instantiating the submodel when should
+                            # absolutely not copy the subconfig
+                            self.assertTrue(subconfig_from_model_config is subconfig_from_model_internal)
+
+    def test_can_set_attention_dynamically(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if not model_class._can_set_attn_implementation():
+                self.skipTest(reason="This model does not support setting its attention dynamically")
+
+            # Need to deepcopy here to avoid changing the _attn_implementation in-place
+            model_config = copy.deepcopy(config)
+            # Set eager everywhere (it sets it recursively on subconfigs)
+            model_config._attn_implementation = "eager"
+            model = model_class(model_config)
+
+            # sanity check to make sure everything is correctly eager
+            self.assertTrue(model.config._attn_implementation == "eager")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
+            # Now, set it to sdpa (all models should support it if they support the dynamic switch)
+            model.set_attn_implementation("sdpa")
+
+            # Check everything was correctly changed
+            self.assertTrue(model.config._attn_implementation == "sdpa")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+
+            # Check we cannot set it to random values, and it raises a warning (but no crash)
+            with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
+                model.set_attn_implementation("foo")
+                self.assertTrue(
+                    any(
+                        "Impossible to set the requested `attn_implementation`. The following error was captured:"
+                        in warning
+                        for warning in cm.output
+                    )
+                )
+
+            # Should still be sdpa everywhere
+            self.assertTrue(model.config._attn_implementation == "sdpa")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+
+    def test_can_set_attention_dynamically_composite_model(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if not model_class._can_set_attn_implementation():
+                self.skipTest(reason="This model does not support setting its attention dynamically")
+            if not self._is_composite:
+                self.skipTest(reason="This model is not composite")
+
+            # Need to deepcopy here to avoid changing the _attn_implementation in-place
+            model_config = copy.deepcopy(config)
+            # Set eager everywhere (it sets it recursively on subconfigs)
+            model_config._attn_implementation = "eager"
+            model = model_class(model_config)
+
+            # sanity check to make sure everything is correctly eager
+            self.assertTrue(model.config._attn_implementation == "eager")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
+            # Now, set only top-most to sdpa (should support it if it supports the dynamic switch)
+            model.set_attn_implementation({"": "sdpa"})
+
+            # Check only top-most was correctly changed
+            self.assertTrue(model.config._attn_implementation == "sdpa")
+            for subconfig_key in model.config.sub_configs:
+                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
 
 global_rng = random.Random()
 
