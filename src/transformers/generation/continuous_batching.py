@@ -724,7 +724,7 @@ class PagedAttentionArgs:
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
-    max_seqlen_q: torch.Tensor
+    max_seqlen_q: int
     max_seqlen_k: int
     write_index: torch.Tensor
     read_index: torch.Tensor
@@ -835,7 +835,7 @@ class ContinuousBatchProcessor:
         self.write_index = torch.zeros((T,), **tensor_metadata).to(self.model_device, non_blocking=True)
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata).to(self.model_device, non_blocking=True)
         self.logits_indices = torch.full((T,), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
-        self.max_seqlen_q = torch.tensor(0, **tensor_metadata).to(self.model_device, non_blocking=True)
+        self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.block_tables = torch.full(
@@ -856,7 +856,7 @@ class ContinuousBatchProcessor:
         self.write_index.fill_(-1)
         self.read_index.fill_(-1)
         self.logits_indices.fill_(-1)
-        self.max_seqlen_q = torch.tensor(0).to(self.model_device, non_blocking=True)
+        self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids.zero_()
         self.block_tables.fill_(-1)
@@ -983,7 +983,7 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
-            self.max_seqlen_q = max(self.max_seqlen_q, torch.tensor(query_length, device=self.model_device))
+            self.max_seqlen_q = max(self.max_seqlen_q, query_length)
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
@@ -1006,9 +1006,8 @@ class ContinuousBatchProcessor:
         )
 
         self.metrics.record_kv_cache_memory_metrics(self.cache)
-
-        self.is_decoding = (self.max_seqlen_q == 1).item()
-
+        
+        self.is_decoding = (self.max_seqlen_q == 1)
     @traced
     def _build_tensors(
         self,

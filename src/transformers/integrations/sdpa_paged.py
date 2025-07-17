@@ -5,7 +5,7 @@ import torch
 from kernels import get_kernel
 
 paged_attention_kernel = get_kernel("kernels-community/paged-attention")
-
+sdpa_flash_kernel = get_kernel("kernels-community/metal-flash-sdpa")
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -66,6 +66,71 @@ def sdpa_attention_paged_forward__(
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, None
 
+def sdpa_attention_paged_forward_flash__(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    reshaping_function=None,
+    is_causal: Optional[bool] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, None]:
+    cache = kwargs.pop("cache", None)
+    if cache is not None:
+        key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
+
+    # because of the kernel, the shape of the cache is different
+    # it return [num_tokens, num_kv_heads, head_dim]
+
+    if key.ndim == 3:
+        key = key.permute(1, 0, 2)
+        value = value.permute(1, 0, 2)
+    else:
+        key = key.view(-1, key.shape[-2], key.shape[-1]).permute(1, 0, 2)
+        value = value.view(-1, value.shape[-2], value.shape[-1]).permute(1, 0, 2)
+
+    if hasattr(module, "num_key_value_groups"):
+        key = repeat_kv(key, module.num_key_value_groups)
+        value = repeat_kv(value, module.num_key_value_groups)
+    causal_mask = attention_mask
+    # print(f"causal_mask.shape: {causal_mask.shape}")
+    cu_seqlen_q = kwargs.get("cumulative_seqlens_q")
+    cu_seqlen_k = kwargs.get("cumulative_seqlens_k")
+    max_seqlen_q = kwargs.get("max_seqlen_q")
+    max_seqlen_k = kwargs.get("max_seqlen_k")
+
+    batch_size, num_heads, seq_len, head_size = query.shape
+    query = query.transpose(1, 2).reshape(batch_size * seq_len, num_heads, head_size).contiguous()
+    key = key.transpose(0, 1).contiguous()
+    value = value.transpose(0, 1).contiguous()
+    # print(f"query.shape: {query.shape}")
+    # print(f"key.shape: {key.shape}")
+    # print(f"value.shape: {value.shape}")
+    # print(f"cu_seqlen_q: {cu_seqlen_q}")
+    # print(f"cu_seqlen_k: {cu_seqlen_k}")
+    # print(f"max_seqlen_q: {max_seqlen_q.item()}")
+    # print(f"max_seqlen_k: {max_seqlen_k}")
+    if torch.backends.mps.is_available():
+        torch.mps.synchronize()
+    else:
+        torch.cuda.synchronize()
+
+    attn_output =sdpa_flash_kernel.flash_attn_varlen_func(
+        query,
+        key,
+        value,
+        cu_seqlen_q,
+        cu_seqlen_k,
+        max_seqlen_q,
+        max_seqlen_k,
+        causal=True,
+    )
+    attn_output = attn_output.view(batch_size, seq_len, num_heads, head_size)
+    # attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, None
 
 def sdpa_attention_paged_forward(
     module: torch.nn.Module,
@@ -81,9 +146,9 @@ def sdpa_attention_paged_forward(
     reshaping_function = paged_attention_kernel.reshape_and_cache_flash
 
     is_decoding = kwargs.get("is_decoding")
-
+    max_seqlen_q = kwargs.get("max_seqlen_q")
     if not is_decoding:
-        return sdpa_attention_paged_forward__(
+        return sdpa_attention_paged_forward_flash__(
             module,
             query,
             key,
