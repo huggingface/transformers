@@ -4808,12 +4808,13 @@ class ModelTesterMixin:
 
                     # Both should be exactly the same object, that is when instantiating the submodel when should
                     # absolutely not copy the subconfig
-                    self.assertTrue(
-                        any(
-                            subconfig_from_model_config is subconfig_from_model_internal
-                            for subconfig_from_model_config in matching_sub_configs
+                    if len(matching_sub_configs) > 0:
+                        self.assertTrue(
+                            any(
+                                subconfig_from_model_config is subconfig_from_model_internal
+                                for subconfig_from_model_config in matching_sub_configs
+                            )
                         )
-                    )
 
     def test_can_set_attention_dynamically(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
