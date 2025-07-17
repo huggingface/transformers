@@ -53,6 +53,7 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
+        Gemma3ForSequenceClassification,
         Gemma3Model,
         Gemma3Processor,
         Gemma3TextModel,
@@ -246,6 +247,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         (
             Gemma3Model,
             Gemma3ForConditionalGeneration,
+            Gemma3ForSequenceClassification,
         )
         if is_torch_available()
         else ()
