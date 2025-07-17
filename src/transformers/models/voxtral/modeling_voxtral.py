@@ -238,6 +238,10 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_attention_backend = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         # important: this ported version of Voxtral isn't meant for training from scratch - only

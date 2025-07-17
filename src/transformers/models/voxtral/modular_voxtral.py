@@ -44,7 +44,11 @@ class VoxtralEncoderLayer(Qwen2AudioEncoderLayer):
 
 
 class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
-    pass
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_attention_backend = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
 
 
 # TODO: @eustlb, I would really prefer to use WhisperEncoder but it's messing with modular
