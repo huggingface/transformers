@@ -23,6 +23,7 @@ import json
 import numbers
 import os
 import pickle
+import re
 import shutil
 import sys
 import tempfile
@@ -30,7 +31,6 @@ from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
-import re
 
 import numpy as np
 import packaging.version
