@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.53.0.dev0")
+check_min_version("4.54.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -324,13 +324,12 @@ def main():
         args.model_name_or_path, id2label=id2label, label2id=label2id, trust_remote_code=args.trust_remote_code
     )
     image_processor = AutoImageProcessor.from_pretrained(
-        args.model_name_or_path, trust_remote_code=args.trust_remote_code
+        args.model_name_or_path, trust_remote_code=args.trust_remote_code, do_reduce_labels=args.do_reduce_labels
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
         args.model_name_or_path,
         config=config,
         trust_remote_code=args.trust_remote_code,
-        do_reduce_labels=args.do_reduce_labels,
     )
 
     # Define transforms to be applied to each image and target.

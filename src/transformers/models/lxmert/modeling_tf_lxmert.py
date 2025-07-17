@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -92,11 +91,11 @@ class TFLxmertModelOutput(ModelOutput):
     language_output: tf.Tensor | None = None
     vision_output: tf.Tensor | None = None
     pooled_output: tf.Tensor | None = None
-    language_hidden_states: Tuple[tf.Tensor] | None = None
-    vision_hidden_states: Tuple[tf.Tensor] | None = None
-    language_attentions: Tuple[tf.Tensor] | None = None
-    vision_attentions: Tuple[tf.Tensor] | None = None
-    cross_encoder_attentions: Tuple[tf.Tensor] | None = None
+    language_hidden_states: tuple[tf.Tensor] | None = None
+    vision_hidden_states: tuple[tf.Tensor] | None = None
+    language_attentions: tuple[tf.Tensor] | None = None
+    vision_attentions: tuple[tf.Tensor] | None = None
+    cross_encoder_attentions: tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -140,11 +139,11 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
     prediction_logits: tf.Tensor | None = None
     cross_relationship_score: tf.Tensor | None = None
     question_answering_score: tf.Tensor | None = None
-    language_hidden_states: Tuple[tf.Tensor] | None = None
-    vision_hidden_states: Tuple[tf.Tensor] | None = None
-    language_attentions: Tuple[tf.Tensor] | None = None
-    vision_attentions: Tuple[tf.Tensor] | None = None
-    cross_encoder_attentions: Tuple[tf.Tensor] | None = None
+    language_hidden_states: tuple[tf.Tensor] | None = None
+    vision_hidden_states: tuple[tf.Tensor] | None = None
+    language_attentions: tuple[tf.Tensor] | None = None
+    vision_attentions: tuple[tf.Tensor] | None = None
+    cross_encoder_attentions: tuple[tf.Tensor] | None = None
 
 
 class TFLxmertVisualFeatureEncoder(keras.layers.Layer):
@@ -980,7 +979,7 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
 LXMERT_START_DOCSTRING = r"""
 
     The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from
-    Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal. It's a vision and language transformer
+    Transformers](https://huggingface.co/papers/1908.07490) by Hao Tan and Mohit Bansal. It's a vision and language transformer
     model, pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual
     genome, using a combination of masked language modeling, region of interest feature regression, cross entropy loss
     for question answering attribute prediction, and object tag prediction.
@@ -1109,11 +1108,11 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         visual_attention_mask: np.ndarray | tf.Tensor | None = None,
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[Tuple, TFLxmertModelOutput]:
+    ) -> tuple | TFLxmertModelOutput:
         outputs = self.lxmert(
             input_ids,
             visual_feats,
@@ -1235,7 +1234,7 @@ class TFLxmertLMPredictionHead(keras.layers.Layer):
         self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
-    def get_bias(self) -> Dict[str, tf.Variable]:
+    def get_bias(self) -> dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
@@ -1505,20 +1504,20 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         masked_lm_labels: tf.Tensor | None = None,
-        obj_labels: Dict[str, Tuple[tf.Tensor, tf.Tensor]] | None = None,
+        obj_labels: dict[str, tuple[tf.Tensor, tf.Tensor]] | None = None,
         matched_label: tf.Tensor | None = None,
         ans: tf.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> Tuple[tf.Tensor] | TFLxmertForPreTrainingOutput:
+    ) -> tuple[tf.Tensor] | TFLxmertForPreTrainingOutput:
         r"""
         masked_lm_labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        obj_labels (`Dict[Str: Tuple[tf.Tensor, tf.Tensor]]`, *optional*, defaults to `None`):
+        obj_labels (`dict[Str: tuple[tf.Tensor, tf.Tensor]]`, *optional*, defaults to `None`):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             `(batch_size, num_features)` and `(batch_size, num_features, visual_feature_dim)` for each the label id and
             the label score respectively

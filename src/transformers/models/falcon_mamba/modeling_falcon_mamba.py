@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import MambaCache
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
@@ -405,7 +406,7 @@ class FalconMambaRMSNorm(nn.Module):
 
 
 # Copied from transformers.models.mamba.modeling_mamba.MambaBlock with Mamba->FalconMamba,FalconMambaCache->MambaCache
-class FalconMambaBlock(nn.Module):
+class FalconMambaBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
@@ -436,7 +437,7 @@ class FalconMambaBlock(nn.Module):
 @auto_docstring
 # Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
 class FalconMambaPreTrainedModel(PreTrainedModel):
-    config_class = FalconMambaConfig
+    config: FalconMambaConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["FalconMambaBlock", "FalconMambaMixer"]
     supports_gradient_checkpointing = True
@@ -444,9 +445,16 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
+        std = self.config.initializer_range
         if isinstance(module, FalconMambaMixer):
+            # S4D real initialization. These are not discretized!
+            # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
+            A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
+            A = A.expand(module.intermediate_size, -1).contiguous()
+            module.A_log.copy_(torch.log(A))
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True
+            module.D.data.fill_(1.0)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
             if self.config.time_step_init_scheme == "constant":
@@ -461,88 +469,86 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            with torch.no_grad():
-                module.dt_proj.bias.copy_(inv_dt)
+            module.dt_proj.bias.copy_(inv_dt)
             module.dt_proj.bias._no_reinit = True
 
+            nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
+            if module.conv1d.bias is not None:
+                if not getattr(module.conv1d.bias, "_no_reinit", False):
+                    nn.init.zeros_(module.conv1d.bias)
+            nn.init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
+
+            if self.config.rescale_prenorm_residual:
+                # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+                #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+                #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+                #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+                #
+                # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
+                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+                # We need to reinit p since this code could be called multiple times
+                # Having just p *= scale would repeatedly scale it down
+                p = module.out_proj.weight
+                p /= math.sqrt(self.config.num_hidden_layers)
+
         if isinstance(module, nn.Linear):
+            if not getattr(module.weight, "_no_reinit", False):
+                nn.init.normal_(module.weight, std=std)
             if module.bias is not None:
                 if not getattr(module.bias, "_no_reinit", False):
                     nn.init.zeros_(module.bias)
+        elif isinstance(module, FalconMambaRMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, std=self.config.initializer_range)
-
-        if self.config.rescale_prenorm_residual:
-            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-            #
-            # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-            for name, p in module.named_parameters():
-                if name in ["out_proj.weight"]:
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
-                    nn.init.kaiming_uniform_(p, a=math.sqrt(5))
-                    with torch.no_grad():
-                        p /= math.sqrt(self.config.num_hidden_layers)
+            nn.init.normal_(module.weight, std=std)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for the FALCONMAMBA model outputs.
+    """
+)
 # Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->FALCONMAMBA,Mamba->FalconMamba,FalconMambaCache->MambaCache
 class FalconMambaOutput(ModelOutput):
-    """
-    Class for the FALCONMAMBA model outputs.
+    r"""
+    cache_params (`MambaCache`):
+        The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+        avoid providing the old `input_ids`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        cache_params (`MambaCache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-
-            Includes both the State space model state matrices after the selective scan, and the Convolutional states
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for causal language model (or autoregressive) outputs.
+    """
+)
 # Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->FalconMamba,FalconMambaCache->MambaCache
 class FalconMambaCausalLMOutput(ModelOutput):
-    """
-    Base class for causal language model (or autoregressive) outputs.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    cache_params (`MambaCache`):
+        The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+        avoid providing the old `input_ids`.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache_params (`MambaCache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-
-            Includes both the State space model state matrices after the selective scan, and the Convolutional states
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[MambaCache] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -577,7 +583,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, FalconMambaOutput]:
+    ) -> Union[tuple, FalconMambaOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -620,17 +626,12 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, cache_params, cache_position, attention_mask
-                )
-            else:
-                hidden_states = mixer_block(
-                    hidden_states,
-                    cache_params=cache_params,
-                    cache_position=cache_position,
-                    attention_mask=attention_mask,
-                )
+            hidden_states = mixer_block(
+                hidden_states,
+                cache_params=cache_params,
+                cache_position=cache_position,
+                attention_mask=attention_mask,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -680,8 +681,8 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         return self.backbone.set_input_embeddings(new_embeddings)
 
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], num_new_tokens: int = 1, **kwargs
-    ) -> Dict[str, Any]:
+        self, outputs: ModelOutput, model_kwargs: dict[str, Any], num_new_tokens: int = 1, **kwargs
+    ) -> dict[str, Any]:
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
         if (
             model_kwargs.get("use_cache", True)
@@ -759,7 +760,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # for now we need this for generation
-    ) -> Union[Tuple, FalconMambaCausalLMOutput]:
+    ) -> Union[tuple, FalconMambaCausalLMOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the

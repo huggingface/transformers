@@ -19,10 +19,11 @@ line-length = 119
 
 [tool.ruff.lint]
 # Never enforce `E501` (line length violations).
-ignore = ["C901", "E501", "E741", "F402", "F823" ]
+ignore = ["C901", "E501", "E741", "F402", "F823"]
 # RUF013: Checks for the use of implicit Optional
 #  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013"]
+select = ["C", "E", "F", "I", "W", "RUF013", "UP006", "PERF102", "PLC1802", "PLC0208"]
+extend-safe-fixes = ["UP006"]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]
@@ -51,6 +52,7 @@ line-ending = "auto"
 addopts = "--doctest-glob='**/*.md'"
 doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
 markers = [
+    "flash_attn_3_test: marks tests related to flash attention 3 (deselect with '-m \"not flash_attn_3_test\"')",
     "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
     "generate: marks tests that use the GenerationTesterMixin"

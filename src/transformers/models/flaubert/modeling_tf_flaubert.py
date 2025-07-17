@@ -22,7 +22,6 @@ import itertools
 import random
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -150,7 +149,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility Indices selected in
             `[0, ..., input_ids.size(-1)]`:
-        cache (`Dict[str, tf.Tensor]`, *optional*):
+        cache (`dict[str, tf.Tensor]`, *optional*):
             Dictionary string to `tf.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -261,14 +260,14 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFBaseModelOutput:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -544,14 +543,14 @@ class TFFlaubertMainLayer(keras.layers.Layer):
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFBaseModelOutput:
         # removed: src_enc=None, src_len=None
 
         if input_ids is not None and inputs_embeds is not None:
@@ -808,9 +807,9 @@ class TFFlaubertWithLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    logits: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 @add_start_docstrings(
@@ -864,14 +863,14 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFFlaubertWithLMHeadModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFFlaubertWithLMHeadModelOutput:
         transformer_outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -940,15 +939,15 @@ class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceC
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1031,16 +1030,16 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+    ) -> TFQuestionAnsweringModelOutput | tuple[tf.Tensor]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1138,15 +1137,15 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1251,15 +1250,15 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         lengths: np.ndarray | tf.Tensor | None = None,
-        cache: Optional[Dict[str, tf.Tensor]] = None,
+        cache: dict[str, tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+    ) -> TFMultipleChoiceModelOutput | tuple[tf.Tensor]:
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
             seq_length = shape_list(input_ids)[2]

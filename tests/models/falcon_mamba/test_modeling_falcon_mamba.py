@@ -19,9 +19,12 @@ from unittest.util import safe_repr
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
@@ -30,7 +33,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -356,9 +359,11 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rescale_prenorm_residual = True
 
+        configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = model_class(config=config)
+            model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if "dt_proj.bias" in name:
                     dt = torch.exp(
@@ -377,13 +382,24 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     if param.requires_grad:
                         # check if it's a ones like
                         torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
+                else:
+                    if param.requires_grad:
+                        if (
+                            "mixer.conv1d.weight" in name
+                            or "mixer.dt_proj.weight" in name
+                            or "mixer.out_proj.weight" in name
+                        ):
+                            continue
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @slow
     # Ignore copy
     def test_model_from_pretrained(self):
-        model = FalconMambaModel.from_pretrained(
-            "tiiuae/falcon-mamba-7b", torch_dtype=torch.float16, low_cpu_mem_usage=True
-        )
+        model = FalconMambaModel.from_pretrained("tiiuae/falcon-mamba-7b", torch_dtype=torch.float16)
         self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
@@ -452,15 +468,30 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.text = "Hello today"
 
-    def test_generation_bf16(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    # On T4, get `NotImplementedError: Cannot copy out of meta tensor; no data!`
+    @require_torch_large_accelerator
+    def test_generation_fp16(self):
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
+                ("cuda", 8): 'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle',
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
+            EXPECTED_OUTPUT,
         )
 
     @require_bitsandbytes
@@ -473,11 +504,11 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            """Hello today I'm going to talk about the "C" in the "C-I-""",
+            "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
     def test_generation_torch_compile(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         model = torch.compile(model)
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
@@ -485,7 +516,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
+            "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
         )
 
     def test_batched_generation(self):
@@ -495,13 +526,22 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         texts = ["Hello today", "Hello my name is Younes and today"]
 
-        EXPECTED_OUTPUT = [
-            "Hello today I'm going to show you how to make a 3D model of a house.\n",
-            "Hello my name is Younes and today I will be talking about the topic of “The importance of the internet in our life”.\n",
-        ]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+                ("cuda", 8): [
+                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.float16)
 
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
@@ -516,6 +556,19 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+                ("cuda", 8): [
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
@@ -523,7 +576,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         model_id = "tiiuae/falcon-mamba-7b"
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.float16)
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello today"

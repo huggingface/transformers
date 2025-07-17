@@ -2,7 +2,7 @@ import functools
 import logging
 import time
 from enum import Enum
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 
@@ -20,26 +20,8 @@ class RequestStatus(Enum):
 
 
 try:
-    from opentelemetry import metrics, trace
-    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry import metrics
     from opentelemetry.trace import Status, StatusCode, get_tracer
-
-    resource = Resource.create({"service.name": "transformers"})
-
-    metrics_exporter = PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=1000)
-    meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-    metrics.set_meter_provider(meter_provider)
-
-    trace_exporter = OTLPSpanExporter()
-    tracer_provider = TracerProvider(resource=resource)
-    tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-    trace.set_tracer_provider(tracer_provider)
 
     _has_opentelemetry = True
 except ImportError:
@@ -98,7 +80,7 @@ def traced(
     *,
     span_name=None,
     standalone=False,
-    additional_attributes: Optional[List[Tuple[str, str, Union[Any, Callable[[Any], Any]]]]] = None,
+    additional_attributes: Optional[list[tuple[str, str, Union[Any, Callable[[Any], Any]]]]] = None,
 ):
     """
     Decorator to trace function calls with OpenTelemetry.
@@ -301,7 +283,7 @@ class ContinuousBatchProcessorMetrics:
             logger.warning(f"Failed to record TTFT metric: {e}")
 
     @traced
-    def record_batch_metrics(self, requests_in_batch: List) -> None:
+    def record_batch_metrics(self, requests_in_batch: list) -> None:
         """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage.
 
         Args:

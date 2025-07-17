@@ -16,7 +16,6 @@
 
 import os
 from pickle import UnpicklingError
-from typing import Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -83,14 +82,14 @@ def load_pytorch_checkpoint_in_flax_state_dict(
 
 
 def rename_key_and_reshape_tensor(
-    pt_tuple_key: Tuple[str],
+    pt_tuple_key: tuple[str],
     pt_tensor: np.ndarray,
-    random_flax_state_dict: Dict[str, jnp.ndarray],
+    random_flax_state_dict: dict[str, jnp.ndarray],
     model_prefix: str,
-) -> (Tuple[str], np.ndarray):
+) -> (tuple[str], np.ndarray):
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
-    def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
+    def is_key_or_prefix_key_in_dict(key: tuple[str]) -> bool:
         """Checks if `key` of `(prefix,) + key` is in random_flax_state_dict"""
         return len(set(random_flax_state_dict) & {key, (model_prefix,) + key}) > 0
 
@@ -347,7 +346,7 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
             try:
                 flax_state_dict = from_bytes(flax_cls, state_f.read())
             except UnpicklingError:
-                raise EnvironmentError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
 
     return load_flax_weights_in_pytorch_model(model, flax_state_dict)
 

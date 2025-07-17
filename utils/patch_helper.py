@@ -56,8 +56,6 @@ def get_release_branch_name():
         major -= 1
         # You'll need logic to determine the last minor of the previous major version
         raise ValueError("Minor version is 0; need logic to find previous major version's last minor")
-    else:
-        minor -= 1
 
     return f"v{major}.{minor}-release"
 
