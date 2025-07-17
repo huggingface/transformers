@@ -1258,6 +1258,9 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_output_embeddings(self):
+        return None
+
     def get_input_embeddings(self):
         return self.model.decoder.input_embeds_layer
 
