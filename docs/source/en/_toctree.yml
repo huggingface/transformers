@@ -1055,8 +1055,6 @@
         title: Qwen2.5-VL
       - local: model_doc/qwen2_audio
         title: Qwen2Audio
-      - local: model_doc/voxtral
-        title: Voxtral
       - local: model_doc/qwen2_vl
         title: Qwen2VL
       - local: model_doc/sam
@@ -1097,6 +1095,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/voxtral
+        title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
