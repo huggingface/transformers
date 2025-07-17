@@ -99,7 +99,7 @@ def _prepare_from_posids(query, key, value, position_ids):
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
-    query = query.view(-1, query.size(-2), query.size(-1))
+    query = query.contiguous().view(-1, query.size(-2), query.size(-1))
     key = key.contiguous().view(-1, key.size(-2), key.size(-1))
     value = value.contiguous().view(-1, value.size(-2), value.size(-1))
     position_ids = position_ids.flatten()
