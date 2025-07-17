@@ -93,7 +93,12 @@ class StateEmbeddingAttention(nn.Module):
 
         # Apply scaled dot-product attention
         attn_output = F.scaled_dot_product_attention(
-            q, k, v, attn_mask=attention_mask, dropout_p=self.dropout if self.training else 0.0, is_causal=False
+            q,
+            k,
+            v,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=False,
         )
 
         # Reshape back to original dimensions
@@ -127,11 +132,27 @@ class StateEmbeddingLayer(nn.Module):
 
     def __init__(self, config: StateEmbeddingConfig):
         super().__init__()
-        self.attention = StateEmbeddingAttention(config)
-        self.mlp = StateEmbeddingMLP(config)
+        self.config = config
+        self.d_model = config.d_model
+        self.nhead = config.nhead
+        self.dropout = config.dropout
+
+        if self.d_model % self.nhead != 0:
+            raise ValueError(f"d_model ({self.d_model}) must be divisible by nhead ({self.nhead})")
+
+        self.head_dim = self.d_model // self.nhead
+
+        # These parameter names should match your state dict
+        self.qkv_proj = nn.Linear(self.d_model, self.d_model * 3)
+        self.out_proj = nn.Linear(self.d_model, self.d_model)
+
         self.norm1 = nn.LayerNorm(config.d_model)
         self.norm2 = nn.LayerNorm(config.d_model)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout_layer = nn.Dropout(config.dropout)
+
+        # MLP layers (these names should also match your state dict)
+        self.linear1 = nn.Linear(config.d_model, config.d_hid)
+        self.linear2 = nn.Linear(config.d_hid, config.d_model)
 
     def forward(
         self,
@@ -143,21 +164,51 @@ class StateEmbeddingLayer(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         # Self-attention with residual connection
         residual = hidden_states
-        attn_output, attn_weights = self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
-            **kwargs,
+
+        # Attention computation
+        batch_size, seq_len, _ = hidden_states.size()
+
+        # Project to Q, K, V
+        qkv = self.qkv_proj(hidden_states)
+        q, k, v = torch.chunk(qkv, 3, dim=-1)
+
+        # Reshape for multi-head attention
+        q = q.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+        v = v.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+
+        # Apply scaled dot-product attention
+        attn_output = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=False,
         )
-        hidden_states = self.norm1(residual + self.dropout(attn_output))
+
+        # Reshape back to original dimensions
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
+
+        # Final projection
+        attn_output = self.out_proj(attn_output)
+
+        # First residual connection
+        hidden_states = self.norm1(residual + self.dropout_layer(attn_output))
 
         # Feed-forward with residual connection
         residual = hidden_states
-        mlp_output = self.mlp(hidden_states)
-        hidden_states = self.norm2(residual + self.dropout(mlp_output))
 
-        return hidden_states, attn_weights
+        # MLP computation
+        mlp_output = self.linear1(hidden_states)
+        mlp_output = F.gelu(mlp_output)
+        mlp_output = self.dropout_layer(mlp_output)
+        mlp_output = self.linear2(mlp_output)
+
+        # Second residual connection
+        hidden_states = self.norm2(residual + self.dropout_layer(mlp_output))
+
+        return hidden_states, None
 
 
 class StateEmbeddingEncoder(nn.Module):
@@ -231,27 +282,52 @@ class StateEmbeddingModel(StateEmbeddingPreTrainedModel):
 
         # Gene embedding projection (Paper Eq. 23)
         self.encoder = nn.Sequential(
-            nn.Linear(config.token_dim, config.d_model, bias=True), nn.LayerNorm(config.d_model), nn.SiLU()
+            nn.Linear(config.token_dim, config.d_model, bias=True),
+            nn.LayerNorm(config.d_model),
+            nn.SiLU(),
         )
 
         # Expression count encoder for soft binning (Paper Eq. 25)
         self.count_encoder = nn.Sequential(
-            nn.Linear(1, 512, bias=True), nn.LeakyReLU(), nn.Linear(512, config.num_bins)
+            nn.Linear(1, 512, bias=True),
+            nn.LeakyReLU(),
+            nn.Linear(512, config.num_bins),
         )
 
         # Bin embeddings (Paper Eq. 26)
         self.bin_encoder = nn.Embedding(config.num_bins, config.d_model)
+
+        # Dataset embedder - linear layer for dataset-specific embeddings
+        self.dataset_embedder = nn.Linear(config.d_model, 10, bias=True)
+
+        # Dataset encoder - appears to be a 3-layer network with layers at indices 0, 2, 4
+        # This suggests it's a sequential with activations in between
+        self.dataset_encoder = nn.Sequential(
+            nn.Linear(config.d_model, config.d_model, bias=True),  # index 0: Linear layer
+            nn.ReLU(),  # index 1: activation (no parameters)
+            nn.LayerNorm(config.d_model),  # index 2: LayerNorm (weight shape [2048])
+            nn.ReLU(),  # index 3: activation (no parameters)
+            nn.Linear(config.d_model, 14420, bias=True),  # index 4: Linear layer to 14420 classes
+        )
+
+        # Dataset token - learnable parameter
+        self.dataset_token = nn.Parameter(torch.randn(1, 5120))
+
+        # Positional embeddings
+        self.pe_embedding = nn.Embedding(19790, 5120)
 
         # Transformer encoder (Paper Eq. 28)
         self.transformer_encoder = StateEmbeddingEncoder(config)
 
         # Gene output decoder
         self.decoder = nn.Sequential(
-            SkipBlock(config.d_model), nn.Linear(config.d_model, config.output_dim, bias=True)
+            SkipBlock(config.d_model),
+            nn.Linear(config.d_model, config.output_dim, bias=True),
         )
 
         # Binary classification decoder
-        binary_input_dim = config.output_dim + config.d_model + config.z_dim_rd + config.z_dim_ds
+        # binary_input_dim = config.output_dim + config.d_model + config.z_dim_rd + config.z_dim_ds
+        binary_input_dim = 4107
         self.binary_decoder = nn.Sequential(
             SkipBlock(binary_input_dim),
             SkipBlock(binary_input_dim),
@@ -312,13 +388,7 @@ class StateEmbeddingModel(StateEmbeddingPreTrainedModel):
             hidden_states = hidden_states + count_emb
 
         # Paper Eq. 28: Pass through transformer encoder
-        hidden_states = self.transformer_encoder(
-            hidden_states,
-            attention_mask=attention_mask,
-            past_key_value=past_key_values,
-            cache_position=cache_position,
-            **kwargs,
-        )
+        hidden_states = self.transformer_encoder(hidden_states)
 
         # Decode gene representations
         gene_output = self.decoder(hidden_states)  # batch x seq_len x output_dim
