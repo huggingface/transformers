@@ -992,7 +992,6 @@ def byte_group_hash_function(
         hashes = rolling_polynomial_hash(windows, hash_func_nb)
         hash_values = hashes % max_hash
 
-    hash_values.requires_grad = False
     return hash_values
 
 

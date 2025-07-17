@@ -120,7 +120,6 @@ def byte_group_hash_function(
         hashes = rolling_polynomial_hash(windows, hash_func_nb)
         hash_values = hashes % max_hash
 
-    hash_values.requires_grad = False
     return hash_values
 
 
@@ -459,7 +458,7 @@ class BLTLocalEncoder(nn.Module):
                 )
 
                 layer_idx = idx if self.config.cross_attn_all_layers else 0
-                cross_attention_output, _, _ = self.cross_attn_layers[layer_idx](
+                cross_attention_output, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
                     attention_mask=cross_mask,
@@ -579,7 +578,7 @@ class BLTLocalDecoder(nn.Module):
 
             if i == 0 or self.config.cross_attn_all_layers:
                 # Use cross attention to extract info from patch_embeds into hidden_states
-                cross_attention_output, _, _ = self.cross_attn_layers[i](
+                cross_attention_output, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
                     attention_mask=cross_mask,
