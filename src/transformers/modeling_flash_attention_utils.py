@@ -280,7 +280,7 @@ def _lazy_imports(impl: Optional[str]):
             getattr(impl, "flash_attn_varlen_func"),
             pad_input,
             unpad_input,
-            False,
+            True,
         )
 
 
@@ -364,14 +364,16 @@ def _flash_attention_forward(
             q,
             k,
             v,
-            cu_seqlens_q=cu_q,
-            cu_seqlens_k=cu_k.clone(),
+            cu_seqlens_q=cu_q.to(torch.int32),
+            cu_seqlens_k=cu_k.clone().to(torch.int32),
             max_seqlen_q=mq,
             max_seqlen_k=mk,
             softmax_scale=softmax_scale,
             causal=causal,
             **flash_kwargs,
         )
+        if isinstance(out_unpad, tuple):
+            out_unpad = out_unpad[0]
         out = pad_fn(out_unpad, idx, query_states.shape[0], query_length)
     elif use_varlen:
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
@@ -399,14 +401,16 @@ def _flash_attention_forward(
             q,
             k,
             v,
-            cu_seqlens_q=cu_q,
-            cu_seqlens_k=cu_k.clone(),
+            cu_seqlens_q=cu_q.to(torch.int32),
+            cu_seqlens_k=cu_k.clone().to(torch.int32),
             max_seqlen_q=mq,
             max_seqlen_k=mk,
             softmax_scale=softmax_scale,
             causal=causal,
             **flash_kwargs,
         )
+        if isinstance(out, tuple):
+            out = out[0]
         out = out.view(query_states.shape[0], -1, out.size(-2), out.size(-1))
     else:
         out = flash_fn(
