@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 > [!TIP]
 > 텐서 병렬화에 대해 더 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)의 텐서 병렬화 섹션을 참조하세요.
 
-텐서 병렬화를 기본적으로 지원하는 모델 목록을 아래에서 확인하세요. 모델에 대한 지원을 추가하려면 GitHub 이슈나 풀 리퀘스트를 열어주세요.
+아래 목록에서 텐서 병렬 처리를 기본적으로 지원하는 모델을 확인할 수 있습니다. 새로운 모델에 대한 지원을 추가하려면 GitHub 이슈나 풀 리퀘스트를 열어주세요.
 
 <details>
 <summary>지원되는 모델 보기</summary>
