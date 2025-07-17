@@ -247,7 +247,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
                     continue
 
                 self.assertListEqual(
-                    list(self_attentions[i].shape[-2:]),
+                    list(self_attn.shape[-2:]),
                     [
                         self.model_tester.num_output_groups[i],
                         self.model_tester.num_output_groups[i - 1] if i > 0 else seq_len,

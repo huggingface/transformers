@@ -15,7 +15,7 @@ def get_runner_status(target_runners, token):
         "https://api.github.com/repos/huggingface/transformers/actions/runners",
     ]
 
-    output = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE)
+    output = subprocess.run(cmd, check=False, shell=True, stdout=subprocess.PIPE)
     o = output.stdout.decode("utf-8")
     status = json.loads(o)
 
