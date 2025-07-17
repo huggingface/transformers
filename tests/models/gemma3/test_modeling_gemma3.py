@@ -268,6 +268,45 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.model_tester = Gemma3Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
 
+    def test_bidirectional_image_attention(self):
+        """
+        Tests that each image can attend to itself bidirectionally. However an image
+        cannot attend to future images, even within the same batch.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = Gemma3Model(config).to(torch_device)
+
+        # First let's pass inputs without change which is one image per text and manipulate
+        # `token_type_ids` to make sure bidirectional mask is applied where it has to be
+        inputs_dict["token_type_ids"] = torch.zeros_like(inputs_dict["token_type_ids"])
+        inputs_dict["token_type_ids"][:, :4] = 1  # unmask first 4 tokens
+        with torch.no_grad():
+            out = model(**inputs_dict, output_attentions=True)
+            # We expect a non-causal mask on first 4 tokens, thus no zeros
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+
+        # Now when removing `token_type_ids`, we will get simple causal mask
+        inputs_dict["token_type_ids"][:, :4] = 0  # mask back first 4 tokens
+        with torch.no_grad():
+            out = model(**inputs_dict, output_attentions=True)
+            # We expect a causal mask on first 4 tokens, thus no zeros
+            for attention in out.attentions:
+                self.assertFalse((attention[..., :4, :4] != 0).all().item())
+
+        # Let's add two "images" per text, first one spanning 4 tokens and last one 3 tokens
+        inputs_dict["token_type_ids"][:, :4] = 1
+        inputs_dict["token_type_ids"][:, 7:10] = 1
+        with torch.no_grad():
+            out = model(**inputs_dict, output_attentions=True)
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+                self.assertTrue((attention[..., 7:10, 7:10] != 0).all().item())
+
+                # We expect a non-causal mask only within same image and no looking ahead to the future
+                self.assertTrue((attention[..., :4, 7:10] == 0).all().item())
+
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
