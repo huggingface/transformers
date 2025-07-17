@@ -193,6 +193,7 @@ class Gemma3TextConfig(PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
+        use_bidirectional_attention=False,
         **kwargs,
     ):
         super().__init__(
@@ -222,6 +223,7 @@ class Gemma3TextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling

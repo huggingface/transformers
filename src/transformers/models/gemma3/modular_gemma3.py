@@ -204,6 +204,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
+        use_bidirectional_attention=False,
         **kwargs,
     ):
         PretrainedConfig.__init__(
@@ -233,6 +234,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
@@ -535,6 +537,19 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
             module.mm_input_projection_weight.data.zero_()
 
 
+def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
+    """
+    Enables a bidirectional mask within the sliding window.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        """A token can attend to any other token if their absolute distance is within
+        half the sliding window size (distance <= sliding_window // 2)."""
+        return abs(q_idx - kv_idx) <= sliding_window // 2
+
+    return inner_mask
+
+
 class Gemma3TextModel(Gemma2Model):
     config: Gemma3TextConfig
 
@@ -609,10 +624,16 @@ class Gemma3TextModel(Gemma2Model):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args, **kwargs: True
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         # embed positions
