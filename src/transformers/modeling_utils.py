@@ -2273,7 +2273,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
+    def _check_attn_implementation(cls, attn_implementation: Union[dict, str]) -> Union[dict, str]:
         """
         Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
@@ -2321,7 +2321,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         return attn_implementation
 
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
         """
         Checks and dispatches to the requested attention implementation.
         """
