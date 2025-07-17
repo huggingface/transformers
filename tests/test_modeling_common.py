@@ -4798,7 +4798,7 @@ class ModelTesterMixin:
                     for subconfig_key in subconfig_keys:
                         # Get the subconfig from the model config
                         subconfig_from_model_config = getattr(model.config, subconfig_key)
-                        if subconfig_from_model_config.__class__ == submodule.config_class:
+                        if subconfig_from_model_config.__class__ == submodule.config.__class__:
                             subconfig_from_model_internal = submodule.config
 
                             # Both should be exactly the same object, that is when instantiating the submodel when should
