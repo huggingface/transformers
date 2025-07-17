@@ -288,7 +288,7 @@ class Starcoder2RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Starcoder2PreTrainedModel(PreTrainedModel):
-    config_class = Starcoder2Config
+    config: Starcoder2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Starcoder2DecoderLayer"]
@@ -296,8 +296,7 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {

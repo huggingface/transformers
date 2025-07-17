@@ -554,7 +554,7 @@ class FalconMambaBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class FalconMambaPreTrainedModel(PreTrainedModel):
-    config_class = FalconMambaConfig
+    config: FalconMambaConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["FalconMambaBlock", "FalconMambaMixer"]
     supports_gradient_checkpointing = True

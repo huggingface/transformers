@@ -92,7 +92,7 @@ class InformerValueEmbedding(TimeSeriesValueEmbedding):
 
 @auto_docstring
 class InformerPreTrainedModel(PreTrainedModel):
-    config_class = InformerConfig
+    config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
@@ -430,7 +430,7 @@ class InformerProbSparseAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py

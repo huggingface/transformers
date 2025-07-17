@@ -576,7 +576,7 @@ class T5GemmaAttention(nn.Module):
 
 @auto_docstring
 class T5GemmaPreTrainedModel(PreTrainedModel):
-    config_class = T5GemmaConfig
+    config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]
@@ -584,8 +584,7 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {

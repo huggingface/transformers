@@ -1152,7 +1152,7 @@ class WhisperGenerationMixin(GenerationMixin):
                             for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
                                 layer_past_key_values.append(v[batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
+                    return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
                 else:
                     all_past_key_values = []
                     for v in range(len(values)):
@@ -1199,7 +1199,6 @@ class WhisperGenerationMixin(GenerationMixin):
                     for i in range(len(seek_outputs[0][key]))
                 )
             elif key == "past_key_values":
-                past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
                     outputs[key] = tuple(
                         tuple(
@@ -1208,8 +1207,8 @@ class WhisperGenerationMixin(GenerationMixin):
                         )
                         for i in range(len(seek_outputs[0][key]))
                     )
-                    if past_key_value_type is not None and isinstance(past_key_value_type, EncoderDecoderCache):
-                        outputs[key] = past_key_value_type.from_legacy_cache(outputs[key])
+                    if isinstance(seek_outputs[0][key], EncoderDecoderCache):
+                        outputs[key] = EncoderDecoderCache.from_legacy_cache(outputs[key])
                 else:
                     outputs[key] = None
 

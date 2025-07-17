@@ -305,7 +305,7 @@ class GemmaDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GemmaPreTrainedModel(PreTrainedModel):
-    config_class = GemmaConfig
+    config: GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GemmaDecoderLayer"]
@@ -313,8 +313,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
