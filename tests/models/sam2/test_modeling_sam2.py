@@ -1023,7 +1023,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_labels=[[[1]]],
         )
         outputs = self.video_model(
-            inference_state=inference_session,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
@@ -1043,7 +1043,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_session,
+            inference_session=inference_session,
             max_frame_num_to_track=2,
         ):
             frames.append(sam2_video_output.video_res_masks)
@@ -1078,7 +1078,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_session,
+            inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
@@ -1100,19 +1100,19 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_mask_generation_video_multi_points(self):
         raw_video = prepare_video()
-        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
         self.processor.add_inputs_to_inference_session(
-            inference_session=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
         outputs = self.video_model(
-            inference_state=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
@@ -1132,7 +1132,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_state,
+            inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
@@ -1154,18 +1154,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_mask_generation_video_one_bb(self):
         raw_video = prepare_video()
-        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
         self.processor.add_inputs_to_inference_session(
-            inference_session=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_boxes=[[[[300, 0, 500, 400]]]],
         )
         outputs = self.video_model(
-            inference_state=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
@@ -1185,7 +1185,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_state,
+            inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
@@ -1207,12 +1207,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_mask_generation_video_one_point_one_bb(self):
         raw_video = prepare_video()
-        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
         self.processor.add_inputs_to_inference_session(
-            inference_session=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_boxes=[[[[300, 0, 500, 400]]]],
@@ -1220,7 +1220,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             input_labels=[[[1]]],
         )
         outputs = self.video_model(
-            inference_state=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
@@ -1240,7 +1240,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_state,
+            inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
@@ -1262,19 +1262,19 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_mask_generation_video_multi_objects_multi_points(self):
         raw_video = prepare_video()
-        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_ids = [2, 3]  # give a unique id to each object we interact with (it can be any integers)
 
         self.processor.add_inputs_to_inference_session(
-            inference_session=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_ids,
             input_points=[[[[200, 300], [230, 250], [275, 175]], [[400, 150]]]],
             input_labels=[[[1, 1, 0], [1]]],
         )
         outputs = self.video_model(
-            inference_state=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
@@ -1294,7 +1294,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_state,
+            inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
@@ -1316,33 +1316,33 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_propagate_video_from_mask_input(self):
         raw_video = prepare_video()
-        inference_state = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
         ann_frame_idx = 0  # the frame index we interact with
         ann_obj_id = 1  # give a unique id to each object we interact with (it can be any integers)
 
         # get input_mask
         self.processor.add_inputs_to_inference_session(
-            inference_session=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
         sam2_video_output = self.video_model(
-            inference_state=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=True,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
 
         # set mask as input
         self.processor.add_inputs_to_inference_session(
-            inference_session=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
             input_masks=sam2_video_output.video_res_masks,
         )
         sam2_video_output = self.video_model(
-            inference_state=inference_state,
+            inference_session=inference_session,
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
@@ -1362,7 +1362,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         # test propagate in video frames
         frames = []
         for sam2_video_output in self.video_model.propagate_in_video_async(
-            inference_state=inference_state,
+            inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
@@ -1385,7 +1385,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
     def test_inference_propagate_on_streamed_video(self):
         raw_video = prepare_video()
 
-        inference_state = self.processor.init_video_session(inference_device=torch_device)
+        inference_session = self.processor.init_video_session(inference_device=torch_device)
         video_res_masks = []
         max_frame_num_to_track = 3
         for frame_idx, frame in enumerate(raw_video):
@@ -1394,14 +1394,14 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             inputs = self.processor(images=frame, device=torch_device, return_tensors="pt")
             if frame_idx == 0:
                 self.processor.add_inputs_to_inference_session(
-                    inference_state,
+                    inference_session,
                     frame_idx=0,
                     obj_ids=1,
                     input_points=[[[[210, 350], [250, 220]]]],
                     input_labels=[[[1, 1]]],
                     original_size=inputs.original_sizes[0],
                 )
-            sam2_video_output = self.video_model(inference_state=inference_state, frame=inputs.pixel_values[0])
+            sam2_video_output = self.video_model(inference_session=inference_session, frame=inputs.pixel_values[0])
             video_res_masks.append(sam2_video_output.video_res_masks)
 
         video_res_masks = torch.stack(video_res_masks, dim=0)

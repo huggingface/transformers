@@ -139,7 +139,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Sam2VideoProcessor
 
-## Sam2VideoSession
+## Sam2VideoInferenceSession
 
 [[autodoc]] Sam2VideoInferenceSession
 
