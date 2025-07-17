@@ -558,6 +558,7 @@ class Qwen2VLAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            position_ids=position_ids,  # pass positions for FA2
             **kwargs,
         )
 
@@ -866,7 +867,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
         #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
         #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
         #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
-        if position_ids.shape[0] == 4:
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
@@ -907,7 +908,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
