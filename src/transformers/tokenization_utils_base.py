@@ -232,7 +232,7 @@ class BatchEncoding(UserDict):
 
         self._encodings = encoding
 
-        if n_sequences is None and encoding is not None and len(encoding):
+        if n_sequences is None and encoding is not None and encoding:
             n_sequences = encoding[0].n_sequences
 
         self._n_sequences = n_sequences
