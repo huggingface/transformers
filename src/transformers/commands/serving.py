@@ -118,7 +118,7 @@ if serve_dependencies_available:
         generation_config: str
         stream: Optional[bool] = False
 
-    # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
+    # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
     completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
     transcription_validator = TypeAdapter(TransformersTranscriptionCreateParams)
