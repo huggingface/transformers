@@ -80,14 +80,13 @@ class Qwen2RMSNorm(nn.Module):
 
 @auto_docstring
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
-    config_class = Qwen2_5OmniConfig
+    config: Qwen2_5OmniConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5OmniDecoderLayer", "Qwen2_5OmniVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
     _supports_static_cache = False
     _supports_attention_backend = True
 
@@ -743,7 +742,7 @@ class SinusoidsPositionEmbedding(nn.Module):
     """
 )
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniAudioEncoderConfig
+    config: Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
     _supports_sdpa = True
@@ -1107,7 +1106,7 @@ class Qwen2_5OmniPatchMerger(nn.Module):
 
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniVisionEncoderConfig
+    config: Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
@@ -1532,7 +1531,7 @@ class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniTextConfig
+    config: Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTextConfig):
@@ -1684,7 +1683,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
-    config_class = Qwen2_5OmniThinkerConfig
+    config: Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
@@ -2080,7 +2079,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring
 class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniTalkerConfig
+    config: Qwen2_5OmniTalkerConfig
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
@@ -2226,7 +2225,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
-    config_class = Qwen2_5OmniTalkerConfig
+    config: Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
@@ -3330,7 +3329,7 @@ class AMPBlock(torch.nn.Module):
     """
 )
 class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniBigVGANConfig
+    config: Qwen2_5OmniBigVGANConfig
 
     def __init__(self, config: Qwen2_5OmniBigVGANConfig):
         super().__init__(config)
@@ -3465,7 +3464,7 @@ class RungeKutta4ODESolver:
     """
 )
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniDiTConfig
+    config: Qwen2_5OmniDiTConfig
     _no_split_modules = ["DiTDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
@@ -3620,7 +3619,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniToken2WavConfig
+    config: Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
     _no_split_modules = ["Qwen2_5OmniToken2WavDiTModel", "Qwen2_5OmniToken2WavBigVGANModel"]
 
@@ -3688,7 +3687,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
-    config_class = Qwen2_5OmniConfig
+    config: Qwen2_5OmniConfig
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
         "Qwen2_5OmniToken2WavModel",

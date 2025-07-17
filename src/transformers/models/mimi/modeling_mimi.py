@@ -1367,7 +1367,7 @@ class MimiSplitResidualVectorQuantizer(nn.Module):
 
 @auto_docstring
 class MimiPreTrainedModel(PreTrainedModel):
-    config_class = MimiConfig
+    config: MimiConfig
     base_model_prefix = "mimi"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
@@ -1375,7 +1375,7 @@ class MimiPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
 
     def _init_weights(self, module):

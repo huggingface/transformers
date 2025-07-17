@@ -147,7 +147,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 
 
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
-    config_class = GraniteMoeSharedConfig
+    config: GraniteMoeSharedConfig
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
 
 

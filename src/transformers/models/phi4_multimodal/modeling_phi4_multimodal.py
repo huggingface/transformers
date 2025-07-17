@@ -365,7 +365,7 @@ def default_flax_embed_init(tensor):
 
 @auto_docstring
 class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
 
@@ -524,7 +524,7 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(nn.Module):
 
 
 class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
@@ -992,7 +992,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalAudioConfig
+    config: Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
     _supports_flash_attn = True
@@ -1584,7 +1584,7 @@ class Phi4MultimodalRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalConfig
+    config: Phi4MultimodalConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalDecoderLayer"]
@@ -1592,8 +1592,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
