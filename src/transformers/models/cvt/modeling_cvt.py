@@ -509,7 +509,7 @@ class CvtEncoder(nn.Module):
 
 @auto_docstring
 class CvtPreTrainedModel(PreTrainedModel):
-    config_class = CvtConfig
+    config: CvtConfig
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
     _no_split_modules = ["CvtLayer"]

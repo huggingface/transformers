@@ -377,7 +377,7 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
 
 
 class Cohere2PreTrainedModel(CoherePreTrainedModel):
-    config_class = Cohere2Config
+    config: Cohere2Config
 
 
 class Cohere2Model(Gemma2Model):

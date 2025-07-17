@@ -156,6 +156,11 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
     supplied arguments.
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     def normalize(self, item):
         if isinstance(item, SquadExample):
             return item
@@ -551,8 +556,18 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None
             )
 
+            pre_topk = (
+                top_k * 2 + 10 if align_to_words else top_k
+            )  # Some candidates may be deleted if we align to words
             starts, ends, scores, min_null_score = select_starts_ends(
-                start_, end_, p_mask, attention_mask, min_null_score, top_k, handle_impossible_answer, max_answer_len
+                start_,
+                end_,
+                p_mask,
+                attention_mask,
+                min_null_score,
+                pre_topk,
+                handle_impossible_answer,
+                max_answer_len,
             )
 
             if not self.tokenizer.is_fast:
