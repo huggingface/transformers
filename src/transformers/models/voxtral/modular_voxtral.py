@@ -52,6 +52,11 @@ class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
 
 
 # TODO: @eustlb, I would really prefer to use WhisperEncoder but it's messing with modular
+@auto_docstring(
+    custom_intro="""
+    The Voxtral encoder, which is a Whisper encoder.
+    """
+)
 class VoxtralEncoder(Qwen2AudioEncoder):
     _can_record_outputs = {
         "attentions": VoxtralAttention,
@@ -121,6 +126,11 @@ class VoxtralMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    The Voxtral model, which consists of Whisper encoder, a multi-modal projector and a LLama language model.
+    """
+)
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -193,7 +203,37 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        TODO: @eustlb, add docstring
+        Example:
+
+        ```python
+        >>> from transformers import VoxtralForConditionalGeneration, AutoProcessor
+        >>> import torch
+
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> repo_id = "/home/eustache_lebihan/add-moshi-asr/Voxtral-Mini-3B-2507"
+
+        >>> processor = AutoProcessor.from_pretrained(repo_id)
+        >>> model = VoxtralForConditionalGeneration.from_pretrained(repo_id, torch_dtype=torch.bfloat16, device_map=device)
+
+        >>> conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
+                    {"type": "text", "text": "What can you tell me about this audio?"},
+                ],
+            }
+        ]
+
+        >>> inputs = processor.apply_chat_template(conversation)
+        >>> inputs = inputs.to(device, dtype=torch.bfloat16)
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=30)
+        >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        ["This audio is a humorous conversation between two friends, likely in English, where one of them is trying to figure out what the other's tattoo says."]
         ```"""
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

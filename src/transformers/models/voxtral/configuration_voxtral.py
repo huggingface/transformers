@@ -134,7 +134,7 @@ class VoxtralConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VoxtralForConditionalGeneration`]. It is used to instantiate an
     Voxtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Voxtral-Mini-3B
+    with the defaults will yield a similar configuration to that of the Voxtral-Mini-3B.
 
     e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 

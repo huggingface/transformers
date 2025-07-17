@@ -40,6 +40,8 @@ if is_soundfile_available():
 
 if is_librosa_available():
     import librosa
+    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
+    import soxr
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -101,6 +103,9 @@ def load_audio_as(
             - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
+    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
+    requires_backends(load_audio_as, ["librosa"])
+
     if return_format not in ["base64", "dict", "buffer"]:
         raise ValueError(f"Invalid return_format: {return_format}. Must be 'base64', 'dict', or 'buffer'")
 
@@ -125,11 +130,7 @@ def load_audio_as(
                 audio_format = f.format
                 if sampling_rate is not None and sampling_rate != original_sr:
                     # Resample audio to target sampling rate
-                    audio_array = librosa.resample(
-                        y=audio_array,
-                        orig_sr=original_sr,
-                        target_sr=sampling_rate
-                    )
+                    audio_array = soxr.resample(audio_array, original_sr, sampling_rate, quality="HQ")
                 else:
                     sampling_rate = original_sr
 

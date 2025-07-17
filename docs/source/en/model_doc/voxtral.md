@@ -310,7 +310,7 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 [[autodoc]] VoxtralProcessor
 
-## VoxtralAudioEncoder
+## VoxtralEncoder
 
 [[autodoc]] VoxtralEncoder
     - forward

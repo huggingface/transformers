@@ -65,8 +65,7 @@ class VoxtralProcessor(ProcessorMixin):
     r"""
     Constructs a Voxtral processor which wraps [`WhisperFeatureExtractor`] and
     [`MistralCommonTokenizer`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities. See the [`~VoxtralProcessor.__call__`] for more
-    information.
+    tokenizer functionalities.
 
     Args:
         feature_extractor ([`WhisperFeatureExtractor`]):
@@ -109,38 +108,48 @@ class VoxtralProcessor(ProcessorMixin):
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        chat_template: Optional[str] = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
         This method applies the model's chat completion template given a conversation. It relies on MistralCommonTokenizer's
         [`~MistralCommonTokenizer.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
         [`~WhisperFeatureExtractor.__call__`] to prepare input features to the model.
-        Please refer to the docstring of these methods for more information.
 
-        The input is expected to be in the following format, where each message content is a list consisting of text and
-        optionally audio input. For the audio, one can provide a URL or local path which will be used to form
-        `input_features` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+        Note that audio is padded to the nearest 30-second multiple prior to mel feature extraction.
 
+        A `conversation` is a list of messages, where each message is a dictionary with a `role` and a `content` field.
+        For Voxtral, `role` can be `"user"` or `"assistant"`.
+        The `content` field can be a string or a list of dictionaries with a `type` field. See example below.
+
+        ```python
+        from huggingface_hub import hf_hub_download
+        from transformers.audio_utils import load_audio_as
+
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+        audio_path = hf_hub_download(repo_id="hf-internal-testing/dummy-audio-samples", filename="bcn_weather.mp3", repo_type="dataset")
+        audio_base64 = load_audio_as(audio_path, return_format="base64", force_mono=True)
+
+        # audio + text
         conversation = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "audio", "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.ogg"},
-                    {"type": "text", "text": "What can you tell me about this audio?"},
+                    {"type": "audio", "url": audio_url},
+                    {"type": "audio", "path": audio_path},
+                    {"type": "audio", "base64": audio_base64},
+                    {"type": "text", "text": "How many audio do you hear?"},
                 ],
             },
         ]
+
+        processor = VoxtralProcessor.from_pretrained("/home/eustache_lebihan/add-moshi-asr/Voxtral-Mini-3B-2507")
+        inputs = processor.apply_chat_template(conversation)
+        ```
 
         Args:
             conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
                 The conversation to format.
         """
-        if chat_template is not None:
-            raise ValueError(
-                "Using a custom `chat_template` is not supported for VoxtralProcessor since it relies on mistral_common directly."
-            )
-
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
                 raise ValueError(
@@ -279,7 +288,7 @@ class VoxtralProcessor(ProcessorMixin):
         self,
         language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
-        model_id: str = "model",
+        model_id: str,
         sampling_rate: Optional[int] = None,
         format: Optional[Union[str, list[str]]] = None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
@@ -288,13 +297,25 @@ class VoxtralProcessor(ProcessorMixin):
         This method applies the model's transcription request template given a language and audio.
         It relies on MistralCommonTokenizer and WhisperFeatureExtractor to prepare input ids and input features to the model.
 
+        ```python
+        from transformers import VoxtralProcessor
+
+        model_id = "mistralai/Voxtral-Mini-3B-2507"
+        processor = VoxtralProcessor.from_pretrained(model_id)
+
+        language = "en"
+        audio = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
+
+        inputs = processor.apply_transcrition_request(language=language, audio=audio, model_id=model_id)
+        ```
+
         Args:
             language (`str`, `list[str]`):
                 The language or languages of the audio. If provided as a string, will be applied uniformly to all audio.
                 If provided as a list, will be applied to each audio individually with a one-to-one mapping.
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audio to be prepared. If provided as a string, it should correspond to the path or url of the audio file.
-            model_id (`str`, *optional*, default="model"):
+            model_id (`str`:
                 The hub model id of the model to use for transcription.
             sampling_rate (`int`, *optional*):
                 The sampling rate of the audio. Necessary if it is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
@@ -341,7 +362,9 @@ class VoxtralProcessor(ProcessorMixin):
         if is_str:
             audio = [load_audio_as(audio, return_format="buffer", force_mono=True, sampling_rate=sampling_rate)]
         elif is_list_of_str:
-            audio = [load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio]
+            audio = [
+                load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
+            ]
         else:
             audio = make_list_of_audio(audio)
             if len(audio) != len(format):
@@ -417,7 +440,7 @@ class VoxtralProcessor(ProcessorMixin):
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
