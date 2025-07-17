@@ -41,7 +41,7 @@ rendered properly in your Markdown viewer.
 
 </details>
 
-이 가이드는 Transformers와 다양한 분할 전략을 사용하여 텐서 병렬화를 활성화하는 방법을 보여줍니다.
+이 가이드는 Transformers에서 다양한 분할 전략을 사용하여 텐서 병렬화를 활성화하는 방법을 설명합니다.
 
 ## 모델 분할[[partitioning-a-model]]
 
