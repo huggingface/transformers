@@ -451,7 +451,7 @@ class Idefics2Encoder(nn.Module):
 
 @auto_docstring
 class Idefics2PreTrainedModel(PreTrainedModel):
-    config_class = Idefics2Config
+    config: Idefics2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
@@ -459,7 +459,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -492,7 +492,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
-    config_class = Idefics2VisionConfig
+    config: Idefics2VisionConfig
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -779,7 +779,7 @@ class Idefics2PerceiverLayer(nn.Module):
     """
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
-    config_class = Idefics2PerceiverConfig
+    config: Idefics2PerceiverConfig
     _supports_sdpa = True
     _supports_flash_attention_2 = True
     _supports_flex_attn = True

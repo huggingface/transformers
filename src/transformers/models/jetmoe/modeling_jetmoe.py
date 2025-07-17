@@ -821,14 +821,13 @@ class JetMoeBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
-    config_class = JetMoeConfig
+    config: JetMoeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         """Initialize the weights."""

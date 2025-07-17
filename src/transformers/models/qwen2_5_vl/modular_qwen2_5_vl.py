@@ -189,7 +189,7 @@ class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
-    config_class = Qwen2_5_VLVisionConfig
+    config: Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:
@@ -354,7 +354,7 @@ class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
 
 
 class Qwen2_5_VLModel(Qwen2VLModel):
-    config_class = Qwen2_5_VLConfig
+    config: Qwen2_5_VLConfig
     base_model_prefix = ""
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
@@ -723,6 +723,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Qwen2_5_VLCausalLMOutputWithPast]:
         r"""
@@ -795,7 +796,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

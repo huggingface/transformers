@@ -290,7 +290,7 @@ class Olmo2RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Olmo2PreTrainedModel(PreTrainedModel):
-    config_class = Olmo2Config
+    config: Olmo2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Olmo2DecoderLayer"]
@@ -298,8 +298,7 @@ class Olmo2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {

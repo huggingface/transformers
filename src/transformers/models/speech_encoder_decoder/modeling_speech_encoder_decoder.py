@@ -61,7 +61,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
-    config_class = SpeechEncoderDecoderConfig
+    config: SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
     supports_gradient_checkpointing = True
@@ -502,10 +502,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported. Please use the"
             " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
         )
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
 
 __all__ = ["SpeechEncoderDecoderModel"]

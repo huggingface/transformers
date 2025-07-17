@@ -580,7 +580,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MiniMaxPreTrainedModel(PreTrainedModel):
-    config_class = MiniMaxConfig
+    config: MiniMaxConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxDecoderLayer"]
@@ -588,8 +588,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True  # Note: only supports MiniMaxCache
-    _supports_quantized_cache = False
+    # Note: only supports MiniMaxCache
     _supports_static_cache = False
     _supports_attention_backend = True
     _can_record_outputs = {

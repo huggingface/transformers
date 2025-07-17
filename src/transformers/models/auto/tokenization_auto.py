@@ -758,7 +758,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
             except AttributeError:
                 continue
 
-    for config, tokenizers in TOKENIZER_MAPPING._extra_content.items():
+    for tokenizers in TOKENIZER_MAPPING._extra_content.values():
         for tokenizer in tokenizers:
             if getattr(tokenizer, "__name__", None) == class_name:
                 return tokenizer

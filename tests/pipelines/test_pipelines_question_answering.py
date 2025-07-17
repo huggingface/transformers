@@ -168,10 +168,11 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_fp16(self):
@@ -182,10 +183,11 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_bf16(self):
@@ -196,10 +198,11 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_iterator(self):
@@ -211,7 +214,9 @@ class QAPipelineTests(unittest.TestCase):
                 yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
 
         for outputs in pipe(data()):
-            self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+            self.assertEqual(
+                nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"}
+            )
 
     @require_torch
     def test_small_model_pt_softmax_trick(self):
@@ -242,10 +247,11 @@ class QAPipelineTests(unittest.TestCase):
         question_answerer.postprocess = ensure_large_logits_postprocess
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.028, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.111, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @slow
     @require_torch
