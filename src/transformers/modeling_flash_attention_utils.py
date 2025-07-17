@@ -352,13 +352,6 @@ def _flash_attention_forward(
         q, k, v, idx, (cu_q, cu_k), (mq, mk) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
-        if kwargs.get("layer_idx", 0) == 0:
-            print(
-                cu_q,
-                cu_k,
-                mq,
-                mk,
-            )
         out_unpad = flash_varlen_fn(
             q,
             k,
@@ -389,13 +382,6 @@ def _flash_attention_forward(
             v = value_states.view(-1, value_states.size(-2), value_states.size(-1))
             mq, mk = max_length_q, max_length_k
             cu_q, cu_k = cu_seq_lens_q, cu_seq_lens_k
-        if kwargs.get("layer_idx", 0) == 0:
-            print(
-                cu_q,
-                cu_k,
-                mq,
-                mk,
-            )
         out = flash_varlen_fn(
             q,
             k,
