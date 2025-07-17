@@ -2098,7 +2098,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
-            self.config._attn_implementation, is_early_check=True
+            self.config._attn_implementation, is_init_check=True
         )
 
         # for initialization of the loss
@@ -2339,12 +2339,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Otherwise, can't generate
         return False
 
-    def _flash_attn_2_can_dispatch(self, is_early_check: bool = False) -> bool:
+    def _flash_attn_2_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flash Attention 2 for a given model.
 
         Args:
-            is_early_check (`bool`, *optional*):
+            is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
                 fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
@@ -2401,7 +2401,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         # With the early check, the parameters are not yet initalized correctly
-        if not is_early_check:
+        if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
                     "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
@@ -2429,12 +2429,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # If no error raise by this point, we can return `True`
         return True
 
-    def _flash_attn_3_can_dispatch(self, is_early_check: bool = False) -> bool:
+    def _flash_attn_3_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flash Attention 3 for a given model.
 
         Args:
-            is_early_check (`bool`, *optional*):
+            is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
                 fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
@@ -2489,7 +2489,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         # With the early check, the parameters are not yet initalized correctly
-        if not is_early_check:
+        if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
                 if torch.cuda.is_available():
@@ -2506,12 +2506,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         return True
 
-    def _sdpa_can_dispatch(self, is_early_check: bool = False) -> bool:
+    def _sdpa_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of SDPA for a given model.
 
         Args:
-            is_early_check (`bool`, *optional*):
+            is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
                 fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
@@ -2536,7 +2536,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
             torch.backends.cuda.enable_flash_sdp(False)
 
-        if not is_early_check:
+        if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
                     "SDPA and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
@@ -2544,12 +2544,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         return True
 
-    def _flex_attn_can_dispatch(self, is_early_check: bool = False) -> bool:
+    def _flex_attn_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flex Attention for a given model.
 
         Args:
-            is_early_check (`bool`, *optional*):
+            is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
                 fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
@@ -2568,7 +2568,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
             )
 
-        if not is_early_check:
+        if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
                     "FlexAttention and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
@@ -2578,7 +2578,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: Optional[str], is_early_check: bool = False
+        self, attn_implementation: Optional[str], is_init_check: bool = False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -2587,7 +2587,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Args:
             attn_implementation (`str` or `None`):
                 The attention implementation to check for existence/validity.
-            is_early_check (`bool`, *optional*):
+            is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
                 fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
@@ -2641,15 +2641,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Perform relevant checks
         if applicable_attn_implementation == "flash_attention_2":
-            self._flash_attn_2_can_dispatch(is_early_check)
+            self._flash_attn_2_can_dispatch(is_init_check)
         elif applicable_attn_implementation == "flash_attention_3":
-            self._flash_attn_3_can_dispatch(is_early_check)
+            self._flash_attn_3_can_dispatch(is_init_check)
         elif applicable_attn_implementation == "flex_attention":
-            self._flex_attn_can_dispatch(is_early_check)
+            self._flex_attn_can_dispatch(is_init_check)
         elif applicable_attn_implementation == "sdpa":
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
-                self._sdpa_can_dispatch(is_early_check)
+                self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
                 # In this case, sdpa was requested explicitly, but we can't use it, so let's raise
                 if attn_implementation == "sdpa":
@@ -2703,7 +2703,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # warn the user that the requested value is not working
         try:
             applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                current_implementation, is_early_check=False
+                current_implementation, is_init_check=False
             )
             # Apply the change (on the internal attr, to avoid setting it recursively)
             self.config._attn_implementation_internal = applicable_attn_implementation
