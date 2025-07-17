@@ -4795,15 +4795,25 @@ class ModelTesterMixin:
             for submodule in model.modules():
                 # This is a submodel
                 if isinstance(submodule, PreTrainedModel) and submodule.config.__class__ != model.config.__class__:
+                    subconfig_from_model_internal = submodule.config
+                    matching_sub_configs = []
                     for subconfig_key in subconfig_keys:
                         # Get the subconfig from the model config
                         subconfig_from_model_config = getattr(model.config, subconfig_key)
-                        if subconfig_from_model_config.__class__ == submodule.config.__class__:
-                            subconfig_from_model_internal = submodule.config
+                        if subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__:
+                            # Since some composite models have different submodels parameterized by 2 of the same config
+                            # class instances, we need to check against a list of matching classes, and check that at least
+                            # 1 is the exact object (instead of checking immediately for similar object)
+                            matching_sub_configs.append(subconfig_from_model_config)
 
-                            # Both should be exactly the same object, that is when instantiating the submodel when should
-                            # absolutely not copy the subconfig
-                            self.assertTrue(subconfig_from_model_config is subconfig_from_model_internal)
+                    # Both should be exactly the same object, that is when instantiating the submodel when should
+                    # absolutely not copy the subconfig
+                    self.assertTrue(
+                        any(
+                            subconfig_from_model_config is subconfig_from_model_internal
+                            for subconfig_from_model_config in matching_sub_configs
+                        )
+                    )
 
     def test_can_set_attention_dynamically(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
