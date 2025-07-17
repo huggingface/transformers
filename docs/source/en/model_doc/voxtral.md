@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 ## VoxtralAudioEncoder
 
-[[autodoc]] VoxtralAudioEncoder
+[[autodoc]] VoxtralEncoder
     - forward
 
 ## VoxtralForConditionalGeneration
