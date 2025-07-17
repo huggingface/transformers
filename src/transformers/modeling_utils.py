@@ -5629,7 +5629,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         unexpected_keys: list[str],
         dtype: Optional[torch.dtype],
         hf_quantizer: Optional[HfQuantizer],
-    ) -> "PreTrainedModel":
+    ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
         from meta device to cpu.
         """
@@ -5663,7 +5663,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         loaded_keys: list[str],
         ignore_mismatched_sizes: bool,
         is_quantized: bool,
-    ) -> "PreTrainedModel":
+    ) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
         be initialized correctly (i.e. weight initialization distribution).
@@ -5684,20 +5684,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         else:
             not_initialized_submodules = dict(self.named_modules())
         # This will only initialize submodules that are not marked as initialized by the line above.
-        if is_deepspeed_zero3_enabled() and not is_quantized:
-            import deepspeed
+        if not is_quantized:
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
 
-            not_initialized_parameters = list(
-                set(
-                    itertools.chain.from_iterable(
-                        submodule.parameters(recurse=False) for submodule in not_initialized_submodules.values()
+                not_initialized_parameters = list(
+                    set(
+                        itertools.chain.from_iterable(
+                            submodule.parameters(recurse=False) for submodule in not_initialized_submodules.values()
+                        )
                     )
                 )
-            )
-            with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
+                with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
+                    self.initialize_weights()
+            else:
                 self.initialize_weights()
-        else:
-            self.initialize_weights()
 
     def get_parameter_or_buffer(self, target: str):
         """
