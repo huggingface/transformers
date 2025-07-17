@@ -2739,7 +2739,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if not isinstance(attn_implementation, dict)
                 else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
             )
-            if subconfig.__class__ not in subconfigs_changed and requested_implementation != subconfig._attn_implementation:
+            # This means we did not perform any check above for this particular subconfig
+            if (
+                subconfig.__class__ not in subconfigs_changed
+                and requested_implementation != subconfig._attn_implementation
+            ):
                 subconfig._attn_implementation_internal = requested_implementation
                 logger.warning(
                     f"We set the attention implementation for the sub-config {subconfig_key} without finding the associated "
