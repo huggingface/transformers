@@ -207,7 +207,6 @@ class HunYuanMoeV1Config(PretrainedConfig):
             self.attention_head_dim = attention_head_dim
         else:
             self.attention_head_dim = self.hidden_size // num_attention_heads
-        assert self.head_dim == self.attention_head_dim
         
         # for backward compatibility
         if num_key_value_heads is None:
