@@ -184,37 +184,16 @@ print("=" * 80)
 
 ➡️ audio only:
 ```python
-conversations = [
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "audio",
-                    "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
-                },
-                {
-                    "type": "audio",
-                    "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
-                },
-                {"type": "text", "text": "Describe briefly what you can hear."},
-            ],
-        },
-        {
-            "role": "assistant",
-            "content": "The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.",
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "audio",
-                    "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
-                },
-                {"type": "text", "text": "Ok, now compare this new audio with the previous one."},
-            ],
-        },
-    ]
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "audio",
+                "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
+            },
+        ],
+    }
 ]
 
 inputs = processor.apply_chat_template(conversations)
