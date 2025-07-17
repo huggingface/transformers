@@ -220,6 +220,8 @@ def write_model(
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 
+    model.generation_config.pad_token_id = 11
+
     print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)
     del state_dict, model

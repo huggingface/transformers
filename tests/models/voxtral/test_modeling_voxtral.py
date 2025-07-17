@@ -208,7 +208,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
                     },
                 ],
             }
@@ -240,7 +240,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
                     },
                     {"type": "text", "text": "What can you tell me about this audio?"},
                 ],
@@ -274,11 +274,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/mary_had_lamb.mp3",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mary_had_lamb.mp3",
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.mp3",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/winning_call.mp3",
                     },
                     {"type": "text", "text": "What sport and what nursery rhyme are referenced?"},
                 ],
@@ -343,11 +343,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
                         },
                         {
                             "type": "text",
@@ -362,7 +362,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/winning_call.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/winning_call.mp3",
                         },
                         {"type": "text", "text": "What can you tell me about this audio?"},
                     ],
@@ -399,11 +399,11 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
                         },
                         {"type": "text", "text": "Describe briefly what you can hear."},
                     ],
@@ -417,7 +417,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
                         },
                         {"type": "text", "text": "Ok, now compare this new audio with the previous one."},
                     ],
@@ -451,7 +451,8 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.check_model_name, torch_dtype=self.dtype, device_map=torch_device
         )
         inputs = self.processor.apply_transcrition_request(
-            language="en", audio="https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama.mp3"
+            language="en",
+            audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
         )
         inputs = inputs.to(torch_device, dtype=self.dtype)
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
