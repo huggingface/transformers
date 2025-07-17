@@ -607,7 +607,7 @@ class PretrainedConfig(PushToHubMixin):
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             # sometimes the config has no `base_config_key` if the config is used in several composite models
             # e.g. LlamaConfig. In that case we try to see if there is match in `model_type` before raising a warning
-            for k, v in config_dict.items():
+            for v in config_dict.values():
                 if isinstance(v, dict) and v.get("model_type") == cls.model_type:
                     config_dict = v
 
