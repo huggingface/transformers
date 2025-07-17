@@ -308,4 +308,4 @@ DTensor의 가장 중요한 부분은 `placement` 속성입니다. 이는 PyTorc
     bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Replicate()]) # 모든 GPU에 편향 복제
     ```
 
-- `Partial()` - 텐서가 감소 연산을 대기 중임을 나타냅니다(일반적으로 Transformers에서 사용과는 관련이 없음).
+- `Partial()` - 텐서가 감소 연산을 기다리고 있는 상태임을 나타냅니다 (일반적으로 Transformers에서의 사용 사례와는 직접적인 관련이 적습니다).
