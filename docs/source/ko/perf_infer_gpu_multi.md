@@ -47,7 +47,7 @@ rendered properly in your Markdown viewer.
 
 Transformers는 `tp_plan`매개변수를 활용할 수 있는 모델에 대해 텐서 병렬 처리를 지원합니다. 모델 분할 방식은 두 가지가 있습니다.
 
-- `auto` 텐서 병렬화 계획은 사전 정의된 구성을 기반으로 모델(위의 지원되는 모델 참조)을 분할합니다.
+- `auto` 텐서 병렬화 계획은 사전 정의된 구성을 기반으로 모델(위에 언급된 지원 모델)을 자동으로 분할합니다.
 - 고유한 분할 계획을 수동으로 지정하고 [`~PreTrainedModel.from_pretrained`]의 `tp_plan` 매개변수에 전달할 수도 있습니다.
 
 <hfoptions id="sharding">
