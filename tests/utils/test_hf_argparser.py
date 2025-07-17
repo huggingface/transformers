@@ -29,7 +29,7 @@ import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_deepspeed, require_torch
 
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types
@@ -484,6 +484,7 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         self.assertIsNotNone(parser)
 
+    @require_deepspeed
     @patch("sys.argv", ["test.py", "--deepspeed", '{"zero_optimization": {"stage": 1}}'])
     def test_16_cli_input_parsing(self):
         parser = HfArgumentParser(TrainingArguments)
