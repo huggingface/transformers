@@ -2694,23 +2694,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             else attn_implementation.get("", self.config._attn_implementation)
         )
 
-        # In this case, do nothing
-        if current_implementation == self.config._attn_implementation:
-            return
-
-        # It can sometimes change the attn, mostly from sdpa (default) to eager if sdpa is not supported
         # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
         # warn the user that the requested value is not working
-        try:
-            applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                current_implementation, is_init_check=False
-            )
-            # Apply the change (on the internal attr, to avoid setting it recursively)
-            self.config._attn_implementation_internal = applicable_attn_implementation
-        except (ValueError, ImportError) as e:
-            logger.warning(
-                f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
-            )
+        if current_implementation != self.config._attn_implementation:
+            try:
+                applicable_attn_implementation = self._check_and_adjust_attn_implementation(
+                    current_implementation, is_init_check=False
+                )
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._attn_implementation_internal = applicable_attn_implementation
+            except (ValueError, ImportError) as e:
+                logger.warning(
+                    f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
+                )
 
         # Apply it to all submodels as well
         for submodule in self.modules():
