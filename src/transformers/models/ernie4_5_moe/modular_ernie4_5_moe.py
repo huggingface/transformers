@@ -47,10 +47,6 @@ class Ernie4_5_MoEMLP(Qwen3MoeMLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config, intermediate_size)
 
-        del self.gate_proj
-        del self.up_proj
-        del self.down_proj
-
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
@@ -63,11 +59,6 @@ class Ernie4_5_MoERotaryEmbedding(Ernie4_5RotaryEmbedding):
 class Ernie4_5_MoEAttention(LlamaAttention):
     def __init__(self, config: Ernie4_5_MoEConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.q_proj
-        del self.k_proj
-        del self.v_proj
-        del self.o_proj
-        del self.attention_dropout
 
         self.attention_dropout = 0.0
 
@@ -236,10 +227,6 @@ class Ernie4_5_MoEPreTrainedModel(MixtralPreTrainedModel):
             module.e_score_correction_bias.data.zero_()
 
 
-# TODO: add mtp option? - a lot of unclear details
-#    - Do we act as if we were in pos 0, no past?
-#    - Which variables would need to be cut then?
-#    - ...
 @auto_docstring
 class Ernie4_5_MoEModel(MixtralModel):
     @check_model_inputs

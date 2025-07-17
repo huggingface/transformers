@@ -40,6 +40,7 @@ from .tokenization_utils_base import (
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
+    SpecialTokensMixin,
     TextInput,
     TextInputPair,
     TruncationStrategy,
@@ -890,7 +891,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         kwargs = self.init_kwargs.copy()
         # Map pad/cls/mask token at the Transformers level
-        special_tokens_list = self.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
         for token in special_tokens_list:
             if getattr(self, token) is not None:

@@ -85,9 +85,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class Ernie4_5MLP(LlamaMLP):
     def __init__(self, config: Ernie4_5Config):
         super().__init__()
-        del self.gate_proj
-        del self.up_proj
-        del self.down_proj
 
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
@@ -97,11 +94,6 @@ class Ernie4_5MLP(LlamaMLP):
 class Ernie4_5Attention(LlamaAttention):
     def __init__(self, config: Ernie4_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.q_proj
-        del self.k_proj
-        del self.v_proj
-        del self.o_proj
-        del self.attention_dropout
 
         self.attention_dropout = 0.0
 
