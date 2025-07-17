@@ -750,7 +750,7 @@ class BLTLocalDecoder(nn.Module):
 
             if i == 0 or self.config.cross_attn_all_layers:
                 # Use cross attention to extract info from patch_embeds into hidden_states
-                cross_attention_output, _, _ = self.cross_attn_layers[i](
+                cross_attention_output, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
                     attention_mask=cross_mask,
