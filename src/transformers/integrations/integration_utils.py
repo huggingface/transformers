@@ -1345,12 +1345,9 @@ class MLflowCallback(TrainerCallback):
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
-                    
+
             # sanitize metric names to replace unsupported characters like parentheses
-            sanitized_metrics = {
-                re.sub(r'[^0-9A-Za-z_\-\.\ :/]', '_', k): v
-                for k, v in metrics.items()
-            }
+            sanitized_metrics = {re.sub(r"[^0-9A-Za-z_\-\.\ :/]", "_", k): v for k, v in metrics.items()}
 
             if self._async_log:
                 self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step, synchronous=False)
