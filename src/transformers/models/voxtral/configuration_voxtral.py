@@ -172,6 +172,7 @@ class VoxtralConfig(PretrainedConfig):
     _default_text_config_kwargs = {
         "vocab_size": 131072,
         "hidden_size": 3072,
+        "intermediate_size": 8192,
         "num_hidden_layers": 30,
         "num_key_value_heads": 8,
         "max_position_embeddings": 131072,
