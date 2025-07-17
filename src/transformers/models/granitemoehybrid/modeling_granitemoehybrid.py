@@ -221,7 +221,7 @@ class GraniteMoeHybridAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HybridMambaAttentionDynamicCache(DynamicCache):
+class HybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -234,6 +234,10 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
+
+    key_cache = None
+    value_cache = None
+    is_compileable = False
 
     def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
         super().__init__()

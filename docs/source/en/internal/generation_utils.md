@@ -371,7 +371,11 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] QuantoQuantizedCache
 
+[[autodoc]] QuantoQuantizedCacheProcessor
+
 [[autodoc]] HQQQuantizedCache
+
+[[autodoc]] HQQQuantizedCacheProcessor
 
 [[autodoc]] OffloadedCache
 
@@ -380,6 +384,8 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] OffloadedStaticCache
 
 [[autodoc]] HybridCache
+
+[[autodoc]] HybridChunkedCache
 
 [[autodoc]] SlidingWindowCache
 

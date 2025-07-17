@@ -1531,24 +1531,6 @@ class HybridChunkedCache(HybridCache):
     Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
     for global attention. For more information, see the documentation of each subcomponent cache class.
 
-    Parameters:
-        config (`PretrainedConfig`):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
-            smaller batch size is used.
-        max_cache_len (`int`, *optional*):
-            The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`, *optional*):
-            The device on which the cache should be initialized. If you're using more than 1 computation device, you
-            should pass the `layer_device_map` argument instead.
-        dtype (torch.dtype, *optional*, defaults to `torch.bfloat16`):
-            The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is split between different gpus. You can know which layers mapped to which device by
-            checking the associated device_map: `model.hf_device_map`.
-
     Example:
 
         ```python
