@@ -281,13 +281,12 @@ class CodeGenBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class CodeGenPreTrainedModel(PreTrainedModel):
-    config_class = CodeGenConfig
+    config: CodeGenConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CodeGenBlock"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
 
     def __init__(self, *inputs, **kwargs):
@@ -668,20 +667,6 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
-        )
-
-    @staticmethod
-    def _reorder_cache(
-        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
-        [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past_key_values
         )
 
 

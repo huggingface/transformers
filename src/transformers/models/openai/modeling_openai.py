@@ -358,7 +358,7 @@ class OpenAIGPTSequenceSummary(nn.Module):
 
 @auto_docstring
 class OpenAIGPTPreTrainedModel(PreTrainedModel):
-    config_class = OpenAIGPTConfig
+    config: OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
 

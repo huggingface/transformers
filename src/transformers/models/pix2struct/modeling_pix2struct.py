@@ -349,8 +349,8 @@ class Pix2StructVisionEncoder(nn.Module):
 
 @auto_docstring
 class Pix2StructPreTrainedModel(PreTrainedModel):
-    config_class = Pix2StructConfig
-    _supports_cache_class = True
+    config: Pix2StructConfig
+
     _supports_static_cache = False
 
     @property
@@ -474,7 +474,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
-    config_class = Pix2StructVisionConfig
+    config: Pix2StructVisionConfig
     main_input_name = "flattened_patches"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
@@ -1013,7 +1013,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
     """
 )
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
-    config_class = Pix2StructTextConfig
+    config: Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
     _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
@@ -1418,7 +1418,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     """
 )
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMixin):
-    config_class = Pix2StructConfig
+    config: Pix2StructConfig
     main_input_name = "flattened_patches"
     _tied_weights_keys = ["decoder.lm_head.weight"]
 

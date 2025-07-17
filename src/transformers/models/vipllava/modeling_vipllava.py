@@ -114,15 +114,14 @@ class VipLlavaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class VipLlavaPreTrainedModel(PreTrainedModel):
-    config_class = VipLlavaConfig
+    config: VipLlavaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True

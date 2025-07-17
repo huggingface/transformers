@@ -752,14 +752,13 @@ class MT5ClassificationHead(nn.Module):
 @auto_docstring
 # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class MT5PreTrainedModel(PreTrainedModel):
-    config_class = MT5Config
+    config: MT5Config
     load_tf_weights = load_tf_weights_in_mt5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_quantized_cache = False  # enc-dec models don't support yet
     _supports_static_cache = True
-    _supports_cache_class = True
+
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]
 
@@ -1295,7 +1294,7 @@ class MT5Model(MT5PreTrainedModel):
     ```"""
 
     model_type = "mt5"
-    config_class = MT5Config
+    config: MT5Config
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1562,7 +1561,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
     ```"""
 
     model_type = "mt5"
-    config_class = MT5Config
+    config: MT5Config
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1844,37 +1843,6 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past_key_values
-
-        reordered_decoder_past = ()
-        for layer_past_states in past_key_values:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
-                )
-
-            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
-                raise ValueError(
-                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
-                )
-            if len(reordered_layer_past_states) != len(layer_past_states):
-                raise ValueError(
-                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
-                )
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
-
 
 @auto_docstring
 class MT5EncoderModel(MT5PreTrainedModel):
@@ -1893,7 +1861,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
     ```"""
 
     model_type = "mt5"
-    config_class = MT5Config
+    config: MT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
 
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5->MT5

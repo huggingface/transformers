@@ -49,16 +49,15 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class SmolVLMPreTrainedModel(PreTrainedModel):
-    config_class = SmolVLMConfig
+    config: SmolVLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -371,10 +370,9 @@ class SmolVLMEncoder(nn.Module):
     """
 )
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
-    config_class = SmolVLMVisionConfig
+    config: SmolVLMVisionConfig
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
 
     def __init__(self, config: SmolVLMVisionConfig):

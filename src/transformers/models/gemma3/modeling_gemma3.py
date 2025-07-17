@@ -420,7 +420,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Gemma3PreTrainedModel(PreTrainedModel):
-    config_class = Gemma3Config
+    config: Gemma3Config
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -430,12 +430,10 @@ class Gemma3PreTrainedModel(PreTrainedModel):
         "SiglipMultiheadAttentionPoolingHead",
     ]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -462,7 +460,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Gemma3TextModel(Gemma3PreTrainedModel):
-    config_class = Gemma3TextConfig
+    config: Gemma3TextConfig
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -605,7 +603,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = Gemma3TextConfig
+    config: Gemma3TextConfig
     base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):

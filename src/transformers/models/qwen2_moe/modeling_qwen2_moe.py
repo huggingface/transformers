@@ -739,15 +739,13 @@ class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen2MoePreTrainedModel(PreTrainedModel):
-    config_class = Qwen2MoeConfig
+    config: Qwen2MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2MoeDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
