@@ -92,7 +92,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
     def test_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_file = self.tokenizer.save_pretrained(tmp_dir)[0]
+            self.tokenizer.save_pretrained(tmp_dir)
             loaded_tokenizer = MistralCommonTokenizer.from_pretrained(tmp_dir)
 
         self.assertIsNotNone(loaded_tokenizer)
