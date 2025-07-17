@@ -2293,6 +2293,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     ALL_ATTENTION_FUNCTIONS[repo_id] = partial(flash_attention_forward, implementation=kernel)
                 else:
                     ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
+                ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
+                    "flash_attention_2"
+                ]
                 attn_implementation = repo_id
             except FileNotFoundError as e:
                 logger.warning(

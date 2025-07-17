@@ -689,8 +689,6 @@ def _preprocess_mask_arguments(
     # with `torch._dynamo.exc.Unsupported: 'inline in skipfiles:Mapping.__contains__ | __contains__, skipped
     # according trace_rules.lookup SKIP_DIRS'` -- can be removed when we require Python>=3.11
     if config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping:
-        if "kernel" in config._attn_implementation:
-            return True, attention_mask, None, None, None
         return True, None, None, None, None
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
