@@ -205,14 +205,11 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     return_row_col_info = False
     valid_kwargs = Idefics3FastImageProcessorKwargs
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
         Prepare a nested images structure for processing.
         """
-        return make_nested_list_of_images(images)
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def resize(
         self,
