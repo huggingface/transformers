@@ -52,6 +52,7 @@ if is_torchao_available():
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
+from .distributed import DistributedConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -71,15 +72,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .pytorch_utils import (  # noqa: F401
-    Conv1D,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    id_tensor_storage,
-    prune_conv1d_layer,
-    prune_layer,
-    prune_linear_layer,
-)
+from .pytorch_utils import id_tensor_storage
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
@@ -4398,6 +4391,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4440,10 +4434,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # `device_map` pointing to the correct device
         if tp_plan is not None:
             if device_mesh is None and tp_plan is not None:
-                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
                 # TODO: make device_mesh support multiple dimensions
-                if device_mesh.ndim == 1:
+                if device_mesh.ndim > 1:
                     raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
                 device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
@@ -4752,8 +4746,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         config.name_or_path = pretrained_model_name_or_path
+        if distributed_config is not None and distributed_config.enable_expert_parallel:
+            # TODO: add proper support for ep_plan independently of tp_plan
+            if getattr(config, "base_model_ep_plan", None) is None:
+                raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
+            config.base_model_tp_plan = config.base_model_ep_plan  # TODO: hack for now
 
-        # Instantiate model.
+        config.device_mesh = device_mesh  # Used in post_init
+
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
