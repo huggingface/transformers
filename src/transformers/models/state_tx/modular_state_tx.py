@@ -111,6 +111,19 @@ class StateTxConfig(PretrainedConfig):
         dropout=0.1,
         rms_norm_eps=1e-6,
         use_cache=True,
+        max_position_embeddings=512,
+        num_key_value_heads=None,
+        head_dim=None,
+        attention_dropout=0.0,
+        hidden_dropout=0.0,
+        layer_norm_eps=1e-6,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        tie_word_embeddings=False,
+        rotary_dim=0,
+        use_rotary_embeddings=False,
+        n_positions=512,
         **kwargs,
     ):
         super().__init__(
@@ -125,16 +138,27 @@ class StateTxConfig(PretrainedConfig):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.num_attention_heads = num_heads  # Add for Llama compatibility
-        self.num_key_value_heads = num_heads  # Add for Llama compatibility
+        self.num_key_value_heads = num_key_value_heads or num_heads  # Add for Llama compatibility
         self.intermediate_size = intermediate_size
         self.vocab_size = vocab_size
         self.num_batches = num_batches
         self.dropout = dropout
-        self.attention_dropout = dropout  # Add for Llama compatibility
+        self.attention_dropout = attention_dropout  # Add for Llama compatibility
+        self.hidden_dropout = hidden_dropout
         self.attention_bias = False  # Add for Llama compatibility
         self.mlp_bias = False  # Add for Llama compatibility
         self.hidden_act = "silu"  # Add for Llama compatibility
         self.rms_norm_eps = rms_norm_eps
+        self.max_position_embeddings = max_position_embeddings
+        self.head_dim = head_dim or (hidden_dim // num_heads)
+        self.layer_norm_eps = layer_norm_eps
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rotary_dim = rotary_dim
+        self.use_rotary_embeddings = use_rotary_embeddings
+        self.n_positions = n_positions
 
 
 class SamplesLoss(nn.Module):
@@ -252,7 +276,6 @@ class LlamaBidirectionalModel(LlamaModel):
         )
 
 
-
 class StateTxPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -328,30 +351,27 @@ class StateTxModel(StateTxPreTrainedModel):
         )
 
         # Transformer backbone
-        kwargs = {
-            'max_position_embeddings': 512, 
-            'hidden_size': 1440, 
-            'intermediate_size': 4416, 
-            'num_hidden_layers': 4, 
-            'num_attention_heads': 12, 
-            'num_key_value_heads': 12, 
-            'head_dim': 120, 
-            'use_cache': False, 
-            'attention_dropout': 0.0, 
-            'hidden_dropout': 0.0, 
-            'layer_norm_eps': 1e-06, 
-            'pad_token_id': 0, 
-            'bos_token_id': 1, 
-            'eos_token_id': 2, 
-            'tie_word_embeddings': False, 
-            'rotary_dim': 0, 
-            'use_rotary_embeddings': False, 
-            'n_positions': 512
-        }
-        _config = LlamaBidirectionalConfig(**kwargs)
-        model = LlamaBidirectionalModel(_config)
-        model_dim = config.hidden_size
-        self.transformer_backbone = model
+        transformer_config = LlamaBidirectionalConfig(
+            max_position_embeddings=512,
+            hidden_size=1440,
+            intermediate_size=4416,
+            num_hidden_layers=4,
+            num_attention_heads=12,
+            num_key_value_heads=12,
+            head_dim=120,
+            use_cache=False,
+            attention_dropout=0.0,
+            hidden_dropout=0.0,
+            layer_norm_eps=1e-06,
+            pad_token_id=0,
+            bos_token_id=1,
+            eos_token_id=2,
+            tie_word_embeddings=False,
+            rotary_dim=0,
+            use_rotary_embeddings=False,
+            n_positions=512,
+        )
+        self.transformer_backbone = LlamaBidirectionalModel(transformer_config)
 
         # Project out
         self.project_out = nn.Sequential(

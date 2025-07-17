@@ -293,7 +293,7 @@ if TYPE_CHECKING:
     from .squeezebert import *
     from .stablelm import *
     from .starcoder2 import *
-    from .state import *
+    from .state_emb import *
     from .state_tx import *
     from .superglue import *
     from .superpoint import *

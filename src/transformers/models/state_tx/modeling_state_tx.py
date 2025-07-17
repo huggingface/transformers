@@ -540,28 +540,27 @@ class StateTxModel(StateTxPreTrainedModel):
         )
 
         # Transformer backbone
-        kwargs = {
-            "max_position_embeddings": 512,
-            "hidden_size": 1440,
-            "intermediate_size": 4416,
-            "num_hidden_layers": 4,
-            "num_attention_heads": 12,
-            "num_key_value_heads": 12,
-            "head_dim": 120,
-            "use_cache": False,
-            "attention_dropout": 0.0,
-            "hidden_dropout": 0.0,
-            "layer_norm_eps": 1e-06,
-            "pad_token_id": 0,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "tie_word_embeddings": False,
-            "rotary_dim": 0,
-            "use_rotary_embeddings": False,
-            "n_positions": 512,
-        }
-        _config = LlamaBidirectionalConfig(**kwargs)
-        model = LlamaBidirectionalModel(_config)
+        transformer_config = LlamaBidirectionalConfig(
+            max_position_embeddings=512,
+            hidden_size=1440,
+            intermediate_size=4416,
+            num_hidden_layers=4,
+            num_attention_heads=12,
+            num_key_value_heads=12,
+            head_dim=120,
+            use_cache=False,
+            attention_dropout=0.0,
+            hidden_dropout=0.0,
+            layer_norm_eps=1e-06,
+            pad_token_id=0,
+            bos_token_id=1,
+            eos_token_id=2,
+            tie_word_embeddings=False,
+            rotary_dim=0, 
+            use_rotary_embeddings=False,
+            n_positions=512,
+        )
+        model = LlamaBidirectionalModel(transformer_config)
         model_dim = config.hidden_size
         self.transformer_backbone = model
 

@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from .configuration_state import StateEmbeddingConfig
+from .configuration_state_emb import StateEmbeddingConfig
 
 
 class SkipBlock(nn.Module):
