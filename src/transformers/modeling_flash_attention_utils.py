@@ -104,7 +104,6 @@ def _prepare_from_posids(query, key, value, position_ids):
     value = value.contiguous().view(-1, value.size(-2), value.size(-1))
     position_ids = position_ids.flatten()
     indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
-
     cu_seq_lens = torch.cat(
         (
             indices_q[position_ids == 0],
@@ -162,11 +161,8 @@ def _lazy_imports(impl: Optional[str]):
             getattr(impl, "flash_attn_varlen_func"),
             pad_input,
             unpad_input,
-            True,
+            False,
         )
-
-    # fallback
-    raise ValueError(f"Invalid flash-attn implementation: {impl}")
 
 
 _flash_supports_window = None
@@ -266,7 +262,6 @@ def _flash_attention_forward(
             v = value_states.view(-1, value_states.size(-2), value_states.size(-1))
             mq, mk = max_length_q, max_length_k
             cu_q, cu_k = cu_seq_lens_q, cu_seq_lens_k
-
         out = flash_varlen_fn(
             q,
             k,
@@ -286,4 +281,3 @@ def _flash_attention_forward(
         )
 
     return out[0] if isinstance(out, tuple) else out
-
