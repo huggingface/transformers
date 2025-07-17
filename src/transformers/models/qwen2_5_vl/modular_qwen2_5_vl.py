@@ -630,7 +630,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
-            if self.rope_deltas is None:
+            if self.rope_deltas is None or cache_position is None or cache_position[0] == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
@@ -837,7 +837,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             elif "position_ids" in model_inputs:
                 position_ids = model_inputs["position_ids"][None, ...]
-                vision_positions = position_ids + self.model.rope_deltas.expand_as(position_ids)
+                delta = self.model.rope_deltas
+                delta = delta.repeat_interleave(position_ids.shape[1] // delta.shape[0], dim=0)
+                vision_positions = position_ids + delta.expand_as(position_ids)
                 vision_positions = vision_positions.expand(3, vision_positions.shape[1], -1)
 
             # Concatenate "text + vision" positions into [4, bs, seq-len]
