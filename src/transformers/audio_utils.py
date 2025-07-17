@@ -21,7 +21,7 @@ import io
 import os
 import warnings
 from io import BytesIO
-from typing import Optional, Union, Dict, Any
+from typing import Any, Optional, Union
 
 import numpy as np
 import requests
@@ -76,14 +76,14 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 
 
 def load_audio_as(
-    audio: str, 
+    audio: str,
     return_format: str,
-    timeout: Optional[int] = None, 
-    force_mono: bool = False, 
-) -> Union[str, Dict[str, Any], io.BytesIO, None]:
+    timeout: Optional[int] = None,
+    force_mono: bool = False,
+) -> Union[str, dict[str, Any], io.BytesIO, None]:
     """
     Load audio from either a local file path or URL and return in specified format.
-    
+
     Args:
         audio (`str`): Either a local file path or a URL to an audio file
         return_format (`str`): Format to return the audio in:
@@ -92,16 +92,16 @@ def load_audio_as(
             - "buffer": BytesIO object
         timeout (`int`, *optional*): Timeout for URL requests in seconds
         force_mono (`bool`): Whether to convert stereo audio to mono
-    
+
     Returns:
-        `Union[str, Dict[str, Any], io.BytesIO, None]`: 
+        `Union[str, Dict[str, Any], io.BytesIO, None]`:
             - `str`: Base64 encoded audio data (if return_format="base64")
-            - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")  
+            - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
     if return_format not in ["base64", "dict", "buffer"]:
         raise ValueError(f"Invalid return_format: {return_format}. Must be 'base64', 'dict', or 'buffer'")
-    
+
     try:
         # Load audio bytes from URL or file
         audio_bytes = None
