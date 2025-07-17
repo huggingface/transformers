@@ -42,7 +42,7 @@ print(output[0]["generated_text"])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("ctrl")
@@ -68,7 +68,7 @@ transformers-cli run text-generation \
 </hfoption>
 <hfoption id="Quantization">
 
-```py
+```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("ctrl")
@@ -92,7 +92,7 @@ model = AutoModelForCausalLM.from_pretrained(
 - Using an appropriate prefix such as `Books:` or `Reviews:` is crucial for meaningful output.
 - This model is **not compatible** with attention visualization tools.
 
-```py
+```python
 # Control code example
 prompt = "Books: Once upon a time"
 inputs = tokenizer(prompt, return_tensors="pt")
