@@ -1,6 +1,15 @@
 import argparse
 
-from transformers import Ernie4_5Tokenizer, Ernie4_5TokenizerFast
+from transformers import LlamaTokenizer, LlamaTokenizerFast
+
+
+DEFAULT_CHAT_TEMPLATE = '{%- if not add_generation_prompt is defined -%}\n    {%- set add_generation_prompt = true -%}\n{%- endif -%}\n{%- if not cls_token is defined -%}\n    {%- set cls_token = "<|begin_of_sentence|>" -%}\n{%- endif -%}\n{%- if not sep_token is defined -%}\n    {%- set sep_token = "<|end_of_sentence|>" -%}\n{%- endif -%}\n{{- cls_token -}}\n{%- for message in messages -%}\n    {%- if message["role"] == "user" -%}\n        {{- "User: " + message["content"] + "\n" -}}\n    {%- elif message["role"] == "assistant" -%}\n        {{- "Assistant: " + message["content"] + sep_token -}}\n    {%- elif message["role"] == "system" -%}\n        {{- message["content"] + "\n" -}}\n    {%- endif -%}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- "Assistant: " -}}\n{%- endif -%}'
+DEFAULT_TEXT_ADD_TOKENS = [
+    "<mask:4>",
+    "<mask:5>",
+    "<mask:6>",
+    "<mask:7>",
+]
 
 
 if __name__ == "__main__":
@@ -22,7 +31,17 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    hf_tok = Ernie4_5Tokenizer.from_pretrained(args.repo_name)
+    hf_tok = LlamaTokenizer.from_pretrained(
+        args.repo_name,
+        pad_token="<unk>",
+        cls_token="<|begin_of_sentence|>",
+        sep_token="<|end_of_sentence|>",
+        mask_token="<mask:1>",
+        add_bos_token=False,
+        add_prefix_space=False,
+        chat_template=DEFAULT_CHAT_TEMPLATE,
+        legacy=True,
+    )
     hf_tok.model_max_length = 131072
     hf_tok.init_kwargs.pop("auto_map", None)
     # special tokens which we need to map as additional special tokens instead
@@ -30,15 +49,10 @@ if __name__ == "__main__":
     hf_tok.init_kwargs.pop("header_end_token", None)
     hf_tok.init_kwargs.pop("sys_start_token", None)
     hf_tok.init_kwargs.pop("sys_end_token", None)
-    for token in [
-        "<mask:4>",
-        "<mask:5>",
-        "<mask:6>",
-        "<mask:7>",
-    ]:
+    for token in DEFAULT_TEXT_ADD_TOKENS:
         hf_tok.add_tokens([token], special_tokens=True)
 
     # save slow model and convert on load time
     hf_tok.save_pretrained("/tmp/ernie4_5_tokenizer")
-    hf_tok_fast = Ernie4_5TokenizerFast.from_pretrained("/tmp/ernie4_5_tokenizer", from_slow=True)
+    hf_tok_fast = LlamaTokenizerFast.from_pretrained("/tmp/ernie4_5_tokenizer", from_slow=True)
     hf_tok_fast.save_pretrained(args.output_dir, push_to_hub=args.push_to_hub)
