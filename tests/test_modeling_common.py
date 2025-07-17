@@ -3471,8 +3471,8 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
-            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
-                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
+            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn) or (
+                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn
             ):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
@@ -3970,9 +3970,9 @@ class ModelTesterMixin:
 
                 sub_models_supporting_fa = [
                     (
-                        module._supports_flash_attn_3
+                        module._supports_flash_attn
                         if attn_implementation == "flash_attention_3"
-                        else module._supports_flash_attn_2
+                        else module._supports_flash_attn
                     )
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
@@ -3981,9 +3981,9 @@ class ModelTesterMixin:
                     all(sub_models_supporting_fa)
                     if len(sub_models_supporting_fa) > 0
                     else (
-                        model._supports_flash_attn_3
+                        model._supports_flash_attn
                         if attn_implementation == "flash_attention_3"
-                        else model._supports_flash_attn_2
+                        else model._supports_flash_attn
                     )
                 )
                 if not supports_fa_all_modules:
@@ -4037,7 +4037,7 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -4132,9 +4132,9 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not (
-                model_class._supports_flash_attn_2
+                model_class._supports_flash_attn
                 if attn_implementation == "flash_attention_2"
-                else model_class._supports_flash_attn_3
+                else model_class._supports_flash_attn
             ):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
@@ -4256,8 +4256,8 @@ class ModelTesterMixin:
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_generative_model_classes:
-            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn_2) or (
-                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn_3
+            if (attn_implementation == "flash_attention_2" and not model_class._supports_flash_attn) or (
+                attn_implementation == "flash_attention_3" and not model_class._supports_flash_attn
             ):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
