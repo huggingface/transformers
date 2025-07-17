@@ -1489,6 +1489,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                     normalized_content.append({"type": "audio_url", "audio_url": {"url": maybe_base64}})
                 else:
                     normalized_content.append(content)
+            message["content"] = normalized_content
 
         outputs = []
         images: list[np.ndarray] = []
