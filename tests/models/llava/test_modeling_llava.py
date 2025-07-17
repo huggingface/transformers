@@ -333,7 +333,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-        
+
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
