@@ -1920,10 +1920,12 @@ class EmbeddingAccessMixin:
         # 2) vanilla decoder‑only architectures
         elif hasattr(self, "embed_tokens"):
             return self.embed_tokens
-        elif getattr(self, self.base_model_prefix, self) is not self:
-            base_model = getattr(self, self.base_model_prefix, self)
-            return base_model.get_input_embeddings()
         else:
+            base_model = getattr(self, "base_model_prefix", None)
+            if base_model is not None:
+                base_model = getattr(self, base_model, None)
+                if base_model is not None and base_model is not self:
+                    return base_model.get_input_embeddings()
             raise NotImplementedError(
                 f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
                 "please override in the subclass."
