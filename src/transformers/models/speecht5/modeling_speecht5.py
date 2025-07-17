@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqSpectrogramOutput,
 )
-from ...modeling_utils import PreTrainedModel, EmbeddingAccessMixin
+from ...modeling_utils import EmbeddingAccessMixin, PreTrainedModel
 from ...utils import auto_docstring, logging
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 

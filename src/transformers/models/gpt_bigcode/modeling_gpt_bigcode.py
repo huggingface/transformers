@@ -687,7 +687,6 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=device)
         return model_kwargs
 
-
     @auto_docstring
     def forward(
         self,

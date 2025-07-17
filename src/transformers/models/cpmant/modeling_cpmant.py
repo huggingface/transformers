@@ -808,5 +808,4 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return past_key_values
 
 
-
 __all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

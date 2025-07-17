@@ -1900,10 +1900,12 @@ class ModuleUtilsMixin:
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
+
 class EmbeddingAccessMixin:
     """
     Base utilities to regroup getters and setters for embeddings.
     """
+
     def get_input_embeddings(self) -> nn.Module:
         """
         Returns the model's input embeddings.
@@ -1979,6 +1981,7 @@ class EmbeddingAccessMixin:
         """
         if getattr(self, "lm_head"):
             self.lm_head = new_embeddings
+
 
 class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
@@ -2768,8 +2771,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Removes the `_require_grads_hook`.
         """
         self._require_grads_hook.remove()
-
-
 
     def _init_weights(self, module):
         """

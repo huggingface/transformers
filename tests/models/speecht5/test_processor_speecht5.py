@@ -21,7 +21,7 @@ import unittest
 
 from transformers import is_speech_available, is_torch_available
 from transformers.models.speecht5 import SpeechT5Tokenizer
-from transformers.testing_utils import get_tests_dir, require_torch, require_speech
+from transformers.testing_utils import get_tests_dir, require_speech, require_torch
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 
