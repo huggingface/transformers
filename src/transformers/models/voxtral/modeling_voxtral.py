@@ -158,7 +158,7 @@ class VoxtralAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights
 
 
 class VoxtralEncoderLayer(GradientCheckpointingLayer):
@@ -200,7 +200,7 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -221,17 +221,12 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
 @auto_docstring
 class VoxtralPreTrainedModel(PreTrainedModel):
-    config_class = VoxtralConfig
+    config: VoxtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VoxtralAttention"]
@@ -267,7 +262,7 @@ class VoxtralPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The audio model from Voxtral without any head or projection on top.
+    The Voxtral encoder, which is a Whisper encoder.
     """
 )
 class VoxtralEncoder(VoxtralPreTrainedModel):
@@ -280,7 +275,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     """
 
     # Ignore copy
-    config_class = VoxtralEncoderConfig
+    config: VoxtralEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["VoxtralEncoderLayer"]
     _can_record_outputs = {
@@ -397,6 +392,11 @@ class VoxtralMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    The Voxtral model, which consists of Whisper encoder, a multi-modal projector and a LLama language model.
+    """
+)
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -469,7 +469,37 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        TODO: @eustlb, add docstring
+        Example:
+
+        ```python
+        >>> from transformers import VoxtralForConditionalGeneration, AutoProcessor
+        >>> import torch
+
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+        >>> repo_id = "/home/eustache_lebihan/add-moshi-asr/Voxtral-Mini-3B-2507"
+
+        >>> processor = AutoProcessor.from_pretrained(repo_id)
+        >>> model = VoxtralForConditionalGeneration.from_pretrained(repo_id, torch_dtype=torch.bfloat16, device_map=device)
+
+        >>> conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
+                    {"type": "text", "text": "What can you tell me about this audio?"},
+                ],
+            }
+        ]
+
+        >>> inputs = processor.apply_chat_template(conversation)
+        >>> inputs = inputs.to(device, dtype=torch.bfloat16)
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=30)
+        >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        ["This audio is a humorous conversation between two friends, likely in English, where one of them is trying to figure out what the other's tattoo says."]
         ```"""
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
