@@ -279,7 +279,7 @@ device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
 
 ### DTensor[[dtensor]]
 
-`DTensor`(분산 텐서)는 일반적인 텐서 연산 위에 분산 로직을 처리하는 텐서 하위 클래스입니다. 텐서 병렬화의 대부분의 모델 가중치는 `DTensor`로 저장됩니다.
+`DTensor`(분산 텐서)는 일반적인 텐서 연산 위에 분산 로직을 처리하는 텐서 하위 클래스입니다. 텐서 병렬화의 대부분의 모델 가중치는 `DTensor` 형태로 저장됩니다.
 
 DTensor의 가장 중요한 부분은 `placement` 속성입니다. 이는 PyTorch에게 텐서가 `DeviceMesh`의 기기에 어떻게 배치되는지 알려주기 때문입니다. `placement` 속성은 다음 값을 가질 수 있습니다.
 
