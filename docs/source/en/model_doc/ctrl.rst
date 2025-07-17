@@ -1,11 +1,7 @@
 CTRL
 ====
 
-.. autoclass:: transformers.CTRLModel
-    :members:
-    :undoc-members:
-
-.. autoclass:: transformers.CTRLLMHeadModel
+.. autoclass:: transformers.CTRLConfig
     :members:
     :undoc-members:
 
@@ -13,15 +9,11 @@ CTRL
     :members:
     :undoc-members:
 
-.. autoclass:: transformers.TFCTRLModel
+.. autoclass:: transformers.CTRLLMHeadModel
     :members:
     :undoc-members:
 
-.. autoclass:: transformers.TFCTRLLMHeadModel
-    :members:
-    :undoc-members:
-
-.. autoclass:: transformers.TFCTRLForSequenceClassification
+.. autoclass:: transformers.CTRLModel
     :members:
     :undoc-members:
 
@@ -29,6 +21,14 @@ CTRL
     :members:
     :undoc-members:
 
-.. autoclass:: transformers.CTRLConfig
+.. autoclass:: transformers.TFCTRLForSequenceClassification
+    :members:
+    :undoc-members:
+
+.. autoclass:: transformers.TFCTRLLMHeadModel
+    :members:
+    :undoc-members:
+
+.. autoclass:: transformers.TFCTRLModel
     :members:
     :undoc-members:
