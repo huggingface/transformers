@@ -433,15 +433,17 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         batch_size, embed_dim, _, _ = hidden_states.shape
 
         # Aggregate features
-        aggregated_hidden_states, encoder_hidden_states = self.aggregation(hidden_states, encoder_hidden_states)
+        aggregated_hidden_states, aggregated_encoder_hidden_states = self.aggregation(
+            hidden_states, encoder_hidden_states
+        )
 
         attention_hidden_states = aggregated_hidden_states.reshape(batch_size, -1, embed_dim)
-        encoder_hidden_states = encoder_hidden_states.reshape(batch_size, -1, embed_dim)
+        aggregated_encoder_hidden_states = aggregated_encoder_hidden_states.reshape(batch_size, -1, embed_dim)
 
         # Multi-head attention
         message, _ = self.attention(
             attention_hidden_states,
-            encoder_hidden_states,
+            aggregated_encoder_hidden_states,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -480,22 +482,13 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         batch_size, _, embed_dim, height, width = hidden_states.shape
 
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
+        hidden_states = self.self_attention(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
-        hidden_states = self.self_attention(
-            hidden_states,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
+        encoder_hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
+        encoder_hidden_states = encoder_hidden_states.flip(1)
+        encoder_hidden_states = encoder_hidden_states.reshape(-1, embed_dim, height, width)
 
-        encoder_hidden_states = (
-            hidden_states.reshape(-1, 2, embed_dim, height, width).flip(1).reshape(-1, embed_dim, height, width)
-        )
-
-        hidden_states = self.cross_attention(
-            hidden_states,
-            encoder_hidden_states,
-            **kwargs,
-        )
+        hidden_states = self.cross_attention(hidden_states, encoder_hidden_states, **kwargs)
         hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
 
         return hidden_states
