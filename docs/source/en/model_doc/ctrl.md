@@ -66,8 +66,6 @@ transformers-cli run text-generation \
 ```
 
 </hfoption>
-</hfoptions>
-
 <hfoption id="Quantization">
 
 ```py
@@ -87,10 +85,6 @@ model = AutoModelForCausalLM.from_pretrained(
 <!-- Attention visualizer is not currently supported for CTRL, but section is added for future compatibility. -->
 
 <!-- Not applicable for CTRL as it does not support attention mask visualization yet. -->
-
-<div class="flex justify-center">
-    <img src="" />
-</div>
 
 ## Notes
 
