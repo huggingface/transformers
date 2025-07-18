@@ -28,7 +28,7 @@ generation_config = GenerationConfig(
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-train_dataset = train_dataset.select(range(1))
+train_dataset = train_dataset.select(range(10))
 
 # Create a dataset from a list with one element
 # from datasets import Dataset

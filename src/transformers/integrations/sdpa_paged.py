@@ -169,7 +169,7 @@ def sdpa_attention_paged_forward(
         # Get max sequence length to determine if we need v2
         max_seq_len = kwargs.get("max_seqlen_k", 0)
         partition_size = 512  # Standard partition size for v2
-        use_v2 = max_seq_len > 512 # Use v2 for longer sequences
+        use_v2 = max_seq_len > 1024 # Use v2 for longer sequences
         
         # Introduce another runtime error - accessing a non-existent attribute
         if not hasattr(module, "_attn_output"):
