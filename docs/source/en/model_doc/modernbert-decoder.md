@@ -24,9 +24,15 @@ rendered properly in your Markdown viewer.
 
 # ModernBERT Decoder
 
-ModernBERT Decoder is the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but trained from scratch with a causal language modeling (CLM) objective from the [Ettin paper](https://arxiv.org/abs/2507.11412). This allows for using the same architecture for comparing encoders and decoders. Thus, this is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
+ModernBERT Decoder has the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but it is trained from scratch with a causal language modeling objective from the [Ettin paper](https://huggingface.co/papers/2507.11412). This allows for using the same architecture to compare encoders and decoders. This model is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
+
+ModernBERT Decoder uses sliding window attention and rotary positional embeddings for efficiency and to handle longer sequences.
+
+You can find all the original ModernBERT Decoder checkpoints under the [jhu-clsp](https://huggingface.co/collections/jhu-clsp/encoders-vs-decoders-the-ettin-suite-686303e16142257eed8e6aeb) collection.
 
 > [!TIP]
+> This model was contributed by [orionw](https://huggingface.co/orionweller).
+>
 > Click on the ModernBERT Decoder models in the right sidebar for more examples of how to apply ModernBERT Decoder to different text generation tasks.
 
 The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`], and from the command line.
