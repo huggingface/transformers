@@ -205,7 +205,7 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
-    "mistral-common[opencv]>=1.6.3",
+    "mistral-common[image,audio]>=1.8.1",
 ]
 
 
