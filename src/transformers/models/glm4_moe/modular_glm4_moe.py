@@ -34,6 +34,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3TopkRouter,
 )
 
+from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 
 logger = logging.get_logger(__name__)
 
@@ -256,7 +257,7 @@ class Glm4MoeConfig(PretrainedConfig):
 
 class Glm4MoeAttention(CohereAttention, nn.Module):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
-        nn.Module.__init__(config)
+        nn.Module.__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -287,7 +288,7 @@ class Glm4MoeMLP(DeepseekV3MLP):
 
 class Glm4MoeTopkRouter(DeepseekV3TopkRouter, nn.Module):
     def __init__(self, config: Glm4MoeConfig):
-        nn.Module.__init__(config)
+        nn.Module.__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
