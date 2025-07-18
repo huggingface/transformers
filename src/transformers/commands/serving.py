@@ -686,6 +686,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "meta-llama/Llama-3.3-70B-Instruct",
             "HuggingFaceTB/SmolVLM-Instruct",
             "ibm-granite/granite-vision-3.2-2b",
+            "Qwen/Qwen2.5-VL-7B-Instruct",
         ]
 
         if HF_HUB_OFFLINE:
@@ -731,11 +732,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.running_continuous_batching_manager = None
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
+        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+
         generation_config = create_generation_config_from_req(
             req,
             model_generation_config=model.generation_config,
-            eos_token_id=processor.eos_token_id,
-            pad_token_id=processor.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
             use_cache=False,
             num_blocks=1,
             block_size=1024,
@@ -1025,8 +1028,7 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        text = processor.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
-        inputs = processor(text, return_tensors="pt").to(model.device)["input_ids"]
+        inputs = processor.apply_chat_template(req["input"], add_generation_prompt=True).to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
