@@ -35,6 +35,7 @@ from transformers.models.sam.modeling_sam import (
     SamAttention,
     SamLayerNorm,
     SamMaskEmbedding,
+    SamModel,
     SamPromptEncoder,
     SamTwoWayAttentionBlock,
     SamTwoWayTransformer,
@@ -1898,11 +1899,13 @@ class Sam2MemoryEncoder(nn.Module):
         return vision_features, [vision_pos_enc]
 
 
-@auto_docstring
-class Sam2Model(Sam2PreTrainedModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model 2 (SAM 2) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
+    """
+)
+class Sam2Model(SamModel):
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
         r"^mask_downsample.*",
@@ -1912,10 +1915,9 @@ class Sam2Model(Sam2PreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
-    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: Sam2Config):
-        super().__init__(config)
+        SamModel().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
@@ -1938,14 +1940,6 @@ class Sam2Model(Sam2PreTrainedModel):
                 logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
-
-    def get_input_embeddings(self):
-        return self.vision_encoder.get_input_embeddings()
 
     def get_image_wide_positional_embeddings(self) -> torch.Tensor:
         size = self.prompt_encoder.image_embedding_size
@@ -1992,39 +1986,6 @@ class Sam2Model(Sam2PreTrainedModel):
         ]
 
         return image_embeddings
-
-    @torch.no_grad()
-    def get_prompt_embeddings(
-        self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        r"""
-        Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
-
-        Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
-                Optional input points for the prompt encoder. The padding of the point is automatically done by the
-                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
-                point. The model will output `point_batch_size` times 3 masks in total.
-            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
-                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
-                processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
-                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
-                processor. users can also pass manually the input boxes.
-            input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
-                Optional input masks for the prompt encoder.
-        """
-        prompt_output = self.prompt_encoder(
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-            input_masks=input_masks,
-        )
-        return prompt_output
 
     def get_image_features(
         self,

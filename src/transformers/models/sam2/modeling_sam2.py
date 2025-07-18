@@ -2007,11 +2007,17 @@ def load_cuda_kernels():
     )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model 2 (SAM 2) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
+    """
+)
 class Sam2Model(Sam2PreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
         r"^mask_downsample.*",
@@ -2021,7 +2027,6 @@ class Sam2Model(Sam2PreTrainedModel):
         "no_object_pointer",
         "occlusion_spatial_embedding_parameter",
     ]
-    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: Sam2Config):
         super().__init__(config)
@@ -2109,7 +2114,7 @@ class Sam2Model(Sam2PreTrainedModel):
         input_labels: Optional[torch.LongTensor] = None,
         input_boxes: Optional[torch.FloatTensor] = None,
         input_masks: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ):
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
@@ -2134,48 +2139,6 @@ class Sam2Model(Sam2PreTrainedModel):
             input_masks=input_masks,
         )
         return prompt_output
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
-    ]:
-        r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
-        """
-        vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
-
-        feature_maps = vision_outputs.fpn_hidden_states
-        feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
-        vision_hidden_states = vision_outputs.hidden_states
-        vision_attentions = vision_outputs.attentions
-
-        # precompute projected level 0 and level 1 features in SAM decoder
-        # to avoid running it again on every SAM click
-        feature_maps = list(feature_maps)
-        feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
-        feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
-
-        return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
 
     @check_model_inputs
     @auto_docstring
@@ -2392,6 +2355,48 @@ class Sam2Model(Sam2PreTrainedModel):
             vision_hidden_states=vision_hidden_states,
             vision_attentions=vision_attentions,
         )
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[
+        list[torch.Tensor],
+        list[torch.Tensor],
+        Optional[tuple[torch.FloatTensor, ...]],
+        Optional[tuple[torch.FloatTensor, ...]],
+    ]:
+        r"""
+        Extract and preprocess image features using the vision encoder.
+
+        Args:
+            pixel_values (`torch.FloatTensor`):
+                Input pixel values of shape `(batch_size, num_channels, height, width)`.
+
+        Returns:
+            `tuple`: A tuple containing:
+                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
+                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
+                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
+                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        """
+        vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(
+            pixel_values,
+            **kwargs,
+        )
+
+        feature_maps = vision_outputs.fpn_hidden_states
+        feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
+        vision_hidden_states = vision_outputs.hidden_states
+        vision_attentions = vision_outputs.attentions
+
+        # precompute projected level 0 and level 1 features in SAM decoder
+        # to avoid running it again on every SAM click
+        feature_maps = list(feature_maps)
+        feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
+        feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
+
+        return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
 
 
 class Sam2VideoInferenceCache:
