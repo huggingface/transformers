@@ -15,4 +15,4 @@ jobs:
       pr_number: ${{ github.event.number }}
       package: transformers
       languages: en
-      pre_build_command: uv pip install pyarrow==20.0.0
+      pre_command: uv pip install pyarrow==20.0.0
