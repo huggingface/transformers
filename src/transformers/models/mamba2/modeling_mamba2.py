@@ -970,7 +970,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
-
+        if use_cache and cache_params is None:
+            cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
         if use_cache:
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
@@ -995,6 +996,10 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
+
+        if use_cache and cache_params is None:
+            max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
+            cache_params = Mamba2Cache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
 
         model_inputs.update(
             {
