@@ -121,10 +121,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
     def sample_frames(
         self,
-        temporal_patch_size: int,
-        min_frames: int,
-        max_frames: int,
-        metadata: Optional[VideoMetadata] = None,
+        metadata: VideoMetadata,
+        temporal_patch_size: Optional[int] = None,
+        min_frames: Optional[int] = None,
+        max_frames: Optional[int] = None,
         num_frames: Optional[int] = None,
         fps: Optional[Union[int, float]] = None,
         **kwargs,
@@ -135,14 +135,14 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         and `fps` are mutually exclusive.
 
         Args:
-            temporal_patch_size (`int`):
-                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
-            min_frames (`int`):
-                The minimum number of frames that can be sampled.
-            max_frames (`int`):
-                The maximum number of frames that can be sampled.
-            metadata (`VideoMetadata`, *optional*):
+        metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
+            temporal_patch_size (`int`, *optional*):
+                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
+            min_frames (`int`, *optional*):
+                The minimum number of frames that can be sampled.
+            max_frames (`int`, *optional*):
+                The maximum number of frames that can be sampled.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
             fps (`int` or `float`, *optional*):
@@ -157,19 +157,22 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
-        total_num_frames = metadata["total_num_frames"]
+        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
+        min_frames = min_frames if min_frames is not None else self.min_frames
+        max_frames = max_frames if max_frames is not None else self.max_frames
+        total_num_frames = metadata.total_num_frames
 
         # If num_frames is not given but fps is, calculate num_frames from fps
         if num_frames is not None:
             num_frames = round(num_frames / temporal_patch_size) * temporal_patch_size
         elif fps is not None:
-            if metadata is None or getattr(metadata, "fps", None) is None:
+            if metadata is None or metadata.fps is None:
                 raise ValueError(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
-            num_frames = total_num_frames / metadata["fps"] * fps
+            num_frames = total_num_frames / metadata.fps * fps
             num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
             num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
 

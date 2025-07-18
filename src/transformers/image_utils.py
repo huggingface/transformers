@@ -556,7 +556,7 @@ def validate_preprocess_arguments(
             "Only one of `interpolation` and `resample` should be specified, depending on image processor type."
         )
 
-    if not (do_resize and size is not None and (resample is not None or interpolation is not None)):
+    if do_resize and not (size is not None and (resample is not None or interpolation is not None)):
         raise ValueError("`size` and `resample/interpolation` must be specified if `do_resize` is `True`.")
 
 

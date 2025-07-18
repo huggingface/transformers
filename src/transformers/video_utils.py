@@ -200,6 +200,33 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "str
     return convert_pil_frames_to_video(videos)
 
 
+def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
+    if video_metadata is None:
+        video_metadata = [
+            {
+                "total_num_frames": len(video),
+                "fps": 24,
+                "duration": len(video) / 24,
+                "frames_indices": list(range(len(video))),
+            }
+            for video in videos
+        ]
+
+    if isinstance(video_metadata, list):
+        # Flatten if nested list
+        if isinstance(video_metadata[0], list):
+            video_metadata = [
+                VideoMetadata(**metadata) for metadata_list in video_metadata for metadata in metadata_list
+            ]
+        # Simply wrap in VideoMetadata if simple dict
+        elif isinstance(video_metadata[0], dict):
+            video_metadata = [VideoMetadata(**metadata) for metadata in video_metadata]
+    else:
+        # Create a batched list from single object
+        video_metadata = [VideoMetadata(**video_metadata)]
+    return video_metadata
+
+
 def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.

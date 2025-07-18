@@ -57,6 +57,7 @@ from .video_utils import (
     group_videos_by_shape,
     is_valid_video,
     load_video,
+    make_batched_metadata,
     make_batched_videos,
     reorder_videos,
     to_channel_dimension_format,
@@ -236,7 +237,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
     def sample_frames(
         self,
-        metadata: Optional[Union[VideoMetadata, dict]] = None,
+        metadata: VideoMetadata,
         num_frames: Optional[int] = None,
         fps: Optional[Union[int, float]] = None,
         **kwargs,
@@ -249,7 +250,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Args:
             video (`torch.Tensor`):
                 Video that need to be sampled.
-            metadata (`VideoMetadata`, *optional*):
+            metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
@@ -267,16 +268,16 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
-        total_num_frames = metadata["total_num_frames"]
+        total_num_frames = metadata.total_num_frames
 
         # If num_frames is not given but fps is, calculate num_frames from fps
         if num_frames is None and fps is not None:
-            if metadata is None or getattr(metadata, "fps", None) is None:
+            if metadata is None or metadata.fps is None:
                 raise ValueError(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
-            num_frames = int(total_num_frames / metadata["fps"] * fps)
+            num_frames = int(total_num_frames / metadata.fps * fps)
 
         if num_frames > total_num_frames:
             raise ValueError(
@@ -300,24 +301,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Decode the input videos and sample frames if needed.
         """
         videos = make_batched_videos(videos)
-        video_metadata = (
-            video_metadata
-            if video_metadata is not None
-            else [
-                [
-                    {
-                        "total_num_frames": len(video),
-                        "fps": 24,
-                        "duration": len(video) / 24,
-                        "frames_indices": list(range(len(video))),
-                    }
-                ]
-                for video in videos
-            ]
-        )
-        video_metadata = [VideoMetadata(**metadata) for metadata_list in video_metadata for metadata in metadata_list]
+        video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
 
-        # Only apply frame sampling when an array is found, otherwise decode and then sample
+        # Apply only frame sampling when an array video is passed, otherwise first decode -> then sample
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
             for video, metadata in zip(videos, video_metadata):
@@ -326,7 +312,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             videos = sampled_videos
         elif not is_valid_video(videos[0]):
             if isinstance(videos[0], list):
-                videos = [torch.cat(images, dim=0) for images in self.fetch_images(videos)]
+                # Videos sometimes are passed as a list of image URLs, especially through templates
+                videos = [
+                    torch.stack([F.pil_to_tensor(image) for image in images], dim=0)
+                    for images in self.fetch_images(videos)
+                ]
             else:
                 videos, video_metadata = self.fetch_videos(videos, sample_indices_fn=sample_indices_fn)
 
@@ -379,6 +369,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         input_data_format = kwargs.pop("input_data_format")
         do_sample_frames = kwargs.pop("do_sample_frames")
+        device = kwargs.pop("device")
 
         if do_sample_frames:
             sample_indices_fn = partial(self.sample_frames, **kwargs)
@@ -391,7 +382,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             do_sample_frames=do_sample_frames,
             sample_indices_fn=sample_indices_fn,
         )
-        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format)
+        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
         kwargs = self._further_process_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
@@ -422,6 +413,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

@@ -334,6 +334,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             else self.pan_and_scan_min_ratio_to_activate
         )
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):

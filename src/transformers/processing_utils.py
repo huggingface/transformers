@@ -33,7 +33,7 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
+from .image_utils import ChannelDimension, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
 
 

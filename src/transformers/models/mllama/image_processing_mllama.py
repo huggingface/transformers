@@ -692,6 +692,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         # extra validation
         _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if self.do_convert_rgb:

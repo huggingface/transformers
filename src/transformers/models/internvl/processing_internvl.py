@@ -18,10 +18,10 @@ from typing import Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
+from ...image_utils import ImageInput, concatenate_list
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -216,13 +216,11 @@ class InternVLProcessor(ProcessorMixin):
         video_patch_indices = np.array([0])
         video_num_patches_indices = np.array([0])
         if images is not None:
-            images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
             image_num_patches_indices = np.cumsum(image_num_patches)
         if videos is not None:
-            videos = make_batched_videos(videos)
             video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_pixel_values = video_inputs.pop("pixel_values_videos")
 

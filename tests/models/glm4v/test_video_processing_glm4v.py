@@ -96,7 +96,7 @@ class Glm4vVideoProcessingTester:
             metadata = {
                 "fps": 2,
                 "duration": num_frames / 2,
-                "total_frames": num_frames,
+                "total_num_frames": num_frames,
             }
             video_metadata.append(metadata)
         return video_metadata

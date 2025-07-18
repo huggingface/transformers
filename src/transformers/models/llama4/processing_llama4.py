@@ -20,7 +20,7 @@ from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, Proces
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import ImageInput
 
 
 class Llama4ImagesKwargs(ImagesKwargs, total=False):
@@ -188,7 +188,6 @@ class Llama4Processor(ProcessorMixin):
         # Process images
         image_inputs = {}
         if images is not None:
-            images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_height, image_width = image_inputs["pixel_values"][0].shape[-2:]
             num_patches_per_chunk = int(
