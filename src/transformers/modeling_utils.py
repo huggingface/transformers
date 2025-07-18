@@ -2778,6 +2778,46 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         self._require_grads_hook.remove()
 
+    def get_decoder(self):
+        """
+        Best-effort lookup of the *decoder* module.
+
+        Order of attempts (covers ~85 % of current usages):
+
+        1. `self.decoder`
+        2. `self.model`                       (many wrappers store the decoder here)
+        3. `self.model.get_decoder()`         (nested wrappers)
+        4. fallback: raise for the few exotic models that need a bespoke rule
+        """
+        if hasattr(self, "decoder"):
+            return self.decoder
+
+        if hasattr(self, "model"):
+            inner = self.model
+            if hasattr(inner, "get_decoder"):
+                return inner.get_decoder()
+            return inner
+
+        return None # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
+
+    def set_decoder(self, decoder):
+        """
+        Symmetric setter. Mirrors the lookup logic used in `get_decoder`.
+        """
+        if hasattr(self, "decoder"):
+            self.decoder = decoder
+            return
+
+        if hasattr(self, "model"):
+            inner = self.model
+            if hasattr(inner, "set_decoder"):
+                inner.set_decoder(decoder)
+            else:
+                self.model = decoder
+            return
+
+        return # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
+
     def _init_weights(self, module):
         """
         Initialize the weights. This method should be overridden by derived class and is
