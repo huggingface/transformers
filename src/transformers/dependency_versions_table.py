@@ -54,7 +54,6 @@ deps = {
     "phonemizer": "phonemizer",
     "protobuf": "protobuf",
     "psutil": "psutil",
-    "pyarrow": "pyarrow<=20.0.0",
     "pyyaml": "pyyaml>=5.1",
     "pydantic": "pydantic>=2",
     "pytest": "pytest>=7.2.0",
