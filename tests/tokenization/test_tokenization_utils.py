@@ -24,6 +24,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from transformers import (
+    AutoTokenizer,
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
@@ -375,3 +376,25 @@ class TokenizerUtilsTest(unittest.TestCase):
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+
+class ChatTemplateTest(unittest.TestCase):
+    def test_encode_message(self):
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hey there, how are you?"},
+            {"role": "assistant", "content": "Thank you for asking, I am doing well"},
+            {"role": "user", "content": "What's the weather like today?"},
+            {"role": "assistant", "content": "Today the weather is nice"},
+        ]
+
+        # First, test the default case, where we encode the whole conversation at once
+        whole_conversation_tokens = tokenizer.apply_chat_template(conversation, tokenize=True)
+
+        # Now, test the message-by-message encoding
+        tokens = []
+        for i, message in enumerate(conversation):
+            tokens += tokenizer.encode_message(message, conversation_history=conversation[:i])
+
+        self.assertEqual(whole_conversation_tokens, tokens)
