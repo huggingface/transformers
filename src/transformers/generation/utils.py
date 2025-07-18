@@ -677,6 +677,35 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
+        if "flash" in self.config._attn_implementation:
+            tensor_kws = {"dtype": torch.int32, "device": self.device}
+            cu_seq_lens_q: Optional[torch.LongTensor] = None
+            cu_seq_lens_k: Optional[torch.LongTensor] = None
+            max_length_q: Optional[int] = None
+            max_length_k: Optional[int] = None
+
+            position_ids = model_inputs.get("position_ids")
+            if position_ids is not None:
+                last_pos = position_ids[:, -1]
+                cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), last_pos.cumsum(dim=0).add(1)], dim=0)
+                max_length_k = last_pos.max().item() + 1
+                flat_q = position_ids.flatten()
+                cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), torch.tensor([flat_q.numel()], **tensor_kws)])
+                max_length_q = flat_q.numel()
+            elif attention_mask is not None:
+                seqlens = attention_mask.sum(dim=-1, **tensor_kws)
+                cu_seq_lens_k = torch.nn.functional.pad(seqlens.cumsum(dim=0), (1, 0))
+                max_length_k = seqlens.max().item()
+                q_len = cache_position.size(0)
+                cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), torch.tensor(q_len, **tensor_kws)])
+                max_length_q = q_len
+
+            model_inputs.update(
+                cu_seq_lens_q=cu_seq_lens_q,
+                cu_seq_lens_k=cu_seq_lens_k,
+                max_length_q=max_length_q,
+                max_length_k=max_length_k,
+            )
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
