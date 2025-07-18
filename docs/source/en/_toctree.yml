@@ -565,6 +565,8 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
+      - local: model_doc/modernbert-decoder
+        title: ModernBERTDecoder
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -1095,6 +1097,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/voxtral
+        title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
