@@ -403,7 +403,7 @@ class Qwen3MoeRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Qwen3MoePreTrainedModel(PreTrainedModel):
-    config_class = Qwen3MoeConfig
+    config: Qwen3MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3MoeDecoderLayer"]
@@ -411,8 +411,6 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {

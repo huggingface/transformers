@@ -607,7 +607,7 @@ class DepthProNeck(nn.Module):
 
 @auto_docstring
 class DepthProPreTrainedModel(PreTrainedModel):
-    config_class = DepthProConfig
+    config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
