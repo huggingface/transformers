@@ -286,7 +286,7 @@ class MgpstrA3Module(nn.Module):
 
 @auto_docstring
 class MgpstrPreTrainedModel(PreTrainedModel):
-    config_class = MgpstrConfig
+    config: MgpstrConfig
     base_model_prefix = "mgp_str"
     _no_split_modules = []
 
@@ -357,7 +357,7 @@ class MgpstrModel(MgpstrPreTrainedModel):
     """
 )
 class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
-    config_class = MgpstrConfig
+    config: MgpstrConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: MgpstrConfig) -> None:
