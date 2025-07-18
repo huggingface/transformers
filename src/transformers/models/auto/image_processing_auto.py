@@ -214,7 +214,7 @@ def get_image_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractors in IMAGE_PROCESSOR_MAPPING._extra_content.items():
+    for extractors in IMAGE_PROCESSOR_MAPPING._extra_content.values():
         for extractor in extractors:
             if getattr(extractor, "__name__", None) == class_name:
                 return extractor
@@ -535,7 +535,7 @@ class AutoImageProcessor:
                 )
                 use_fast = False
             if use_fast:
-                for _, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+                for image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.values():
                     if image_processor_type in image_processors:
                         break
                 else:
