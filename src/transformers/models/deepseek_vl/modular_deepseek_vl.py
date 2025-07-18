@@ -20,7 +20,6 @@ from ...image_utils import (
     ImageInput,
     make_flat_list_of_images,
 )
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -34,7 +33,7 @@ from ...utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
-from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel
+from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
 
 if is_torch_available():
@@ -137,18 +136,8 @@ class DeepseekVLAligner(nn.Module):
         return x
 
 
-@auto_docstring
-class DeepseekVLPreTrainedModel(PreTrainedModel):
-    config_class = DeepseekVLConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
-    _supports_static_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
