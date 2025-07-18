@@ -103,7 +103,7 @@ _deps = [
     "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets!=2.5.0",
+    "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",

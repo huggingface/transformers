@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Blenderbot model."""
 
-import copy
 import math
 import os
 import warnings
@@ -1488,7 +1487,6 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
