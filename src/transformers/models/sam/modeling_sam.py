@@ -1149,6 +1149,8 @@ class SamModel(SamPreTrainedModel):
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
         self.prompt_encoder = SamPromptEncoder(config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()

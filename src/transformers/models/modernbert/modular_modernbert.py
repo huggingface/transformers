@@ -811,7 +811,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
         """
         Checks and dispatches to hhe requested attention implementation.
         """

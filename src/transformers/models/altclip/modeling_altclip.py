@@ -1226,6 +1226,8 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
 
         text_config = config.text_config
         vision_config = config.vision_config
+        # The module using it is not a PreTrainedModel subclass so we need this
+        vision_config._attn_implementation = config._attn_implementation
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.project_dim

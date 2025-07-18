@@ -206,3 +206,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         pass
+
+    @unittest.skip("ShieldGemma requires images in input, and fails in text-only processing")
+    def test_apply_chat_template_assistant_mask(self):
+        pass

@@ -63,14 +63,13 @@ class ServeCLITest(unittest.TestCase):
         """
         dummy = ServeCommand.__new__(ServeCommand)
         dummy.args = type("Args", (), {})()
-        dummy.loaded_model = "dummy_model@main"
 
         # The keys for these fields must be present in every chunk
         MANDATORY_FIELDS = ["data", "id", "choices", "created", "model", "object", "system_fingerprint"]
 
         # Case 1: most fields are provided
         chunk = ServeCommand.build_chat_completion_chunk(
-            dummy, request_id="req0", content="hello", finish_reason="stop", role="user"
+            dummy, request_id="req0", content="hello", finish_reason="stop", role="user", model="dummy_model@main"
         )
         for field in MANDATORY_FIELDS:
             self.assertIn(field, chunk)
@@ -79,13 +78,13 @@ class ServeCLITest(unittest.TestCase):
         )
 
         # Case 2: only the role is provided -- other fields in 'choices' are omitted
-        chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user")
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", role="user", model="dummy_model@main")
         for field in MANDATORY_FIELDS:
             self.assertIn(field, chunk)
         self.assertIn('"choices":[{"delta":{"role":"user"},"index":0}]', chunk)
 
         # Case 3: only the content is provided -- other fields in 'choices' are omitted
-        chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello")
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", content="hello", model="dummy_model@main")
         for field in MANDATORY_FIELDS:
             self.assertIn(field, chunk)
         self.assertIn('"choices":[{"delta":{"content":"hello"},"index":0}]', chunk)
@@ -96,7 +95,7 @@ class ServeCLITest(unittest.TestCase):
             function=ChoiceDeltaToolCallFunction(name="foo_bar", arguments='{"foo1": "bar1", "foo2": "bar2"}'),
             type="function",
         )
-        chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call])
+        chunk = dummy.build_chat_completion_chunk(request_id="req0", tool_calls=[tool_call], model="dummy_model@main")
         for field in MANDATORY_FIELDS:
             self.assertIn(field, chunk)
         expected_choices_content = (
