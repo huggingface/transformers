@@ -520,7 +520,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        print(f"Generated: {outputs}")
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     def test_tokenizer_integration(self):
