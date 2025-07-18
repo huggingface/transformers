@@ -78,6 +78,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
     default_to_square = True
+    do_convert_rgb = True
     do_resize = True
     do_rescale = True
     do_normalize = True
