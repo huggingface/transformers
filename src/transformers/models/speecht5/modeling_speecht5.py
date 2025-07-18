@@ -832,6 +832,14 @@ class SpeechT5TextDecoderPostnet(nn.Module, EmbeddingAccessMixin):
     def forward(self, hidden_states: torch.Tensor):
         return self.lm_head(hidden_states)
 
+    def get_output_embeddings(self):
+        # Post-net has no token embeddings, but its lm_head must still be
+        # tied to the decoder weights when `tie_word_embeddings=True`.
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
 
 class SpeechT5Attention(nn.Module):
     """
