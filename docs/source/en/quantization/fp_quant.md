@@ -26,7 +26,7 @@ import torch
 
 model = AutoModelForCausalLM.from_pretrained(
     "qwen/Qwen3-8B",
-    quantization_config=HiggsConfig(bits=4),
+    quantization_config=FPQuantConfig(),
     device_map="cuda",
     torch_dtype=torch.bfloat16,
 )
