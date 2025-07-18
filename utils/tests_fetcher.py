@@ -52,11 +52,9 @@ python utils/tests_fetcher.py --diff_with_last_commit
 import argparse
 import collections
 import glob
-import importlib.util
 import json
 import os
 import re
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Union
@@ -323,58 +321,32 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
             if key in new_keys:
                 impacted_model_classes.extend(new_content[key]["model_classes"])
 
-        # get the module where the model classes are defined. We want to use the main `__init__` file, but it requires
-        # all the framework being installed, which is not ideal for a simple script like test fetcher.
-        # So we create a temporary and modified main `__init__` and access its `_import_structure`.
-        with open(folder / "src/transformers/__init__.py") as fp:
-            lines = fp.readlines()
-            new_lines = []
-            # Get all the code related to `_import_structure`
-            for line in lines:
-                if line == "_import_structure = {\n":
-                    new_lines.append(line)
-                elif line == "# Direct imports for type-checking\n":
-                    break
-                elif len(new_lines) > 0:
-                    # bypass the framework check so we can get all the information even if frameworks are not available
-                    line = re.sub(r"is_.+_available\(\)", "True", line)
-                    line = line.replace("OptionalDependencyNotAvailable", "Exception")
-                    line = line.replace("Exception()", "Exception")
-                    new_lines.append(line)
+        # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
+        from transformers.utils.import_utils import define_import_structure
 
-        # create and load the temporary module
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            with open(os.path.join(tmpdirname, "temp_init.py"), "w") as fp:
-                fp.write("".join(new_lines))
+        reversed_structure = {}
+        new_imported_modules_from_import_structure = define_import_structure("src/transformers/__init__.py")
+        for mapping in new_imported_modules_from_import_structure.values():
+            for _module, _imports in mapping.items():
+                # Import Structure returns _module keys as import paths rather than local paths
+                # We replace with os.path.sep so that it's Windows-compatible
+                for _import in _imports:
+                    reversed_structure[_import] = _module
 
-            spec = importlib.util.spec_from_file_location("temp_init", os.path.join(tmpdirname, "temp_init.py"))
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            # Finally, get `_import_structure` that we need
-            import_structure = module._import_structure
-
-            # map model classes to their defined module
-            reversed_structure = {}
-            for key, values in import_structure.items():
-                for value in values:
-                    reversed_structure[value] = key
-
-            # Get the corresponding modeling file path
-            for model_class in impacted_model_classes:
-                module = reversed_structure[model_class]
-                framework = ""
-                if model_class.startswith("TF"):
-                    framework = "tf"
-                elif model_class.startswith("Flax"):
-                    framework = "flax"
-                fn = (
-                    f"modeling_{module.split('.')[-1]}.py"
-                    if framework == ""
-                    else f"modeling_{framework}_{module.split('.')[-1]}.py"
-                )
-                files.add(
-                    f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py")
-                )
+        # Get the corresponding modeling file path
+        for model_class in impacted_model_classes:
+            module = reversed_structure[model_class]
+            framework = ""
+            if model_class.startswith("TF"):
+                framework = "tf"
+            elif model_class.startswith("Flax"):
+                framework = "flax"
+            fn = (
+                f"modeling_{module.split('.')[-1]}.py"
+                if framework == ""
+                else f"modeling_{framework}_{module.split('.')[-1]}.py"
+            )
+            files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
 
     return sorted(files)
 
