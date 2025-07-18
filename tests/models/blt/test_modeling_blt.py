@@ -76,7 +76,7 @@ class BLTModelTester(CausalLMModelTester):
         self.vocab_size = 32
         self.rope_theta = 500000.0
         self.rope_scaling = {"rope_type": "default"}
-        self.norm_eps = 1e-5
+        self.rms_norm_eps = 1e-5
         self.dropout = 0.0
         self.encoder_hash_byte_group_size = [2, 3]
         self.encoder_hash_byte_group_vocab = 64
@@ -92,7 +92,7 @@ class BLTModelTester(CausalLMModelTester):
             "rope_theta": self.rope_theta,
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
-            "norm_eps": self.norm_eps,
+            "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
         }
 
@@ -106,7 +106,7 @@ class BLTModelTester(CausalLMModelTester):
             "rope_theta": self.rope_theta,
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
-            "norm_eps": self.norm_eps,
+            "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
         }
 
@@ -122,7 +122,7 @@ class BLTModelTester(CausalLMModelTester):
             "rope_theta": self.rope_theta,
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
-            "norm_eps": self.norm_eps,
+            "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
         }
 
@@ -136,7 +136,7 @@ class BLTModelTester(CausalLMModelTester):
             "rope_theta": self.rope_theta,
             "rope_scaling": self.rope_scaling,
             "hidden_act": self.hidden_act,
-            "norm_eps": self.norm_eps,
+            "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
         }
 
@@ -331,15 +331,15 @@ class BLTIntegrationTest(unittest.TestCase):
         prompt = "my name is"
 
         model = BLTForCausalLM.from_pretrained(
-            "itazap/blt-1b",
+            "itazap/blt-1b-testing",
             device_map="auto",
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False)
 
         output_text = tokenizer.decode(generated_ids[0])
         self.assertEqual(output_text, EXPECTED_TEXT)
@@ -418,7 +418,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b", device_map="auto")
+        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto")
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
@@ -435,13 +435,13 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b", device_map="auto", torch_dtype=torch.bfloat16)
+        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", torch_dtype=torch.bfloat16)
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False)
 
         output_text = tokenizer.decode(generated_ids[0])
         self.assertEqual(output_text, EXPECTED_TEXT)
@@ -523,7 +523,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b", device_map="auto", torch_dtype=torch.bfloat16)
+        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", torch_dtype=torch.bfloat16)
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
@@ -541,13 +541,13 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b", device_map="auto", attn_implementation="eager")
+        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", attn_implementation="eager")
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False)
 
         output_text = tokenizer.decode(generated_ids[0])
         self.assertEqual(output_text, EXPECTED_TEXT)
@@ -562,15 +562,15 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b", device_map="auto", torch_dtype=torch.bfloat16)
+        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", torch_dtype=torch.bfloat16)
 
         model.generation_config.cache_implementation = "static"
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False)
 
         output_text = tokenizer.decode(generated_ids[0])
         self.assertEqual(output_text, EXPECTED_TEXT)
