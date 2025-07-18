@@ -181,7 +181,7 @@ class Ernie4_5_MoEIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant: Yes, I am conscious and I can communicate with you. How can I assist you with any questions or information you need?"  # fmt: skip
 
         model = self.get_model()
-        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT")
         prompt = "Hey, are you conscious? Can you talk to me?"
         messages = [{"role": "user", "content": prompt}]
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
