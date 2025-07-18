@@ -151,11 +151,6 @@ class GitSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -165,11 +160,24 @@ class GitSelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         cutoff = self.image_patch_tokens if pixel_values_present else 0
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
         if past_key_value is not None:
             # NOTE: like in other caches, we store the text component. In GIT it means we discard the image component.
             key_layer_past, value_layer_past = past_key_value.update(
@@ -177,8 +185,6 @@ class GitSelfAttention(nn.Module):
             )
             key_layer = torch.cat([key_layer[:, :, :cutoff, :], key_layer_past], dim=2)
             value_layer = torch.cat([value_layer[:, :, :cutoff, :], value_layer_past], dim=2)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -447,11 +453,9 @@ class GitEncoder(nn.Module):
 
 @auto_docstring
 class GitPreTrainedModel(PreTrainedModel):
-    config_class = GitConfig
+    config: GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -875,7 +879,7 @@ class GitVisionTransformer(nn.Module):
     """
 )
 class GitVisionModel(GitPreTrainedModel):
-    config_class = GitVisionConfig
+    config: GitVisionConfig
     main_input_name = "pixel_values"
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git
@@ -1095,7 +1099,7 @@ class GitModel(GitPreTrainedModel):
         past_key_values_length = 0
         if past_key_values is not None:
             past_key_values_length = (
-                past_key_values[0][0].shape[2]
+                past_key_values.get_seq_length()
                 if not isinstance(past_key_values, Cache)
                 else past_key_values.get_seq_length()
             )
@@ -1451,14 +1455,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]

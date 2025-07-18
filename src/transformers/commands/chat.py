@@ -471,7 +471,7 @@ class ChatCommand(BaseTransformersCLICommand):
             # This is a chat session, so we have a few non-standard defaults
             # !!!!!!!!!
             generation_config = copy.deepcopy(model_generation_config)
-            generation_config.update({"do_sample": True, "max_new_tokens": 256})
+            generation_config.update(**{"do_sample": True, "max_new_tokens": 256})
 
         # Finally: parse and apply `generate_flags`
         parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
