@@ -60,7 +60,6 @@ class BarkProcessorTest(unittest.TestCase):
         My hypothesis: there are many files (~700 speaker embeddings) and some fail to download (not the same at different first runs)
         https://github.com/huggingface/transformers/blob/967045082faaaaf3d653bfe665080fd746b2bb60/src/transformers/models/bark/processing_bark.py#L89
         https://github.com/huggingface/transformers/blob/967045082faaaaf3d653bfe665080fd746b2bb60/src/transformers/models/bark/processing_bark.py#L188
-        
         So for testing purposes, we will remove the unavailable speaker embeddings before saving.
         """
         processor._verify_speaker_embeddings(remove_unavailable=True)
