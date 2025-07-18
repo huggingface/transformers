@@ -1992,7 +1992,6 @@ class EmbeddingAccessMixin:
             return None
         return self.lm_head
 
-
     def set_output_embeddings(self, new_embeddings):
         """
         Sets the model's output embedding, defaulting to setting new_embeddings to lm_head.
