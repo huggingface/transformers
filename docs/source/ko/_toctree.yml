@@ -280,8 +280,8 @@
       title: 모델 출력
     - local: main_classes/output
       title: (번역중) Pipelines
-    - local: in_translation
-      title: (번역중) Processors
+    - local: main_classes/tokenizer
+      title: 토크나이저
     - local: main_classes/quantization
       title: 양자화
     - local: in_translation
