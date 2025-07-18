@@ -247,9 +247,11 @@ class BarkProcessor(ProcessorMixin):
             for voice_preset in self.available_voice_presets:
                 try:
                     voice_preset_dict = self._load_voice_preset(voice_preset)
-                    self._validate_voice_preset_dict(voice_preset_dict)
-                except Exception:
+                except ValueError:
+                    # error from `_load_voice_preset` of path not existing
                     unavailable_keys.append(voice_preset)
+                    continue
+                self._validate_voice_preset_dict(voice_preset_dict)
 
             if unavailable_keys:
                 logger.warning(
