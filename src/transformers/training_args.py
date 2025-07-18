@@ -1258,7 +1258,7 @@ class TrainingArguments:
             )
         },
     )
-    accelerator_config: Optional[Union[dict, str]] = field(
+    accelerator_config: Optional[str] = field(
         default=None,
         metadata={
             "help": (
@@ -1267,7 +1267,7 @@ class TrainingArguments:
             )
         },
     )
-    deepspeed: Optional[Union[dict, str]] = field(
+    deepspeed: Optional[str] = field(
         default=None,
         metadata={
             "help": (
