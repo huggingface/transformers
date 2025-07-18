@@ -272,8 +272,7 @@ class Ernie4_5_MoEStatics(nn.Module):
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
-            # TODO: it has non-zero values...
-            # requires_grad=False,
+            requires_grad=False,
         )
 
 
@@ -332,13 +331,12 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
             # router_logits: (batch * sequence_length, n_experts)
             router_logits = self.gate(hidden_states.float())
 
-            # TODO: check below
-            # See https://github.com/PaddlePaddle/ERNIE/blob/d4e1c371dfd089ef618ef378e8996049bd54da00/ernie/moe/moe_layer.py#L607 in combination with
-            # https://github.com/PaddlePaddle/Paddle/blob/develop/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L104 == the "correction bias"
-            # correction_bias = self.moe_statics.e_score_correction_bias[0]
+            # NOTE: we are using the original code base at
+            # https://github.com/PaddlePaddle/Paddle/blob/9b40438ce0f6d76b4f08a7837dd1e28b26cf8ee6/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L109-L116
+            # this might differ from the remote version regarding the bias
+            correction_bias = self.moe_statics.e_score_correction_bias[0]
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            # routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
-            routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+            routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
