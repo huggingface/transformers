@@ -1567,6 +1567,8 @@ class FPQuantConfig(QuantizationConfigMixin):
             Whether to store the master weights. Needed for QAT over layer weights.
         hadamard_group_size (`int`, *optional*, defaults to 32):
             The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
+        pseudoquantization (`bool`, *optional*, defaults to `False`):
+            Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1579,6 +1581,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         backward_dtype: str = "bf16",
         store_master_weights: bool = False,
         hadamard_group_size: int = 32,
+        pseudoquantization: bool = False,
         modules_to_not_convert: Optional[list[str]] = None,
         **kwargs,
     ):
@@ -1587,6 +1590,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         self.backward_dtype = backward_dtype
         self.store_master_weights = store_master_weights
         self.hadamard_group_size = hadamard_group_size
+        self.pseudoquantization = pseudoquantization
         self.modules_to_not_convert = modules_to_not_convert
 
         self.quant_method = QuantizationMethod.FPQUANT

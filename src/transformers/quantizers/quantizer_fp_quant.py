@@ -91,12 +91,15 @@ class FPQuantHfQuantizer(HfQuantizer):
 
         if param_name.endswith(".qweight"):
             # Loading an already quantized checkpoint
+            if self.quantization_config.pseudoquantization:
+                raise ValueError(
+                    "Pseudoquantization is not supported for pre-quantized weights. Please either use with a `store_master_weights=True` checkpoint or quantize the model on the fly."
+                )
             module.qweight = torch.nn.Parameter(
                 param_value.to(target_device),
                 requires_grad=False,
             )
-            if not self.quantization_config.store_master_weights:
-                module.weight = None
+            module.weight = None
             return
 
         module.weight = torch.nn.Parameter(param_value.to(target_device))
@@ -127,7 +130,11 @@ class FPQuantHfQuantizer(HfQuantizer):
             name: module for name, module in model.named_modules() if isinstance(module, FPQuantLinear)
         }
         for name, module in fp_quant_modules.items():
-            if not self.quantization_config.store_master_weights and module.weight is not None:
+            if (
+                not self.quantization_config.store_master_weights
+                and module.weight is not None
+                and not self.quantization_config.pseudoquantization
+            ):
                 module.weight = None
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
