@@ -155,18 +155,21 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
-        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.shared_experts": "local",
+        # sequence parallel is pretty slow
+        #"norm.weight": "sequence_parallel",
+        #"layers.*.input_layernorm.weight": "sequence_parallel",
+        #"layers.*.post_attention_layernorm.weight": "sequence_parallel",
         "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
         "layers.*.mlp.shared_experts.up_proj": "local_colwise",
         "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
+        "layers.*.mlp.experts.*.up_proj": "local_colwise",
+        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "local",
         "layers.*.mlp.gate_proj": "local_colwise",
         "layers.*.mlp.up_proj": "local_colwise",
         "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
+        "layers.*.mlp": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

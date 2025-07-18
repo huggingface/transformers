@@ -275,6 +275,14 @@ class Ernie4_5_MoEStatics(nn.Module):
             requires_grad=False,
         )
 
+    def forward(self, hidden_states):
+        # NOTE: This is a workaround to enable TP with a module that only has parameters
+        #
+        # Otherwise, it stays as `DTensor` when called in the "super" forward
+        #   1. All other tensors are local (`torch.Tensor`)
+        #   2. Isolate does not work on `nn.Module` which only has parameters
+        return hidden_states + self.e_score_correction_bias.squeeze()
+
 
 class Ernie4_5_MoESparseMoeBlock(nn.Module):
     """
@@ -333,10 +341,10 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
 
             # NOTE: we are using the original code base at
             # https://github.com/PaddlePaddle/Paddle/blob/9b40438ce0f6d76b4f08a7837dd1e28b26cf8ee6/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L109-L116
-            # this might differ from the remote version regarding the bias
-            correction_bias = self.moe_statics.e_score_correction_bias[0]
+            # this might differ from the remote version regarding the bias (see `Ernie4_5_MoEStatics`)
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            routing_weights, selected_experts = torch.topk(routing_weights + correction_bias, self.top_k, dim=-1)
+            routing_weights = self.moe_statics(routing_weights)
+            routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
