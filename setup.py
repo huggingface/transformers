@@ -148,6 +148,9 @@ _deps = [
     "phonemizer",
     "protobuf",
     "psutil",
+    # temporary pin to work around datasets exception in the docbuilder. See
+    # https://github.com/huggingface/transformers/actions/runs/16365952006/job/46243081358?pr=38545
+    "pyarrow<21.0.0",
     "pyyaml>=5.1",
     "pydantic>=2",
     "pytest>=7.2.0",
