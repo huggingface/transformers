@@ -33,6 +33,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     make_list_of_images,
@@ -99,6 +100,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     pad_size = {"height": 1024, "width": 1024}
     mask_pad_size = {"height": 256, "width": 256}
+
+    def __init__(self, **kwargs: Unpack[SamFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def pad_image(self, images: "torch.Tensor", pad_size: SizeDict):
         """Pad images to the specified size."""
@@ -266,8 +270,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     @auto_docstring
     def preprocess(
         self,
-        images,
-        segmentation_maps=None,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
         **kwargs: Unpack[SamFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
