@@ -11,6 +11,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 
 -->
+*This model was released on 2024-02-26 and added to Hugging Face Transformers on 2024-08-06.*
 
 # Nemotron
 
