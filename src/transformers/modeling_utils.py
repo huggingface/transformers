@@ -2291,7 +2291,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 kernel = get_kernel(repo_id)
                 if "flash_attention" in kernel_name:
                     ALL_ATTENTION_FUNCTIONS[repo_id] = partial(flash_attention_forward, implementation=kernel)
-                elif "paged_atention" in kernel_name:
+                elif "paged_attention" in kernel_name:
                     ALL_ATTENTION_FUNCTIONS[repo_id] = partial(paged_attention_forward, implementation=kernel)
                 else:
                     ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)

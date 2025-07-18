@@ -50,9 +50,9 @@ def paged_attention_forward(
     if implementation is not None:
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
     attn_output = flash_attn_varlen_func(
-        q.transpose(1, 2).squeeze(0),
-        k.transpose(1, 2).squeeze(0),
-        v.transpose(1, 2).squeeze(0),
+        q.transpose(1, 2).squeeze(0).contiguous(),
+        k.transpose(1, 2).squeeze(0).contiguous(),
+        v.transpose(1, 2).squeeze(0).contiguous(),
         cumulative_seqlens_q.to(torch.int32),
         cumulative_seqlens_k.to(torch.int32),
         max_seqlen_q,
