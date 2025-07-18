@@ -1436,7 +1436,7 @@ if __name__ == "__main__":
         }
 
         key = job_to_test_map.get(job_name)
-        target_results = additional_results.get(key, default_result) if key else default_result
+        target_results = additional_results.get(key, default_result) if key is not None else default_result
 
     # Make the format uniform between `model_results` and `additional_results[XXX]`
     if "failures" in target_results:
