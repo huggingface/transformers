@@ -1132,7 +1132,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5OmniConfig
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     def _init_weights(self, module):
         # important: this ported version of Qwen2.5OmniThinker isn't meant for training from scratch - only

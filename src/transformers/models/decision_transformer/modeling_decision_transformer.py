@@ -453,7 +453,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     supports_gradient_checkpointing = True
 
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

@@ -351,7 +351,7 @@ class Pix2StructVisionEncoder(nn.Module):
 class Pix2StructPreTrainedModel(PreTrainedModel):
     config: Pix2StructConfig
 
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     @property
     def dummy_inputs(self):

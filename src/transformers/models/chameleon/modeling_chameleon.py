@@ -815,7 +815,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True
     _supports_attention_backend = True
