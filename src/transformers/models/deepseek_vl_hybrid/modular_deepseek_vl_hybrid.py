@@ -44,6 +44,7 @@ from ...tokenization_utils_base import (
 )
 from ...utils import (
     TensorType,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
@@ -351,7 +352,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -378,7 +379,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return DeepseekVLHybridCausalLMOutputWithPast(
             loss=loss,
