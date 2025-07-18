@@ -1009,7 +1009,7 @@ class SamVisionNeck(nn.Module):
 
 @auto_docstring
 class SamPreTrainedModel(PreTrainedModel):
-    config_class = SamConfig
+    config: SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
     _no_split_modules = ["SamVisionAttention"]
@@ -1095,7 +1095,7 @@ class SamVisionEncoder(SamPreTrainedModel):
     """
 )
 class SamVisionModel(SamPreTrainedModel):
-    config_class = SamVisionConfig
+    config: SamVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SamVisionConfig):
@@ -1132,6 +1132,8 @@ class SamModel(SamPreTrainedModel):
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
         self.prompt_encoder = SamPromptEncoder(config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()

@@ -821,15 +821,13 @@ class JetMoeBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
-    config_class = JetMoeConfig
+    config: JetMoeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeBlock"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -1206,19 +1204,9 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Ensure tensors are on the same device
-            shift_labels = shift_labels.to(shift_logits.device)
             loss = self.loss_function(
-                shift_logits,
-                shift_labels,
+                logits,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
