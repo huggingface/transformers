@@ -1395,7 +1395,7 @@ def _get_torch_dtype(
 
 def _get_device_map(
     model: "PreTrainedModel",
-    device_map: Optional[Union[dict, str]],
+    device_map: Optional[Union[str, dict]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
@@ -1959,37 +1959,16 @@ class EmbeddingAccessMixin:
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
             )
 
-    def _has_token_embeddings(self) -> bool:
-        """
-        Heuristic. True if a real text model (can resize / tie / share embeddings)
-        False if speech / vision backbone or helper head (no token embs)
-        """
-        # direct attribute on self
-        if hasattr(self, "embed_tokens"):
-            return True
-
-        # common encoder–decoder layout: self.model.embed_tokens
-        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
-            return True
-
-        # did the subclass override get_input_embeddings?
-        if self.__class__.get_input_embeddings is not EmbeddingAccessMixin.get_input_embeddings:
-            return True
-
-        # one-level indirection via base_model_prefix, if it exists
-        base_prefix = getattr(self, "base_model_prefix", None)
-        if base_prefix is not None:
-            base_model = getattr(self, base_prefix, None)
-            if base_model is not None and base_model is not self:
-                return getattr(base_model, "embed_tokens", None) is not None
-
-        return False
-
     def get_output_embeddings(self):
         if not hasattr(self, "lm_head"):
             return None
-        if not self._has_token_embeddings():
+
+        # Heuristic: only keep the head if the module’s config *has* a vocab size
+        # (text-ish) – speech/vision backbones don’t.
+        vocab_size = getattr(getattr(self, "config", None), "vocab_size", None)
+        if vocab_size is None:
             return None
+
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
@@ -2372,7 +2351,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[dict, str]) -> Union[dict, str]:
+    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
         """
         Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
@@ -2420,7 +2399,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return attn_implementation
 
-    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
+    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
         """
         Checks and dispatches to the requested attention implementation.
         """
