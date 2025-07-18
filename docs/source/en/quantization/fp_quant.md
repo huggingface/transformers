@@ -47,7 +47,7 @@ FP-Quant is fully compatible with [torch.compile](https://pytorch.org/tutorials/
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, HiggsConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, FPQuantConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "qwen/Qwen3-8B",
