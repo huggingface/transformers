@@ -38,7 +38,7 @@ class FPQuantHfQuantizer(HfQuantizer):
     requires_calibration = False
     requires_parameters_quantization = True
     is_qat_trainable = False
-    required_packages = ["qutlass", "fp_quant"]
+    required_packages = ["fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -50,8 +50,15 @@ class FPQuantHfQuantizer(HfQuantizer):
                 "FPQuant quantization is only supported on GPU. Please use a different quantizer."
             )
 
-        if not is_qutlass_available():
-            raise ImportError("Using `fp_quant` quantization requires qutlass: `pip install qutlass`")
+        if not is_qutlass_available() and not self.quantization_config.pseudoquantization:
+            raise ImportError(
+                "Using `fp_quant` with real quantization requires a **Blackwell GPU** and qutlass: `git clone https://github.com/IST-DASLab/qutlass.git && cd qutlass && pip install --no-build-isolation .`. You can use `FPQuantConfig(pseudoquantization=True, ...)` to use Triton-based pseudo-quantization. It doesn't provide any speedups but emulates the quantization behavior of the real quantization."
+            )
+
+        if self.quantization_config.pseudoquantization:
+            logger.warning(
+                "Using pseudo-quantization for FP-Quant. This doesn't provide any speedups but emulates the quantization behavior of the real quantization."
+            )
 
         if not is_fp_quant_available():
             raise ImportError("Using `fp_quant` quantization requires fp_quant: `pip install fp_quant`")
@@ -89,20 +96,32 @@ class FPQuantHfQuantizer(HfQuantizer):
     ):
         module, _ = get_module_from_name(model, param_name)
 
+        # The module holds either:
+        #  * `weight` when `store_master_weights=True`
+        #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
+        #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
+
         if param_name.endswith(".qweight"):
-            # Loading an already quantized checkpoint
-            if self.quantization_config.pseudoquantization:
-                raise ValueError(
-                    "Pseudoquantization is not supported for pre-quantized weights. Please either use with a `store_master_weights=True` checkpoint or quantize the model on the fly."
-                )
+            # Loading a real quantized checkpoint without master weights
             module.qweight = torch.nn.Parameter(
                 param_value.to(target_device),
                 requires_grad=False,
             )
             module.weight = None
+            module.dqweight = None
             return
 
+        if param_name.endswith(".dqweight"):
+            # Loading a pseudo-quantized checkpoint without master weights
+            module.dqweight = torch.nn.Parameter(param_value.to(target_device))
+            module.weight = None
+            module.qweight = None
+            module.scales = None
+            return
+
+        # Loading master weights or an unquantized checkpoint
         module.weight = torch.nn.Parameter(param_value.to(target_device))
+        # Let pre-forward handle the quantization and set None where necessary
         module.pre_forward()
 
         if unexpected_keys is not None and param_name in unexpected_keys:
@@ -130,11 +149,7 @@ class FPQuantHfQuantizer(HfQuantizer):
             name: module for name, module in model.named_modules() if isinstance(module, FPQuantLinear)
         }
         for name, module in fp_quant_modules.items():
-            if (
-                not self.quantization_config.store_master_weights
-                and module.weight is not None
-                and not self.quantization_config.pseudoquantization
-            ):
+            if not self.quantization_config.store_master_weights and module.weight is not None:
                 module.weight = None
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
@@ -168,7 +183,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         from fp_quant import FPQuantLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, FPQuantLinear) and tensor_name in ["weight", "qweight"]:
+        if isinstance(module, FPQuantLinear) and tensor_name in ["weight", "qweight", "dqweight"]:
             # Only quantize weights of FPQuantLinear modules that are not already quantized
             return True
         else:
