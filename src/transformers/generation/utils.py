@@ -619,6 +619,7 @@ class GenerationMixin(ContinuousMixin):
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
 
+        q_lengths = attention_mask.sum(dim=-1)
         # 6. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
         # pass)
         if (
@@ -679,30 +680,19 @@ class GenerationMixin(ContinuousMixin):
 
         if "flash" in self.config._attn_implementation:
             tensor_kws = {"dtype": torch.int32, "device": self.device}
-            cu_seq_lens_q: Optional[torch.LongTensor] = None
-            cu_seq_lens_k: Optional[torch.LongTensor] = None
-            max_length_q: Optional[int] = None
-            max_length_k: Optional[int] = None
+            pos = model_inputs["position_ids"][:, -1]
 
-            position_ids = model_inputs.get("position_ids")
-            if position_ids is not None:
-                last_pos = position_ids[:, -1]
-                cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), last_pos.cumsum(dim=0).add(1)], dim=0)
-                max_length_k = last_pos.max().item() + 1
-                flat_q = position_ids.flatten()
-                cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), torch.tensor([flat_q.numel()], **tensor_kws)])
-                max_length_q = flat_q.numel()
-            elif attention_mask is not None:
-                seqlens = attention_mask.sum(dim=-1, **tensor_kws)
-                cu_seq_lens_k = torch.nn.functional.pad(seqlens.cumsum(dim=0), (1, 0))
-                max_length_k = seqlens.max().item()
-                q_len = cache_position.size(0)
-                cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), torch.tensor(q_len, **tensor_kws)])
-                max_length_q = q_len
+            cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), pos.cumsum(0).add(1)], 0)
+            max_length_k = int(pos.max()) + 1
+
+            bs, seq_len = input_ids.size()
+            q_len = torch.ones(bs, **tensor_kws) if seq_len == 1 else pos.to(torch.int32).add(1)
+            cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), q_len.cumsum(0)], 0)
+            max_length_q = int(q_len.max())
 
             model_inputs.update(
-                cu_seq_lens_q=cu_seq_lens_q,
-                cu_seq_lens_k=cu_seq_lens_k,
+                cu_seq_lens_q=cu_seq_lens_q.to(self.device),
+                cu_seq_lens_k=cu_seq_lens_k.to(self.device),
                 max_length_q=max_length_q,
                 max_length_k=max_length_k,
             )

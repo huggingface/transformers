@@ -379,9 +379,9 @@ def _flash_attention_forward(
                 query_states, key_states, value_states, position_ids
             )
         else:
-            q = query_states.view(-1, query_states.size(-2), query_states.size(-1))
-            k = key_states.view(-1, key_states.size(-2), key_states.size(-1))
-            v = value_states.view(-1, value_states.size(-2), value_states.size(-1))
+            q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
+            k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
+            v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
             mq, mk = max_length_q, max_length_k
             cu_q, cu_k = cu_seq_lens_q, cu_seq_lens_k
         out = flash_varlen_fn(
