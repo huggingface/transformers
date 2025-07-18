@@ -32,6 +32,7 @@ from transformers import (
     DeepseekVLImageProcessor,
     DeepseekVLProcessor,
 )
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 
 
 # fmt: off
@@ -254,7 +255,10 @@ def convert_model(
     # Convert processor
     # ------------------------------------------------------------
 
-    image_processor = DeepseekVLImageProcessor()
+    image_processor = DeepseekVLImageProcessor(
+        image_mean=IMAGENET_STANDARD_MEAN,
+        image_std=IMAGENET_STANDARD_STD,
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(
         input_path,

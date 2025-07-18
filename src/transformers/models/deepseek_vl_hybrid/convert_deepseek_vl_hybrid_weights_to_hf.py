@@ -32,6 +32,13 @@ from transformers import (
     DeepseekVLHybridImageProcessor,
     DeepseekVLHybridProcessor,
 )
+from transformers.image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    PILImageResampling,
+)
 
 
 # fmt: off
@@ -283,7 +290,13 @@ def convert_model(
     # Convert processor
     # ------------------------------------------------------------
 
-    image_processor = DeepseekVLHybridImageProcessor()
+    image_processor = DeepseekVLHybridImageProcessor(
+        image_mean=IMAGENET_STANDARD_MEAN,
+        image_std=IMAGENET_STANDARD_STD,
+        high_res_image_mean=OPENAI_CLIP_MEAN,
+        high_res_image_std=OPENAI_CLIP_STD,
+        resample=PILImageResampling.BILINEAR,
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(
         input_path,
