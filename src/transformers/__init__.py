@@ -365,6 +365,16 @@ else:
     ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
+        "CacheLayerMixin",
+        "DynamicLayer",
+        "StaticLayer",
+        "SlidingWindowLayer",
+        "ChunkedSlidingLayer",
+        "CacheProcessor",
+        "OffloadedCacheProcessor",
+        "QuantizedCacheProcessor",
+        "QuantoQuantizedCacheProcessor",
+        "HQQQuantizedCacheProcessor",
         "Cache",
         "CacheConfig",
         "DynamicCache",

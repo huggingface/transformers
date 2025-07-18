@@ -77,6 +77,19 @@ class DynamicLayer(CacheLayerMixin):
 
     @classmethod
     def from_tensors(cls, keys: torch.Tensor, values: torch.Tensor) -> "DynamicLayer":
+        """
+        Build a `DynamicLayer` instance from pre-existing key/value tensors.
+
+        Args:
+            keys (`torch.Tensor`):
+                Key cache tensor of shape ``[batch_size, num_heads, seq_len, head_dim]``.
+            values (`torch.Tensor`):
+                Value cache tensor of shape ``[batch_size, num_heads, seq_len, head_dim]``.
+
+        Returns:
+            `DynamicLayer`: The newly constructed layer whose internal cache directly references
+            the supplied tensors.
+        """
         layer = cls()
         layer.keys = keys
         layer.values = values
@@ -176,6 +189,29 @@ class StaticLayer(CacheLayerMixin):
         device: str = "cpu",
         sliding_window: Optional[int] = None,
     ):
+        """
+        Args:
+            max_cache_len (`int`):
+                Maximum number of tokens that can be stored, used for tensor preallocation.
+            batch_size (`int`):
+                Maximum batch size the cache is pre-allocated for.
+            num_heads (`int`):
+                Number of attention heads.
+            head_dim (`int`):
+                Per-head hidden dimension.
+            dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+                Data type of the cache tensors.
+            device (`str` or `torch.device`, *optional*, defaults to `"cpu"`):
+                Device on which the cache tensors will be materialised.
+            sliding_window (`int`, *optional*):
+                When not ``None``, indicates that this layer will be used as a sliding-window
+                cache capped to ``sliding_window`` tokens (see `SlidingWindowLayer`).
+
+        Notes:
+            Static layers allocate their full backing tensors up-front and mutate them
+            in-place. See the documentation of `Cache` for shared helper methods that
+            operate uniformly across all layer types.
+        """
         self.max_cache_len = max_cache_len
         self.max_batch_size = batch_size
         self.num_heads = num_heads
@@ -241,6 +277,7 @@ class StaticLayer(CacheLayerMixin):
         return self.keys, self.values
 
     def get_seq_length(self, cache_position=None) -> int:
+        """Returns the sequence length of the cached states."""
         if cache_position is not None:
             return int(cache_position[-1] + 1)
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
@@ -249,12 +286,14 @@ class StaticLayer(CacheLayerMixin):
         return seq_length
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders the cache for beam search, given the selected beam indices."""
         dev = self.keys.device
         beam_idx_dev = beam_idx.to(dev)
         self.keys = self.keys.index_select(0, beam_idx_dev)
         self.values = self.values.index_select(0, beam_idx_dev)
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
         kv_offset = 0
         kv_length = self.max_cache_len
         return kv_length, kv_offset
@@ -266,7 +305,13 @@ class SlidingWindowLayer(StaticLayer):
     Inherits from StaticLayer but uses sliding window update logic.
     """
 
-    def __init__(self, sliding_window, max_cache_len=None, *args, **kwargs):
+    def __init__(self, sliding_window, *args, **kwargs):
+        """
+        Args:
+            sliding_window (`int`):
+                Effective window size: number of tokens that are kept on each update call.
+        """
+        kwargs.pop("max_cache_len", None)
         super().__init__(*args, max_cache_len=sliding_window, *args, **kwargs)
 
     def update(
@@ -329,6 +374,7 @@ class SlidingWindowLayer(StaticLayer):
         return self.keys, self.values
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
         query_length = cache_position.shape[0]
         first_cache_position = cache_position[0]
 
@@ -339,7 +385,7 @@ class SlidingWindowLayer(StaticLayer):
 
 
 class ChunkedSlidingLayer(SlidingWindowLayer):
-    """An extended SlidingWindowLayer that supports prefill chunking."""
+    """An extended SlidingWindowLayer that supports prefill chunking, originally implemented for Llama 4."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -410,7 +456,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
 
 class CacheProcessor:
     """
-    Base class for cache processors that can be applied to modify cache behavior.
+    Base class for cache processors. It defines a pre-update and post-update methods that are called before and after the cache update.
     This class should be subclassed.
     """
 
@@ -518,7 +564,7 @@ class OffloadedCacheProcessor(CacheProcessor):
         layer_idx: int,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Handle prefetching and eviction before cache update."""
+        """Handles prefetching and eviction before cache update."""
         # Update the cache
         if len(cache) < layer_idx:
             raise ValueError("OffloadedCache does not support model usage where layers are skipped. Use DynamicCache.")
@@ -918,20 +964,38 @@ def apply_processors(
 
 class Cache:
     """
-    Base class for all caches.
-    The actual data structure is specific to the layers.
-    This class handles propagation of operations across layers.
+    Base container for per-layer key/value caches.
+
+    A `Cache` behaves like a list of `CacheLayerMixin` objects, one per model layer.
+    Sub-classes such as `DynamicCache`, `StaticCache`, or `SlidingWindowCache`
+    simply pre-select which `CacheLayerMixin` class to use and may attach a
+    `CacheProcessor` (off-loading, quantization).
+
+    Example
+    -------
+    ```python
+    from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
+
+    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
+    tok   = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+    inputs = tok("Hello", return_tensors="pt")
+
+    cache = DynamicCache()
+    outputs = model(**inputs, past_key_values=cache, use_cache=True)
+    ```
 
     Parameters:
         config (`PretrainedConfig`, *optional*):
-            Model configuration for shape/device info.
+            Model configuration used to infer number of layers, head sizes, default
+            device/dtype, etc.
         cache_processor (`CacheProcessor` or `str`, *optional*):
-            Cache processor to apply (e.g., "offloaded", "quanto_quantized", "hqq_quantized") or
-            a CacheProcessor class.
-        layer_classes (`list[type[CacheLayer]]`, *optional*):
-            List of layer classes to use for the cache. Default is [DynamicLayer].
-    Additional arguments for cache configuration:
-        max_batch_size/batch_size (`int`): Maximum batch size for static caches
+            Cache processor to apply (e.g., "offloaded", "quanto_quantized", "hqq_quantized")
+            or a CacheProcessor class.
+        layer_classes (`list[type[CacheLayerMixin]]`, *optional*):
+            List of `CacheLayerMixin` classes to instantiate for the cache. When shorter than the
+            required number of layers the list is cycled. Default is [DynamicLayer].
+    Additional arguments passed to the layers:
+        max_batch_size (`int`): Maximum batch size for static caches
         max_cache_len (`int`): Maximum sequence length. For hybrid caches:
             * SlidingWindowLayers: clamped to `min(sliding_window, max_cache_len)`
             * StaticLayers: uses full `max_cache_len`
@@ -939,10 +1003,9 @@ class Cache:
         dtype (`torch.dtype`): Data type for cache tensors
         layer_device_map (`dict[int, Union[str, torch.device]]`): Per-layer device mapping
         tp_size (`int`): Tensor parallel size to adjust the number of key/value heads
-        device (`torch.device`): Device for cache tensors
-        dtype (`torch.dtype`): Data type for cache tensors
-        layer_device_map (`dict[int, Union[str, torch.device]]`): Per-layer device mapping
-        tp_size (`int`): Tensor parallel size to adjust the number of key/value heads
+
+    Additional keyword arguments are forwarded to the chosen layers constructor(s).  See the
+    documentation of the relevant `CacheLayerMixin` class for more details.
     """
 
     def __init__(
@@ -1074,7 +1137,7 @@ class Cache:
 
     @property
     def key_cache(self) -> "KeyValuesWrapper":
-        """Returns a list-like object of key cache tensors indexed by layer."""
+        """List-like object of key cache tensors indexed by layer. Deprecated in favor of `cache.layers[idx].keys`"""
         warnings.warn(
             "`cache.key_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].keys` instead."
         )
@@ -1082,7 +1145,7 @@ class Cache:
 
     @property
     def value_cache(self) -> "KeyValuesWrapper":
-        """Returns a list-like object of value cache tensors indexed by layer."""
+        """List-like object of value cache tensors indexed by layer. Deprecated in favor of `cache.layers[idx].values`"""
         warnings.warn(
             "`cache.value_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].values` instead."
         )
@@ -1091,7 +1154,7 @@ class Cache:
     ### Wrappers for layer operations and properties ###
 
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
+        """Returns maximum sequence length of the cache object. Dynamic caches do not have a maximum length."""
         return self.layers[layer_idx].get_max_cache_shape()
 
     def reset(self):
@@ -1526,7 +1589,7 @@ class OffloadedStaticCache(StaticCache):
 class HybridChunkedCache(HybridCache):
     """
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
-    attention and global attention in every other layer, with support for chunked attention (originally implemented
+    attention and global attention in every other layer, with support for prefill chunking (originally implemented
     for Llama4).
     Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
     for global attention. For more information, see the documentation of each subcomponent cache class.
