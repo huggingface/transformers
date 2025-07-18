@@ -10,7 +10,7 @@ deps = {
     "codecarbon": "codecarbon>=2.8.1",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
-    "datasets": "datasets!=2.5.0",
+    "datasets": "datasets>=2.15.0",
     "deepspeed": "deepspeed>=0.9.3",
     "diffusers": "diffusers",
     "dill": "dill<0.3.5",
@@ -43,6 +43,7 @@ deps = {
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
+    "openai": "openai",
     "opencv-python": "opencv-python",
     "optimum-benchmark": "optimum-benchmark>=0.3.0",
     "optuna": "optuna",
@@ -106,4 +107,5 @@ deps = {
     "opentelemetry-api": "opentelemetry-api",
     "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
     "opentelemetry-sdk": "opentelemetry-sdk",
+    "mistral-common[opencv]": "mistral-common[opencv]>=1.6.3",
 }

@@ -28,6 +28,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -56,7 +57,7 @@ logger = logging.get_logger(__name__)
 )
 class LlavaOnevisionModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -87,7 +88,7 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -276,15 +277,15 @@ def unpad_image(tensor, original_size):
 
 @auto_docstring
 class LlavaOnevisionPreTrainedModel(PreTrainedModel):
-    config_class = LlavaOnevisionConfig
+    config: LlavaOnevisionConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
+
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -501,7 +502,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -515,16 +516,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, LlavaOnevisionModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
@@ -784,7 +777,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -800,16 +793,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):

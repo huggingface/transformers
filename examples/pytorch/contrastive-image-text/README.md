@@ -84,7 +84,7 @@ loaded using the pre-trained weights.
 Finally, we can run the example script to train the model:
 
 ```bash
-python examples/pytorch/contrastive-image-text/run_clip.py \
+python run_clip.py \
     --output_dir ./clip-roberta-finetuned \
     --model_name_or_path ./clip-roberta \
     --data_dir $PWD/data \

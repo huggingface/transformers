@@ -674,11 +674,11 @@ class Emu3VQVAEDecoder(nn.Module):
     """
 )
 class Emu3VQVAE(PreTrainedModel):
-    config_class = Emu3VQVAEConfig
+    config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _no_split_modules = [
@@ -873,7 +873,7 @@ class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
 
 
 class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
-    config_class = Emu3TextConfig
+    config: Emu3TextConfig
 
     def __init__(self, config):
         super().__init__(config)

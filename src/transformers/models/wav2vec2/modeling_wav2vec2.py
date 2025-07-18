@@ -530,7 +530,6 @@ class Wav2Vec2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -1031,11 +1030,11 @@ class Wav2Vec2AttnAdapterLayer(nn.Module):
 
 @auto_docstring
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
-    config_class = Wav2Vec2Config
+    config: Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 

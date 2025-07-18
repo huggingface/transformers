@@ -607,7 +607,7 @@ class ChineseCLIPTextPooler(nn.Module):
 
 @auto_docstring
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
-    config_class = ChineseCLIPConfig
+    config: ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
     supports_gradient_checkpointing = True
 
@@ -856,7 +856,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    config_class = ChineseCLIPTextConfig
+    config: ChineseCLIPTextConfig
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
@@ -926,11 +926,8 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
@@ -975,7 +972,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 )
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
-    config_class = ChineseCLIPVisionConfig
+    config: ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
@@ -1030,7 +1027,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
 
 @auto_docstring
 class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
-    config_class = ChineseCLIPConfig
+    config: ChineseCLIPConfig
 
     def __init__(self, config: ChineseCLIPConfig):
         super().__init__(config)
@@ -1049,6 +1046,8 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
 
         text_config = config.text_config
         vision_config = config.vision_config
+        # The module using it is not a PreTrainedModel subclass so we need this
+        vision_config._attn_implementation = config._attn_implementation
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size

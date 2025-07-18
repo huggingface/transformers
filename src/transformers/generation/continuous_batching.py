@@ -162,6 +162,7 @@ class PagedAttentionCache(Cache):
         dtype: torch.dtype = torch.float16,
         layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
         initial_prompt_shapes: Optional[list[list[int]]] = None,
+        tp_size: Optional[int] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
 
@@ -196,7 +197,16 @@ class PagedAttentionCache(Cache):
 
         self.block_size = block_size
         self.num_blocks = num_blocks
-        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
+        num_key_value_heads = self.num_key_value_heads
+        if tp_size is not None and tp_size > 1:
+            if num_key_value_heads % tp_size != 0:
+                raise ValueError(
+                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+                )
+            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
+            num_key_value_heads //= tp_size
+
+        self.cache_shape = (num_key_value_heads, num_blocks, self.block_size, self.head_dim)
 
         self.dtype = dtype
         self.device = device
@@ -640,7 +650,7 @@ def compute_optimal_blocks(
     memory_per_token = 2 * num_kv_heads * head_dim * dtype_size * num_hidden_layers  # For K and V caches
 
     # Estimate sequence length requirements
-    tokens_to_generate = getattr(generation_config, "max_new_tokens", 20)
+    tokens_to_generate = getattr(generation_config, "max_new_tokens") or 20
 
     if median_prefill_length is None and inputs:
         non_empty_inputs = [len(seq) for seq in inputs if seq]
@@ -938,7 +948,7 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
-        logger.warning(
+        logger.info(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
@@ -1281,6 +1291,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
+                tp_size=getattr(self.model, "tp_size"),
             )
 
             scheduler = None

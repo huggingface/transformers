@@ -475,7 +475,7 @@ class SamHQVisionNeck(nn.Module):
 
 @auto_docstring
 class SamHQPreTrainedModel(PreTrainedModel):
-    config_class = SamHQConfig
+    config: SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
     _no_split_modules = ["SamHQVisionAttention"]
@@ -787,7 +787,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
-        return query, keys, attn_out
+        return queries, keys, attn_out
 
 
 class SamHQTwoWayTransformer(nn.Module):
@@ -1076,7 +1076,7 @@ class SamHQMaskDecoder(nn.Module):
     """
 )
 class SamHQVisionModel(SamHQPreTrainedModel):
-    config_class = SamHQVisionConfig
+    config: SamHQVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SamHQVisionConfig):
@@ -1274,6 +1274,8 @@ class SamHQModel(SamHQPreTrainedModel):
         self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
         self.prompt_encoder = SamHQPromptEncoder(config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
 
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
 

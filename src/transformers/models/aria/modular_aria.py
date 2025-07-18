@@ -18,6 +18,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
@@ -42,6 +43,7 @@ from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
@@ -1250,6 +1252,13 @@ class AriaTextMoELayer(nn.Module):
         return output + shared_expert_output
 
 
+class AriaTextAttention(LlamaAttention):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: AriaTextConfig, layer_idx: int):
+        super().__init__()
+
+
 class AriaTextDecoderLayer(LlamaDecoderLayer):
     """
     Aria Text Decoder Layer.
@@ -1270,15 +1279,19 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class AriaTextPreTrainedModel(PreTrainedModel):
-    config_class = AriaTextConfig
+    config: AriaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1297,7 +1310,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
-    config_class = AriaConfig
+    config: AriaConfig
     base_model_prefix = ""
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
@@ -1419,7 +1432,7 @@ class AriaModel(LlavaModel):
         pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1516,7 +1529,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

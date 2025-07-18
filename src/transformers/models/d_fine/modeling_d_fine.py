@@ -882,7 +882,7 @@ def _get_clones(partial_module, N):
 
 @auto_docstring
 class DFinePreTrainedModel(PreTrainedModel):
-    config_class = DFineConfig
+    config: DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
@@ -1674,7 +1674,9 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DFineObjectDetectionOutput]:
-        """
+        r"""
+        Example:
+
         ```python
         >>> import torch
         >>> from transformers.image_utils import load_image
