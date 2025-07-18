@@ -1257,6 +1257,11 @@ class ContinuousBatchingManager:
 
     @traced(span_name="logit_processing")
     def _process_logit(self, batch_data, logits):
+        # Pass continuous batching context to logits processor if it supports it
+        if hasattr(self.logit_processor, "set_continuous_batching_context"):
+            self.logit_processor.set_continuous_batching_context(
+                batch_data["logits_indices"], batch_data["cumulative_seqlens_q"]
+            )
         return self.logit_processor(batch_data["input_ids"], logits)
 
     @traced(span_name="sampling")

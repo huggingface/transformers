@@ -355,42 +355,53 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
+        self.logits_indices = None
+        self.cumulative_seqlens_q = None
+
+    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cumulative_seqlens_q: torch.Tensor):
+        self.logits_indices = logits_indices
+        self.cumulative_seqlens_q = cumulative_seqlens_q
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if self.prompt_ignore_length:
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
-        # Ensure input_ids is int64 for gather operation
         input_ids = input_ids.to(torch.int64)
 
-        # Handle continuous batching case where scores have shape [batch_size, seq_len, vocab_size]
         if scores.dim() == 3:
-            # For continuous batching, apply repetition penalty only to the last position
-            # This is compatible with CUDA graphs as it avoids dynamic operations
-            batch_size, seq_len, vocab_size = scores.shape
-
-            last_scores = scores[:, -1, :]  # [batch_size, vocab_size]
-
-            # Create a mask for all tokens that have appeared in the sequence
-            token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
-
-            for i in range(seq_len):
-                token_mask.scatter_(1, input_ids[:, i : i + 1], True)
-
-            penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
-            scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
+            if self.logits_indices is not None and self.cumulative_seqlens_q is not None:
+                batch_size, seq_len, vocab_size = scores.shape
+                last_positions = self.logits_indices
+                last_scores = scores[0, last_positions, :]
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                cu_seq_lens = self.cumulative_seqlens_q
+                for i in range(len(cu_seq_lens) - 1):
+                    start_idx = cu_seq_lens[i]
+                    end_idx = cu_seq_lens[i + 1]
+                    sequence_tokens = input_ids[start_idx:end_idx]
+                    token_mask[i].scatter_(0, sequence_tokens, True)
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
+            else:
+                batch_size, seq_len, vocab_size = scores.shape
+                last_scores = scores[:, -1, :]
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                if input_ids.dim() == 1:
+                    unique_tokens = torch.unique(input_ids)
+                    token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
+                else:
+                    for i in range(seq_len):
+                        token_mask.scatter_(1, input_ids[:, i : i + 1], True)
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
             return scores
 
-        # Handle 1D input_ids (batch_size,) by adding sequence dimension
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(1)
 
         score = torch.gather(scores, 1, input_ids)
-
-        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
-
         scores_processed = scores.scatter(1, input_ids, score)
         return scores_processed
 
@@ -988,12 +999,12 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
     >>> output = model.generate(**inputs)
     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    Today I’m not sure if I’m going to be able to do it.
+    Today I'm not sure if I'm going to be able to do it.
 
-    >>> # Now let's add ngram size using `no_repeat_ngram_size`. This stops the repetitions ("I’m") in the output.
+    >>> # Now let's add ngram size using `no_repeat_ngram_size`. This stops the repetitions ("I'm") in the output.
     >>> output = model.generate(**inputs, no_repeat_ngram_size=2)
     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    Today I’m not sure if I can get a better understanding of the nature of this issue
+    Today I'm not sure if I can get a better understanding of the nature of this issue
     ```
     """
 
