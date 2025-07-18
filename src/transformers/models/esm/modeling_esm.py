@@ -764,6 +764,9 @@ class EsmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, EsmLMHead):
             module.bias.data.zero_()
 
+    def get_output_embeddings(self):
+        return None
+
 
 @auto_docstring
 class EsmModel(EsmPreTrainedModel):
