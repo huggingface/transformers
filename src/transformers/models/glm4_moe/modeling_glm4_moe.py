@@ -221,8 +221,8 @@ class Glm4MoeMLP(nn.Module):
 
 
 class Glm4MoeTopkRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config: Glm4MoeConfig):
+        super().__init__(config)
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
@@ -232,7 +232,6 @@ class Glm4MoeTopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
 
     @torch.no_grad()
@@ -395,17 +394,14 @@ class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Glm4MoePreTrainedModel(PreTrainedModel):
-    config_class = Glm4MoeConfig
+    config: Glm4MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4MoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
     _supports_static_cache = False
     _supports_attention_backend = True
     _can_record_outputs = {

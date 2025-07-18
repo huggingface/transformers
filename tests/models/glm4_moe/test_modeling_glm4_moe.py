@@ -40,12 +40,6 @@ class Glm4MoeModelTester(CausalLMModelTester):
         base_model_class = Glm4MoeModel
         causal_lm_class = Glm4MoeForCausalLM
 
-    def __init__(
-        self,
-        parent,
-    ):
-        super().__init__(parent)
-
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
