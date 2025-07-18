@@ -71,6 +71,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -2286,11 +2287,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             repo_id, kernel_name = attn_implementation.split(":")
             kernel_name = kernel_name.strip()
             repo_id = repo_id.strip()
-
             try:
                 kernel = get_kernel(repo_id)
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
-                attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                if "flash_attention" in kernel_name:
+                    ALL_ATTENTION_FUNCTIONS[repo_id] = partial(flash_attention_forward, implementation=kernel)
+                elif "paged_atention" in kernel_name:
+                    ALL_ATTENTION_FUNCTIONS[repo_id] = partial(paged_attention_forward, implementation=kernel)
+                else:
+                    ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
+                ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
+                    "flash_attention_2"
+                ]
+                attn_implementation = repo_id
             except FileNotFoundError as e:
                 logger.warning(
                     f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."

@@ -38,7 +38,6 @@ def flash_attention_forward(
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
         )
-
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
@@ -76,6 +75,7 @@ def flash_attention_forward(
         use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
+        layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
         **kwargs,
     )
 

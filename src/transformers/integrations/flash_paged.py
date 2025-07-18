@@ -20,6 +20,7 @@ def paged_attention_forward(
     max_seqlen_q=None,
     max_seqlen_k=None,
     block_tables=None,
+    implementation=None,
     **kwargs,
 ) -> torch.Tensor:
     r"""Perform the forward pass of attention with paged key-value cache.
@@ -46,6 +47,8 @@ def paged_attention_forward(
     """
     k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
 
+    if implementation is not None:
+        flash_attn_varlen_func = implementation.flash_attn_varlen_func
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0),
         k.transpose(1, 2).squeeze(0),
