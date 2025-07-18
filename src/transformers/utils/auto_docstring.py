@@ -1901,8 +1901,7 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
     for common arguments (like `input_ids`, `attention_mask`, etc.), and generates complete documentation
     including examples and return value descriptions.
 
-    For complete documentation and examples, see: https://huggingface.co/docs/transformers/en/auto_docstring
-
+    For complete documentation and examples, read this [guide](https://huggingface.co/docs/transformers/auto_docstring).
 
     Examples of usage:
 

@@ -92,7 +92,7 @@ class MySpecialModel(PreTrainedModel):
         # ...
 ```
 
-You should also use the `@auto_docstring` decorator for custom `ModelOutput` classes (dataclasses that inherit from `ModelOutput`).
+You should also use the `@auto_docstring` decorator for classes that inherit from [`~utils.ModelOutput`].
 
 ```python
 @dataclass
