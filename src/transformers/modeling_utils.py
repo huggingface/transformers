@@ -1395,7 +1395,7 @@ def _get_torch_dtype(
 
 def _get_device_map(
     model: "PreTrainedModel",
-    device_map: Optional[Union[str, dict]],
+    device_map: Optional[Union[dict, str]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
@@ -2373,7 +2373,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return model
 
     @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
+    def _check_attn_implementation(cls, attn_implementation: Union[dict, str]) -> Union[dict, str]:
         """
         Checks that the requested attention implementation exists and tries to get the kernel from hub
         if `attn_implementation` matches hf kernels pattern.
@@ -2421,7 +2421,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return attn_implementation
 
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+    def set_attention_implementation(self, attn_implementation: Union[dict, str]):
         """
         Checks and dispatches to the requested attention implementation.
         """
