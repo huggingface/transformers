@@ -1427,12 +1427,12 @@ if __name__ == "__main__":
         target_results = matrix_job_results
     else:
         default_result = {
-        "failed": {"unclassified": 0, "single": 0, "multi": 0},
-        "success": 0,
-        "time_spent": "",
-        "error": False,
-        "failures": {},
-        "job_link": {},
+            "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "success": 0,
+            "time_spent": "",
+            "error": False,
+            "failures": {},
+            "job_link": {},
         }
 
         key = job_to_test_map.get(job_name)
