@@ -276,14 +276,14 @@ class GotOcr2VisionLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GotOcr2PreTrainedModel(PreTrainedModel):
-    config_class = GotOcr2Config
+    config: GotOcr2Config
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_flex_attn = True
     _supports_attention_backend = True

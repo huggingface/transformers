@@ -438,7 +438,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
                     size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
                     interpolation=interpolation,
                 )
-            split_images_grouped[shape] = stacked_images
+                split_images_grouped[shape] = stacked_images
             processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
             rows = [[0] * len(images) for images in processed_images]
             cols = [[0] * len(images) for images in processed_images]
