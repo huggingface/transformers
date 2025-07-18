@@ -564,18 +564,16 @@ class BagelTextAttention(nn.Module):
         mode: Optional[str] = "und",
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        is_causal = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
+        self.is_causal = is_causal
 
         if mode == "und":
-            query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-            key_states = (
-                self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            )
-            value_states = (
-                self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            )
+            query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim)
+            key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+            value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim)
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
         elif mode == "gen":
@@ -608,7 +606,12 @@ class BagelTextAttention(nn.Module):
             key_states[vae_indices] = self.k_norm_generation(key_states[vae_indices])
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
+
+        key_states = key_states.transpose(1, 2).contiguous()
+        query_states = query_states.transpose(1, 2).contiguous()
+        value_states = value_states.transpose(1, 2).contiguous()
+
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -619,17 +622,38 @@ class BagelTextAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            is_causal=True,
-            **kwargs,
-        )
+        if self.config._attn_implementation == "flash_attention_2":
+            # Flash Attention 2: Use cu_seqlens for variable length attention
+            cu_seqlens_q = torch.tensor([0, q_len], dtype=torch.int32, device=query_states.device)
+            cu_seqlens_k = torch.tensor([0, key_states.shape[2]], dtype=torch.int32, device=key_states.device)
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens_q,
+                cu_seq_lens_k=cu_seqlens_k,
+                max_length_q=q_len,
+                max_length_k=key_states.shape[2],
+                is_causal=is_causal,
+                **kwargs,
+            )
+        else:
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                is_causal=is_causal,
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -663,6 +687,7 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        is_causal = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -684,6 +709,7 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            is_causal=is_causal,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -753,6 +779,7 @@ class BagelTextModel(BagelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         mode: Optional[str] = None,
+        is_causal = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -817,6 +844,7 @@ class BagelTextModel(BagelPreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                is_causal=is_causal,
                 **flash_attn_kwargs,
             )
 
@@ -1263,6 +1291,7 @@ class BagelModel(BagelPreTrainedModel):
         self.latent_channel = config.vq_config.latent_channels
         self.latent_patch_size = config.vq_config.latent_patch_size
         self.patch_latent_dim = self.latent_patch_size**2 * self.latent_channel
+        self.latent_downsample = self.latent_patch_size*self.config.vq_config.downsample,
 
         self.vision_tower = BagelVisionTransformer(config.vision_config)
         self.language_model = BagelTextModel(config.text_config)
@@ -1334,12 +1363,34 @@ class BagelModel(BagelPreTrainedModel):
         image_embeddings = image_embeddings + pos_embed
         return image_embeddings
 
+    def get_latent_features(
+        self,
+        pixel_values: torch.Tensor,
+        timesteps:torch.Tensor,
+        **kwargs,
+    ):
+        # Need to handle the num image tokens
+        position_ids = get_flattened_position_ids_extrapolate(
+            pixel_values.size(-2),
+            pixel_values.size(-1),
+            self.latent_downsample,
+            max_num_patches_per_side=self.config.max_latent_size,
+        )
+        latent_embeddings = self.vq_model.encode(pixel_values)
+        # Still need to add the einsum part here
+
+        pos_embed = self.latent_pos_embed[position_ids]
+        timestep_embeds = self.timestep_embedder(timesteps)
+        latent_embeddings = self.vae2llm_connector(latent_embeddings) + pos_embed + timestep_embeds
+        return latent_embeddings
+
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        mode: str = "und",
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
@@ -1348,23 +1399,52 @@ class BagelModel(BagelPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
+
+        # append boi and eoi tokens embeddings and pass through qwen
+        boi_token_id, eoi_token_id = 151652,151653
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values=pixel_values)
+            boi_embed = self.get_input_embeddings()(torch.tensor([boi_token_id], device=image_embeds.device))  # [1, D]
+            eoi_embed = self.get_input_embeddings()(torch.tensor([eoi_token_id], device=image_embeds.device))  # [1, D]
+
+            B = image_embeds.size(0)
+            boi_embed = boi_embed.expand(B, 1, -1)
+            eoi_embed = eoi_embed.expand(B, 1, -1)
+
+            image_embeds = torch.cat([boi_embed, image_embeds, eoi_embed], dim=1) 
+
+        image_seq_len = image_embeds.size(1)
+        image_position_ids = torch.zeros((B, image_seq_len), dtype=torch.long, device=image_embeds.device)
+
+        # Should combine the flow and create custom attn mask with bidirectional attention
+        # for image tokemns and causal atttn for text tokens
+        outputs = self.language_model(
+            inputs_embeds=image_embeds,
+            attention_mask=attention_mask,
+            position_ids=image_position_ids,
+            past_key_values=past_key_values,
+            use_cache=True,
+            cache_position=cache_position,
+            mode=mode,
+            is_causal=False,
+            **kwargs,
+        )
+
+        # boi+image_tokens+eoi+bos+text_tokens+eos
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values=pixel_values)
-            # boi+image_tokens+eoi+bos+text_tokens+eos
-            inputs_embeds = torch.cat([inputs_embeds, image_embeds], dim=1)
-            # Correctly place the image embeds once proc is ready.
-
+        text_seq_len = input_ids.size(1)
+        text_position_ids = torch.arange(1, text_seq_len + 1, device=input_ids.device).unsqueeze(0).expand(B, -1)
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+            past_key_values=outputs.past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             mode="und",
+            is_causal=True,
             **kwargs,
         )
         return outputs
@@ -1387,6 +1467,12 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
+
+    def forward_flow(self, timestep):
+
+        timestep_pos_embed = self.model.latent_pos_embed(timestep)
+        return timestep_pos_embed
+
 
     @can_return_tuple
     @auto_docstring
