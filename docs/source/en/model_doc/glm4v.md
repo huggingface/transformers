@@ -23,6 +23,29 @@ rendered properly in your Markdown viewer.
 
 # GLM-4.1V
 
+## Overview
+
+**GLM-4.1V-9B-Thinking** is a bilingual vision-language model optimized for reasoning, built on GLM-4-9B. It introduces
+a "thinking paradigm" with reinforcement learning, achieving state-of-the-art results among 10B-class models and
+rivaling 72B-scale models. It supports 64k context, 4K resolution, and arbitrary aspect ratios, with an open-source base
+model for further research. You can check our paper [here](https://huggingface.co/papers/2507.01006). and below is a abstract.
+
+*We present GLM-4.1V-Thinking, a vision-language model (VLM) designed to advance general-purpose multimodal understanding
+and reasoning. In this report, we share our key findings in the development of the reasoning-centric training framework.
+We first develop a capable vision foundation model with significant potential through large-scale pre-training, which
+arguably sets the upper bound for the final performance. We then propose Reinforcement Learning with Curriculum
+Sampling (RLCS) to unlock the full potential of the model, leading to comprehensive capability enhancement across a
+diverse range of tasks, including STEM problem solving, video understanding, content recognition, coding, grounding,
+GUI-based agents, and long document understanding. We open-source GLM-4.1V-9B-Thinking, which achieves state-of-the-art
+performance among models of comparable size. In a comprehensive evaluation across 28 public benchmarks, our model
+outperforms Qwen2.5-VL-7B on nearly all tasks and achieves comparable or even superior performance on 18 benchmarks
+relative to the significantly larger Qwen2.5-VL-72B. Notably, GLM-4.1V-9B-Thinking also demonstrates competitive or
+superior performance compared to closed-source models such as GPT-4o on challenging tasks including long document
+understanding and STEM reasoning, further underscoring its strong capabilities. Code, models and more information
+are released at https://github.com/THUDM/GLM-4.1V-Thinking.*
+
+## Usage
+
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">

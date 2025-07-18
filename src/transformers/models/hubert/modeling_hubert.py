@@ -306,7 +306,6 @@ class HubertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -680,11 +679,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
 @auto_docstring
 class HubertPreTrainedModel(PreTrainedModel):
-    config_class = HubertConfig
+    config: HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -954,16 +953,14 @@ class HubertModel(HubertPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, HubertModel
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1230,9 +1227,10 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
+            into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

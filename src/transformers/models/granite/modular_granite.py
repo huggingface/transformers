@@ -21,10 +21,9 @@ from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -141,7 +140,7 @@ class GraniteModel(LlamaModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -206,7 +205,7 @@ class GraniteModel(LlamaModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -228,9 +227,6 @@ class GraniteModel(LlamaModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class GraniteForCausalLM(LlamaForCausalLM):
     def forward(
         self,
@@ -245,7 +241,7 @@ class GraniteForCausalLM(LlamaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

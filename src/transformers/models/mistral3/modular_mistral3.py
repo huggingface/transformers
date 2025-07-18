@@ -19,16 +19,17 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import is_torchdynamo_compiling, logging
 from ..llava.modeling_llava import (
-    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
 from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
@@ -181,7 +182,7 @@ class Mistral3Model(LlavaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         use_cache: Optional[bool] = None,
@@ -277,7 +278,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -287,7 +288,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Mistral3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

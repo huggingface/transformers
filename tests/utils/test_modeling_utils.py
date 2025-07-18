@@ -158,6 +158,38 @@ if is_torch_available():
         def forward(self, x):
             return self.linear2(self.linear(self.base(x)))
 
+    class ModelWithDirectParam(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            # direct params and submodules is helpful for testing offloading logic
+            self.weight = nn.Parameter(torch.rand((5, 5)))
+            self.base = BaseModel(config)
+
+        def forward(self, x):
+            return self.base(x @ self.weight.T)
+
+    class ModelWithDirectParamSubmodule(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.submodule = ModelWithDirectParam(config)
+            # needed so model can have at least one module on accelerator
+            self.linear = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.linear(self.submodule(x))
+
     class ModelWithHeadAndTiedWeights(PreTrainedModel):
         base_model_prefix = "base"
         config_class = PretrainedConfig
@@ -1187,6 +1219,42 @@ class ModelUtilsTest(TestCasePlus):
         torch.testing.assert_close(output, presaved_output, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(presaved_output, postsaved_output)
 
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_save_offloaded_model_with_direct_params(self):
+        from accelerate import dispatch_model
+
+        device_map = {"submodule": "cpu", "linear": f"{torch_device}:0"}
+        model = ModelWithDirectParamSubmodule(PretrainedConfig())
+        dispatch_model(model, device_map)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_save_offloaded_model_dynamic_tied_weights_keys(self):
+        from accelerate import dispatch_model
+
+        device_map = {"base": f"{torch_device}:0", "linear": "cpu", "linear2": "cpu"}
+        model = ModelWithHead(PretrainedConfig())
+        dispatch_model(model, device_map)
+
+        transform_a = torch.nn.Linear(1, 1, bias=False)
+        transform_a._dynamic_tied_weights_keys = ["weight"]
+        transform_b = torch.nn.Linear(1, 1, bias=False)
+        transform_b._dynamic_tied_weights_keys = ["weight"]
+
+        model.linear.register_module("transform_a", transform_a)
+        model.linear.register_module("transform_b", transform_b)
+        model.linear2.register_module("transform_a", transform_a)
+        model.linear2.register_module("transform_b", transform_b)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
     @require_safetensors
     def test_use_safetensors(self):
         # Should not raise anymore
@@ -1935,6 +2003,37 @@ class ModelUtilsTest(TestCasePlus):
             # The serialized weights should be in model.safetensors and not the transformers_weights
             self.assertTrue(explicit_transformers_weights not in os.listdir(tmpdirname))
             self.assertTrue("model.safetensors.index.json" in os.listdir(tmpdirname))
+
+    def test_config_class_attribute(self):
+        # custom configs
+        class MyConfigA(PretrainedConfig):
+            pass
+
+        class MyConfigB(PretrainedConfig):
+            pass
+
+        class MyConfigC(PretrainedConfig):
+            pass
+
+        # custom models
+        class MyModelA(PreTrainedModel):
+            config: dict
+            config_class = MyConfigA
+
+        class MyModelB(MyModelA):
+            config: MyConfigB
+
+        class MyModelC(MyModelA):
+            config_class = MyConfigC
+
+        class MyModelD(MyModelA):
+            pass
+
+        # child config_class > child 'config:' > parent config_class > parent 'config:'
+        self.assertIs(MyModelA.config_class, MyConfigA)
+        self.assertIs(MyModelB.config_class, MyConfigB)
+        self.assertIs(MyModelC.config_class, MyConfigC)
+        self.assertIs(MyModelD.config_class, MyConfigA)
 
 
 @slow

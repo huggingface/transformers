@@ -40,7 +40,14 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_flex_attn_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from .generation_dia import DiaGenerationMixin
 
@@ -54,13 +61,12 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class DiaPreTrainedModel(PreTrainedModel):
-    config_class = DiaConfig
+    config: DiaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
     _supports_static_cache = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
@@ -150,7 +156,7 @@ class DiaRotaryEmbedding(nn.Module):
     def __init__(self, config: DiaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -234,7 +240,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -280,8 +286,8 @@ class DiaSelfAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

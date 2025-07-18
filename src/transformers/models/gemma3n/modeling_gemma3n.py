@@ -41,6 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
@@ -913,7 +914,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
 class Gemma3nAudioEncoder(PreTrainedModel):
     """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
 
-    config_class = Gemma3nAudioConfig
+    config: Gemma3nAudioConfig
 
     main_input_name = "audio_mel"
 
@@ -1152,7 +1153,7 @@ class Gemma3nTextRotaryEmbedding(nn.Module):
     def __init__(self, config: Gemma3nTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -1480,19 +1481,21 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Gemma3nPreTrainedModel(PreTrainedModel):
-    config_class = Gemma3nConfig
+    config: Gemma3nConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_3 = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Gemma3nTextDecoderLayer,
+        "attentions": Gemma3nTextAttention,
+    }
 
     def _init_weights(self, module):
         # important: this ported version of Gemma2 isn't meant for training from scratch - only
@@ -1520,7 +1523,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3nPreTrainedModel):
-    config_class = Gemma3nTextConfig
+    config: Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):
         super().__init__(config)
@@ -1599,7 +1602,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         per_layer_inputs (torch.Tensor, *optional*, defaults to None):
@@ -1702,7 +1705,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -1777,7 +1780,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = Gemma3nTextConfig
+    config: Gemma3nTextConfig
     base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
 
@@ -1823,14 +1826,9 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1868,7 +1866,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **loss_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
@@ -1882,7 +1880,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -2181,7 +2179,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         Args:
             input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
                The tensors corresponding to the input audio.
-            input_features (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+            input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
                The attention mask for the input audio.
 
         Returns:
@@ -2264,8 +2262,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         **lm_kwargs,
     ) -> Gemma3nCausalLMOutputWithPast:
         r"""
-        input_features (torch.Tensor, *optional*, defaults to None):
-            The audio inputs to be encoded.
         input_features_mask (torch.Tensor, *optional*, defaults to None):
             The attention mask for the input audio.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

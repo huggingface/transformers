@@ -31,7 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -1475,7 +1475,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
 class Gemma3nAudioEncoder(PreTrainedModel):
     """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
 
-    config_class = Gemma3nAudioConfig
+    config: Gemma3nAudioConfig
 
     main_input_name = "audio_mel"
 
@@ -1912,7 +1912,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
 
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
-    config_class = Gemma3nConfig
+    config: Gemma3nConfig
     base_model_prefix = ""
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
@@ -1942,7 +1942,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3TextModel):
-    config_class = Gemma3nTextConfig
+    config: Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):
         super().__init__(config)
@@ -2038,7 +2038,7 @@ class Gemma3nTextModel(Gemma3TextModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         per_layer_inputs (torch.Tensor, *optional*, defaults to None):
@@ -2141,7 +2141,7 @@ class Gemma3nTextModel(Gemma3TextModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -2450,7 +2450,7 @@ class Gemma3nModel(PaliGemmaModel):
         Args:
             input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
                The tensors corresponding to the input audio.
-            input_features (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+            input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
                The attention mask for the input audio.
 
         Returns:
@@ -2503,8 +2503,6 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         **lm_kwargs,
     ) -> Gemma3nCausalLMOutputWithPast:
         r"""
-        input_features (torch.Tensor, *optional*, defaults to None):
-            The audio inputs to be encoded.
         input_features_mask (torch.Tensor, *optional*, defaults to None):
             The attention mask for the input audio.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

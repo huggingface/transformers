@@ -13,7 +13,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -24,7 +23,8 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from .configuration_phi import PhiConfig
 
 
@@ -85,7 +85,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -258,7 +258,7 @@ class PhiRotaryEmbedding(nn.Module):
     def __init__(self, config: PhiConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -290,19 +290,21 @@ class PhiRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class PhiPreTrainedModel(PreTrainedModel):
-    config_class = PhiConfig
+    config: PhiConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PhiDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_3 = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": PhiDecoderLayer,
+        "attentions": PhiAttention,
+    }
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -344,7 +346,7 @@ class PhiModel(PhiPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -357,7 +359,7 @@ class PhiModel(PhiPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -421,7 +423,7 @@ class PhiModel(PhiPreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -441,9 +443,6 @@ class PhiModel(PhiPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring
@@ -490,11 +489,9 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -518,12 +515,6 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -531,8 +522,6 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             **kwargs,
         )
@@ -596,8 +585,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -613,8 +601,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
@@ -690,8 +677,7 @@ class PhiForTokenClassification(PhiPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -707,8 +693,7 @@ class PhiForTokenClassification(PhiPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         sequence_output = outputs.last_hidden_state
         sequence_output = self.dropout(sequence_output)

@@ -29,7 +29,15 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoProcessor, AutoTokenizer, is_torch_available, logging, pipeline
+from transformers import (
+    AutoConfig,
+    AutoProcessor,
+    AutoTokenizer,
+    PreTrainedModel,
+    is_torch_available,
+    logging,
+    pipeline,
+)
 from transformers.testing_utils import (
     CaptureLogger,
     is_flaky,
@@ -993,7 +1001,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -1022,7 +1030,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -1062,10 +1070,8 @@ class GenerationTesterMixin:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support contrastive search generation")
 
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
-                self.skipTest(reason="TODO: fix me")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
@@ -1104,22 +1110,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
                     "moshi",
-                    "speech2text",
                     "git",
                     "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
                     "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()` all BLIP models
                     "instructblip",
                     "instructblipvideo",
                 ]
@@ -1188,23 +1188,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
                     "moshi",
-                    "speech2text",
                     "git",
                     "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
-                    "fuyu",
                     "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
                     # All models below: shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
@@ -1332,22 +1325,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
                     "moshi",
-                    "speech2text",
                     "git",
                     "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
                     "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
                 ]
@@ -1694,6 +1681,7 @@ class GenerationTesterMixin:
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
@@ -1703,8 +1691,10 @@ class GenerationTesterMixin:
                 continue
             config.is_decoder = True
 
+            set_config_for_less_flaky_test(config)
             # Skip models without explicit support
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue
 
@@ -2004,7 +1994,7 @@ class GenerationTesterMixin:
             max_new_tokens = 20
 
             for dtype in (torch.float32, torch.float16):
-                model = model_class(config).to(torch_device).to(dtype).eval()
+                model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
                 inputs_dict = {
                     k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
                     for k, v in inputs_dict.items()
@@ -2048,12 +2038,15 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_quantized_cache:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if (
+                config.get_text_config(decoder=True).is_encoder_decoder
+                or not model_class._supports_default_dynamic_cache()
+            ):
                 self.skipTest(reason="This model does not support the quantized cache format")
 
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             config.is_decoder = True
-
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
                 "max_new_tokens": 5,
@@ -2085,6 +2078,7 @@ class GenerationTesterMixin:
 
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._supports_static_cache:
@@ -2092,7 +2086,9 @@ class GenerationTesterMixin:
 
             # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
+            set_config_for_less_flaky_test(config)
             model = model_class(config).to(torch_device)
+            set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
 
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
@@ -2298,13 +2294,14 @@ class GenerationTesterMixin:
         NOTE: despite the test logic being the same, different implementations actually need different decorators, hence
         this separate function.
         """
-        max_new_tokens = 30
+        max_new_tokens = 3
         support_flag = {
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn_2",
             "flash_attention_3": "_supports_flash_attn_3",
         }
 
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             if not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
@@ -2330,7 +2327,20 @@ class GenerationTesterMixin:
             if hasattr(config, "max_position_embeddings"):
                 config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
 
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
+
+            # If not all sub-models support flex, skip the test. We could potentially set not supported backbones
+            # to "eager" attention, leaving it for future updates on multimodality tests
+            sub_models_supporting_attn = [
+                getattr(module, support_flag[attn_implementation])
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            if not all(sub_models_supporting_attn) and len(sub_models_supporting_attn) > 0:
+                self.skipTest(
+                    f"One of {model_class.__name__}'s backbones does not support `attn_implementation={attn_implementation}`"
+                )
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -2350,6 +2360,7 @@ class GenerationTesterMixin:
                     torch_dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
+                set_model_for_less_flaky_test(model_eager)
                 res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
                 del model_eager
                 gc.collect()
@@ -2359,6 +2370,7 @@ class GenerationTesterMixin:
                     torch_dtype=torch.float16,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
+                set_model_for_less_flaky_test(model_attn)
                 res_attn = model_attn.generate(**inputs_dict, **generate_kwargs)
                 del model_attn
                 gc.collect()
@@ -2479,20 +2491,17 @@ class GenerationTesterMixin:
         # Past Key Value States -- a few notes here:
         # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
         # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
-        #    standard cache format (e.g.gptbigcode )
+        #    standard cache format (e.g.mamba architecture )
         models_without_standard_cache = (
             "bamba",
-            "ctrl",
-            "fsmt",
             "granitemoehybrid",
-            "gptbigcode",
-            "mega",
             "reformer",
             "jamba",
             "mamba",
             "xlnet",
             "zamba",
             "zamba2",
+            "lfm2",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
@@ -2879,6 +2888,53 @@ class GenerationIntegrationTests(unittest.TestCase):
                 " name of Timberlake's maternal grandfather. It's also his own middle name.",
             ],
         )
+
+    @slow
+    def test_beam_search_early_stop_heuristic(self):
+        """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
+        EXPECTED_OUTPUT = (
+            "<|user|>\nWhat is 3+5?\n<|assistant|>\nThe sum of 3 and 5 is 8. \n\nSo, 3 + 5 = 8. \n\n"
+            "Let's confirm this using Python code:\n\n```python\n# Define the numbers\nnum1 = 3\nnum2 = 5\n\n"
+            "# Calculate the sum\nresult = num1 + num2\n\n# Print the result\nprint(result)\n```\n"
+            "```output\n8\n```\nThe sum of 3 and 5 is \\(\\boxed{8}\\)."
+        )
+
+        model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B-Instruct").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-2-0425-1B-Instruct", padding_side="left")
+        generation_config = GenerationConfig(
+            num_beams=10,
+            max_new_tokens=256,
+            length_penalty=2,
+        )
+        # batch of 1
+        question = [{"role": "user", "content": "What is 3+5?"}]
+        question = tokenizer.apply_chat_template(
+            question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
+        )
+        inputs = tokenizer(question, return_tensors="pt", padding=True).to("cuda")
+        outputs = model.generate(**inputs, generation_config=generation_config)
+        responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        self.assertEqual(responses[0], EXPECTED_OUTPUT)
+
+        # batch of 2
+        question = [{"role": "user", "content": "What is 3+5?"}]
+        cot_question = [
+            {
+                "role": "user",
+                "content": "What is 3+5? Explain your reasoning step by step, and provide the final answer at the end.",
+            }
+        ]
+        question = tokenizer.apply_chat_template(
+            question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
+        )
+        cot_question = tokenizer.apply_chat_template(
+            cot_question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
+        )
+        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to("cuda")
+
+        outputs = model.generate(**inputs, generation_config=generation_config)
+        responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        self.assertEqual(responses[0], EXPECTED_OUTPUT)
 
     def test_max_length_if_input_embeds(self):
         article = "Today a dragon flew over Paris."

@@ -56,6 +56,8 @@ if TYPE_CHECKING:
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("aimv2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("aimv2_vision_model", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
@@ -132,6 +134,7 @@ else:
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
+            ("perception_lm", ("PerceptionLMImageProcessorFast",)),
             ("phi4_multimodal", ("Phi4MultimodalImageProcessorFast",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
@@ -209,7 +212,7 @@ def get_image_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractors in IMAGE_PROCESSOR_MAPPING._extra_content.items():
+    for extractors in IMAGE_PROCESSOR_MAPPING._extra_content.values():
         for extractor in extractors:
             if getattr(extractor, "__name__", None) == class_name:
                 return extractor
@@ -530,7 +533,7 @@ class AutoImageProcessor:
                 )
                 use_fast = False
             if use_fast:
-                for _, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+                for image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.values():
                     if image_processor_type in image_processors:
                         break
                 else:
@@ -597,7 +600,6 @@ class AutoImageProcessor:
                     raise ValueError(
                         "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
                     )
-
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "

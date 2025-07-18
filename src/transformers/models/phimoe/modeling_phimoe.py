@@ -31,7 +31,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils.generic import TransformersKwargs
 from .configuration_phimoe import PhimoeConfig
 
 
@@ -319,7 +321,7 @@ class PhimoeAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class PhimoeFlashAttention2(PhimoeAttention):
@@ -417,7 +419,7 @@ class PhimoeFlashAttention2(PhimoeAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class PhimoeSdpaAttention(PhimoeAttention):
@@ -505,7 +507,7 @@ class PhimoeSdpaAttention(PhimoeAttention):
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None
 
 
 PHIMOE_ATTENTION_CLASSES = {
@@ -849,7 +851,7 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -872,9 +874,6 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
@@ -883,15 +882,14 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class PhimoePreTrainedModel(PreTrainedModel):
-    config_class = PhimoeConfig
+    config: PhimoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PhimoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
@@ -947,7 +945,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -976,19 +974,12 @@ class PhimoeModel(PhimoePreTrainedModel):
                 )
                 use_cache = False
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                )
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1013,7 +1004,6 @@ class PhimoeModel(PhimoePreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -1033,9 +1023,6 @@ class PhimoeModel(PhimoePreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -1048,13 +1035,9 @@ class PhimoeModel(PhimoePreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
@@ -1261,7 +1244,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1270,7 +1253,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> MoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1329,7 +1312,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
         if output_router_logits:
@@ -1433,8 +1416,7 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1450,8 +1432,7 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)

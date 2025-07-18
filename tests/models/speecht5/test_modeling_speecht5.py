@@ -354,9 +354,9 @@ class SpeechT5ForSpeechToTextTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -764,7 +764,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
@@ -1792,7 +1792,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
