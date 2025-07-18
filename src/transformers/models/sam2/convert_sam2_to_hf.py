@@ -69,6 +69,7 @@ def get_config(model_name):
             window_spec=(8, 4, 16, 8),
         )
         vision_config = Sam2VisionConfig(
+            backbone_config=hiera_det_config,
             backbone_channel_list=[1152, 576, 288, 144],
         )
     prompt_encoder_config = Sam2PromptEncoderConfig()
@@ -252,7 +253,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
         assert torch.allclose(scores, torch.tensor([0.0364, 0.9773, 0.1285]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_large":
         # [0.96484375 0.03613281 0.19042969]
-        assert torch.allclose(scores, torch.tensor([0.9660, 0.0362, 0.1927]).cuda(), atol=1e-3)
+        assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1898]).cuda(), atol=1e-3)
     elif model_name == "sam2_hiera_tiny":
         assert torch.allclose(scores, torch.tensor([0.0439, 0.9567, 0.1415]).cuda(), atol=1e-3)
     elif model_name == "sam2_hiera_small":
@@ -272,7 +273,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
         hf_model.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
-        repo_id = f"danelcsb/{model_name}"
+        repo_id = f"yonigozlan/{pytorch_dump_folder.split('/')[-1]}"
         processor.push_to_hub(repo_id)
         hf_model.push_to_hub(repo_id)
 
