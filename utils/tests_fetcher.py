@@ -328,8 +328,6 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         new_imported_modules_from_import_structure = define_import_structure("src/transformers/__init__.py")
         for mapping in new_imported_modules_from_import_structure.values():
             for _module, _imports in mapping.items():
-                # Import Structure returns _module keys as import paths rather than local paths
-                # We replace with os.path.sep so that it's Windows-compatible
                 for _import in _imports:
                     reversed_structure[_import] = _module
 
