@@ -156,9 +156,9 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         # sequence parallel is pretty slow
-        #"norm.weight": "sequence_parallel",
-        #"layers.*.input_layernorm.weight": "sequence_parallel",
-        #"layers.*.post_attention_layernorm.weight": "sequence_parallel",
+        # "norm.weight": "sequence_parallel",
+        # "layers.*.input_layernorm.weight": "sequence_parallel",
+        # "layers.*.post_attention_layernorm.weight": "sequence_parallel",
         "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
         "layers.*.mlp.shared_experts.up_proj": "local_colwise",
         "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
