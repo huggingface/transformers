@@ -812,8 +812,9 @@ class BLTCrossAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.q_norm = BLTRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = BLTRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        # needs to stay hidden_size, NOT head_dim
+        self.q_norm = BLTRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.k_norm = BLTRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.is_causal = False
 
     def forward(
@@ -829,17 +830,18 @@ class BLTCrossAttention(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         bsz, q_len, _ = hidden_states.size()
-        query_states = self.q_proj(hidden_states)
+
+        query_states = self.q_norm(hidden_states)  # BLT normalizes first
+        query_states = self.q_proj(query_states)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = self.q_norm(query_states)
+
 
         if cross_attention_states is not None:
+            cross_attention_states = self.k_norm(cross_attention_states)  # BLT normalizes first
             key_states = self.k_proj(cross_attention_states)
             value_states = self.v_proj(cross_attention_states)
             key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
             value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-            key_states = self.k_norm(key_states)
             if past_key_value is not None:
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
@@ -880,6 +882,7 @@ class BLTCrossAttention(nn.Module):
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+        attn_output = attn_output + hidden_states
 
         if not output_attentions:
             attn_weights = None
