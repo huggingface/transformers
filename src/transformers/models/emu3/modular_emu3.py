@@ -902,7 +902,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
 
 class Emu3Model(Emu3PreTrainedModel):
     _checkpoint_conversion_mapping = {"text_model.model": "text_model"}
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
 
     def __init__(self, config):
         super().__init__(config)
@@ -1045,7 +1044,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         "^vqmodel": "model.vqmodel",
         "^text_model.lm_head": "lm_head",
     }
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
 
     def __init__(self, config):
         super().__init__(config)

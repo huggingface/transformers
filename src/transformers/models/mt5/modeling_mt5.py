@@ -757,7 +757,7 @@ class MT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]

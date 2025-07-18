@@ -4404,7 +4404,7 @@ class ModelTesterMixin:
         set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
+            if not model_class._can_compile_fullgraph:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             set_config_for_less_flaky_test(config)
