@@ -1959,23 +1959,39 @@ class EmbeddingAccessMixin:
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
             )
 
-    def get_output_embeddings(self) -> nn.Module:
+    def _has_token_embeddings(self) -> bool:
         """
-        Returns the model's output embedding, defaulting to lm_head.
-
-        Returns:
-            `nn.Module`: A torch module mapping hidden states to vocabulary.
+        Heuristic. True if a real text model (can resize / tie / share embeddings)
+        False if speech / vision backbone or helper head (no token embs)
         """
+        # direct attribute on self
+        if hasattr(self, "embed_tokens"):
+            return True
 
+        # common encoder–decoder layout: self.model.embed_tokens
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            return True
+
+        # did the subclass override get_input_embeddings?
+        if self.__class__.get_input_embeddings is not EmbeddingAccessMixin.get_input_embeddings:
+            return True
+
+        # one-level indirection via base_model_prefix, if it exists
+        base_prefix = getattr(self, "base_model_prefix", None)
+        if base_prefix is not None:
+            base_model = getattr(self, base_prefix, None)
+            if base_model is not None and base_model is not self:
+                return getattr(base_model, "embed_tokens", None) is not None
+
+        return False
+
+    def get_output_embeddings(self):
         if not hasattr(self, "lm_head"):
             return None
-        try:
-            # Speech / vision backbones raise here, so we return None.
-            # Legit use of get_input_embs?
-            self.get_input_embeddings()
-        except NotImplementedError:
+        if not self._has_token_embeddings():
             return None
         return self.lm_head
+
 
     def set_output_embeddings(self, new_embeddings):
         """
