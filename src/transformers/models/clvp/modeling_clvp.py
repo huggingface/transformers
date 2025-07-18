@@ -1183,8 +1183,6 @@ class ClvpModel(ClvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.input_embeds_layer = value
 
-
-
     @auto_docstring
     def forward(
         self,

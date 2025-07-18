@@ -1976,8 +1976,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will

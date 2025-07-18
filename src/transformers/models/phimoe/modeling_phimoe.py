@@ -1208,8 +1208,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         self.post_init()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
-    def set_decoder(self, decoder):
-        self.model = decoder
+
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
 

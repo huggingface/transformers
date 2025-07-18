@@ -1514,8 +1514,6 @@ class UdopModel(UdopPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     @auto_docstring
     def forward(
         self,
@@ -1711,8 +1709,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
 
     def get_encoder(self):
         return self.encoder
-
-
 
     @auto_docstring
     def forward(

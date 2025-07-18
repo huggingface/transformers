@@ -992,8 +992,6 @@ class WhisperModel(WhisperPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
@@ -1355,8 +1353,6 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

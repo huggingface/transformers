@@ -679,8 +679,6 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-
-
     @auto_docstring
     # Ignore copy
     def forward(
@@ -1368,8 +1366,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     def get_encoder(self):
         # get the text encoder to compute the conditioning hidden-states for generation
         return self.get_text_encoder()
-
-
 
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()

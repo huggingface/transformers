@@ -809,8 +809,6 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         )
         self.config = config
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     @unpack_inputs

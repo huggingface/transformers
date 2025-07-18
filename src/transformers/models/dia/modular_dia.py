@@ -555,8 +555,6 @@ class DiaModel(DiaPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     @auto_docstring
     @can_return_tuple
     def forward(

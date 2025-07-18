@@ -1731,8 +1731,6 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     @add_start_docstrings_to_model_forward(XLM_PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=XLMProphetNetSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(

@@ -1700,8 +1700,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     def get_video_features(

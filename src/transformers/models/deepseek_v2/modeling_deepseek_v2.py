@@ -576,8 +576,6 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     @can_return_tuple

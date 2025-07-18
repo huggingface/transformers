@@ -1004,8 +1004,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         hidden_state = self.model.generation_aligner(hidden_state)
         return hidden_state
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     @can_return_tuple

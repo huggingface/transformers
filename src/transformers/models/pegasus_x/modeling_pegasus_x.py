@@ -1437,8 +1437,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings matrix of the model if `new_num_position_embeddings !=

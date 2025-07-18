@@ -2965,12 +2965,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return inner.get_decoder()
             return inner
 
-        return None # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
+        return None  # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
 
     def set_decoder(self, decoder):
         """
         Symmetric setter. Mirrors the lookup logic used in `get_decoder`.
         """
+
         if hasattr(self, "decoder"):
             self.decoder = decoder
             return
@@ -2983,7 +2984,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model = decoder
             return
 
-        return # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
+        return  # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
 
     def _init_weights(self, module):
         """

@@ -672,8 +672,6 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     @add_start_docstrings_to_model_forward(OPEN_LLAMA_INPUTS_DOCSTRING)

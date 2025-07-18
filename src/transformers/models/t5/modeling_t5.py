@@ -1366,8 +1366,6 @@ class T5Model(T5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -1617,8 +1615,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
 
     def get_encoder(self):
         return self.encoder
-
-
 
     @auto_docstring
     def forward(
@@ -2226,8 +2222,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-
 
     @auto_docstring
     def forward(

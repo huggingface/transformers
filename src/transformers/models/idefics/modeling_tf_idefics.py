@@ -1607,8 +1607,6 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
             name="lm_head",
         )
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     def tie_weights(self):

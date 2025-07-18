@@ -1414,8 +1414,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
     def set_output_embeddings(self, new_embeddings):
         self.decoder.set_output_embeddings(new_embeddings)
 
-
-
     def get_encoder(self):
         return self.encoder
 

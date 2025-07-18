@@ -1505,8 +1505,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     @auto_docstring
     def forward(
         self,

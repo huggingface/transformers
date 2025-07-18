@@ -1518,8 +1518,6 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad_(False)

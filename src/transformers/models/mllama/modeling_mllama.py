@@ -1462,8 +1462,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     @auto_docstring

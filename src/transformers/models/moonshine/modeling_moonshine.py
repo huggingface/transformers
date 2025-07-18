@@ -845,8 +845,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-
-
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Moonshine encoder so that its parameters will

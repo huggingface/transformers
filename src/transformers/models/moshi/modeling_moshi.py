@@ -1497,8 +1497,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
 
 
     @auto_docstring
@@ -1633,8 +1631,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
     def get_depth_decoder(self):
         return self.depth_decoder
-
-
 
     @auto_docstring
     def forward(
