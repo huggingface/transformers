@@ -102,7 +102,7 @@ class OpenAIMoeExperts(nn.Module):
                     _, token_idx = torch.where(expert_mask[expert_idx[0]])
                 current_state = hidden_states[token_idx]
                 gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
-                gate, up = gate_up.chunk(2, dim=-1)
+                gate, up = gate_up[..., ::2], gate_up[..., 1::2]
                 glu = gate * torch.sigmoid(gate * self.alpha)
                 gated_output = (up + 1) * glu
                 out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
@@ -113,7 +113,7 @@ class OpenAIMoeExperts(nn.Module):
             hidden_states = hidden_states.repeat(num_experts, 1)
             hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
             gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
-            gate, up = gate_up.chunk(2, dim=-1)
+            gate, up = gate_up[..., ::2], gate_up[..., 1::2]
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
