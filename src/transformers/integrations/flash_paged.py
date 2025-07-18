@@ -54,7 +54,7 @@ def paged_attention_forward(
         k.transpose(1, 2).squeeze(0).contiguous(),
         v.transpose(1, 2).squeeze(0).contiguous(),
         cumulative_seqlens_q.to(torch.int32),
-        cumulative_seqlens_k.to(torch.int32),
+        cumulative_seqlens_k.to(torch.int32).clone(),
         max_seqlen_q,
         max_seqlen_k,
         softmax_scale=module.scaling,
