@@ -1,0 +1,597 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+from typing import Any, List, Optional, Tuple, Union, Callable
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
+
+from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import logging
+
+# TODO: remove this when generation is working with the correct inherited layers
+from ..qwen2.modeling_qwen2 import Qwen2Model  # This is completely unused
+
+
+# This file generates the modeling and configuration files
+# ```
+# python utils/modular_model_converter.py --files-to-parse src/transformers/models/state/modular_state.py
+# ```
+
+# Can sanity check the configuration and model initialization
+# ```
+# python sanity.py
+# ```
+
+logger = logging.get_logger(__name__)
+
+
+class StateEmbeddingConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`StateEmbeddingModel`]. It is used to instantiate a
+    State Embedding model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        token_dim (`int`, *optional*, defaults to 5120):
+            Dimension of the input gene embeddings (from ESM-2).
+        d_model (`int`, *optional*, defaults to 512):
+            Dimension of the model's hidden representations.
+        nhead (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        d_hid (`int`, *optional*, defaults to 2048):
+            Dimension of the feedforward network in the Transformer encoder.
+        nlayers (`int`, *optional*, defaults to 6):
+            Number of hidden layers in the Transformer encoder.
+        output_dim (`int`, *optional*, defaults to 128):
+            Dimension of the output gene representations.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with (top L genes).
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions.
+        num_bins (`int`, *optional*, defaults to 10):
+            Number of expression bins for soft binning in Expression-Aware Embeddings.
+        z_dim_rd (`int`, *optional*, defaults to 0):
+            Dimension of random effect embeddings.
+        z_dim_ds (`int`, *optional*, defaults to 0):
+            Dimension of dataset-specific embeddings.
+
+    ```python
+    >>> from transformers import StateEmbeddingModel, StateEmbeddingConfig
+
+    >>> # Initializing a State Embedding style configuration
+    >>> configuration = StateEmbeddingConfig()
+
+    >>> # Initializing a model from the State Embedding style configuration
+    >>> model = StateEmbeddingModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "state_embedding"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        token_dim=5120,
+        d_model=2048,
+        # nhead=8,
+        nhead=16,
+        d_hid=2048,
+        nlayers=16,
+        output_dim=2048,
+        dropout=0.0,
+        max_position_embeddings=2048,
+        use_cache=True,
+        num_bins=10,
+        z_dim_rd=0,
+        z_dim_ds=0,
+        use_return_dict=True,
+        **kwargs,
+    ):
+        super().__init__(
+            use_cache=use_cache,
+            # use_return_dict=use_return_dict,
+            **kwargs,
+        )
+        self.token_dim = token_dim
+        self.d_model = d_model
+        self.nhead = nhead
+        self.d_hid = d_hid
+        self.nlayers = nlayers
+        self.output_dim = output_dim
+        self.dropout = dropout
+        self.max_position_embeddings = max_position_embeddings
+        self.num_bins = num_bins
+        self.z_dim_rd = z_dim_rd
+        self.z_dim_ds = z_dim_ds
+
+
+class SkipBlock(nn.Module):
+    """Skip connection block with intermediate expansion."""
+
+    def __init__(self, in_features: int) -> None:
+        super().__init__()
+        self.dim = in_features
+        self.intermediate_dense = nn.Linear(in_features, in_features * 2, bias=True)
+        self.dense = nn.Linear(in_features * 2, in_features, bias=True)
+        self.activation = nn.ReLU()
+        self.layer_norm = nn.LayerNorm(in_features)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.intermediate_dense(x)
+        x = self.activation(x)
+        x = self.dense(x)
+        x = self.layer_norm(x + residual)
+        return x
+
+
+class StateEmbeddingAttention(nn.Module):
+    """Multi-head attention layer with Flash Attention optimization."""
+
+    def __init__(self, config: StateEmbeddingConfig):
+        super().__init__()
+        self.config = config
+        self.d_model = config.d_model
+        self.nhead = config.nhead
+        self.dropout = config.dropout
+
+        if self.d_model % self.nhead != 0:
+            raise ValueError(
+                f"d_model ({self.d_model}) must be divisible by nhead ({self.nhead})"
+            )
+
+        self.head_dim = self.d_model // self.nhead
+
+        self.qkv_proj = nn.Linear(self.d_model, self.d_model * 3)
+        self.out_proj = nn.Linear(self.d_model, self.d_model)
+        self.dropout_layer = nn.Dropout(config.dropout)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size, seq_len, _ = hidden_states.size()
+
+        # Project to Q, K, V
+        qkv = self.qkv_proj(hidden_states)
+        q, k, v = torch.chunk(qkv, 3, dim=-1)
+
+        # Reshape for multi-head attention
+        q = q.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+        v = v.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+
+        # Apply scaled dot-product attention
+        attn_output = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=False,
+        )
+
+        # Reshape back to original dimensions
+        attn_output = (
+            attn_output.transpose(1, 2)
+            .contiguous()
+            .view(batch_size, seq_len, self.d_model)
+        )
+
+        # Final projection
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None
+
+
+class StateEmbeddingMLP(nn.Module):
+    """Feed-forward network with GELU activation."""
+
+    def __init__(self, config: StateEmbeddingConfig):
+        super().__init__()
+        self.linear1 = nn.Linear(config.d_model, config.d_hid)
+        self.linear2 = nn.Linear(config.d_hid, config.d_model)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.linear1(x)
+        x = F.gelu(x)
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return x
+
+
+class StateEmbeddingLayer(nn.Module):
+    """Single transformer layer with attention and feed-forward."""
+
+    def __init__(self, config: StateEmbeddingConfig):
+        super().__init__()
+        self.config = config
+        self.d_model = config.d_model
+        self.nhead = config.nhead
+        self.dropout = config.dropout
+
+        if self.d_model % self.nhead != 0:
+            raise ValueError(
+                f"d_model ({self.d_model}) must be divisible by nhead ({self.nhead})"
+            )
+
+        self.head_dim = self.d_model // self.nhead
+
+        # These parameter names should match your state dict
+        self.qkv_proj = nn.Linear(self.d_model, self.d_model * 3)
+        self.out_proj = nn.Linear(self.d_model, self.d_model)
+
+        self.norm1 = nn.LayerNorm(config.d_model)
+        self.norm2 = nn.LayerNorm(config.d_model)
+        self.dropout_layer = nn.Dropout(config.dropout)
+
+        # MLP layers (these names should also match your state dict)
+        self.linear1 = nn.Linear(config.d_model, config.d_hid)
+        self.linear2 = nn.Linear(config.d_hid, config.d_model)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # Self-attention with residual connection
+        residual = hidden_states
+
+        # Attention computation
+        batch_size, seq_len, _ = hidden_states.size()
+
+        # Project to Q, K, V
+        qkv = self.qkv_proj(hidden_states)
+        q, k, v = torch.chunk(qkv, 3, dim=-1)
+
+        # Reshape for multi-head attention
+        q = q.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+        k = k.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+        v = v.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
+
+        # Apply scaled dot-product attention
+        attn_output = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=False,
+        )
+
+        # Reshape back to original dimensions
+        attn_output = (
+            attn_output.transpose(1, 2)
+            .contiguous()
+            .view(batch_size, seq_len, self.d_model)
+        )
+
+        # Final projection
+        attn_output = self.out_proj(attn_output)
+
+        # First residual connection
+        hidden_states = self.norm1(residual + self.dropout_layer(attn_output))
+
+        # Feed-forward with residual connection
+        residual = hidden_states
+
+        # MLP computation
+        mlp_output = self.linear1(hidden_states)
+        mlp_output = F.gelu(mlp_output)
+        mlp_output = self.dropout_layer(mlp_output)
+        mlp_output = self.linear2(mlp_output)
+
+        # Second residual connection
+        hidden_states = self.norm2(residual + self.dropout_layer(mlp_output))
+
+        return hidden_states, None
+
+
+class StateEmbeddingEncoder(nn.Module):
+    """Multi-layer transformer encoder."""
+
+    def __init__(self, config: StateEmbeddingConfig):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [StateEmbeddingLayer(config) for _ in range(config.nlayers)]
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> torch.Tensor:
+        for layer in self.layers:
+            hidden_states, _ = layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                past_key_value=past_key_value,
+                cache_position=cache_position,
+                **kwargs,
+            )
+        return hidden_states
+
+
+class StateEmbeddingPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = StateEmbeddingConfig
+    base_model_prefix = "state_embedding"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["StateEmbeddingLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+
+
+class StateEmbeddingModel(StateEmbeddingPreTrainedModel):
+    """
+    State Embedding (SE) Model from paper Section 4.4:
+    "a self-supervised model trained with a gene expression prediction objective to learn
+    cell representations from single-cell RNA sequencing data"
+    """
+
+    def __init__(self, config: StateEmbeddingConfig):
+        super().__init__(config)
+        self.config = config
+        self.global_step = 0
+
+        # CLS token for cell-level aggregation (Paper Eq. 24)
+        self.cls_token = nn.Parameter(torch.randn(1, config.token_dim))
+
+        # Gene embedding projection (Paper Eq. 23)
+        self.encoder = nn.Sequential(
+            nn.Linear(config.token_dim, config.d_model, bias=True),
+            nn.LayerNorm(config.d_model),
+            nn.SiLU(),
+        )
+
+        # Expression count encoder for soft binning (Paper Eq. 25)
+        self.count_encoder = nn.Sequential(
+            nn.Linear(1, 512, bias=True),
+            nn.LeakyReLU(),
+            nn.Linear(512, config.num_bins),
+        )
+
+        # Bin embeddings (Paper Eq. 26)
+        self.bin_encoder = nn.Embedding(config.num_bins, config.d_model)
+
+        # Dataset embedder - linear layer for dataset-specific embeddings
+        self.dataset_embedder = nn.Linear(config.d_model, 10, bias=True)
+
+        # Dataset encoder - appears to be a 3-layer network with layers at indices 0, 2, 4
+        # This suggests it's a sequential with activations in between
+        self.dataset_encoder = nn.Sequential(
+            nn.Linear(
+                config.d_model, config.d_model, bias=True
+            ),  # index 0: Linear layer
+            nn.ReLU(),  # index 1: activation (no parameters)
+            nn.LayerNorm(config.d_model),  # index 2: LayerNorm (weight shape [2048])
+            nn.ReLU(),  # index 3: activation (no parameters)
+            nn.Linear(
+                config.d_model, 14420, bias=True
+            ),  # index 4: Linear layer to 14420 classes
+        )
+
+        # Dataset token - learnable parameter
+        self.dataset_token = nn.Parameter(torch.randn(1, 5120))
+
+        # Positional embeddings
+        self.pe_embedding = nn.Embedding(19790, 5120)
+
+        # Transformer encoder (Paper Eq. 28)
+        self.transformer_encoder = StateEmbeddingEncoder(config)
+
+        # Gene output decoder
+        self.decoder = nn.Sequential(
+            SkipBlock(config.d_model),
+            nn.Linear(config.d_model, config.output_dim, bias=True),
+        )
+
+        # Binary classification decoder
+        # binary_input_dim = config.output_dim + config.d_model + config.z_dim_rd + config.z_dim_ds
+        binary_input_dim = 4107
+        self.binary_decoder = nn.Sequential(
+            SkipBlock(binary_input_dim),
+            SkipBlock(binary_input_dim),
+            nn.Linear(binary_input_dim, 1, bias=True),
+        )
+
+        # Initialize weights
+        self.post_init()
+
+    def forward(
+        self,
+        input_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        counts: Optional[torch.Tensor] = None,
+        dataset_nums: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], dict]:
+        """
+        Forward pass implementing SE model from paper Section 4.4
+
+        Args:
+            input_embeddings: Gene embeddings (from ESM-2), shape (batch, seq_len, token_dim)
+            attention_mask: Mask to avoid performing attention on padding tokens
+            counts: Expression values for soft binning (Section 4.4.3)
+            dataset_nums: Dataset identifiers for dataset-specific embeddings
+            return_dict: Whether to return a dictionary or tuple
+
+        Returns:
+            If return_dict=False: Tuple of (gene_output, cell_embedding)
+            If return_dict=True: Dictionary with 'gene_output' and 'cell_embedding' keys
+        """
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        # Paper Eq. 23: Apply gene embedding projection with scaling
+        hidden_states = self.encoder(input_embeddings) * math.sqrt(self.config.d_model)
+
+
+        if counts is not None:
+            # Paper Eq. 25-27: Expression-Aware Embeddings with soft binning
+            counts = counts.unsqueeze(-1)  # B x H x 1
+
+            # Transform count values into bin distribution
+            bin_weights = self.count_encoder(counts)  # B x H x num_bins
+            bin_weights = F.softmax(bin_weights, dim=-1)
+
+            # Get bin embeddings
+            bin_indices = torch.arange(
+                self.config.num_bins, device=hidden_states.device
+            )
+            bin_embeddings = self.bin_encoder(bin_indices)  # num_bins x d_model
+
+            # Compute weighted sum of bin embeddings
+            count_emb = torch.matmul(bin_weights, bin_embeddings)
+
+            # Add count embeddings to token embeddings (Eq. 27)
+            hidden_states = hidden_states + count_emb
+
+        # Paper Eq. 28: Pass through transformer encoder
+        hidden_states = self.transformer_encoder(hidden_states)
+
+        # Decode gene representations
+        gene_output = self.decoder(hidden_states)  # batch x seq_len x output_dim
+
+        # Paper Eq. 29: Extract cell embedding from CLS token
+        cell_embedding = gene_output[:, 0, :]  # Select CLS token
+        cell_embedding = F.normalize(cell_embedding, dim=1)  # Normalize
+
+        if not return_dict:
+            return gene_output, cell_embedding
+
+        return {
+            "gene_output": gene_output,
+            "cell_embedding": cell_embedding,
+        }
+
+
+class StateEmbeddingForSequenceClassification(StateEmbeddingPreTrainedModel):
+    """State Embedding Model for sequence classification tasks."""
+
+    def __init__(self, config: StateEmbeddingConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels if hasattr(config, "num_labels") else 2
+        self.state_embedding = StateEmbeddingModel(config)
+        self.classifier = nn.Linear(config.output_dim, self.num_labels)
+
+        # Initialize weights
+        self.post_init()
+
+    def forward(
+        self,
+        input_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        counts: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[Tuple, dict]:
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        outputs = self.state_embedding(
+            input_embeddings=input_embeddings,
+            attention_mask=attention_mask,
+            counts=counts,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            **kwargs,
+        )
+
+        # Use cell embedding for classification
+        cell_embedding = outputs["cell_embedding"]
+        logits = self.classifier(cell_embedding)
+
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + tuple(outputs.values())
+            return ((loss,) + output) if loss is not None else output
+
+        return {
+            "loss": loss,
+            "logits": logits,
+            "gene_output": outputs["gene_output"],
+            "cell_embedding": outputs["cell_embedding"],
+        }
+
+
+__all__ = [
+    "StateEmbeddingConfig",
+    "StateEmbeddingPreTrainedModel",
+    "StateEmbeddingModel",
+    "StateEmbeddingForSequenceClassification",
+]
