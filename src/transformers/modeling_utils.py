@@ -1959,23 +1959,8 @@ class EmbeddingAccessMixin:
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
             )
 
-    def get_output_embeddings(self) -> nn.Module:
-        """
-        Returns the model's output embedding, defaulting to lm_head.
-
-        Returns:
-            `nn.Module`: A torch module mapping hidden states to vocabulary.
-        """
-
-        if not hasattr(self, "lm_head"):
-            return None
-        try:
-            # Speech / vision backbones raise here, so we return None.
-            # Legit use of get_input_embs?
-            self.get_input_embeddings()
-        except NotImplementedError:
-            return None
-        return self.lm_head
+    def get_output_embeddings(self):
+        return getattr(self, "lm_head", None)
 
     def set_output_embeddings(self, new_embeddings):
         """
