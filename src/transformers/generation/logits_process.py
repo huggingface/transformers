@@ -393,6 +393,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 else:
                     for i in range(seq_len):
                         token_mask.scatter_(1, input_ids[:, i : i + 1], True)
+                # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
                 scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
             return scores
@@ -401,6 +402,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
             input_ids = input_ids.unsqueeze(1)
 
         score = torch.gather(scores, 1, input_ids)
+        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
         scores_processed = scores.scatter(1, input_ids, score)
         return scores_processed
