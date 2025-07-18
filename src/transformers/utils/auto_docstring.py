@@ -1145,37 +1145,34 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
             place_holder_value = getattr(
                 getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
                 PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
-            )[model_name]
-            if isinstance(place_holder_value, (list, tuple)):
-                place_holder_value = place_holder_value[0]
-            placeholders_dict[placeholder] = place_holder_value
+            ).get(model_name, None)
+            if place_holder_value is not None:
+                if isinstance(place_holder_value, (list, tuple)):
+                    place_holder_value = place_holder_value[0]
+                placeholders_dict[placeholder] = place_holder_value
+            else:
+                placeholders_dict[placeholder] = placeholder
 
     return placeholders_dict
 
 
-def format_args_docstring(args, model_name):
+def format_args_docstring(docstring, model_name):
     """
     Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
     deducted from the model name and the auto modules.
     """
-    # first check if there are any placeholders in the args, if not return them as is
-    placeholders = set(re.findall(r"{(.*?)}", "".join(args[arg]["description"] for arg in args)))
+    # first check if there are any placeholders in the docstring, if not return it as is
+    placeholders = set(re.findall(r"{(.*?)}", docstring))
     if not placeholders:
-        return args
+        return docstring
 
     # get the placeholders dictionary for the given model name
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
+    # replace the placeholders in the docstring with the values from the placeholders_dict
+    for placeholder, value in placeholders_dict.items():
+        docstring = docstring.replace(f"{{{placeholder}}}", value)
 
-    # replace the placeholders in the args with the values from the placeholders_dict
-    for arg in args:
-        new_arg = args[arg]["description"]
-        placeholders = re.findall(r"{(.*?)}", new_arg)
-        placeholders = [placeholder for placeholder in placeholders if placeholder in placeholders_dict]
-        if placeholders:
-            new_arg = new_arg.format(**{placeholder: placeholders_dict[placeholder] for placeholder in placeholders})
-        args[arg]["description"] = new_arg
-
-    return args
+    return docstring
 
 
 def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
@@ -1494,8 +1491,6 @@ def _process_kwargs_parameters(
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
                 documented_kwargs, _ = parse_docstring(kwargs_documentation)
-                if model_name_lowercase is not None:
-                    documented_kwargs = format_args_docstring(documented_kwargs, model_name_lowercase)
 
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
@@ -1573,8 +1568,6 @@ def _process_parameters_section(
     # Parse existing docstring if available
     if func_documentation is not None:
         documented_params, func_documentation = parse_docstring(func_documentation)
-        if model_name_lowercase is not None:
-            documented_params = format_args_docstring(documented_params, model_name_lowercase)
 
     # Process regular parameters
     param_docstring, missing_args = _process_regular_parameters(
@@ -1771,6 +1764,9 @@ def auto_method_docstring(
         indent_level,
     )
     docstring += example_docstring
+
+    # Format the docstring with the placeholders
+    docstring = format_args_docstring(docstring, model_name_lowercase)
 
     # Assign the dynamically generated docstring to the wrapper function
     func.__doc__ = docstring
