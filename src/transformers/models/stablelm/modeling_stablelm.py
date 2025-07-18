@@ -903,8 +903,6 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
         self.model = decoder
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

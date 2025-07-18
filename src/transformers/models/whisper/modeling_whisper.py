@@ -992,8 +992,7 @@ class WhisperModel(WhisperPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     def freeze_encoder(self):
         """
@@ -1357,8 +1356,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_decoder(self):
-        return self.decoder
+
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

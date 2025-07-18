@@ -1754,8 +1754,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
     def set_decoder(self, decoder):
         self.model = decoder
 
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

@@ -1055,8 +1055,7 @@ class DetrModel(DetrPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():

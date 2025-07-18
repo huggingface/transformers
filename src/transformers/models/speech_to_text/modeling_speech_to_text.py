@@ -1060,8 +1060,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     @auto_docstring
     def forward(

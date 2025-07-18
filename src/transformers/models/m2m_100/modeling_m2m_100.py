@@ -1205,8 +1205,7 @@ class M2M100Model(M2M100PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     @auto_docstring
     def forward(

@@ -666,8 +666,6 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
     def set_decoder(self, decoder):
         self.model = decoder
 
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

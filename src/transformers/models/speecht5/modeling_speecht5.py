@@ -1976,8 +1976,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     def freeze_feature_encoder(self):
         """

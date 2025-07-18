@@ -1366,8 +1366,7 @@ class T5Model(T5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -1619,8 +1618,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     @auto_docstring
     def forward(
@@ -2229,8 +2227,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     @auto_docstring
     def forward(

@@ -1500,8 +1500,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     def set_decoder(self, decoder):
         self.model = decoder
 
-    def get_decoder(self):
-        return self.model
 
     @auto_docstring
     def forward(
@@ -1636,8 +1634,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     def get_depth_decoder(self):
         return self.depth_decoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     @auto_docstring
     def forward(

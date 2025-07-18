@@ -1178,8 +1178,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def set_decoder(self, decoder):
         self.model = decoder
 
-    def get_decoder(self):
-        return self.model
 
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)

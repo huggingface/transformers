@@ -1178,8 +1178,7 @@ class MBartModel(MBartPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
+
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
