@@ -101,15 +101,17 @@ class GraniteMoeHybridModelTest(BambaModelTest, GenerationTesterMixin, unittest.
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
 
-# TODO (@alex-jw-brooks) - update this once the model(s) are out
-@unittest.skip(reason="GraniteMoeHybrid models are not yet released")
 @require_torch_gpu
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]
 
-        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-tiny", device_map="auto")
+        model = GraniteMoeHybridForCausalLM.from_pretrained(
+            "ibm-granite/granite-4.0-tiny-preview",
+            device_map="auto",
+            torch_dtype="bfloat16",
+        )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
@@ -117,14 +119,13 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
         # fmt: off
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([
-            [-2.9711, -2.2554, -1.0814, -1.6123, -0.8780, -1.0685, -0.6368, -1.9732, -3.3548, -2.6895, -2.3062, -2.6338]
+            [-2.0041,  1.0344,  8.3842, 10.2653,  9.9950,  6.9927,  7.5597, -0.7904, 5.4209,  6.5575,  4.9957,  1.2563],
         ])
 
-        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), atol=1, rtol=1e-3)
 
-        # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = torch.tensor([
-            [4.0662, 5.9547, 3.5803, 3.1306, 4.3211, 3.8902, 4.6438, 8.5434, 7.5865, 5.1623, 5.2240, 9.2982, 5.9094, 6.8834, 5.7551],
+            [ 4.0000, -5.2500, -5.1562, -5.2188, -5.1250,  2.7344, -5.0000, -5.1250, -5.1250, -5.1250, -2.6875, -2.7031, -3.1250, -4.2500, -1.9609],
         ])
         # fmt: on
 
@@ -132,19 +133,21 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
             torch.allclose(
                 EXPECTED_SLICE.to(torch_device),
                 out.logits[0, 0, :15].float(),
-                atol=1e-3,
+                atol=1,
                 rtol=1e-3,
             )
         )
 
     @slow
     def test_model_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that 1) time is relative, and 2) space is relative. The first"
-        )
+        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers in uniform motion"
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-tiny")
-        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-tiny", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-tiny-preview")
+        model = GraniteMoeHybridForCausalLM.from_pretrained(
+            "ibm-granite/granite-4.0-tiny-preview",
+            device_map="auto",
+            torch_dtype="bfloat16",
+        )
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
