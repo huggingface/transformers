@@ -26,14 +26,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
-
-
-if is_torch_available():
-    pass
-
-if is_accelerate_available():
-    pass
 
 
 @require_torch_gpu
@@ -63,7 +55,6 @@ class FPQuantConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_fp_quant_and_qutlass
 @require_accelerate
-# @require_read_token
 class FPQuantTest(unittest.TestCase):
     model_name = "unsloth/Llama-3.2-1B"
 

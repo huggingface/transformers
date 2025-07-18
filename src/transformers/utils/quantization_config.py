@@ -1560,13 +1560,13 @@ class FPQuantConfig(QuantizationConfigMixin):
         forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
             The dtype to use for the forward pass.
         forward_method (`str`, *optional*, defaults to `"abs_max"`):
-            The method to use for the forward pass.
+            The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
         backward_dtype (`str`, *optional*, defaults to `"bf16"`):
             The dtype to use for the backward pass.
         store_master_weights (`bool`, *optional*, defaults to `False`):
-            Whether to store the master weights.
+            Whether to store the master weights. Needed for QAT over layer weights.
         hadamard_group_size (`int`, *optional*, defaults to 32):
-            The group size for the hadamard transform.
+            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
