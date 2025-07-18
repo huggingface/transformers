@@ -1539,7 +1539,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             if tokenizer is None or assistant_tokenizer is None:
                 raise ValueError(
-                    f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
+                    f"The main and assistant models have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
                 )
 
     def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
