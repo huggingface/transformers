@@ -50,13 +50,13 @@ One can directly use MADLAD-400 weights without finetuning the model:
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt")
 >>> tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
 
->>> inputs = tokenizer("<2it> I love pizza!", return_tensors="pt")
+>>> inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt")
 >>> outputs = model.generate(**inputs)
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['Eu amo pizza!']
 ```
 
-Note that in the input sentence, "`<2it>`" is a token determining the target language of the translation. To see all supported language codes and their corresponding tokens:
+Note that in the input sentence, "`<2pt>`" is a token determining the target language of the translation. To see all supported language codes and their corresponding tokens:
 ```python
 >>> tokens = [tokenizer.decode(i) for i in range(4,459)]
 >>> lang_codes = [token[2:-1] for token in tokens]
