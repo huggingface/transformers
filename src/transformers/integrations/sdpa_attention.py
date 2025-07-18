@@ -21,6 +21,15 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -> bool:
+    # torch supports enable_gqa since 2.5, but we need to check if the key is a proxy to avoid tracing issues, make sure attention_mask is None to avoid fall back into the math kernel
+    return (
+        version.parse(get_torch_version()) >= version.parse("2.5")
+        and attention_mask is None
+        and not isinstance(key, torch.fx.Proxy)
+    )
+
+
 def sdpa_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -39,12 +48,7 @@ def sdpa_attention_forward(
         )
     sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups"):
-        if (
-            version.parse(get_torch_version()) < version.parse("2.5")
-            or attention_mask is not None
-            or isinstance(key, torch.fx.Proxy)
-        ):
-            # fx.trace symbolic tracing failure if set `enable_gqa` in sdpa
+        if not use_gqa_in_sdpa(attention_mask, key):
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
         else:
