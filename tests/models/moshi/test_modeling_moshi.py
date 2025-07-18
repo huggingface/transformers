@@ -371,6 +371,91 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_save_load(self):
         super().test_save_load()
 
+    @slow
+    def test_export_static_cache(self):
+        from packaging import version
+
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        from transformers.generation.configuration_utils import GenerationConfig
+        from transformers.integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+        )
+
+        # Create a small model for testing
+        config = self.model_tester.get_config()
+        config.use_cache = True
+        config.attn_implementation = "sdpa"
+
+        # Create model with static cache generation config
+        model = MoshiForCausalLM(config).to(torch_device)
+        model.eval()
+
+        # Set up generation config with static cache
+        batch_size = 1
+        max_generation_length = 50
+        model.generation_config = GenerationConfig(
+            use_cache=True,
+            cache_implementation="static",
+            max_length=max_generation_length,
+            cache_config={
+                "batch_size": batch_size,
+                "max_cache_len": max_generation_length,
+                "device": torch_device,
+            },
+        )
+
+        # Test exportable module with static cache
+        from transformers.integrations.executorch import (
+            TorchExportableModuleForDecoderOnlyLM,
+        )
+
+        # Create exportable module
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+
+        # Get representative token IDs within model's vocabulary range
+        # Use simple token IDs that are within the test model's vocab_size (99)
+        prompt_token_ids = torch.tensor([[1, 2, 3, 4, 5]], dtype=torch.long, device=torch_device)
+
+        # Use first token for example input
+        example_input_ids = prompt_token_ids[:, :1]
+        example_cache_position = torch.tensor([0], dtype=torch.long, device=torch_device)
+
+        # Export the model
+        exported_program = exportable_module.export(
+            input_ids=example_input_ids,
+            cache_position=example_cache_position,
+        )
+
+        # Generate reference output from eager model
+        with torch.no_grad():
+            eager_generated_ids = model.generate(
+                prompt_token_ids,
+                max_new_tokens=5,
+                do_sample=False,
+                use_cache=True,
+            )
+
+        # Test generation with exported program
+        ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
+            exported_program=exported_program,
+            prompt_token_ids=prompt_token_ids,
+            max_new_tokens=5,
+        )
+
+        # Verify the exported program generates tokens
+        self.assertIsInstance(ep_generated_ids, torch.Tensor)
+        self.assertEqual(ep_generated_ids.shape[0], 1)  # batch size
+        self.assertGreater(ep_generated_ids.shape[1], 1)  # generated tokens
+
+        # Compare exported model output with eager model output
+        self.assertEqual(ep_generated_ids.shape, eager_generated_ids.shape)
+
+        # Note: Due to numerical precision differences in export, we use relaxed tolerances
+        # The key validation is that both models generate tokens and have the same shape
+        torch.testing.assert_close(ep_generated_ids, eager_generated_ids, rtol=1e-2, atol=1e-2)
+
 
 class MoshiTester:
     def __init__(
