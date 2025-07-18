@@ -683,7 +683,7 @@ class SamHQAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
             query,
             key,
@@ -695,10 +695,10 @@ class SamHQAttention(nn.Module):
             **kwargs,
         )
 
-        out = self._recombine_heads(attn_output, point_batch_size)
-        out = self.out_proj(out)
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
 
-        return out
+        return attn_output, attn_weights
 
 
 class SamHQTwoWayAttentionBlock(nn.Module):
@@ -745,10 +745,10 @@ class SamHQTwoWayAttentionBlock(nn.Module):
     ):
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(query=queries, key=queries, value=queries)
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
         else:
             query = queries + query_point_embedding
-            attn_out = self.self_attn(query=query, key=query, value=queries)
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
             queries = queries + attn_out
         queries = self.layer_norm1(queries)
 
@@ -756,7 +756,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(
+        attn_out, _ = self.cross_attn_token_to_image(
             query=query, key=key, value=keys, attention_similarity=attention_similarity
         )
         queries = queries + attn_out
@@ -772,7 +772,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
@@ -829,7 +829,7 @@ class SamHQTwoWayTransformer(nn.Module):
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
-        attn_out = self.final_attn_token_to_image(query=query, key=key, value=keys)
+        attn_out, _ = self.final_attn_token_to_image(query=query, key=key, value=keys)
 
         queries = queries + attn_out
         queries = self.layer_norm_final_attn(queries)
