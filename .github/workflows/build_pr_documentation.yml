@@ -15,4 +15,6 @@ jobs:
       pr_number: ${{ github.event.number }}
       package: transformers
       languages: en
+      # temporary pin to work around datasets exception in the docbuilder. See
+      # https://github.com/huggingface/transformers/actions/runs/16365952006/job/46243081358?pr=38545
       pre_command: uv pip install pyarrow==20.0.0
