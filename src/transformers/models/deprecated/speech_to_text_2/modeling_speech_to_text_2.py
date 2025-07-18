@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Speech2Text2 model."""
 
-import copy
 import math
 from typing import Optional, Union
 
@@ -676,7 +675,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
