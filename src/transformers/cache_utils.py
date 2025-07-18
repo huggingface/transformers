@@ -1288,9 +1288,10 @@ class DynamicCache(Cache):
         backward compatibility.
         """
         cache = cls()
-        for layer_idx in range(len(past_key_values)):
-            key_states, value_states = past_key_values[layer_idx]
-            cache.update(key_states, value_states, layer_idx)
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx]
+                cache.update(key_states, value_states, layer_idx)
         return cache
 
 
