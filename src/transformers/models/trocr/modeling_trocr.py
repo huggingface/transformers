@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TrOCR decoder model (based on RoBERTa)."""
 
-import copy
 import math
 from typing import Optional, Union
 
@@ -709,7 +708,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

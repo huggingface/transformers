@@ -1684,18 +1684,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
         super().__init__(config)
-        self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(
-            config.audio_config, attn_implementation=config._attn_implementation
-        )
-
-        self.visual = Qwen2_5OmniVisionEncoder._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
-
+        self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(config.audio_config)
+        self.visual = Qwen2_5OmniVisionEncoder._from_config(config.vision_config)
         self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerTextModel._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.spatial_merge_size = config.vision_config.spatial_merge_size
@@ -2940,7 +2932,6 @@ class DiTAttention(nn.Module):
         self.heads = config.num_attention_heads
         self.inner_dim = config.head_dim * config.num_attention_heads
         self.dropout = config.dropout
-        self._attn_implementation = config._attn_implementation
         self.is_causal = False
 
         self.to_q = nn.Linear(config.hidden_size, self.inner_dim)
@@ -2974,7 +2965,7 @@ class DiTAttention(nn.Module):
         cos, sin = position_embeddings
         query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS[self._attn_implementation]
+        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attention_weights, _ = attention_interface(
             self,
             query,

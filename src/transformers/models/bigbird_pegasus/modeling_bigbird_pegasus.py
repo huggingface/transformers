@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch BigBirdPegasus model."""
 
-import copy
 import math
 from typing import Callable, Optional, Union
 
@@ -2910,7 +2909,6 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
