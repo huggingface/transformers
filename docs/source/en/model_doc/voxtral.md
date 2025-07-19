@@ -262,7 +262,7 @@ for decoded_output in decoded_outputs:
 Use the model to transcribe audio (supports English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
 
 ```python
-inputs = processor.apply_transcrition_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3")
+inputs = processor.apply_transcrition_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
 inputs = inputs.to(device, dtype=torch.bfloat16)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
