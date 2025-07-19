@@ -282,10 +282,10 @@ def eager_attention_forward(
     **kwargs,
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
-        attn_weights = torch.softmax(attn_weights, dim=-1)
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -899,9 +899,8 @@ class Sam2PromptEncoder(nn.Module):
         """
         sparse_embeddings = None
         batch_size = 1
-        target_device = self.shared_embedding.positional_embedding.device
         if input_points is not None:
-            batch_size, point_batch_size = input_points.shape[:2]
+            batch_size = input_points.shape[0]
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
@@ -919,9 +918,6 @@ class Sam2PromptEncoder(nn.Module):
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
                 batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
-
-        if sparse_embeddings is None:
-            sparse_embeddings = torch.zeros((0, 1, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
@@ -973,10 +969,10 @@ class Sam2TwoWayAttentionBlock(nn.Module):
     ):
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(query=queries, key=queries, value=queries)
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
         else:
             query = queries + query_point_embedding
-            attn_out = self.self_attn(query=query, key=query, value=queries)
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
             queries = queries + attn_out
         queries = self.layer_norm1(queries)
 
@@ -984,7 +980,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(
+        attn_out, _ = self.cross_attn_token_to_image(
             query=query, key=key, value=keys, attention_similarity=attention_similarity
         )
         queries = queries + attn_out
@@ -1000,7 +996,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
@@ -1057,7 +1053,7 @@ class Sam2TwoWayTransformer(nn.Module):
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
-        attn_out = self.final_attn_token_to_image(query=query, key=key, value=keys)
+        attn_out, _ = self.final_attn_token_to_image(query=query, key=key, value=keys)
 
         queries = queries + attn_out
         queries = self.layer_norm_final_attn(queries)
@@ -1502,27 +1498,26 @@ class Sam2Attention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # Sam2Attention
-        scale = query.shape[-1] ** -0.5
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
             query,
             key,
             value,
             attention_mask=attention_similarity,
             dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
 
-        out = self._recombine_heads(attn_output, point_batch_size)
-        out = self.out_proj(out)
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
 
-        return out
+        return attn_output, attn_weights
 
 
 def init_2d_position_ids(end_x: int, end_y: int):
