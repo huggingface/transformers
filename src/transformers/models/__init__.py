@@ -84,6 +84,8 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_vl import *
+    from .deepseek_vl_hybrid import *
     from .deformable_detr import *
     from .deit import *
     from .deprecated import *
