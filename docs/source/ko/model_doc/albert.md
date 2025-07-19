@@ -23,23 +23,23 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# ALBERT
+# ALBERT[[albert]]
 
-[ALBERT](https://huggingface.co/papers/1909.11942) is designed to address memory limitations of scaling and training of [BERT](./bert). It adds two parameter reduction techniques. The first, factorized embedding parametrization, splits the larger vocabulary embedding matrix into two smaller matrices so you can grow the hidden size without adding a lot more parameters. The second, cross-layer parameter sharing, allows layer to share parameters which keeps the number of learnable parameters lower.
+[ALBERT](https://huggingface.co/papers/1909.11942)는 [BERT](./bert)의 확장성과 학습 시 메모리 한계를 해결하기 위해 설계된 모델입니다. 이 모델은 두 가지 파라미터 감소 기법을 도입합니다. 첫 번째는 임베딩 행렬 분해(factorized embedding parametrization)로, 큰 어휘 임베딩 행렬을 두 개의 더 작은 행렬로 분리하여 히든 사이즈를 늘려도 파라미터 수가 크게 증가하지 않도록 합니다. 두 번째는 계층 간 파라미터 공유(cross-layer parameter sharing)로, 여러 계층이 파라미터를 공유하여 학습해야 할 파라미터 수를 줄입니다.
 
-ALBERT was created to address problems like -- GPU/TPU memory limitations, longer training times, and unexpected model degradation in BERT. ALBERT uses two parameter-reduction techniques to lower memory consumption and increase the training speed of BERT:
+ALBERT는 BERT에서 발생하는 GPU/TPU 메모리 한계, 긴 학습 시간, 예기치 않은 성능 저하 문제를 해결하기 위해 만들어졌습니다. ALBERT는 두 가지 파라미터 감소 기법을 사용하여 메모리 사용량을 줄이고 BERT의 학습 속도를 높입니다:
 
-- **Factorized embedding parameterization:** The large vocabulary embedding matrix is decomposed into two smaller matrices, reducing memory consumption.
-- **Cross-layer parameter sharing:** Instead of learning separate parameters for each transformer layer, ALBERT shares parameters across layers, further reducing the number of learnable weights.
+- **임베딩 행렬 분해:** 큰 어휘 임베딩 행렬을 두 개의 더 작은 행렬로 분해하여 메모리 사용량을 줄입니다.
+- **계층 간 파라미터 공유:** 각 트랜스포머 계층마다 별도의 파라미터를 학습하는 대신, 여러 계층이 파라미터를 공유하여 학습해야 할 가중치 수를 더욱 줄입니다.
 
-ALBERT uses absolute position embeddings (like BERT) so padding is applied at right. Size of embeddings is 128 While BERT uses 768. ALBERT can processes maximum 512 token at a time.
+ALBERT는 BERT와 마찬가지로 절대 위치 임베딩(absolute position embeddings)을 사용하므로, 입력 패딩은 오른쪽에 적용해야 합니다. 임베딩 크기는 128이며, BERT의 768보다 작습니다. ALBERT는 한 번에 최대 512개의 토큰을 처리할 수 있습니다.
 
-You can find all the original ALBERT checkpoints under the [ALBERT community](https://huggingface.co/albert) organization.
+모든 공식 ALBERT 체크포인트는 [ALBERT 커뮤니티](https://huggingface.co/albert) 조직에서 확인하실 수 있습니다.
 
 > [!TIP]
-> Click on the ALBERT models in the right sidebar for more examples of how to apply ALBERT to different language tasks.
+> 오른쪽 사이드바의 ALBERT 모델을 클릭하시면 다양한 언어 작업에 ALBERT를 적용하는 예시를 더 확인하실 수 있습니다.
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+아래 예시는 [`Pipeline`], [`AutoModel`] 그리고 커맨드라인에서 `[MASK]` 토큰을 예측하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -96,70 +96,70 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 </hfoptions>
 
-## Notes
+## 참고 사항[[notes]]
 
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
-- The embedding size `E` is different from the hidden size `H` because the embeddings are context independent (one embedding vector represents one token) and the hidden states are context dependent (one hidden state represents a sequence of tokens). The embedding matrix is also larger because `V x E` where `V` is the vocabulary size. As a result, it's more logical if `H >> E`. If `E < H`, the model has less parameters.
+- 입력은 오른쪽에 패딩해야 합니다. BERT는 절대 위치 임베딩을 사용하기 때문입니다.
+- 임베딩 크기 `E`는 히든 크기 `H`와 다릅니다. 임베딩은 문맥에 독립적(각 토큰마다 하나의 임베딩 벡터)이고, 히든 스테이트는 문맥에 의존적(토큰 시퀀스마다 하나의 히든 스테이트)입니다. 임베딩 행렬은 `V x E`(V: 어휘 크기)이므로, 일반적으로 `H >> E`가 더 논리적입니다. `E < H`일 때 모델 파라미터가 더 적어집니다.
 
-## Resources
+## 참고 자료[[resources]]
 
-The resources provided in the following sections consist of a list of official Hugging Face and community (indicated by 🌎) resources to help you get started with AlBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+아래 섹션의 자료들은 공식 Hugging Face 및 커뮤니티(🌎 표시) 자료로, AlBERT를 시작하는 데 도움이 됩니다. 여기에 추가할 자료가 있다면 Pull Request를 보내주세요! 기존 자료와 중복되지 않고 새로운 내용을 담고 있으면 좋습니다.
 
 <PipelineTag pipeline="text-classification"/>
 
-- [`AlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification).
+- [`AlbertForSequenceClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification)에서 지원됩니다.
 
-- [`TFAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification).
+- [`TFAlbertForSequenceClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification)에서 지원됩니다.
 
-- [`FlaxAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
-- Check the [Text classification task guide](../tasks/sequence_classification) on how to use the model.
+- [`FlaxAlbertForSequenceClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
+- [텍스트 분류 작업 가이드](../tasks/sequence_classification)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`AlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification).
+- [`AlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification)에서 지원됩니다.
 
-- [`TFAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+- [`TFAlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
 
-- [`FlaxAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
-- [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
-- Check the [Token classification task guide](../tasks/token_classification) on how to use the model.
+- [`FlaxAlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification)에서 지원됩니다.
+- [토큰 분류](https://huggingface.co/course/chapter7/2?fw=pt) 🤗 Hugging Face 강좌의 챕터.
+- [토큰 분류 작업 가이드](../tasks/token_classification)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`AlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
-- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
-- Check the [Masked language modeling task guide](../tasks/masked_language_modeling) on how to use the model.
+- [`AlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
+- [`TFAlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
+- [`FlaxAlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
+- [마스킹 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 🤗 Hugging Face 강좌의 챕터.
+- [마스킹 언어 모델링 작업 가이드](../tasks/masked_language_modeling)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`AlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-- [`TFAlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
-- [`FlaxAlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
-- [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
-- Check the [Question answering task guide](../tasks/question_answering) on how to use the model.
+- [`AlbertForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
+- [`TFAlbertForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
+- [`FlaxAlbertForQuestionAnswering`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering)에서 지원됩니다.
+- [질의응답](https://huggingface.co/course/chapter7/7?fw=pt) 🤗 Hugging Face 강좌의 챕터.
+- [질의응답 작업 가이드](../tasks/question_answering)에서 모델 사용법을 확인하세요.
 
-**Multiple choice**
+**다중 선택(Multiple choice)**
 
-- [`AlbertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
-- [`TFAlbertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
+- [`AlbertForMultipleChoice`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
+- [`TFAlbertForMultipleChoice`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
 
-- Check the [Multiple choice task guide](../tasks/multiple_choice) on how to use the model.
+- [다중 선택 작업 가이드](../tasks/multiple_choice)에서 모델 사용법을 확인하세요.
 
-## AlbertConfig
+## AlbertConfig[[albertconfig]]
 
 [[autodoc]] AlbertConfig
 
-## AlbertTokenizer
+## AlbertTokenizer[[alberttokenizer]]
 
 [[autodoc]] AlbertTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
 
-## AlbertTokenizerFast
+## AlbertTokenizerFast[[alberttokenizerfast]]
 
 [[autodoc]] AlbertTokenizerFast
 
-## Albert specific outputs
+## Albert 특화 출력[[albert-specific-outputs]]
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
@@ -168,31 +168,31 @@ The resources provided in the following sections consist of a list of official H
 <frameworkcontent>
 <pt>
 
-## AlbertModel
+## AlbertModel[[albertmodel]]
 
 [[autodoc]] AlbertModel - forward
 
-## AlbertForPreTraining
+## AlbertForPreTraining[[albertforpretraining]]
 
 [[autodoc]] AlbertForPreTraining - forward
 
-## AlbertForMaskedLM
+## AlbertForMaskedLM[[albertformaskedlm]]
 
 [[autodoc]] AlbertForMaskedLM - forward
 
-## AlbertForSequenceClassification
+## AlbertForSequenceClassification[[albertforsequenceclassification]]
 
 [[autodoc]] AlbertForSequenceClassification - forward
 
-## AlbertForMultipleChoice
+## AlbertForMultipleChoice[[albertformultiplechoice]]
 
 [[autodoc]] AlbertForMultipleChoice
 
-## AlbertForTokenClassification
+## AlbertForTokenClassification[[albertfortokenclassification]]
 
 [[autodoc]] AlbertForTokenClassification - forward
 
-## AlbertForQuestionAnswering
+## AlbertForQuestionAnswering[[albertforquestionanswering]]
 
 [[autodoc]] AlbertForQuestionAnswering - forward
 
@@ -200,62 +200,62 @@ The resources provided in the following sections consist of a list of official H
 
 <tf>
 
-## TFAlbertModel
+## TFAlbertModel[[tfalbertmodel]]
 
 [[autodoc]] TFAlbertModel - call
 
-## TFAlbertForPreTraining
+## TFAlbertForPreTraining[[tfalbertforpretraining]]
 
 [[autodoc]] TFAlbertForPreTraining - call
 
-## TFAlbertForMaskedLM
+## TFAlbertForMaskedLM[[tfalbertformaskedlm]]
 
 [[autodoc]] TFAlbertForMaskedLM - call
 
-## TFAlbertForSequenceClassification
+## TFAlbertForSequenceClassification[[tfalbertforsequenceclassification]]
 
 [[autodoc]] TFAlbertForSequenceClassification - call
 
-## TFAlbertForMultipleChoice
+## TFAlbertForMultipleChoice[[tfalbertformultiplechoice]]
 
 [[autodoc]] TFAlbertForMultipleChoice - call
 
-## TFAlbertForTokenClassification
+## TFAlbertForTokenClassification[[tfalbertfortokenclassification]]
 
 [[autodoc]] TFAlbertForTokenClassification - call
 
-## TFAlbertForQuestionAnswering
+## TFAlbertForQuestionAnswering[[tfalbertforquestionanswering]]
 
 [[autodoc]] TFAlbertForQuestionAnswering - call
 
 </tf>
 <jax>
 
-## FlaxAlbertModel
+## FlaxAlbertModel[[flaxalbertmodel]]
 
 [[autodoc]] FlaxAlbertModel - **call**
 
-## FlaxAlbertForPreTraining
+## FlaxAlbertForPreTraining[[flaxalbertforpretraining]]
 
 [[autodoc]] FlaxAlbertForPreTraining - **call**
 
-## FlaxAlbertForMaskedLM
+## FlaxAlbertForMaskedLM[[flaxalbertformaskedlm]]
 
 [[autodoc]] FlaxAlbertForMaskedLM - **call**
 
-## FlaxAlbertForSequenceClassification
+## FlaxAlbertForSequenceClassification[[flaxalbertforsequenceclassification]]
 
 [[autodoc]] FlaxAlbertForSequenceClassification - **call**
 
-## FlaxAlbertForMultipleChoice
+## FlaxAlbertForMultipleChoice[[flaxalbertformultiplechoice]]
 
 [[autodoc]] FlaxAlbertForMultipleChoice - **call**
 
-## FlaxAlbertForTokenClassification
+## FlaxAlbertForTokenClassification[[flaxalbertfortokenclassification]]
 
 [[autodoc]] FlaxAlbertForTokenClassification - **call**
 
-## FlaxAlbertForQuestionAnswering
+## FlaxAlbertForQuestionAnswering[[flaxalbertforquestionanswering]]
 
 [[autodoc]] FlaxAlbertForQuestionAnswering - **call**
 
