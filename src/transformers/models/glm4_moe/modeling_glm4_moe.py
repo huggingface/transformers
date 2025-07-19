@@ -462,7 +462,7 @@ class Glm4MoeRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Glm4MoeModel(Glm4MoePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
 
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
