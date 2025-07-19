@@ -17,28 +17,12 @@ from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
-# Import structure for lazy loading
-_import_structure = {
-    "configuration_parakeet_ctc": [
-        "ParakeetCTCConfig",
-    ],
-    "tokenization_parakeet_ctc": ["ParakeetCTCTokenizer"],
-}
-
-_import_structure["modeling_parakeet_ctc"] = [
-    "ParakeetCTC",
-    "ParakeetCTCPreTrainedModel",
-]
-
 if TYPE_CHECKING:
-    from .configuration_parakeet_ctc import ParakeetCTCConfig
-    from .modeling_parakeet_ctc import (
-        ParakeetCTC,
-        ParakeetCTCPreTrainedModel,
-    )
-    from .tokenization_parakeet_ctc import ParakeetCTCTokenizer
-
+    from .configuration_parakeet_ctc import *
+    from .modeling_parakeet_ctc import *
+    from .tokenization_parakeet_ctc import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
