@@ -14,19 +14,19 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Machine learning apps
+# 머신러닝 앱[[machine-learning-apps]]
 
-[Gradio](https://www.gradio.app/), a fast and easy library for building and sharing machine learning apps, is integrated with [`Pipeline`] to quickly create a simple interface for inference.
+머신러닝 앱을 빠르고 쉽게 구축하고 공유할 수 있는 라이브러리인 [Gradio](https://www.gradio.app/)는 [`Pipeline`]과 통합되어 추론을 위한 간단한 인터페이스를 빠르게 생성할 수 있습니다.
 
-Before you begin, make sure Gradio is installed.
+시작하기 전에 Gradio가 설치되어 있는지 확인하세요.
 
 ```py
 !pip install gradio
 ```
 
-Create a pipeline for your task, and then pass it to Gradio's [Interface.from_pipeline](https://www.gradio.app/docs/gradio/interface#interface-from_pipeline) function to create the interface. Gradio automatically determines the appropriate input and output components for a [`Pipeline`].
+작업에 대한 파이프라인을 생성한 다음, Gradio의 [Interface.from_pipeline](https://www.gradio.app/docs/gradio/interface#interface-from_pipeline) 함수에 전달하여 인터페이스를 만드세요. Gradio는 [`Pipeline`]에 적합한 입력 및 출력 컴포넌트를 자동으로 결정합니다.
 
-Add [launch](https://www.gradio.app/main/docs/gradio/blocks#blocks-launch) to create a web server and start up the app.
+[launch](https://www.gradio.app/main/docs/gradio/blocks#blocks-launch)를 추가하여 웹 서버를 생성하고 앱을 시작하세요.
 
 ```py
 from transformers import pipeline
@@ -36,13 +36,13 @@ pipeline = pipeline("image-classification", model="google/vit-base-patch16-224")
 gr.Interface.from_pipeline(pipeline).launch()
 ```
 
-The web app runs on a local server by default. To share the app with other users, set `share=True` in [launch](https://www.gradio.app/main/docs/gradio/blocks#blocks-launch) to generate a temporary public link. For a more permanent solution, host the app on Hugging Face [Spaces](https://hf.co/spaces).
+웹 앱은 기본적으로 로컬 서버에서 실행됩니다. 다른 사용자와 앱을 공유하려면 [launch](https://www.gradio.app/main/docs/gradio/blocks#blocks-launch)에서 `share=True`로 설정하여 임시 공개 링크를 생성하세요. 더 영구적인 솔루션을 원한다면 Hugging Face [Spaces](https://hf.co/spaces)에서 앱을 호스팅하세요.
 
 ```py
 gr.Interface.from_pipeline(pipeline).launch(share=True)
 ```
 
-The Space below is created with the code above and hosted on Spaces.
+아래 Space는 위의 코드로 생성되어 Spaces에서 호스팅됩니다.
 
 <iframe
 	src="https://stevhliu-gradio-pipeline-demo.hf.space"
