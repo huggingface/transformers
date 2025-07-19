@@ -277,7 +277,7 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
 
 class Sam2MaskDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM 2
+    This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM2
     memory encoder according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -287,7 +287,7 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the hidden states.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the SAM mask decoder.
+            The non-linear activation function in the SAM2 mask decoder.
         mlp_dim (`int`, *optional*, defaults to 2048):
             The dimension of the MLP in the two-way transformer.
         num_hidden_layers (`int`, *optional*, defaults to 2):
@@ -478,10 +478,10 @@ class Sam2Config(PretrainedConfig):
     ...     Sam2Model,
     ... )
 
-    >>> # Initializing a Sam2Config with `"facebook/hiera-base-plus"` style configuration
+    >>> # Initializing a Sam2Config with `"facebook/sam2.1_hiera_tiny"` style configuration
     >>> configuration = Sam2config()
 
-    >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam-vit-huge"` style configuration
+    >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam2.1_hiera_tiny"` style configuration
     >>> model = Sam2Model(configuration)
 
     >>> # Accessing the model configuration
