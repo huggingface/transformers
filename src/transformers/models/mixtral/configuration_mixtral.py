@@ -124,6 +124,17 @@ class MixtralConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.block_sparse_moe.gate": "ep_router",
+        "layers.*.block_sparse_moe.experts.*.w1": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.*.w2": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.*.w3": "grouped_gemm",
+        "layers.*.block_sparse_moe": "gather",
+    }
 
     def __init__(
         self,

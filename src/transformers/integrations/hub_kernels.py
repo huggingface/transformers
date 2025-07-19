@@ -52,6 +52,12 @@ try:
                 layer_name="TritonLlamaMLP",
             )
         },
+        "MegaBlocksMoeMLP": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/megablocks",
+                layer_name="MegaBlocksMoeMLP",
+            )
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
