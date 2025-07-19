@@ -33,8 +33,8 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
     DeepseekV3TopkRouter,
 )
+from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
 
-from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 
 logger = logging.get_logger(__name__)
 
