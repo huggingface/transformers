@@ -14,6 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for TVP."""
 
+from dataclasses import dataclass
 from typing import Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature
@@ -24,7 +25,7 @@ from ...image_processing_utils_fast import (
     reorder_images,
     validate_kwargs,
 )
-from ...image_transforms import pil_torch_interpolation_mapping
+from ...image_utils import pil_torch_interpolation_mapping
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -53,7 +54,8 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-@auto_docstring
+@dataclass
+@auto_docstring(custom_intro="Fast image processor kwargs for TVP.")
 class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """Valid kwargs for TvpImageProcessorFast."""
 
@@ -129,7 +131,46 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        return self._preprocess(videos, **kwargs)
+        # Extract required parameters for _preprocess
+        do_resize = kwargs.pop("do_resize")
+        size = kwargs.pop("size")
+        interpolation = kwargs.pop("interpolation")
+        do_center_crop = kwargs.pop("do_center_crop")
+        crop_size = kwargs.pop("crop_size")
+        do_rescale = kwargs.pop("do_rescale")
+        rescale_factor = kwargs.pop("rescale_factor")
+        do_pad = kwargs.pop("do_pad", self.do_pad)
+        pad_size = kwargs.pop("pad_size", self.pad_size)
+        constant_values = kwargs.pop("constant_values", self.constant_values)
+        pad_mode = kwargs.pop("pad_mode", self.pad_mode)
+        do_normalize = kwargs.pop("do_normalize")
+        image_mean = kwargs.pop("image_mean")
+        image_std = kwargs.pop("image_std")
+        do_flip_channel_order = kwargs.pop("do_flip_channel_order", self.do_flip_channel_order)
+        return_tensors = kwargs.pop("return_tensors")
+        disable_grouping = kwargs.pop("disable_grouping")
+
+        return self._preprocess(
+            videos,
+            do_resize=do_resize,
+            size=size,
+            interpolation=interpolation,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_pad=do_pad,
+            pad_size=pad_size,
+            constant_values=constant_values,
+            pad_mode=pad_mode,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_flip_channel_order=do_flip_channel_order,
+            return_tensors=return_tensors,
+            disable_grouping=disable_grouping,
+            **kwargs
+        )
 
     def _prepare_input_videos(
         self,
@@ -154,7 +195,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         for video in batched_videos:
             video_tensors = []
             for frame in video:
-                frame_tensor = self._prepare_input_image(
+                frame_tensor = self._process_image(
                     frame, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
                 )
                 video_tensors.append(frame_tensor)
@@ -243,7 +284,8 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             if len(stacked_videos) > 1:
                 pixel_values = torch.stack(stacked_videos)
             else:
-                pixel_values = stacked_videos[0]
+                # Add batch dimension for single video
+                pixel_values = stacked_videos[0].unsqueeze(0)
         else:
             pixel_values = processed_videos
         
@@ -271,6 +313,54 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         # Apply padding
         padding = [0, 0, pad_right, pad_bottom]  # [left, top, right, bottom]
         return F.pad(frames, padding, fill=constant_values, padding_mode=pad_mode)
+
+    def resize(
+        self,
+        image: "torch.Tensor",
+        size: SizeDict,
+        interpolation: "F.InterpolationMode" = None,
+        antialias: bool = True,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Resize an image to the specified size.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to resize.
+            size (`SizeDict`):
+                Size dictionary. If `size` has `longest_edge`, resize the longest edge to that value
+                while maintaining aspect ratio. Otherwise, use the base class resize method.
+            interpolation (`F.InterpolationMode`, *optional*):
+                Interpolation method to use.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to use antialiasing.
+
+        Returns:
+            `torch.Tensor`: The resized image.
+        """
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        
+        # Handle longest_edge case (TVP-specific)
+        if size.longest_edge is not None:
+            # Get current dimensions
+            current_height, current_width = image.shape[-2:]
+            
+            # Calculate new dimensions maintaining aspect ratio
+            if current_height >= current_width:
+                ratio = current_width * 1.0 / current_height
+                new_height = size.longest_edge
+                new_width = int(new_height * ratio)
+            else:
+                ratio = current_height * 1.0 / current_width
+                new_width = size.longest_edge
+                new_height = int(new_width * ratio)
+            
+            new_size = (new_height, new_width)
+            return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        
+        # Use base class resize method for other cases
+        return super().resize(image, size, interpolation, antialias, **kwargs)
 
     def _flip_channel_order(self, frames: "torch.Tensor") -> "torch.Tensor":
         """Flip channel order from RGB to BGR."""
