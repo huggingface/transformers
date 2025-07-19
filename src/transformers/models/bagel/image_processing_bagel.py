@@ -58,7 +58,7 @@ class BagelImageProcessor(BaseImageProcessor):
         min_size (int): Minimum size for the shortest edge of the image.
         stride (int): Value by which the height and width of the image must be divisible.
         max_pixels (int): Maximum pixels for the full image.
-        image_number (int): Nnumber of size. 
+        image_number (int): Number of images.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
@@ -323,7 +323,6 @@ class BagelImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": all_images}
         return BatchFeature(data=data, tensor_type=return_tensors)
-
 
 
 __all__ = ["BagelImageProcessor"]

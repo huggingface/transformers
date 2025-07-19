@@ -35,6 +35,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "and assist the user with a variety of tasks using natural language.\n\n"
 )
 
+
 class BagelTextKwargs(TextKwargs, total=False):
     generation_mode: str
 
@@ -67,18 +68,17 @@ class BagelProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "BagelImageProcessor"
-    tokenizer_class = "Qwen2Tokenizer"
+    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
         # Num image tokens is computed dynamically?
-        self.num_image_tokens = 1024
-        self.image_token = tokenizer.image_token
+        self.num_image_tokens = 1
         self.image_start_token = tokenizer.boi_token
         self.image_end_token = tokenizer.eoi_token
         self.use_default_system_prompt = use_default_system_prompt
 
         # Dummy token for now
-        self.image_token = "[image_placeholder]"
+        self.image_token = "<|vision_pad|>"
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -140,6 +140,7 @@ class BagelProcessor(ProcessorMixin):
         # Replace the image token with expanded image tokens.
         prompt_strings = []
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
+
         for prompt in text:
             prompt = prompt.replace(self.image_token, one_img_tokens)
             if self.use_default_system_prompt and generation_mode == "text":

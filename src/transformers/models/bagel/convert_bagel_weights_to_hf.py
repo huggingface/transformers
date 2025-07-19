@@ -32,8 +32,8 @@ from transformers import (
     Qwen2Config,
     SiglipVisionConfig,
 )
-from transformers.models.bagel.image_processing_janus import BagelImageProcessor
-from transformers.models.bagel.processing_janus import BagelProcessor
+from transformers.models.bagel.image_processing_bagel import BagelImageProcessor
+from transformers.models.bagel.processing_bagel import BagelProcessor
 
 
 MAPPINGS = {
@@ -73,6 +73,19 @@ MAPPINGS = {
     r"language_model.model.norm.weight": r"model.language_model.norm.weight",
 }
 
+CHAT_TEMPLATE = (
+    "{% for message in messages %}"
+    "{% if message['role'] == 'user' or message['role'] == 'assistant' %}"
+    "{% for content in message['content'] %}"
+    "{% if content['type'] == 'image' %}<|vision_pad|>"
+    "{% elif content['type'] == 'text' %}<|im_start|>{{ content['text'].strip() }}<|im_end|>"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}<|im_start|>{% endif %}"
+)
+
 
 def convert_old_keys_to_new_keys(state_dict):
     keys_as_text = "\n".join(state_dict.keys())
@@ -84,6 +97,7 @@ def convert_old_keys_to_new_keys(state_dict):
             new_keys_as_text = re.sub(old, repl, new_keys_as_text)
     output_dict = dict(zip(keys_as_text.split("\n"), new_keys_as_text.split("\n")))
     return output_dict
+
 
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
@@ -112,6 +126,7 @@ def ensure_model_downloaded(
         revision: Optional git revision to use
         local_dir: Optional local directory path where model files should be stored/found
     """
+
     if local_dir is not None:
         if os.path.exists(local_dir):
             print(f"Using provided local directory: {local_dir}")
@@ -119,9 +134,6 @@ def ensure_model_downloaded(
             # Create the local directory if it doesn't exist
             os.makedirs(local_dir, exist_ok=True)
             print(f"Created local directory: {local_dir}")
-
-    if repo_id is None:
-        raise ValueError("Either repo_id or local_dir must be provided")
 
     print(f"Ensuring {repo_id} (revision: {revision or 'latest'}) is downloaded...")
 
@@ -140,6 +152,7 @@ def ensure_model_downloaded(
 
 def load_model_state_dict(input_path: str) -> dict:
     """Load model state dict, handling both single and sharded files."""
+
     index_path = os.path.join(input_path, "pytorch_model.bin.index.json")
     single_file_path = os.path.join(input_path, "pytorch_model.bin")
 
@@ -172,7 +185,6 @@ def load_model_state_dict(input_path: str) -> dict:
 def convert_model(
     repo_id=None,
     local_dir=None,
-    text_model_id=None,
     output_dir=None,
     output_hub_path=None,
     revision=None,
@@ -192,10 +204,21 @@ def convert_model(
     torch.set_default_dtype(torch.float16)
 
     # Download or locate model files
-    input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
+    if local_dir is not None:
+        input_path = local_dir
+        if not os.path.exists(input_path):
+            raise ValueError(f"Local directory {input_path} does not exist.")
+    else:
+        input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
 
     # Load configuration files
-    required_files = ["config.json", "preprocessor_config.json", "special_tokens_map.json", "tokenizer_config.json"]
+    required_files = [
+        "config.json",
+        "vit_config.json",
+        "llm_config.json",
+        "generation_config.json",
+        "tokenizer_config.json",
+    ]
 
     missing_files = [f for f in required_files if not os.path.exists(os.path.join(input_path, f))]
     if missing_files:
@@ -215,27 +238,18 @@ def convert_model(
     _ = vit_config.pop("architectures", None)
 
     # Create tokenizer directly from tokenizer.json if it exists
-    tokenizer_json_path = os.path.join(input_path, "tokenizer.json")
     special_image_tokens = {
         "bos_token": "<|im_start|>",
-        "eos_token":"<|im_end|>",
+        "eos_token": "<|im_end|>",
         "boi_token": "<|vision_start|>",
         "eoi_token": "<|vision_end|>",
     }
 
-    if os.path.exists(tokenizer_json_path) and not text_model_id:
-        tokenizer = AutoTokenizer.from_pretrained(
-            input_path,  # This will load tokenizer.json directly
-            model_max_length=tokenizer_config["model_max_length"],
-            extra_special_tokens=special_image_tokens,
-        )
-    else:
-        # Fallback to creating from text_model_id with special tokens
-        tokenizer = AutoTokenizer.from_pretrained(
-            text_model_id,
-            model_max_length=tokenizer_config["model_max_length"],
-            extra_special_tokens=special_image_tokens,
-        )
+    tokenizer = AutoTokenizer.from_pretrained(
+        input_path,  # This will load tokenizer.json directly
+        model_max_length=tokenizer_config["model_max_length"],
+        extra_special_tokens=special_image_tokens,
+    )
 
     # ToDo - how to have both vit and vae default in preprocessor_config.json?
     image_processor = BagelImageProcessor()
@@ -244,7 +258,7 @@ def convert_model(
     processor = BagelProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
-        chat_template="",
+        chat_template=CHAT_TEMPLATE,
     )
 
     if output_dir:
@@ -267,7 +281,6 @@ def convert_model(
 
     text_config = Qwen2Config(**llm_config)
 
-
     vision_config = SiglipVisionConfig(**vit_config)
 
     vq_config = BagelVQVAEConfig()
@@ -287,8 +300,8 @@ def convert_model(
 
     # Initialize model with empty weights
     print("Creating empty model...")
-    with init_empty_weights():
-        model = BagelForConditionalGeneration(config)
+    # with init_empty_weights():
+    #     model = BagelForConditionalGeneration(config)
 
     # model.generation_config.temperature = 1
     # model.generation_config.guidance_scale = 5
@@ -296,34 +309,34 @@ def convert_model(
     # model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict
-    print("Loading state dict...")
-    state_dict = load_model_state_dict(input_path)
-    state_dict = convert_state_dict_to_hf(state_dict)
+    # print("Loading state dict...")
+    # state_dict = load_model_state_dict(input_path)
+    # state_dict = convert_state_dict_to_hf(state_dict)
 
-    # Load converted state dict
-    print("Loading converted weights into model...")
-    model.load_state_dict(state_dict, strict=True, assign=True)
+    # # Load converted state dict
+    # print("Loading converted weights into model...")
+    # model.load_state_dict(state_dict, strict=True, assign=True)
 
-    # Tie weights before any device mapping
-    print("Tying weights...")
-    model.tie_weights()
+    # # Tie weights before any device mapping
+    # print("Tying weights...")
+    # model.tie_weights()
 
-    # Save the model
-    if output_dir:
-        print(f"Saving model to {output_dir}...")
-        model.save_pretrained(output_dir, safe_serialization=True)
-    if output_hub_path:
-        print(f"Pushing model to hub at {output_hub_path}...")
-        model.push_to_hub(output_hub_path, safe_serialization=True)
+    # # Save the model
+    # if output_dir:
+    #     print(f"Saving model to {output_dir}...")
+    #     model.save_pretrained(output_dir, safe_serialization=True)
+    # if output_hub_path:
+    #     print(f"Pushing model to hub at {output_hub_path}...")
+    #     model.push_to_hub(output_hub_path, safe_serialization=True)
 
-    del state_dict, model
-    gc.collect()
+    # del state_dict, model
+    # gc.collect()
 
     # Validate the saved model if saved locally
-    if output_dir:
-        print("Reloading the local model to check if it's saved correctly...")
-        BagelForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
-        print("Local model reloaded successfully.")
+    # if output_dir:
+    #     print("Reloading the local model to check if it's saved correctly...")
+    #     BagelForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
+    #     print("Local model reloaded successfully.")
 
 
 def main():
@@ -353,11 +366,6 @@ def main():
         help="Repository ID to push model to hub (e.g. 'username/model-name')",
         default=None,
     )
-    parser.add_argument(
-        "--text_model_id",
-        help="Hub ID of the text model to get tokenizer from. Optional if tokenizer.json exists in the model directory.",
-        required=False,
-    )
     args = parser.parse_args()
 
     if args.output_dir is None and args.output_hub_path is None:
@@ -369,7 +377,6 @@ def main():
     convert_model(
         repo_id=args.repo_id,
         local_dir=args.local_dir,
-        text_model_id=args.text_model_id,
         output_dir=args.output_dir,
         output_hub_path=args.output_hub_path,
         revision=args.revision,

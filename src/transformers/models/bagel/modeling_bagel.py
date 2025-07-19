@@ -71,6 +71,7 @@ class BagelVisionEmbeddings(nn.Module):
         patch_embeds = self.patch_embedding(pixel_values)
         return patch_embeds
 
+    # Can this somehow be removed by directly converting ckpt key to 3d.
     def convert_conv2d_to_linear(self, config, meta=False):
         W = self.patch_embedding.weight.permute(0, 2, 3, 1).reshape(
             self.embed_dim, config.num_channels * self.patch_size**2
@@ -564,7 +565,7 @@ class BagelTextAttention(nn.Module):
         mode: Optional[str] = "und",
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        is_causal = None,
+        is_causal=None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -612,7 +613,6 @@ class BagelTextAttention(nn.Module):
         query_states = query_states.transpose(1, 2).contiguous()
         value_states = value_states.transpose(1, 2).contiguous()
 
-
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -656,7 +656,14 @@ class BagelTextAttention(nn.Module):
             )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output)
+
+        if mode == "und":
+            attn_output = self.o_proj(attn_output)
+        elif mode == "gen":
+            packed_attn_output = torch.zeros_like(hidden_states)
+            packed_attn_output[text_indices] = self.o_proj(attn_output[text_indices])
+            packed_attn_output[vae_indices] = self.o_proj_generation(attn_output[vae_indices])
+            attn_output = packed_attn_output
         return attn_output, attn_weights
 
 
@@ -687,7 +694,7 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        is_causal = None,
+        is_causal=None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -779,7 +786,7 @@ class BagelTextModel(BagelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         mode: Optional[str] = None,
-        is_causal = None,
+        is_causal=None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1291,7 +1298,7 @@ class BagelModel(BagelPreTrainedModel):
         self.latent_channel = config.vq_config.latent_channels
         self.latent_patch_size = config.vq_config.latent_patch_size
         self.patch_latent_dim = self.latent_patch_size**2 * self.latent_channel
-        self.latent_downsample = self.latent_patch_size*self.config.vq_config.downsample,
+        self.latent_downsample = self.latent_patch_size * self.config.vq_config.downsample
 
         self.vision_tower = BagelVisionTransformer(config.vision_config)
         self.language_model = BagelTextModel(config.text_config)
@@ -1366,7 +1373,7 @@ class BagelModel(BagelPreTrainedModel):
     def get_latent_features(
         self,
         pixel_values: torch.Tensor,
-        timesteps:torch.Tensor,
+        timesteps: torch.Tensor,
         **kwargs,
     ):
         # Need to handle the num image tokens
@@ -1399,9 +1406,8 @@ class BagelModel(BagelPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
-
         # append boi and eoi tokens embeddings and pass through qwen
-        boi_token_id, eoi_token_id = 151652,151653
+        boi_token_id, eoi_token_id = 151652, 151653
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values=pixel_values)
             boi_embed = self.get_input_embeddings()(torch.tensor([boi_token_id], device=image_embeds.device))  # [1, D]
@@ -1411,7 +1417,7 @@ class BagelModel(BagelPreTrainedModel):
             boi_embed = boi_embed.expand(B, 1, -1)
             eoi_embed = eoi_embed.expand(B, 1, -1)
 
-            image_embeds = torch.cat([boi_embed, image_embeds, eoi_embed], dim=1) 
+            image_embeds = torch.cat([boi_embed, image_embeds, eoi_embed], dim=1)
 
         image_seq_len = image_embeds.size(1)
         image_position_ids = torch.zeros((B, image_seq_len), dtype=torch.long, device=image_embeds.device)
@@ -1469,10 +1475,8 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         self.model.set_input_embeddings(value)
 
     def forward_flow(self, timestep):
-
         timestep_pos_embed = self.model.latent_pos_embed(timestep)
         return timestep_pos_embed
-
 
     @can_return_tuple
     @auto_docstring
