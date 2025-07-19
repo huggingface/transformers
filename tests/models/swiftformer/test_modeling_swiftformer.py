@@ -13,10 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch SwiftFormer model."""
 
-import copy
 import unittest
 
-from transformers import PretrainedConfig, SwiftFormerConfig
+from transformers import SwiftFormerConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -26,7 +25,7 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -234,16 +233,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_initialization(self):
-        def _config_zero_init(config):
-            configs_no_init = copy.deepcopy(config)
-            for key in configs_no_init.__dict__.keys():
-                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-                    setattr(configs_no_init, key, 1e-10)
-                if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
-                    no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
-                    setattr(configs_no_init, key, no_init_subconfig)
-            return configs_no_init
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)

@@ -1016,7 +1016,7 @@ class SamPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1033,6 +1033,9 @@ class SamPreTrainedModel(PreTrainedModel):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
+        elif isinstance(module, SamVisionEncoder):
+            if self.config.use_abs_pos:
+                module.pos_embed.data.zero_()
 
 
 class SamVisionEncoder(SamPreTrainedModel):
