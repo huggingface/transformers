@@ -107,7 +107,8 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         ]
 
         prompts = [
-            "[gMASK]<sop>hello,[gMASK]<sop>tell me",
+            "[gMASK]<sop>hello",
+            "[gMASK]<sop>tell me"
         ]
         tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4.5")
         model = Glm4MoeForCausalLM.from_pretrained(
