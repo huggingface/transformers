@@ -50,6 +50,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
         ("aya_vision", "AyaVisionProcessor"),
+        ("bagel", "BagelProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
         ("blip-2", "Blip2Processor"),
