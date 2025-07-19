@@ -174,6 +174,11 @@ Tips:
 [[autodoc]] TvpImageProcessor
     - preprocess
 
+## TvpImageProcessorFast
+
+[[autodoc]] TvpImageProcessorFast
+    - preprocess
+
 ## TvpProcessor
 
 [[autodoc]] TvpProcessor
