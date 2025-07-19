@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 머신러닝 앱[[machine-learning-apps]]
+# 머신러닝 앱 [[machine-learning-apps]]
 
 머신러닝 앱을 빠르고 쉽게 구축하고 공유할 수 있는 라이브러리인 [Gradio](https://www.gradio.app/)는 [`Pipeline`]과 통합되어 추론을 위한 간단한 인터페이스를 빠르게 생성할 수 있습니다.
 
