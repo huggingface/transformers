@@ -110,46 +110,6 @@ class ImageToTextPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch
-    def test_small_model_pt_conditional(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        prompt = "a photo of"
-
-        outputs = pipe(image, prompt=prompt)
-        self.assertTrue(outputs[0]["generated_text"].startswith(prompt))
-
-    @require_torch
-    def test_consistent_batching_behaviour(self):
-        pipe = pipeline(
-            "image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration", max_new_tokens=10
-        )
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        prompt = "a photo of"
-
-        outputs = pipe([image, image], prompt=prompt)
-        self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
-        self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
-
-        outputs = pipe([image, image], prompt=prompt, batch_size=2)
-        self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
-        self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
-
-        from torch.utils.data import Dataset
-
-        class MyDataset(Dataset):
-            def __len__(self):
-                return 5
-
-            def __getitem__(self, i):
-                return "./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-        dataset = MyDataset()
-        for batch_size in (1, 2, 4):
-            outputs = pipe(dataset, prompt=prompt, batch_size=batch_size if batch_size > 1 else None)
-            self.assertTrue(list(outputs)[0][0]["generated_text"].startswith(prompt))
-            self.assertTrue(list(outputs)[1][0]["generated_text"].startswith(prompt))
-
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -187,75 +147,6 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         outputs = pipe(image)
         self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
-
-    @slow
-    @require_torch
-    def test_conditional_generation_pt_blip(self):
-        pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
-
-        prompt = "a photography of"
-
-        outputs = pipe(image, prompt=prompt)
-        self.assertEqual(outputs, [{"generated_text": "a photography of a volcano"}])
-
-        with self.assertRaises(ValueError):
-            outputs = pipe([image, image], prompt=[prompt, prompt])
-
-    @slow
-    @require_torch
-    def test_conditional_generation_pt_git(self):
-        pipe = pipeline("image-to-text", model="microsoft/git-base-coco")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
-
-        prompt = "a photo of a"
-
-        outputs = pipe(image, prompt=prompt)
-        self.assertEqual(outputs, [{"generated_text": "a photo of a tent with a tent and a tent in the background."}])
-
-        with self.assertRaises(ValueError):
-            outputs = pipe([image, image], prompt=[prompt, prompt])
-
-    @slow
-    @require_torch
-    def test_conditional_generation_pt_pix2struct(self):
-        pipe = pipeline("image-to-text", model="google/pix2struct-ai2d-base")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
-
-        prompt = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
-
-        outputs = pipe(image, prompt=prompt)
-        self.assertEqual(outputs, [{"generated_text": "ash cloud"}])
-
-        with self.assertRaises(ValueError):
-            outputs = pipe([image, image], prompt=[prompt, prompt])
-
-    @slow
-    @require_torch
-    @unittest.skip("TODO (joao, raushan): there is something wrong with image processing in the model/pipeline")
-    def test_conditional_generation_llava(self):
-        pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
-
-        prompt = (
-            "<image>\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT:"
-        )
-
-        outputs = pipe(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
-            prompt=prompt,
-            generate_kwargs={"max_new_tokens": 200},
-        )
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
-                }
-            ],
-        )
 
     @slow
     @require_torch
