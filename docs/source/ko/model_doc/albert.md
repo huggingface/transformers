@@ -25,9 +25,9 @@ rendered properly in your Markdown viewer.
 
 # ALBERT[[albert]]
 
-[ALBERT](https://huggingface.co/papers/1909.11942)는 [BERT](./bert)의 확장성과 학습 시 메모리 한계를 해결하기 위해 설계된 모델입니다. 이 모델은 두 가지 파라미터 감소 기법을 도입합니다. 첫 번째는 임베딩 행렬 분해(factorized embedding parametrization)로, 큰 어휘 임베딩 행렬을 두 개의 더 작은 행렬로 분리하여 히든 사이즈를 늘려도 파라미터 수가 크게 증가하지 않도록 합니다. 두 번째는 계층 간 파라미터 공유(cross-layer parameter sharing)로, 여러 계층이 파라미터를 공유하여 학습해야 할 파라미터 수를 줄입니다.
+[ALBERT](https://huggingface.co/papers/1909.11942)는 [BERT](./bert)의 확장성과 학습 시 메모리 한계를 해결하기 위해 설계된 모델입니다. 이 모델은 두 가지 파라미터 감소 기법을 도입합니다. 첫 번째는 임베딩 행렬 분해(factorized embedding parametrization)로, 큰 어휘 임베딩 행렬을 두 개의 작은 행렬로 분해하여 히든 사이즈를 늘려도 파라미터 수가 크게 증가하지 않도록 합니다. 두 번째는 계층 간 파라미터 공유(cross-layer parameter sharing)로, 여러 계층이 파라미터를 공유하여 학습해야 할 파라미터 수를 줄입니다.
 
-ALBERT는 BERT에서 발생하는 GPU/TPU 메모리 한계, 긴 학습 시간, 예기치 않은 성능 저하 문제를 해결하기 위해 만들어졌습니다. ALBERT는 두 가지 파라미터 감소 기법을 사용하여 메모리 사용량을 줄이고 BERT의 학습 속도를 높입니다:
+ALBERT는 BERT에서 발생하는 GPU/TPU 메모리 한계, 긴 학습 시간, 갑작스런 성능 저하 문제를 해결하기 위해 만들어졌습니다. ALBERT는 파라미터를 줄이기 위해 두 가지 기법을 사용하여 메모리 사용량을 줄이고 BERT의 학습 속도를 높입니다:
 
 - **임베딩 행렬 분해:** 큰 어휘 임베딩 행렬을 두 개의 더 작은 행렬로 분해하여 메모리 사용량을 줄입니다.
 - **계층 간 파라미터 공유:** 각 트랜스포머 계층마다 별도의 파라미터를 학습하는 대신, 여러 계층이 파라미터를 공유하여 학습해야 할 가중치 수를 더욱 줄입니다.
@@ -54,7 +54,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-pipeline("Plants create [MASK] through a process known as photosynthesis.", top_k=5)
+pipeline("식물은 광합성이라고 알려진 과정을 통해 [MASK]를 생성합니다.", top_k=5)
 ```
 
 </hfoption>
@@ -72,7 +72,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     device_map="auto"
 )
 
-prompt = "Plants create energy through a process known as [MASK]."
+prompt = "식물은 [MASK]이라고 알려진 과정을 통해 에너지를 생성합니다."
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
@@ -82,7 +82,7 @@ with torch.no_grad():
 
 top_k = torch.topk(predictions, k=5).indices.tolist()
 for token_id in top_k[0]:
-    print(f"Prediction: {tokenizer.decode([token_id])}")
+    print(f"예측: {tokenizer.decode([token_id])}")
 ```
 
 </hfoption>
@@ -98,8 +98,8 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## 참고 사항[[notes]]
 
-- 입력은 오른쪽에 패딩해야 합니다. BERT는 절대 위치 임베딩을 사용하기 때문입니다.
-- 임베딩 크기 `E`는 히든 크기 `H`와 다릅니다. 임베딩은 문맥에 독립적(각 토큰마다 하나의 임베딩 벡터)이고, 히든 스테이트는 문맥에 의존적(토큰 시퀀스마다 하나의 히든 스테이트)입니다. 임베딩 행렬은 `V x E`(V: 어휘 크기)이므로, 일반적으로 `H >> E`가 더 논리적입니다. `E < H`일 때 모델 파라미터가 더 적어집니다.
+- BERT는 절대 위치 임베딩을 사용하므로, 오른쪽에 입력이 패딩돼야 합니다.
+- 임베딩 크기 `E`는 히든 크기 `H`와 다릅니다. 임베딩은 문맥에 독립적(각 토큰마다 하나의 임베딩 벡터)이고, 은닉 상태는 문맥에 의존적(토큰 시퀀스마다 하나의 은닉 상태)입니다. 임베딩 행렬은 `V x E`(V: 어휘 크기)이므로, 일반적으로 `H >> E`가 더 논리적입니다. `E < H`일 때 모델 파라미터가 더 적어집니다.
 
 ## 참고 자료[[resources]]
 
@@ -121,7 +121,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 - [`TFAlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
 
 - [`FlaxAlbertForTokenClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification)에서 지원됩니다.
-- [토큰 분류](https://huggingface.co/course/chapter7/2?fw=pt) 🤗 Hugging Face 강좌의 챕터.
+- 🤗 Hugging Face의 [토큰 분류](https://huggingface.co/course/chapter7/2?fw=pt) 강좌
 - [토큰 분류 작업 가이드](../tasks/token_classification)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="fill-mask"/>
@@ -129,7 +129,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 - [`AlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
 - [`TFAlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
 - [`FlaxAlbertForMaskedLM`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
-- [마스킹 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 🤗 Hugging Face 강좌의 챕터.
+- 🤗 Hugging Face의 [마스킹 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 강좌
 - [마스킹 언어 모델링 작업 가이드](../tasks/masked_language_modeling)에서 모델 사용법을 확인하세요.
 
 <PipelineTag pipeline="question-answering"/>
