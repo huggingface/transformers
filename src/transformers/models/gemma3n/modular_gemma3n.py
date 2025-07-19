@@ -1770,7 +1770,7 @@ class Gemma3nTextAttention(Gemma3Attention):
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
             # Device of past layer may be different from current one
-            indices = cache_position.to(past_key_value.key_cache[self.kv_shared_layer_index].device)
+            indices = cache_position.to(past_key_value.layers[self.kv_shared_layer_index].keys.device)
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
             if isinstance(past_key_value, HybridCache) and self.is_sliding:
                 max_length = past_key_value.sliding_window
@@ -1781,9 +1781,9 @@ class Gemma3nTextAttention(Gemma3Attention):
                 )
 
             # Device of past layer may be different from current one
-            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices].to(query_states.device)
-            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices].to(
-                query_states.device
+            key_states = past_key_value.layers[self.kv_shared_layer_index].keys[:, :, indices].to(query_states.device)
+            value_states = (
+                past_key_value.layers[self.kv_shared_layer_index].values[:, :, indices].to(query_states.device)
             )
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)

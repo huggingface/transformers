@@ -496,8 +496,8 @@ class MllamaTextCrossAttention(nn.Module):
                 )
         elif cache_position[0] != 0:
             key_states, value_states = (
-                past_key_value.key_cache[self.layer_idx],
-                past_key_value.value_cache[self.layer_idx],
+                past_key_value.layers[self.layer_idx].keys,
+                past_key_value.layers[self.layer_idx].values,
             )
         else:
             raise ValueError(
