@@ -267,7 +267,7 @@ class ParakeetCTC(ParakeetCTCPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-    def generate_speech_recognition_outputs(
+    def generate(
         self,
         input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,

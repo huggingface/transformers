@@ -17,30 +17,12 @@ from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
-# Import structure for lazy loading
-_import_structure = {
-    "configuration_fastconformer": [
-        "FastConformerConfig",
-    ],
-    "feature_extraction_fastconformer": ["FastConformerFeatureExtractor"],
-}
-
-_import_structure["modeling_fastconformer"] = [
-    "FastConformerModel",
-    "FastConformerEncoder",
-    "FastConformerPreTrainedModel",
-]
-
 if TYPE_CHECKING:
-    from .configuration_fastconformer import FastConformerConfig
-    from .feature_extraction_fastconformer import FastConformerFeatureExtractor
-    from .modeling_fastconformer import (
-        FastConformerEncoder,
-        FastConformerModel,
-        FastConformerPreTrainedModel,
-    )
-
+    from .configuration_fastconformer import *
+    from .feature_extraction_fastconformer import *
+    from .modeling_fastconformer import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

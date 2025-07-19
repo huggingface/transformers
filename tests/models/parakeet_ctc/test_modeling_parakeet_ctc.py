@@ -30,8 +30,8 @@ if is_torch_available():
 
     from transformers import AutoConfig, AutoFeatureExtractor, AutoModel, AutoTokenizer
     from transformers.models.fastconformer import FastConformerConfig, FastConformerFeatureExtractor
-    from transformers.models.parakeet_ctc import ParakeetCTCConfig
-    from transformers.models.parakeet_ctc.modular_parakeet_ctc import ParakeetCTC, ParakeetCTCDecoder
+    from transformers.models.parakeet_ctc import ParakeetCTC, ParakeetCTCConfig
+    from transformers.models.parakeet_ctc.modeling_parakeet_ctc import ParakeetCTCDecoder
 
 
 class ParakeetCTCModelTester:
@@ -300,7 +300,7 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @slow
-    def test_ctc_model_integration_generate_speech_recognition_outputs(self):
+    def test_ctc_model_integration_generate(self):
         ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
 
@@ -315,13 +315,11 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
         audio = torch.tensor(audio).unsqueeze(0).to(torch_device)
         features = feature_extractor(audio, sampling_rate=16000, return_tensors="pt")
 
-        decoded_tokens = model.generate_speech_recognition_outputs(
-            features.input_features, features.attention_mask, features.input_lengths
-        )
+        decoded_tokens = model.generate(features.input_features, features.attention_mask, features.input_lengths)
         print(decoded_tokens)
         text = tokenizer.decode(decoded_tokens[0], ctc_decode=True)
 
-        EXPECTED_TOKENS = [[1024, 130, 1024, 103, 1024, 38, 1024, 994, 1024, 62, 1024]]
+        EXPECTED_TOKENS = [[130, 103, 38, 994, 62]]
         EXPECTED_TEXT = "what are you working on"
         self.assertEqual(decoded_tokens, EXPECTED_TOKENS)
         self.assertEqual(text, EXPECTED_TEXT)
@@ -387,7 +385,7 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
             torch.testing.assert_close(auto_outputs.logits, ctc_outputs.logits, rtol=1e-5, atol=1e-5)
 
             # Test CTC generation
-            decoded_sequences = ctc_model.generate_speech_recognition_outputs(
+            decoded_sequences = ctc_model.generate(
                 input_features=input_features,
                 input_lengths=input_lengths,
             )
