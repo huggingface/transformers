@@ -221,7 +221,7 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     base_model_prefix = "model"
     _skip_keys_device_placement = ["past_key_values"]
     _no_split_modules = ["ModernBertDecoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = False
     _supports_gradient_checkpointing = True
     _supports_static_cache = False
