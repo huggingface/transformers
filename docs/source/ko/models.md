@@ -14,14 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Loading models
+# 모델 로드하기[[loading-models]]
 
-Transformers provides many pretrained models that are ready to use with a single line of code. It requires a model class and the [`~PreTrainedModel.from_pretrained`] method.
+트랜스포머는 단 한 줄의 코드로 사용할 수 있는 많은 사전훈련된 모델을 제공합니다. 모델 클래스와 [`~PreTrainedModel.from_pretrained`] 메소드가 필요합니다.
 
-Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
+[`~PreTrainedModel.from_pretrained`]를 호출하여 Hugging Face [Hub](https://hf.co/models)에 저장된 모델의 가중치와 구성을 다운로드하고 로드하세요.
 
 > [!TIP]
-> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
+> [`~PreTrainedModel.from_pretrained`] 메소드는 [safetensors](https://hf.co/docs/safetensors/index) 파일 형식으로 저장된 가중치가 있으면 이를 로드합니다. 전통적으로 PyTorch 모델 가중치는 보안에 취약한 것으로 알려진 [pickle](https://docs.python.org/3/library/pickle.html) 유틸리티로 직렬화됩니다. Safetensor 파일은 더 안전하고 로드 속도가 빠릅니다.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -29,23 +29,23 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype="auto", device_map="auto")
 ```
 
-This guide explains how models are loaded, the different ways you can load a model, how to overcome memory issues for really big models, and how to load custom models.
+이 가이드는 모델이 로드되는 방법, 모델을 로드할 수 있는 다양한 방법, 매우 큰 모델의 메모리 문제를 해결하는 방법, 그리고 사용자 정의 모델을 로드하는 방법을 설명합니다.
 
-## Models and configurations
+## 모델과 구성[[models-and-configurations]]
 
-All models have a `configuration.py` file with specific attributes like the number of hidden layers, vocabulary size, activation function, and more. You'll also find a `modeling.py` file that defines the layers and mathematical operations taking place inside each layer. The `modeling.py` file takes the model attributes in `configuration.py` and builds the model accordingly. At this point, you have a model with random weights that needs to be trained to output meaningful results.
+모든 모델에는 은닉 레이어 수, 어휘 크기, 활성화 함수 등과 같은 특정 속성이 포함된 `configuration.py` 파일이 있습니다. 또한 각 레이어 내부에서 일어나는 레이어와 수학적 연산을 정의하는 `modeling.py` 파일도 있습니다. `modeling.py` 파일은 `configuration.py`의 모델 속성을 가져와서 그에 따라 모델을 구축합니다. 이 시점에서는 의미 있는 결과를 출력하기 위해 훈련이 필요한 무작위 가중치를 가진 모델이 있습니다.
 
 <!-- insert diagram of model and configuration -->
 
 > [!TIP]
-> An *architecture* refers to the model's skeleton and a *checkpoint* refers to the model's weights for a given architecture. For example, [BERT](./model_doc/bert) is an architecture while [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) is a checkpoint. You'll see the term *model* used interchangeably with architecture and checkpoint.
+> *아키텍처*는 모델의 골격을 의미하고 *체크포인트(checkpoint)*는 특정 아키텍처에 대한 모델의 가중치를 의미합니다. 예를 들어, [BERT](./model_doc/bert)는 아키텍처이고 [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)는 체크포인트(checkpoint)입니다. *모델*이라는 용어는 아키텍처 및 체크포인트(checkpoint)와 상호 교환적으로 사용되는 것을 볼 수 있습니다.
 
-There are two general types of models you can load:
+로드할 수 있는 모델에는 두 가지 일반적인 타입이 있습니다:
 
-1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
-2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
+1. 은닉 상태를 출력하는 [`AutoModel`] 또는 [`LlamaModel`]과 같은 기본 모델입니다.
+2. 특정 작업을 수행하기 위해 특정 *헤드*가 연결된 [`AutoModelForCausalLM`] 또는 [`LlamaForCausalLM`]과 같은 모델입니다.
 
-For each model type, there is a separate class for each machine learning framework (PyTorch, TensorFlow, Flax). Pick the corresponding prefix for the framework you're using.
+각 모델 타입에 대해 각 기계학습 프레임워크(PyTorch, TensorFlow, Flax)별로 별도의 클래스가 있습니다. 사용 중인 프레임워크에 해당하는 접두사를 선택하세요.
 
 <hfoptions id="backend">
 <hfoption id="PyTorch">
@@ -53,7 +53,7 @@ For each model type, there is a separate class for each machine learning framewo
 ```py
 from transformers import AutoModelForCausalLM, MistralForCausalLM
 
-# load with AutoClass or model-specific class
+# AutoClass 또는 모델별 클래스로 로드
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype="auto", device_map="auto")
 model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype="auto", device_map="auto")
 ```
@@ -64,7 +64,7 @@ model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dt
 ```py
 from transformers import TFAutoModelForCausalLM, TFMistralForCausalLM
 
-# load with AutoClass or model-specific class
+# AutoClass 또는 모델별 클래스로 로드
 model = TFAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 ```
@@ -75,7 +75,7 @@ model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 ```py
 from transformers import FlaxAutoModelForCausalLM, FlaxMistralForCausalLM
 
-# load with AutoClass or model-specific class
+# AutoClass 또는 모델별 클래스로 로드
 model = FlaxAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 ```
@@ -83,38 +83,38 @@ model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 </hfoption>
 </hfoptions>
 
-## Model classes
+## 모델 클래스[[model-classes]]
 
-To get a pretrained model, you need to load the weights into the model. This is done by calling [`~PreTrainedModel.from_pretrained`] which accepts weights from the Hugging Face Hub or a local directory.
+사전훈련된 모델을 가져오려면 모델에 가중치를 로드해야 합니다. 이는 Hugging Face Hub 또는 로컬 디렉터리에서 가중치를 받아들이는 [`~PreTrainedModel.from_pretrained`]를 호출하여 수행됩니다.
 
-There are two model classes, the [AutoModel](./model_doc/auto) class and a model-specific class.
+모델 클래스에는 [AutoModel](./model_doc/auto) 클래스와 모델별 클래스의 두 가지가 있습니다.
 
 <hfoptions id="model-classes">
 <hfoption id="AutoModel">
 
 <Youtube id="AhChOFRegn4"/>
 
-The [AutoModel](./model_doc/auto) class is a convenient way to load an architecture without needing to know the exact model class name because there are many models available. It automatically selects the correct model class based on the configuration file. You only need to know the task and checkpoint you want to use.
+[AutoModel](./model_doc/auto) 클래스는 사용 가능한 모델이 많기 때문에 정확한 모델 클래스 이름을 알 필요 없이 아키텍처를 로드하는 편리한 방법입니다. 구성 파일을 기반으로 올바른 모델 클래스를 자동으로 선택합니다. 사용하려는 작업과 체크포인트만 알면 됩니다.
 
-Easily switch between models or tasks, as long as the architecture is supported for a given task.
+주어진 작업에 대해 아키텍처가 지원되는 한, 모델이나 작업 간에 쉽게 전환할 수 있습니다.
 
-For example, the same model can be used for separate tasks.
+예를 들어, 동일한 모델을 별도의 작업에 사용할 수 있습니다.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoModelForQuestionAnswering
 
-# use the same API for 3 different tasks
+# 3가지 다른 작업에 동일한 API 사용
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
 model = AutoModelForSequenceClassification.from_pretrained("meta-llama/Llama-2-7b-hf")
 model = AutoModelForQuestionAnswering.from_pretrained("meta-llama/Llama-2-7b-hf")
 ```
 
-In other cases, you may want to quickly try out several different models for a task.
+다른 경우에는 작업에 대해 여러 다른 모델을 빠르게 시도해보고 싶을 수 있습니다.
 
 ```py
 from transformers import AutoModelForCausalLM
 
-# use the same API to load 3 different models
+# 동일한 API를 사용하여 3가지 다른 모델 로드
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 model = AutoModelForCausalLM.from_pretrained("google/gemma-7b")
@@ -123,9 +123,9 @@ model = AutoModelForCausalLM.from_pretrained("google/gemma-7b")
 </hfoption>
 <hfoption id="model-specific class">
 
-The [AutoModel](./model_doc/auto) class builds on top of model-specific classes. All model classes that support a specific task are mapped to their respective `AutoModelFor` task class.
+[AutoModel](./model_doc/auto) 클래스는 모델별 클래스를 기반으로 구축됩니다. 특정 작업을 지원하는 모든 모델 클래스는 해당하는 `AutoModelFor` 작업 클래스에 매핑됩니다.
 
-If you already know which model class you want to use, then you could use its model-specific class directly.
+사용하려는 모델 클래스를 이미 알고 있다면 해당 모델별 클래스를 직접 사용할 수 있습니다.
 
 ```py
 from transformers import LlamaModel, LlamaForCausalLM
@@ -136,28 +136,28 @@ model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
 </hfoption>
 </hfoptions>
 
-## Large models
+## 대규모 모델[[large-models]]
 
-Large pretrained models require a lot of memory to load. The loading process involves:
+대규모 사전훈련된 모델은 로드하는 데 많은 메모리가 필요합니다. 로드 과정은 다음과 같습니다:
 
-1. creating a model with random weights
-2. loading the pretrained weights
-3. placing the pretrained weights on the model
+1. 무작위 가중치로 모델 생성
+2. 사전훈련된 가중치 로드
+3. 사전훈련된 가중치를 모델에 배치
 
-You need enough memory to hold two copies of the model weights (random and pretrained) which may not be possible depending on your hardware. In distributed training environments, this is even more challenging because each process loads a pretrained model.
+모델 가중치의 두 복사본(무작위 및 사전훈련된)을 보관할 수 있는 충분한 메모리가 필요하며, 이는 하드웨어에 따라 불가능할 수 있습니다. 분산 학습 환경에서는 각 프로세스가 사전훈련된 모델을 로드하기 때문에 이는 더욱 어려운 과제입니다.
 
-Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
+트랜스포머는 빠른 초기화, 샤드된 체크포인트, Accelerate의 [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) 기능, 그리고 더 낮은 비트 데이터 타입 지원을 통해 이러한 메모리 관련 문제들을 일부 줄여줍니다.
 
 
-### Sharded checkpoints
+### 샤드된 체크포인트[[sharded-checkpoints]]
 
-The [`~PreTrainedModel.save_pretrained`] method automatically shards checkpoints larger than 10GB.
+[`~PreTrainedModel.save_pretrained`] 메소드는 10GB보다 큰 체크포인트를 자동으로 샤드합니다.
 
-Each shard is loaded sequentially after the previous shard is loaded, limiting memory usage to only the model size and the largest shard size.
+각 샤드는 이전 샤드가 로드된 후 순차적으로 로드되어, 메모리 사용량을 모델 크기와 가장 큰 샤드 크기로만 제한합니다.
 
-The `max_shard_size` parameter defaults to 5GB for each shard because it is easier to run on free-tier GPU instances without running out of memory.
+`max_shard_size` 매개변수는 각 샤드에 대해 기본적으로 5GB로 설정되어 있는데, 이는 무료 GPU 인스턴스에서 메모리 부족 없이 실행하기 더 쉽기 때문입니다.
 
-For example, create some shards checkpoints for [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B) in [`~PreTrainedModel.save_pretrained`].
+예를 들어, [`~PreTrainedModel.save_pretrained`]에서 [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B)에 대한 샤드 체크포인트를 생성해보겠습니다.
 
 ```py
 from transformers import AutoModel
@@ -170,7 +170,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     print(sorted(os.listdir(tmp_dir)))
 ```
 
-Reload the sharded checkpoint with [`~PreTrainedModel.from_pretrained`].
+[`~PreTrainedModel.from_pretrained`]로 샤드된 체크포인트를 다시 로드합니다.
 
 ```py
 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -178,7 +178,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-Sharded checkpoints can also be directly loaded with [`~transformers.modeling_utils.load_sharded_checkpoint`].
+샤드된 체크포인트는 [`~transformers.modeling_utils.load_sharded_checkpoint`]로도 직접 로드할 수 있습니다.
 
 ```py
 from transformers.modeling_utils import load_sharded_checkpoint
@@ -188,7 +188,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     load_sharded_checkpoint(model, tmp_dir)
 ```
 
-The [`~PreTrainedModel.save_pretrained`] method creates an index file that maps parameter names to the files they're stored in. The index file has two keys, `metadata` and `weight_map`.
+[`~PreTrainedModel.save_pretrained`] 메소드는 매개변수 이름을 저장된 파일에 매핑하는 인덱스 파일을 생성합니다. 인덱스 파일에는 `metadata`와 `weight_map`이라는 두 개의 키가 있습니다.
 
 ```py
 import json
@@ -201,14 +201,14 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 print(index.keys())
 ```
 
-The `metadata` key provides the total model size.
+`metadata` 키는 전체 모델 크기를 제공합니다.
 
 ```py
 index["metadata"]
 {'total_size': 28966928384}
 ```
 
-The `weight_map` key maps each parameter to the shard it's stored in.
+`weight_map` 키는 각 매개변수를 저장된 샤드에 매핑합니다.
 
 ```py
 index["weight_map"]
@@ -220,27 +220,27 @@ index["weight_map"]
 }
 ```
 
-### Big Model Inference
+### 대규모 모델 추론[[big-model-inference]]
 
 > [!TIP]
-> Make sure you have Accelerate v0.9.0 and PyTorch v1.9.0 or later installed to use this feature!
+> 이 기능을 사용하려면 Accelerate v0.9.0 및 PyTorch v1.9.0 이상이 설치되어 있는지 확인하세요!
 
 <Youtube id="MWCSGj9jEAo"/>
 
-[`~PreTrainedModel.from_pretrained`] is supercharged with Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature.
+[`~PreTrainedModel.from_pretrained`]는 Accelerate의 [대규모 모델 추론](https://hf.co/docs/accelerate/usage_guides/big_modeling) 기능으로 강화되었습니다.
 
-Big Model Inference creates a *model skeleton* on the PyTorch [meta](https://pytorch.org/docs/main/meta.html) device. The meta device doesn't store any real data, only the metadata.
+대규모 모델 추론은 PyTorch [meta](https://pytorch.org/docs/main/meta.html) 장치에서 *모델 스켈레톤*을 생성합니다. meta 장치는 실제 데이터를 저장하지 않고 메타데이터만 저장합니다.
 
-Randomly initialized weights are only created when the pretrained weights are loaded to avoid maintaining two copies of the model in memory at the same time. The maximum memory usage is only the size of the model.
+무작위로 초기화된 가중치는 사전훈련된 가중치가 로드될 때만 생성되어 메모리에 모델의 두 복사본을 동시에 유지하는 것을 방지합니다. 최대 메모리 사용량은 모델 크기만큼입니다.
 
 > [!TIP]
-> Learn more about device placement in [Designing a device map](https://hf.co/docs/accelerate/v0.33.0/en/concept_guides/big_model_inference#designing-a-device-map).
+> 장치 배치에 대한 자세한 내용은 [장치 맵 설계하기](https://hf.co/docs/accelerate/v0.33.0/en/concept_guides/big_model_inference#designing-a-device-map)를 참조하세요.
 
-Big Model Inference's second feature relates to how weights are loaded and dispatched in the model skeleton. Model weights are dispatched across all available devices, starting with the fastest device (usually the GPU) and then offloading any remaining weights to slower devices (CPU and hard drive).
+대규모 모델 추론의 두 번째 기능은 가중치가 모델 스켈레톤에 로드되고 배치되는 방식과 관련이 있습니다. 모델 가중치는 가장 빠른 장치(일반적으로 GPU)부터 시작하여 사용 가능한 모든 장치에 분산되고, 남은 가중치는 더 느린 장치(CPU 및 하드 드라이브)로 오프로드됩니다.
 
-Both features combined reduces memory usage and loading times for big pretrained models.
+두 기능을 결합하면 대규모 사전훈련된 모델의 메모리 사용량과 로딩 시간이 줄어듭니다.
 
-Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference.
+대규모 모델 추론을 활성화하려면 [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061)을 `"auto"`로 설정하세요.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -248,20 +248,20 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("google/gemma-7b", device_map="auto")
 ```
 
-You can also manually assign layers to a device in `device_map`. It should map all model parameters to a device, but you don't have to detail where all the submodules of a layer go if the entire layer is on the same device.
+`device_map`에서 레이어를 장치에 수동으로 할당할 수도 있습니다. 모든 모델 매개변수를 장치에 매핑해야 하지만, 전체 레이어가 동일한 장치에 있는 경우 레이어의 모든 하위 모듈이 어디로 가는지 자세히 설명할 필요는 없습니다.
 
-Access the `hf_device_map` attribute to see how a model is distributed across devices.
+`hf_device_map` 속성에 액세스하여 모델이 장치 간에 어떻게 분산되어 있는지 확인하세요.
 
 ```py
 device_map = {"model.layers.1": 0, "model.layers.14": 1, "model.layers.31": "cpu", "lm_head": "disk"}
 model.hf_device_map
 ```
 
-### Model data type
+### 모델 데이터 타입[[model-data-type]]
 
-PyTorch model weights are initialized in `torch.float32` by default. Loading a model in a different data type, like `torch.float16`, requires additional memory because the model is loaded again in the desired data type.
+PyTorch 모델 가중치는 기본적으로 `torch.float32`로 초기화됩니다. `torch.float16`과 같은 다른 데이터 타입으로 모델을 로드하려면 추가 메모리가 필요한데, 이는 모델이 원하는 데이터 타입으로 다시 로드되기 때문입니다.
 
-Explicitly set the [torch_dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) parameter to directly initialize the model in the desired data type instead of loading the weights twice (`torch.float32` then `torch.float16`). You could also set `torch_dtype="auto"` to automatically load the weights in the data type they are stored in.
+[torch_dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) 매개변수를 명시적으로 설정하여 가중치를 두 번 로드하는 대신(`torch.float32` 다음 `torch.float16`) 원하는 데이터 타입으로 모델을 직접 초기화하세요. 또한 `torch_dtype="auto"`를 설정하여 가중치가 저장된 데이터 타입으로 자동으로 로드할 수도 있습니다.
 
 <hfoptions id="dtype">
 <hfoption id="specific dtype">
@@ -285,7 +285,7 @@ gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype="aut
 </hfoption>
 </hfoptions>
 
-The `torch_dtype` parameter can also be configured in [`AutoConfig`] for models instantiated from scratch.
+`torch_dtype` 매개변수는 처음부터 인스턴스화된 모델에 대해 [`AutoConfig`]에서도 구성할 수 있습니다.
 
 ```py
 import torch
@@ -295,13 +295,13 @@ my_config = AutoConfig.from_pretrained("google/gemma-2b", torch_dtype=torch.floa
 model = AutoModel.from_config(my_config)
 ```
 
-## Custom models
+## 커스텀 모델[[custom-models]]
 
-Custom models builds on Transformers' configuration and modeling classes, supports the [AutoClass](#autoclass) API, and are loaded with [`~PreTrainedModel.from_pretrained`]. The difference is that the modeling code is *not* from Transformers.
+커스텀 모델은 트랜스포머의 구성 및 모델링 클래스를 기반으로 구축되며, [AutoClass](#autoclass) API를 지원하고 [`~PreTrainedModel.from_pretrained`]로 로드됩니다. 차이점은 모델링 코드가 트랜스포머에서 제공되는 것이 *아니라는* 점입니다.
 
-Take extra precaution when loading a custom model. While the Hub includes [malware scanning](https://hf.co/docs/hub/security-malware#malware-scanning) for every repository, you should still be careful to avoid inadvertently executing malicious code.
+커스텀 모델을 로드할 때는 특별히 주의해야 합니다. Hub에는 모든 저장소에 대한 [멜웨어 스캔](https://hf.co/docs/hub/security-malware#malware-scanning)이 포함되어 있지만, 여전히 악성 코드를 실수로 실행하지 않도록 주의해야 합니다.
 
-Set `trust_remote_code=True` in [`~PreTrainedModel.from_pretrained`] to load a custom model.
+커스텀 모델을 로드하려면 [`~PreTrainedModel.from_pretrained`]에서 `trust_remote_code=True`를 설정하세요.
 
 ```py
 from transformers import AutoModelForImageClassification
@@ -309,7 +309,7 @@ from transformers import AutoModelForImageClassification
 model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
 ```
 
-As an extra layer of security, load a custom model from a specific revision to avoid loading model code that may have changed. The commit hash can be copied from the models [commit history](https://hf.co/sgugger/custom-resnet50d/commits/main).
+추가적인 보안 계층으로, 변경되었을 수 있는 모델 코드를 로드하지 않도록 특정 개정에서 커스텀 모델을 로드하세요. 커밋 해시는 모델의 [커밋 기록](https://hf.co/sgugger/custom-resnet50d/commits/main)에서 복사할 수 있습니다.
 
 ```py
 commit_hash = "ed94a7c6247d8aedce4647f00f20de6875b5b292"
@@ -318,4 +318,4 @@ model = AutoModelForImageClassification.from_pretrained(
 )
 ```
 
-Refer to the [Customize models](./custom_models) guide for more information.
+자세한 내용은 [모델 맞춤 설정](./custom_models) 가이드를 참조하세요.
