@@ -147,6 +147,8 @@
     title: (번역중) Getting started
   - local: quantization/bitsandbytes
     title: bitsandbytes
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
   - local: quantization/gptq
     title: GPTQ
   - local: quantization/awq
