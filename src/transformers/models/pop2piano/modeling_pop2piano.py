@@ -678,10 +678,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -1044,12 +1040,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def get_encoder(self):
         return self.encoder

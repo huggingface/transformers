@@ -869,14 +869,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
 

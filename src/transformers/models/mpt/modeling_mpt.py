@@ -438,9 +438,6 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 

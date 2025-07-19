@@ -888,6 +888,9 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_output_embeddings(self):
+        return None
+
     @auto_docstring
     def forward(
         self,

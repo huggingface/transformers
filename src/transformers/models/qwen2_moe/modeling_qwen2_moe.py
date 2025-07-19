@@ -780,12 +780,6 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1065,18 +1059,6 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1202,12 +1184,6 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1295,12 +1271,6 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1347,7 +1317,6 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
 
 
 @auto_docstring
-# Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     base_model_prefix = "model"
 
@@ -1358,12 +1327,6 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
