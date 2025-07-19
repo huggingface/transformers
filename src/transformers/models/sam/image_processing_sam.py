@@ -387,6 +387,11 @@ class SamImageProcessor(BaseImageProcessor):
 
         return segmentation_map, original_size
 
+    def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Overrides the `__call__` method of the `BaseImageProcessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
+        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
+
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,

@@ -656,6 +656,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("vits", ("VitsTokenizer", None)),
+        (
+            "voxtral",
+            (
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            ),
+        ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-bert", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
