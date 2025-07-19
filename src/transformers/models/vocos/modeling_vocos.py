@@ -26,6 +26,58 @@ from ..auto import AutoModel
 from .configuration_vocos import VocosConfig, VocosWithEncodecConfig
 
 
+def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, window):
+    """
+    Performs the Inverse Short Time Fourier Transform (ISTFT) on a STFT coefficients to reconstruct audio in the time domain.
+    It computes ISTFT differently depending on padding:
+        if `center` : uses PyTorch's built-in ISTFT implementation since it uses `center=True` by default.
+        if `same` : uses custom implementation of ISTFT with the overlap-add method, since the Pytorch version fails the
+        Nonzero Overlap Add (NOLA) condition when center is False. See issue: https://github.com/pytorch/pytorch/issues/62323
+    """
+    if padding == "center":
+        audio = torch.istft(
+            spectrogram,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            win_length=win_length,
+            window=window,
+            center=True,
+        )
+
+    else:
+        batch_size, num_freq_bins, num_time_frames = spectrogram.shape
+        pad = (win_length - hop_length) // 2
+        # the inverse FFT of each frame
+        inverse_fft = torch.fft.irfft(spectrogram, n=n_fft, dim=1, norm="backward")
+        inverse_fft = inverse_fft * window[None, :, None]
+
+        # combine the overlapping frame with windowing and normalizing by the sum of squared window values across overlapping frames
+        # to make sure the reconstruction of the audio is accurate
+        output_length = (num_time_frames - 1) * hop_length + win_length
+        audio = F.fold(
+            inverse_fft,
+            output_size=(1, output_length),
+            kernel_size=(1, win_length),
+            stride=(1, hop_length),
+        )[:, 0, 0, pad:-pad]
+        window_sqrt = window.square().expand(1, num_time_frames, -1).transpose(1, 2)
+        norm = F.fold(
+            window_sqrt,
+            output_size=(1, output_length),
+            kernel_size=(1, win_length),
+            stride=(1, hop_length),
+        ).squeeze()[pad:-pad]
+
+        if torch.any(norm <= 1e-11):
+            raise ValueError(
+                "Normalization tensor `norm` contains values ≤ 1e-11, it would cause division by zero. check the n_fft, hop_length and padding parameters."
+            )
+
+        audio = audio / norm
+
+    return audio
+
+
 class VocosLayerNorm(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
@@ -117,70 +169,6 @@ class VocosBackbone(nn.Module):
         return hidden_states
 
 
-class VocosISTFT(nn.Module):
-    """
-    Performs the Inverse Short Time Fourier Transform (ISTFT) on a STFT coefficients to reconstruct audio in the time domain.
-    It computes ISTFT differently depending on padding:
-        if `center` : uses PyTorch's built-in ISTFT implementation since it uses `center=True` by default.
-        if `same` : uses custom implementation of ISTFT with the overlap-add method, since the Pytorch version fails the
-        Nonzero Overlap Add (NOLA) condition when center is False. See issue: https://github.com/pytorch/pytorch/issues/62323
-    """
-
-    def __init__(self, config: VocosConfig):
-        super().__init__()
-        if config.spec_padding not in ["center", "same"]:
-            raise ValueError("padding must be `center` or `same`")
-        self.padding = config.spec_padding
-        self.n_fft = config.n_fft
-        self.hop_length = config.hop_length
-        self.win_length = config.n_fft
-        window = torch.hann_window(self.win_length)
-        self.register_buffer("window", window)
-
-    def forward(self, spectrogram: torch.Tensor) -> torch.Tensor:
-        if self.padding == "center":
-            audio = torch.istft(
-                spectrogram,
-                n_fft=self.n_fft,
-                hop_length=self.hop_length,
-                win_length=self.win_length,
-                window=self.window,
-                center=True,
-            )
-
-        else:
-            batch_size, num_freq_bins, num_time_frames = spectrogram.shape
-            pad = (self.win_length - self.hop_length) // 2
-            # the inverse FFT of each frame
-            inverse_fft = torch.fft.irfft(spectrogram, n=self.n_fft, dim=1, norm="backward")
-            inverse_fft = inverse_fft * self.window[None, :, None]
-
-            # combine the overlapping frame with windowing and normalizing by the sum of squared window values across overlapping frames
-            # to make sure the reconstruction of the audio is accurate
-            output_length = (num_time_frames - 1) * self.hop_length + self.win_length
-            audio = F.fold(
-                inverse_fft,
-                output_size=(1, output_length),
-                kernel_size=(1, self.win_length),
-                stride=(1, self.hop_length),
-            )[:, 0, 0, pad:-pad]
-            window_sqrt = self.window.square().expand(1, num_time_frames, -1).transpose(1, 2)
-            norm = F.fold(
-                window_sqrt,
-                output_size=(1, output_length),
-                kernel_size=(1, self.win_length),
-                stride=(1, self.hop_length),
-            ).squeeze()[pad:-pad]
-
-            if torch.any(norm <= 1e-11):
-                raise ValueError(
-                    "Normalization tensor `norm` contains values ≤ 1e-11, it would cause division by zero. check the n_fft, hop_length and padding parameters."
-                )
-            audio = audio / norm
-
-        return audio
-
-
 class VocosISTFTHead(nn.Module):
     """
     Projects hidden states to magnitude and phase predictions, combines them into complex
@@ -190,7 +178,14 @@ class VocosISTFTHead(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.out_proj = nn.Linear(config.hidden_dim, config.n_fft + 2)
-        self.istft = VocosISTFT(config)
+        if config.spec_padding not in ["center", "same"]:
+            raise ValueError("padding must be `center` or `same`")
+        self.padding = config.spec_padding
+        self.n_fft = config.n_fft
+        self.hop_length = config.hop_length
+        self.win_length = config.n_fft
+        window = torch.hann_window(self.win_length)
+        self.register_buffer("window", window)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         spectrogram = self.out_proj(hidden_states)
@@ -201,7 +196,14 @@ class VocosISTFTHead(nn.Module):
         real = torch.cos(phase)
         imag = torch.sin(phase)
         stft_complex_coeffs = magnitude * (real + 1j * imag)
-        audio = self.istft(stft_complex_coeffs)
+        audio = _vocos_inverse_stft(
+            stft_complex_coeffs,
+            padding=self.padding,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=self.window,
+        )
         return audio
 
 
