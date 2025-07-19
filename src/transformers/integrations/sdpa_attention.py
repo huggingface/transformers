@@ -1,8 +1,9 @@
 from typing import Optional
 
 import torch
+from packaging import version
 
-from ..utils import logging
+from ..utils import get_torch_version, logging
 
 
 logger = logging.get_logger(__name__)
@@ -18,6 +19,15 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -> bool:
+    # torch supports enable_gqa since 2.5, but we need to check if the key is a proxy to avoid tracing issues, make sure attention_mask is None to avoid fall back into the math kernel
+    return (
+        version.parse(get_torch_version()) >= version.parse("2.5")
+        and attention_mask is None
+        and not isinstance(key, torch.fx.Proxy)
+    )
 
 
 def sdpa_attention_forward(
@@ -36,10 +46,13 @@ def sdpa_attention_forward(
             "`sdpa` attention does not support `output_attentions=True` or `head_mask`."
             " Please set your attention to `eager` if you want any of these features."
         )
-
+    sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups"):
-        key = repeat_kv(key, module.num_key_value_groups)
-        value = repeat_kv(value, module.num_key_value_groups)
+        if not use_gqa_in_sdpa(attention_mask, key):
+            key = repeat_kv(key, module.num_key_value_groups)
+            value = repeat_kv(value, module.num_key_value_groups)
+        else:
+            sdpa_kwargs = {"enable_gqa": True}
 
     if attention_mask is not None and attention_mask.ndim == 4:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
@@ -71,6 +84,7 @@ def sdpa_attention_forward(
         dropout_p=dropout,
         scale=scaling,
         is_causal=is_causal,
+        **sdpa_kwargs,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
