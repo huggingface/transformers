@@ -873,6 +873,8 @@
         title: EnCodec
       - local: model_doc/fastconformer
         title: FastConformer
+      - local: model_doc/parakeet_ctc
+        title: ParakeetCTC
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/granite_speech
