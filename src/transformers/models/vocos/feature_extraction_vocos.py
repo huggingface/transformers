@@ -44,13 +44,13 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        num_mel_bins (`int`, *optional*, defaults to 80):
+        num_mel_bins (`int`, *optional*, defaults to 100):
             Number of Mel-frequency bins.
         n_fft (`int`, *optional*, defaults to 1024):
             Size of the Fourier transform.
         hop_length (`int`, *optional*, defaults to 256):
             Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
-        padding (`str`, *optional*, defaults to center):
+        padding (`str`, *optional*, defaults to `"center"`):
             Symmetric padding if 'same' and center padding if 'center'.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.

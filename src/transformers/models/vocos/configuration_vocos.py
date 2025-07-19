@@ -48,11 +48,11 @@ class VocosConfig(PretrainedConfig):
             Kernel size for depthwise convolutions.
         padding (`int`, *optional*, defaults to 3):
             Padding applied to those convolutions.
-        layer_scale_init_value (`float`, *optional*, defaults to 1/8):
+        layer_scale_init_value (`float`, *optional*, defaults to `1/8`):
             Initial value for layer‐scale (if >0, enables per‐block scaling).
         use_adaptive_norm (`bool`, *optional*, defaults to `False`):
             Whether to use adaptive layer normalization .
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for all LayerNorm operations.
         n_fft (`int`, *optional*, defaults to 1024):
             FFT size for STFT/ISTFT used in VocosISTFT head.
@@ -60,8 +60,6 @@ class VocosConfig(PretrainedConfig):
             Hop length between STFT frames used in VocosISTFT head.
         spec_padding (`str`, *optional*, defaults to `"center"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
-        **kwargs (`Dict[str, Any]`, optional):
-            Additional attributes passed to [`PretrainedConfig`].
 
     Example:
 
@@ -139,8 +137,6 @@ class VocosWithEncodecConfig(VocosConfig):
             Hop length for STFT/ISTFT used in VocosISTFT head.
         spec_padding (`str`, *optional*, defaults to `"same"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
-        **kwargs (`Dict[str, Any]`, optional):
-            Additional attributes passed to [`VocosConfig`].
 
     Example:
 
