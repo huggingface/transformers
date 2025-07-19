@@ -21,32 +21,24 @@ from ...utils.import_utils import define_import_structure
 _import_structure = {
     "configuration_fastconformer": [
         "FastConformerConfig",
-        "ParakeetCTCConfig",
     ],
     "feature_extraction_fastconformer": ["FastConformerFeatureExtractor"],
-    "tokenization_fastconformer": ["FastConformerTokenizer"],
 }
 
 _import_structure["modeling_fastconformer"] = [
     "FastConformerModel",
     "FastConformerEncoder",
     "FastConformerPreTrainedModel",
-    "ParakeetCTC",
 ]
 
 if TYPE_CHECKING:
-    from .configuration_fastconformer import (
-        FastConformerConfig,
-        ParakeetCTCConfig,
-    )
+    from .configuration_fastconformer import FastConformerConfig
     from .feature_extraction_fastconformer import FastConformerFeatureExtractor
     from .modeling_fastconformer import (
         FastConformerEncoder,
         FastConformerModel,
         FastConformerPreTrainedModel,
-        ParakeetCTC,
     )
-    from .tokenization_fastconformer import FastConformerTokenizer
 
 else:
     import sys

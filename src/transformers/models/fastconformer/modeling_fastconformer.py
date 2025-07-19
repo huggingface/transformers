@@ -27,10 +27,10 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils.generic import can_return_tuple
-from .configuration_fastconformer import FastConformerConfig, ParakeetCTCConfig
+from .configuration_fastconformer import FastConformerConfig
 
 
 # Positional Encoding - keeping the FastConformer specific implementation
@@ -589,199 +589,6 @@ class FastConformerModel(FastConformerPreTrainedModel):
         )
 
 
-class ParakeetCTC(FastConformerPreTrainedModel):
-    config_class = ParakeetCTCConfig
-
-    def __init__(self, config: ParakeetCTCConfig):
-        # Initialize with the encoder config for the PreTrainedModel
-        super().__init__(config.fastconformer_config)
-        # Override self.config with the CTC config so it gets saved correctly
-        self.config = config
-        # Store encoder config separately for internal use
-        self.encoder_config = config.fastconformer_config
-
-        # Create the FastConformer encoder using the correct sub-config
-        self.encoder = FastConformerEncoder(config.fastconformer_config)
-
-        # CTC head uses vocab_size from the CTC config
-        self.ctc_head = nn.Linear(config.fastconformer_config.hidden_size, config.vocab_size)
-
-        # Store CTC-specific parameters
-        self.blank_token_id = config.blank_token_id
-        self.ctc_loss_reduction = config.ctc_loss_reduction
-        self.ctc_zero_infinity = config.ctc_zero_infinity
-
-        # Initialize weights
-        self.post_init()
-
-    @can_return_tuple
-    def forward(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        input_lengths: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, CausalLMOutput]:
-        return_dict = return_dict if return_dict is not None else self.encoder_config.use_return_dict
-
-        # Forward through encoder
-        encoder_outputs = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            input_lengths=input_lengths,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-        )
-
-        hidden_states = encoder_outputs.last_hidden_state
-
-        # Apply CTC head
-        logits = self.ctc_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            # Calculate encoder output lengths
-            if input_lengths is not None:
-                encoder_lengths = calc_length(
-                    input_lengths.float(),
-                    all_paddings=2,
-                    kernel_size=3,
-                    stride=2,
-                    ceil_mode=False,
-                    repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
-                )
-                encoder_lengths = encoder_lengths.long()
-            elif attention_mask is not None:
-                input_lens = attention_mask.sum(-1).float()
-                encoder_lengths = calc_length(
-                    input_lens,
-                    all_paddings=2,
-                    kernel_size=3,
-                    stride=2,
-                    ceil_mode=False,
-                    repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
-                )
-                encoder_lengths = encoder_lengths.long()
-            else:
-                encoder_lengths = torch.full((logits.size(0),), logits.size(1), dtype=torch.long, device=logits.device)
-
-            # Calculate CTC loss using the configured parameters
-            label_lengths = torch.sum((labels != -100) & (labels != self.blank_token_id), dim=-1)
-            log_probs = F.log_softmax(logits, dim=-1)
-            log_probs = log_probs.transpose(0, 1)
-
-            targets = []
-            for i, label_length in enumerate(label_lengths):
-                label = labels[i, :label_length]
-                label = label[label != -100]
-                targets.append(label)
-
-            targets = torch.cat(targets)
-
-            loss = F.ctc_loss(
-                log_probs=log_probs,
-                targets=targets,
-                input_lengths=encoder_lengths,
-                target_lengths=label_lengths,
-                blank=self.blank_token_id,
-                reduction=self.ctc_loss_reduction,
-                zero_infinity=self.ctc_zero_infinity,
-            )
-
-        return CausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-    def generate_speech_recognition_outputs(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        input_lengths: Optional[torch.Tensor] = None,
-    ) -> list[list[int]]:
-        """
-        Generate CTC decoded token sequences using greedy decoding.
-
-        Args:
-            input_features: Input mel-spectrogram features
-            attention_mask: Attention mask
-            input_lengths: Sequence lengths
-
-        Returns:
-            List of decoded token sequences (one per batch item)
-        """
-        with torch.no_grad():
-            # Forward pass to get logits
-            outputs = self.forward(
-                input_features=input_features,
-                attention_mask=attention_mask,
-                input_lengths=input_lengths,
-                return_dict=True,
-            )
-
-            logits = outputs.logits  # (batch, time, vocab)
-
-            # Greedy CTC decoding
-            predicted_ids = torch.argmax(logits, dim=-1)  # (batch, time)
-
-            batch_size = predicted_ids.size(0)
-            decoded_sequences = []
-
-            for batch_idx in range(batch_size):
-                sequence = predicted_ids[batch_idx]
-
-                # Get actual sequence length if available
-                if input_lengths is not None:
-                    # Calculate the actual output length after subsampling
-                    actual_length = calc_length(
-                        input_lengths[batch_idx : batch_idx + 1].float(),
-                        all_paddings=2,
-                        kernel_size=3,
-                        stride=2,
-                        ceil_mode=False,
-                        repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
-                    ).item()
-                    sequence = sequence[:actual_length]
-                elif attention_mask is not None:
-                    # Use attention mask to determine length
-                    input_len = attention_mask[batch_idx].sum().float()
-                    actual_length = calc_length(
-                        input_len.unsqueeze(0),
-                        all_paddings=2,
-                        kernel_size=3,
-                        stride=2,
-                        ceil_mode=False,
-                        repeat_num=int(math.log2(self.encoder_config.subsampling_factor)),
-                    ).item()
-                    sequence = sequence[:actual_length]
-
-                # CTC collapse: remove blanks and repeated tokens
-                decoded_tokens = []
-                prev_token = None
-
-                for token_id in sequence.tolist():
-                    # Skip blank tokens (using the configured blank token ID)
-                    if token_id == self.blank_token_id:
-                        prev_token = token_id
-                        continue
-
-                    # Skip repeated tokens (CTC collapse)
-                    if token_id != prev_token:
-                        decoded_tokens.append(token_id)
-
-                    prev_token = token_id
-
-                decoded_sequences.append(decoded_tokens)
-
-            return decoded_sequences
-
-
 # Future decoder configurations - placeholders for later implementation
 # class ParakeetTDTConfig(PretrainedConfig):
 #     """Configuration for Parakeet TDT models (FastConformer + TDT decoder)"""
@@ -796,4 +603,4 @@ class ParakeetCTC(FastConformerPreTrainedModel):
 #     model_type = "canary"
 
 
-__all__ = ["FastConformerEncoder", "FastConformerModel", "ParakeetCTC", "FastConformerPreTrainedModel"]
+__all__ = ["FastConformerEncoder", "FastConformerModel", "FastConformerPreTrainedModel"]
