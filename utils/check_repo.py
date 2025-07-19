@@ -1184,7 +1184,6 @@ def check_public_method_exists(documented_methods_map):
                 pass
 
     if len(failures) > 0:
-        print("failures : ", failures)
         raise Exception("\n".join(failures))
 
 
