@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-02-11 and added to Hugging Face Transformers on 2023-03-01.*
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">

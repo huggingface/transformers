@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-03 and added to Hugging Face Transformers on 2025-01-31.*
 
 # GOT-OCR2
 

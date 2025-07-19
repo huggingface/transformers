@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-02-05 and added to Hugging Face Transformers on 2022-01-19.*
 
 # ViLT
 

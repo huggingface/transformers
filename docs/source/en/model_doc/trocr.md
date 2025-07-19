@@ -12,6 +12,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was released on 2021-09-21 and added to Hugging Face Transformers on 2021-10-13.*
 
 # TrOCR
 

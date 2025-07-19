@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-02-07 and added to Hugging Face Transformers on 2023-06-20.*
 
 # GPTSAN-japanese
 
@@ -30,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The GPTSAN-japanese model was released in the repository by Toshiyuki Sakamoto (tanreinama).
+The [GPTSAN-japanese](https://huggingface.co/Tanrei/GPTSAN-japanese) model was released in the repository by Toshiyuki Sakamoto (tanreinama).
 
 GPTSAN is a Japanese language model using Switch Transformer. It has the same structure as the model introduced as Prefix LM
 in the T5 paper, and support both Text Generation and Masked Language Modeling tasks. These basic tasks similarly can

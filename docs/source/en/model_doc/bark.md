@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-04-09 and added to Hugging Face Transformers on 2023-07-17.*
 
 # Bark
 
@@ -19,7 +20,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
+[Bark](https://huggingface.co/suno/bark) is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
 
 Bark is made of 4 main models:
 
