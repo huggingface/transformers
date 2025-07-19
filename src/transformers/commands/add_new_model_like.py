@@ -1079,10 +1079,10 @@ def add_model_to_auto_classes(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         model_classes (`dict[str, list[str]]`): A dictionary framework to list of model classes implemented.
     """
-    for filename in AUTO_CLASSES_PATTERNS:
+    for filename, patterns in AUTO_CLASSES_PATTERNS.items():
         # Extend patterns with all model classes if necessary
         new_patterns = []
-        for pattern in AUTO_CLASSES_PATTERNS[filename]:
+        for pattern in patterns:
             if re.search("any_([a-z]*)_class", pattern) is not None:
                 framework = re.search("any_([a-z]*)_class", pattern).groups()[0]
                 if framework in model_classes:

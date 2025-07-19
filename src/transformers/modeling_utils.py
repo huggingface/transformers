@@ -1572,8 +1572,8 @@ def _find_mismatched_keys(
         # Fix the key names
         new_state_dict = {keys_to_rename_mapping[k]: v for k, v in state_dict.items() if k in keys_to_rename_mapping}
 
-        for key in new_state_dict.keys():
-            if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
+        for key, tensor in new_state_dict.items():
+            if key in model_state_dict and tensor.shape != model_state_dict[key].shape:
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
@@ -1582,7 +1582,7 @@ def _find_mismatched_keys(
                     and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
-                    mismatched_shapes.append((new_state_dict[key].shape, model_state_dict[key].shape))
+                    mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
 
     return mismatched_keys, mismatched_shapes
 

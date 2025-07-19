@@ -253,8 +253,8 @@ class HqqHfQuantizer(HfQuantizer):
             return
 
         # Step 1: populate module with weight/bias from module state dict
-        for key in module_state_dict:
-            setattr(module, key, torch.nn.Parameter(module_state_dict[key]))
+        for key, tensor in module_state_dict.items():
+            setattr(module, key, torch.nn.Parameter(tensor))
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.
