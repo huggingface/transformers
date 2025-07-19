@@ -97,7 +97,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text: str) -> list[str]:
         """
         Tokenize a string into a list of tokens.
-        
+
         For CTC models, this typically involves character-level or subword tokenization.
         """
         if self.do_lower_case:
@@ -119,29 +119,30 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """
         Converts a sequence of tokens (string) into a single string.
-        
+
         For CTC tokenizers, this handles SentencePiece-style token merging.
         """
         # Join tokens and handle SentencePiece-style subwords
         text = "".join(tokens)
-        
+
         # Handle SentencePiece-style tokens (starting with ▁)
         text = text.replace("▁", " ")
-        
+
         # Clean up extra spaces
         text = re.sub(r"\s+", " ", text).strip()
-        
+
         return text
 
     def ctc_decode_ids(self, token_ids: list[int]) -> list[int]:
         """
         Perform CTC decoding on a sequence of token IDs.
-        
+
         This removes blank tokens and collapses consecutive identical tokens.
-        
+        Also filters out out-of-vocabulary tokens.
+
         Args:
             token_ids: List of token IDs from CTC model output
-            
+
         Returns:
             List of decoded token IDs
         """
@@ -157,6 +158,11 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
                 prev_id = token_id
                 continue
 
+            # Skip out-of-vocabulary tokens
+            if token_id not in self.ids_to_tokens:
+                prev_id = token_id
+                continue
+
             # Skip repeated tokens (CTC collapse)
             if token_id != prev_id:
                 decoded_ids.append(token_id)
@@ -168,22 +174,22 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
     def decode_ctc_tokens(self, token_ids: list[int]) -> str:
         """
         Decode CTC token IDs to text.
-        
+
         Args:
             token_ids: List of token IDs from CTC model output
-            
+
         Returns:
             Decoded text string
         """
         # First apply CTC decoding
         decoded_ids = self.ctc_decode_ids(token_ids)
-        
+
         # Convert IDs to tokens
         tokens = [self._convert_id_to_token(id_) for id_ in decoded_ids]
-        
+
         # Convert tokens to string
         text = self.convert_tokens_to_string(tokens)
-        
+
         return text
 
     def decode(
@@ -207,15 +213,19 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         # Handle single integer
         if isinstance(token_ids, int):
             token_ids = [token_ids]
-        
+
+        # Handle empty list
+        if not token_ids:
+            return ""
+
         # Handle batch of sequences
         if isinstance(token_ids[0], list):
             return self.batch_decode(
-                token_ids, 
+                token_ids,
                 skip_special_tokens=skip_special_tokens,
                 clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 ctc_decode=ctc_decode,
-                **kwargs
+                **kwargs,
             )
 
         # Single sequence
@@ -272,8 +282,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             return
 
         vocab_file = os.path.join(
-            save_directory, 
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
@@ -316,4 +325,4 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
         return [0] * len(token_ids_0) + [0] * len(token_ids_1)
 
 
-__all__ = ["ParakeetCTCTokenizer"] 
+__all__ = ["ParakeetCTCTokenizer"]

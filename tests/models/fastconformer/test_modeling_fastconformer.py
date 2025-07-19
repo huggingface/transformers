@@ -24,8 +24,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_atte
 
 
 if is_torch_available():
-    import torch
-
     from transformers.models.fastconformer import (
         FastConformerConfig,
         FastConformerModel,

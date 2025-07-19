@@ -109,4 +109,4 @@ class ParakeetCTCConfig(PretrainedConfig):
             )
 
 
-__all__ = ["ParakeetCTCConfig"] 
+__all__ = ["ParakeetCTCConfig"]

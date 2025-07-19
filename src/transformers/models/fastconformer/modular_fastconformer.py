@@ -23,7 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ...utils.generic import can_return_tuple
@@ -189,9 +189,6 @@ class FastConformerConfig(PretrainedConfig):
         self.dropout = hidden_dropout_prob
         self.attention_dropout = attention_probs_dropout_prob
         self.activation_function = hidden_act
-
-
-
 
 
 # Future decoder configurations - placeholders for later implementation
@@ -770,9 +767,6 @@ class FastConformerModel(FastConformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
-
-
-
 
 
 # Future model classes - placeholders for later implementation
