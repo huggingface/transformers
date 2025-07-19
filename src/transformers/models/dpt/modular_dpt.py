@@ -267,7 +267,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return processed_images
+        return BatchFeature(data={"pixel_values": processed_images})
 
     def post_process_depth_estimation(
         self,

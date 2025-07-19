@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Image processor class for ViTMatte."""
 
-from functools import partial
 from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
@@ -30,8 +29,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     get_image_size,
-    make_list_of_images,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -85,86 +82,6 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: list["torch.Tensor"],
-        trimaps: list["torch.Tensor"],
-        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        trimaps (`list[torch.Tensor]`):
-            The trimaps to preprocess.
-        """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Prepare input trimaps
-        trimaps = self._prepare_input_trimaps(trimaps=trimaps, device=device)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("resample")
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-        kwargs.pop("do_resize")
-        kwargs.pop("do_center_crop")
-        kwargs.pop("size")
-        kwargs.pop("crop_size")
-
-        return self._preprocess(images, trimaps, **kwargs)
-
-    def _prepare_input_trimaps(
-        self, trimaps: ImageInput, device: Optional["torch.device"] = None
-    ) -> list["torch.Tensor"]:
-        """
-        Prepare input trimaps for processing,m this can not yet deal with nested list
-
-        Args:
-            trimaps ('ImageInout):
-                The input trimaps to be process, should not be nested
-            device('Optional['torch.device'] defaults to 'self.device'):
-                The device to process the trimaps on
-
-        Returns:
-            list['torch.Tensor']:
-                Input trimaps converted to a list of tensors
-        """
-        # from batch or single image to list, and insert channel dimension
-        trimaps = make_list_of_images(trimaps, expected_ndims=2)
-
-        # passing ChannelDimension.First achieves correct functionality on grayscale/single channel
-        process_image_fn = partial(
-            self._process_image,
-            input_data_format=ChannelDimension.FIRST,
-            device=device,
-        )
-
-        processed_trimaps = []
-        for trimap in trimaps:
-            processed_trimaps.append(torch.unsqueeze(process_image_fn(trimap), dim=0))
-
-        return processed_trimaps
-
     def _pad_image(
         self,
         images: "torch.tensor",
@@ -189,6 +106,38 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
             images = F.pad(images, padding)
 
         return images
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: list["torch.Tensor"],
+        trimaps: list["torch.Tensor"],
+        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        trimaps (`list[torch.Tensor]`):
+            The trimaps to preprocess.
+        """
+        return super().preprocess(images, trimaps, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        trimaps: ImageInput,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        trimaps = self._prepare_image_like_inputs(images=trimaps, expected_ndims=2, device=device)
+
+        return self._preprocess(images, trimaps, **kwargs)
 
     @filter_out_non_signature_kwargs()
     def _preprocess(

@@ -39,7 +39,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    make_flat_list_of_images,
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
@@ -99,22 +98,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             batch_num_images = [1]
         kwargs["batch_num_images"] = batch_num_images
         return super().preprocess(images, **kwargs)
-
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
-        """
-        Prepare the images structure for processing.
-
-        Args:
-            images (`ImageInput`):
-                The input images to process.
-
-        Returns:
-            `ImageInput`: The images with a valid nesting.
-        """
-        return make_flat_list_of_images(images)
 
     def _resize_for_patching(
         self,

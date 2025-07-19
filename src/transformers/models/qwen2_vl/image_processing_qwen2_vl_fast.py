@@ -181,7 +181,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             device (`torch.device`, *optional*):
                 The device to process the images on. If unset, the device is inferred from the input images.
         """
-        images = self._prepare_input_images(
+        images = self._prepare_image_like_inputs(
             images=images,
             do_convert_rgb=do_convert_rgb,
             input_data_format=input_data_format,
