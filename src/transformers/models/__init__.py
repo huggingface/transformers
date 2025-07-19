@@ -240,6 +240,7 @@ if TYPE_CHECKING:
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
+    from .parakeet_ctc import *
     from .patchtsmixer import *
     from .patchtst import *
     from .pegasus import *

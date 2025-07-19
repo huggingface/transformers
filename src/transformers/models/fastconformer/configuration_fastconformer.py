@@ -19,10 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 # Configuration
@@ -184,95 +180,6 @@ class FastConformerConfig(PretrainedConfig):
         self.activation_function = hidden_act
 
 
-class ParakeetCTCConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`ParakeetCTC`]. It is used to instantiate a
-    Parakeet CTC model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 1024):
-            Vocabulary size of the CTC head. Defines the number of different tokens that can be predicted by the model.
-        blank_token_id (`int`, *optional*, defaults to 0):
-            The id of the blank token used in CTC. Typically 0.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the beginning-of-sequence token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the end-of-sequence token.
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-            The reduction method for CTC loss. Can be "mean", "sum", or "none".
-        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-            Whether to set infinite losses to zero in CTC loss computation.
-        fastconformer_config (`FastConformerConfig`, *optional*):
-            Configuration for the FastConformer encoder.
-
-    Example:
-        ```python
-        >>> from transformers import ParakeetCTC, ParakeetCTCConfig
-
-        >>> # Initializing a ParakeetCTC configuration
-        >>> configuration = ParakeetCTCConfig()
-
-        >>> # Initializing a model from the configuration
-        >>> model = ParakeetCTC(configuration)
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-
-    This configuration class is based on the Parakeet CTC architecture from NVIDIA NeMo. You can find more details
-    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
-    """
-
-    model_type = "parakeet_ctc"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {
-        "fastconformer_config": FastConformerConfig,
-    }
-
-    def __init__(
-        self,
-        vocab_size=1024,
-        blank_token_id=0,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=True,
-        fastconformer_config=None,
-        **kwargs,
-    ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-
-        # CTC-specific parameters
-        self.vocab_size = vocab_size
-        self.blank_token_id = blank_token_id
-        self.ctc_loss_reduction = ctc_loss_reduction
-        self.ctc_zero_infinity = ctc_zero_infinity
-
-        # FastConformer encoder configuration
-        if fastconformer_config is None:
-            self.fastconformer_config = FastConformerConfig()
-            logger.info("fastconformer_config is None, using default FastConformer config.")
-        elif isinstance(fastconformer_config, dict):
-            self.fastconformer_config = FastConformerConfig(**fastconformer_config)
-        elif isinstance(fastconformer_config, FastConformerConfig):
-            self.fastconformer_config = fastconformer_config
-        else:
-            raise ValueError(
-                f"fastconformer_config must be a dict, FastConformerConfig, or None, got {type(fastconformer_config)}"
-            )
-
-
 # Future decoder configurations - placeholders for later implementation
 # class ParakeetTDTConfig(PretrainedConfig):
 #     """Configuration for Parakeet TDT models (FastConformer + TDT decoder)"""
@@ -287,4 +194,4 @@ class ParakeetCTCConfig(PretrainedConfig):
 #     model_type = "canary"
 
 
-__all__ = ["FastConformerConfig", "ParakeetCTCConfig"]
+__all__ = ["FastConformerConfig"]
