@@ -300,8 +300,8 @@
   - sections:
     - isExpanded: false
       sections:
-      - local: in_translation
-        title: (번역중) ALBERT
+      - local: model_doc/albert
+        title: ALBERT
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
