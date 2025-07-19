@@ -15,23 +15,24 @@
 
 import unittest
 
+import torch
+from packaging import version
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import (
-        Glm4MoeConfig,
-        Glm4MoeForCausalLM,
-        Glm4MoeModel,
-    )
+    from transformers import AutoTokenizer, Glm4MoeConfig, Glm4MoeForCausalLM, Glm4MoeModel
 
 
 class Glm4MoeModelTester(CausalLMModelTester):
@@ -39,6 +40,21 @@ class Glm4MoeModelTester(CausalLMModelTester):
         config_class = Glm4MoeConfig
         base_model_class = Glm4MoeModel
         causal_lm_class = Glm4MoeForCausalLM
+
+    def __init__(
+        self,
+        parent,
+        n_routed_experts=8,
+        n_shared_experts=1,
+        n_group=1,
+        topk_group=1,
+        num_experts_per_tok=8,
+    ):
+        super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
+        self.n_routed_experts = n_routed_experts
+        self.n_shared_experts = n_shared_experts
+        self.n_group = n_group
+        self.topk_group = topk_group
 
 
 @require_torch
@@ -71,4 +87,51 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_read_token
 @slow
 class Glm4MoeIntegrationTest(unittest.TestCase):
-    pass
+    def tearDown(self):
+        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        cleanup(torch_device, gc_collect=False)
+
+    @slow
+    @require_torch_accelerator
+    @require_read_token
+    def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        NUM_TOKENS_TO_GENERATE = 40
+        EXPECTED_TEXT_COMPLETION = [
+            'hello, world!\'\'\')\nprint(\'hello, world!\')\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\n',
+            "tell me the story of the first Thanksgiving. commonly known as the Pilgrims, arrived in the autumn of 1620. They were seeking religious freedom and a new life in the Plymouth Colony. Their first",
+        ]
+
+        prompts = [
+            "[gMASK]<sop>hello,[gMASK]<sop>tell me",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("/mnt/GLM-4.5-MOE-106B-A12B-0715")
+        model = Glm4MoeForCausalLM.from_pretrained(
+            "/mnt/GLM-4.5-MOE-106B-A12B-0715", device_map=torch_device, torch_dtype=torch.bfloat16
+        )
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        # Dynamic Cache
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
+
+        # Static Cache
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+
+        # Static Cache + compile
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
