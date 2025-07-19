@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # compressed-tensors[[compressed-tensors]]
 
-[compressed-tensors](https://github.com/neuralmagic/compressed-tensors)는 [safetensors](https://github.com/huggingface/safetensors) 파일을 압축된 텐서 데이터 타입으로 확장해서, dense, int 양자화(int8), float 양자화(fp8), pack 양자화(int32로 패킹된 int4나 int8 가중치 양자화) 등 다양한 양자화·sparse 형식을 하나의 체크포인트 형식으로 저장하고 불러올 수 있게 합니다.
+[compressed-tensors](https://github.com/neuralmagic/compressed-tensors)는 [safetensors](https://github.com/huggingface/safetensors) 파일을 압축된 텐서 데이터 타입으로 확장해서, dense, int 양자화(int8), float 양자화(fp8), pack 양자화(int32로 패킹된 int4 또는 int8 가중치 양자화) 등 다양한 양자화·sparse 형식을 하나의 체크포인트 형식으로 저장하고 불러올 수 있게 합니다.
 
 compressed-tensors는 [PEFT](https://huggingface.co/docs/peft)를 사용한 파인튜닝을 지원하며, 다음과 같은 기능들을 제공합니다.
 
@@ -24,7 +24,7 @@ compressed-tensors는 [PEFT](https://huggingface.co/docs/peft)를 사용한 파�
 - [tensor, channel, group, block, token](https://github.com/neuralmagic/compressed-tensors/blob/83b2e7a969d70606421a76b9a3d112646077c8de/src/compressed_tensors/quantization/quant_args.py#L43-L52) 수준의 양자화 스케일과 영점 전략을 제공합니다.
 - 토큰별 동적 활성화 양자화(또는 정적 전략)를 지원합니다.
 - 구조화되지 않은 형태 또는 2:4와 같은 반구조화된 형태의 가중치 희소성을 양자화와 결합하여 극한의 압축을 달성할 수 있습니다.
-- [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) 모듈뿐만 아니라 어떤 모듈이든 양자화가 가능합니다.
+- [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) 모듈뿐만 아니라 어떤 모듈이든 양자화할 수 있습니다.
 - 모듈 이름 또는 클래스별 양자화 대상을 지정할 수 있습니다.
 
 최신 안정 버전은 [PyPI](https://pypi.org/project/compressed-tensors)에서 설치할 수 있습니다. 안정화되지 않은 최신 기능을 사용하려면 소스 코드를 이용해 설치하실 수 있습니다.
