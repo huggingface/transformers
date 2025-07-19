@@ -106,10 +106,7 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
             "tell me the story of the first Thanksgiving. commonly known as the Pilgrims, arrived in the autumn of 1620. They were seeking religious freedom and a new life in the Plymouth Colony. Their first",
         ]
 
-        prompts = [
-            "[gMASK]<sop>hello",
-            "[gMASK]<sop>tell me"
-        ]
+        prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
         tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4.5")
         model = Glm4MoeForCausalLM.from_pretrained(
             "THUDM/GLM-4.5", device_map=torch_device, torch_dtype=torch.bfloat16
