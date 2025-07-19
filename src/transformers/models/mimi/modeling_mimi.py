@@ -1448,9 +1448,6 @@ class MimiModel(MimiPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def _encode_frame(
         self,
         input_values: torch.Tensor,

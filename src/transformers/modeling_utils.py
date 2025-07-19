@@ -1396,7 +1396,7 @@ def _get_torch_dtype(
 
 def _get_device_map(
     model: "PreTrainedModel",
-    device_map: Optional[Union[dict, str]],
+    device_map: Optional[Union[str, dict]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
@@ -1902,7 +1902,88 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
+class EmbeddingAccessMixin:
+    """
+    Base utilities to regroup getters and setters for embeddings.
+    """
+
+    def get_input_embeddings(self) -> nn.Module:
+        """
+        Returns the model's input embeddings.
+
+        Returns:
+            `nn.Module`: A torch module mapping vocabulary to hidden states.
+        """
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            return self.model.embed_tokens
+
+        # 2) vanilla decoder‑only architectures
+        elif hasattr(self, "embed_tokens"):
+            return self.embed_tokens
+        else:
+            base_model = getattr(self, "base_model_prefix", None)
+            if base_model is not None:
+                base_model = getattr(self, base_model, None)
+                if base_model is not None and base_model is not self:
+                    return base_model.get_input_embeddings()
+            raise NotImplementedError(
+                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
+                "please override in the subclass."
+            )
+
+    def set_input_embeddings(self, value: nn.Module):
+        """Fallback setter that handles **~70 %** of models in the code‑base.
+
+        Order of attempts:
+        1. `self.model.embed_tokens`
+        2. `self.embed_tokens`
+        3. delegate to the *base model* if one exists
+        4. otherwise raise `NotImplementedError` so subclasses still can (and
+            should) override for exotic layouts.
+        """
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            self.model.embed_tokens = value
+
+        # 2) vanilla decoder‑only architectures
+        elif hasattr(self, "embed_tokens"):
+            self.embed_tokens = value
+
+        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        elif getattr(self, self.base_model_prefix, self) is not self:
+            base_model = getattr(self, self.base_model_prefix, self)
+            base_model.set_input_embeddings(value)
+
+        else:
+            raise NotImplementedError(
+                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+            )
+
+    def get_output_embeddings(self):
+        if not hasattr(self, "lm_head"):
+            return None
+        try:
+            _input_embeddings = self.get_input_embeddings()
+        except NotImplementedError:
+            return None
+        # Only tie if shapes are identical (classic NLP models).
+        if (
+            getattr(_input_embeddings, "weight", None) is not None
+            and _input_embeddings.weight.shape == self.lm_head.weight.shape
+        ):
+            return self.lm_head
+        return None
+
+    def set_output_embeddings(self, new_embeddings):
+        """
+        Sets the model's output embedding, defaulting to setting new_embeddings to lm_head.
+        """
+        if getattr(self, "lm_head"):
+            self.lm_head = new_embeddings
+
+
+class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -2266,6 +2347,101 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             torch.set_default_dtype(dtype_orig)
 
         return model
+
+    @classmethod
+    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
+        """
+        Checks that the requested attention implementation exists and tries to get the kernel from hub
+        if `attn_implementation` matches hf kernels pattern.
+        """
+        if isinstance(attn_implementation, str) and re.match(r"^[^/:]+/[^/:]+:[^/:]+$", attn_implementation):
+            if not is_kernels_available():
+                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
+
+            # Extract repo_id and kernel_name from the string
+            repo_id, kernel_name = attn_implementation.split(":")
+            kernel_name = kernel_name.strip()
+            repo_id = repo_id.strip()
+
+            try:
+                kernel = get_kernel(repo_id)
+                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
+                attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+            except FileNotFoundError as e:
+                logger.warning(
+                    f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
+                )
+                attn_implementation = None  # try to dispatch SDPA and fallback eager if not available
+            except AttributeError:
+                raise ValueError(
+                    "the kernel function name or class specified in the attn_implementation argument is not valid. \
+                                 Please check the documentation for the correct format, \
+                                 and check that the kernel exports the class and the function correctly."
+                )
+        if (
+            not isinstance(attn_implementation, dict)
+            and attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys()
+        ):
+            message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
+            # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
+            if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
+                message += (
+                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
+                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
+                )
+            if cls._supports_sdpa:
+                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+            if cls._supports_flex_attn:
+                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
+            raise ValueError(message + ".")
+
+        return attn_implementation
+
+    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
+        """
+        Checks and dispatches to the requested attention implementation.
+        """
+        requested_attn_implementation = self._check_attn_implementation(attn_implementation)
+
+        # Composite models consisting of several PretrainedModels can specify attention implementation as a dict where
+        # keys are sub-config names. But most people will specify one `str` which means that should dispatch it for all sub-models.
+        # See https://github.com/huggingface/transformers/pull/32238
+        for key in self.config.sub_configs.keys():
+            sub_config = getattr(self.config, key)
+            curr_attn_implementation = (
+                requested_attn_implementation
+                if not isinstance(requested_attn_implementation, dict)
+                else requested_attn_implementation.get(key, None)
+            )
+            # For models with backbone sub-config might be not initialized. Set the requested att
+            # if the config hasn't got any attn pre-set and the requested attn in not `None` (i.e not the default attn)
+            if (
+                sub_config is not None
+                and sub_config._attn_implementation_internal is None
+                and curr_attn_implementation is not None
+            ):
+                sub_config._attn_implementation_internal = curr_attn_implementation
+
+        if requested_attn_implementation == "flash_attention_3" and self._flash_attn_3_can_dispatch():
+            self.config._attn_implementation = "flash_attention_3"
+        if requested_attn_implementation == "flash_attention_2" and self._flash_attn_2_can_dispatch():
+            self.config._attn_implementation = "flash_attention_2"
+        elif requested_attn_implementation == "flex_attention" and self._flex_attn_can_dispatch():
+            self.config._attn_implementation = "flex_attention"
+        elif (
+            requested_attn_implementation in [None, "sdpa"]
+            and not is_torch_xla_available()
+            and self._sdpa_can_dispatch(hard_check_only=requested_attn_implementation is not None)
+        ):
+            self.config._attn_implementation = "sdpa"
+        elif requested_attn_implementation in ALL_ATTENTION_FUNCTIONS.valid_keys():
+            self.config._attn_implementation = requested_attn_implementation
+        elif isinstance(requested_attn_implementation, dict):
+            self.config._attn_implementation = requested_attn_implementation.get("", None)
+        else:
+            self.config._attn_implementation = "eager"
+
+        self.config._attn_implementation_autoset = True
 
     @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
@@ -2769,40 +2945,46 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         self._require_grads_hook.remove()
 
-    def get_input_embeddings(self) -> nn.Module:
+    def get_decoder(self):
         """
-        Returns the model's input embeddings.
+        Best-effort lookup of the *decoder* module.
 
-        Returns:
-            `nn.Module`: A torch module mapping vocabulary to hidden states.
-        """
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
-            return base_model.get_input_embeddings()
-        else:
-            raise NotImplementedError
+        Order of attempts (covers ~85 % of current usages):
 
-    def set_input_embeddings(self, value: nn.Module):
+        1. `self.decoder`
+        2. `self.model`                       (many wrappers store the decoder here)
+        3. `self.model.get_decoder()`         (nested wrappers)
+        4. fallback: raise for the few exotic models that need a bespoke rule
         """
-        Set model's input embeddings.
+        if hasattr(self, "decoder"):
+            return self.decoder
 
-        Args:
-            value (`nn.Module`): A module mapping vocabulary to hidden states.
-        """
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
-            base_model.set_input_embeddings(value)
-        else:
-            raise NotImplementedError
+        if hasattr(self, "model"):
+            inner = self.model
+            if hasattr(inner, "get_decoder"):
+                return inner.get_decoder()
+            return inner
 
-    def get_output_embeddings(self) -> nn.Module:
-        """
-        Returns the model's output embeddings.
+        return None  # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
 
-        Returns:
-            `nn.Module`: A torch module mapping hidden states to vocabulary.
+    def set_decoder(self, decoder):
         """
-        return None  # Overwrite for models with output embeddings
+        Symmetric setter. Mirrors the lookup logic used in `get_decoder`.
+        """
+
+        if hasattr(self, "decoder"):
+            self.decoder = decoder
+            return
+
+        if hasattr(self, "model"):
+            inner = self.model
+            if hasattr(inner, "set_decoder"):
+                inner.set_decoder(decoder)
+            else:
+                self.model = decoder
+            return
+
+        return  # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
 
     def _init_weights(self, module):
         """

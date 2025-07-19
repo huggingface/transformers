@@ -707,12 +707,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @check_model_inputs
     def forward(
         self,
@@ -906,9 +900,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()

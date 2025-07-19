@@ -495,9 +495,6 @@ class EncodecModel(EncodecPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def _encode_frame(
         self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
