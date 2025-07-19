@@ -24,11 +24,15 @@ rendered properly in your Markdown viewer.
 
 # ModernBERT Decoder
 
-ModernBERT Decoder is the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but trained from scratch with a causal language modeling (CLM) objective. This allows for using the same architecture for comparing encoders and decoders. This is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
+ModernBERT Decoder has the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but it is trained from scratch with a causal language modeling objective from the [Ettin paper](https://huggingface.co/papers/2507.11412). This allows for using the same architecture to compare encoders and decoders. This model is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
 
-Like the encoder version, ModernBERT Decoder incorporates modern architectural improvements such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention patterns. However, it uses causal (unidirectional) attention to enable autoregressive generation.
+ModernBERT Decoder uses sliding window attention and rotary positional embeddings for efficiency and to handle longer sequences.
+
+You can find all the original ModernBERT Decoder checkpoints under the [jhu-clsp](https://huggingface.co/collections/jhu-clsp/encoders-vs-decoders-the-ettin-suite-686303e16142257eed8e6aeb) collection.
 
 > [!TIP]
+> This model was contributed by [orionw](https://huggingface.co/orionweller).
+>
 > Click on the ModernBERT Decoder models in the right sidebar for more examples of how to apply ModernBERT Decoder to different text generation tasks.
 
 The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -42,7 +46,7 @@ from transformers import pipeline
 
 generator = pipeline(
     task="text-generation",
-    model="blab-jhu/test-32m-dec",
+    model="jhu-clsp/ettin-decoder-17m",
     torch_dtype=torch.float16,
     device=0
 )
@@ -51,7 +55,7 @@ generator("The future of artificial intelligence is", max_length=50, num_return_
 # For sequence classification
 classifier = pipeline(
     task="text-classification",
-    model="blab-jhu/test-32m-dec",
+    model="jhu-clsp/ettin-decoder-17m",
     torch_dtype=torch.float16,
     device=0
 )
@@ -65,9 +69,9 @@ classifier("This movie is really great!")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("blab-jhu/test-32m-dec")
+tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-17m")
 model = AutoModelForCausalLM.from_pretrained(
-    "blab-jhu/test-32m-dec",
+    "jhu-clsp/ettin-decoder-17m",
     torch_dtype=torch.float16,
     device_map="auto",
 )
@@ -92,7 +96,7 @@ print(f"Generated text: {generated_text}")
 from transformers import AutoModelForSequenceClassification
 
 classifier_model = AutoModelForSequenceClassification.from_pretrained(
-    "blab-jhu/test-32m-dec",
+    "jhu-clsp/ettin-decoder-17m",
     torch_dtype=torch.float16,
     device_map="auto",
     num_labels=2
@@ -114,7 +118,7 @@ print(f"Prediction probabilities: {predictions}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo "The future of artificial intelligence is" | transformers run --task text-generation --model your-username/modernbert-decoder-base --device 0
+echo "The future of artificial intelligence is" | transformers run --task text-generation --model jhu-clsp/ettin-decoder-17m --device 0
 ```
 
 </hfoption>
