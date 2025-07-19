@@ -237,6 +237,10 @@ def _test_eager_matches_sdpa_inference(
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
         model = model_class(config)
+
+        if model.__class__.__name__ in ["SeamlessM4TModel", "SeamlessM4Tv2Model"]:
+            model.set_modality(self.model_tester.input_modality)
+
         # TODO: standardize the interfaces for musicgen models, see other todo in this test
         if model.__class__.__name__ == "MusicgenMelodyForConditionalGeneration":
             is_encoder_decoder = True
