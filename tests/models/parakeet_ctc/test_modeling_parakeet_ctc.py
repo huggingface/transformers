@@ -30,7 +30,8 @@ if is_torch_available():
 
     from transformers import AutoConfig, AutoFeatureExtractor, AutoModel, AutoTokenizer
     from transformers.models.fastconformer import FastConformerConfig, FastConformerFeatureExtractor
-    from transformers.models.parakeet_ctc import ParakeetCTC, ParakeetCTCConfig
+    from transformers.models.parakeet_ctc import ParakeetCTCConfig
+    from transformers.models.parakeet_ctc.modular_parakeet_ctc import ParakeetCTC, ParakeetCTCDecoder
 
 
 class ParakeetCTCModelTester:
@@ -146,9 +147,7 @@ class ParakeetCTCModelTester:
 
         # Check output shape - should be reduced due to subsampling
         expected_seq_length = input_features.shape[1] // config.encoder_config.subsampling_factor
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, expected_seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config, input_features, attention_mask, input_lengths = self.prepare_config_and_inputs()
@@ -158,6 +157,73 @@ class ParakeetCTCModelTester:
             "input_lengths": input_lengths,
         }
         return config, inputs_dict
+
+
+@require_torch
+class ParakeetCTCDecoderTest(unittest.TestCase):
+    """Test the ParakeetCTCDecoder component."""
+
+    def setUp(self):
+        self.config = ParakeetCTCConfig(
+            vocab_size=128,
+            blank_token_id=127,
+            ctc_loss_reduction="mean",
+            ctc_zero_infinity=True,
+            encoder_config=FastConformerConfig(hidden_size=64, num_hidden_layers=2),
+        )
+
+    @require_torch
+    def test_decoder_initialization(self):
+        """Test decoder initialization."""
+        decoder = ParakeetCTCDecoder(self.config)
+
+        # Check CTC head
+        self.assertIsInstance(decoder.ctc_head, torch.nn.Linear)
+        self.assertEqual(decoder.ctc_head.in_features, 64)  # encoder hidden_size
+        self.assertEqual(decoder.ctc_head.out_features, 128)  # vocab_size
+
+        # Check CTC parameters
+        self.assertEqual(decoder.blank_token_id, 127)
+        self.assertEqual(decoder.ctc_loss_reduction, "mean")
+        self.assertEqual(decoder.ctc_zero_infinity, True)
+
+    @require_torch
+    def test_decoder_forward(self):
+        """Test decoder forward pass."""
+        decoder = ParakeetCTCDecoder(self.config)
+        decoder.to(torch_device)
+        decoder.eval()
+
+        # Create test input
+        batch_size, seq_len, hidden_size = 2, 50, 64
+        hidden_states = torch.randn(batch_size, seq_len, hidden_size).to(torch_device)
+
+        # Forward pass
+        with torch.no_grad():
+            logits = decoder(hidden_states)
+
+        # Check output shape
+        self.assertEqual(logits.shape, (batch_size, seq_len, 128))
+
+    @require_torch
+    def test_decoder_ctc_loss(self):
+        """Test CTC loss computation."""
+        decoder = ParakeetCTCDecoder(self.config)
+        decoder.to(torch_device)
+
+        # Create test data
+        batch_size, seq_len, vocab_size = 2, 20, 128
+        logits = torch.randn(batch_size, seq_len, vocab_size).to(torch_device)
+        labels = torch.tensor([[1, 2, 3, -100], [4, 5, -100, -100]]).to(torch_device)
+        input_lengths = torch.tensor([seq_len, seq_len // 2]).to(torch_device)
+        label_lengths = torch.tensor([3, 2]).to(torch_device)
+
+        # Compute loss
+        loss = decoder.compute_ctc_loss(logits, labels, input_lengths, label_lengths)
+
+        # Check loss is finite and positive
+        self.assertTrue(torch.isfinite(loss))
+        self.assertGreater(loss.item(), 0)
 
 
 @require_torch
@@ -178,6 +244,37 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_encoder_decoder_architecture(self):
+        """Test the encoder-decoder architecture."""
+        config = self.model_tester.get_config()
+        model = ParakeetCTC(config).to(torch_device)
+
+        # Test encoder access
+        encoder = model.get_encoder()
+        self.assertIsNotNone(encoder)
+        self.assertEqual(type(encoder).__name__, "FastConformerEncoder")
+
+        # Test decoder access
+        decoder = model.get_decoder()
+        self.assertIsNotNone(decoder)
+        self.assertIsInstance(decoder, ParakeetCTCDecoder)
+
+        # Test decoder properties
+        self.assertEqual(decoder.blank_token_id, config.blank_token_id)
+        self.assertEqual(decoder.ctc_loss_reduction, config.ctc_loss_reduction)
+        self.assertEqual(decoder.ctc_zero_infinity, config.ctc_zero_infinity)
+
+        # Test encoder/decoder setter methods
+        original_encoder = model.get_encoder()
+        original_decoder = model.get_decoder()
+
+        model.set_encoder(original_encoder)
+        model.set_decoder(original_decoder)
+
+        # Should still work the same
+        self.assertEqual(model.get_encoder(), original_encoder)
+        self.assertEqual(model.get_decoder(), original_decoder)
 
     @unittest.skip(reason="ParakeetCTC has no input_embeds")
     def test_inputs_embeds(self):
@@ -339,10 +436,10 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(outputs.logits)
         self.assertEqual(outputs.logits.shape[-1], 128)
 
-        # Check that CTC parameters are set correctly
-        self.assertEqual(model.blank_token_id, 1)  # Custom
-        self.assertEqual(model.ctc_loss_reduction, "sum")  # Custom
-        self.assertEqual(model.ctc_zero_infinity, False)  # Custom
+        # Check that CTC parameters are set correctly in the decoder
+        self.assertEqual(model.decoder.blank_token_id, 1)  # Custom
+        self.assertEqual(model.decoder.ctc_loss_reduction, "sum")  # Custom
+        self.assertEqual(model.decoder.ctc_zero_infinity, False)  # Custom
 
     def test_ctc_model_loss_computation(self):
         """Test CTC loss computation."""
@@ -393,6 +490,54 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.logits.shape[2], 10)  # Vocab size
         self.assertGreater(outputs.logits.shape[1], 0)  # Some positive sequence length
 
+    def test_encoder_decoder_loss_consistency(self):
+        """Test that CTC loss computed via decoder matches model loss."""
+        fastconformer_config = FastConformerConfig(
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_mel_bins=40,
+        )
+
+        config = ParakeetCTCConfig(
+            vocab_size=10,
+            blank_token_id=0,
+            ctc_loss_reduction="mean",
+            encoder_config=fastconformer_config,
+        )
+
+        model = ParakeetCTC(config)
+        model.to(torch_device)
+        model.eval()
+
+        # Create test input and labels
+        batch_size, seq_len, mel_bins = 2, 100, 40
+        input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
+        input_lengths = torch.tensor([seq_len, seq_len // 2], dtype=torch.long).to(torch_device)
+        labels = torch.tensor([[1, 2, 3, -100], [4, 5, -100, -100]], dtype=torch.long).to(torch_device)
+
+        # Forward pass through full model
+        model_outputs = model(
+            input_features=input_features,
+            input_lengths=input_lengths,
+            labels=labels,
+        )
+
+        # Manual encoder-decoder forward pass
+        encoder_outputs = model.encoder(
+            input_features=input_features,
+            input_lengths=input_lengths,
+            return_dict=True,
+        )
+        decoder_logits = model.decoder(encoder_outputs.last_hidden_state)
+
+        # Check that logits match
+        torch.testing.assert_close(model_outputs.logits, decoder_logits)
+
+        # Check that loss is computed correctly
+        self.assertIsNotNone(model_outputs.loss)
+        self.assertTrue(torch.isfinite(model_outputs.loss))
+
 
 if __name__ == "__main__":
-    unittest.main() 
+    unittest.main()

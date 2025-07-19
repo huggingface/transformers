@@ -5,13 +5,14 @@ NeMo to ParakeetCTC HuggingFace Converter
 This script converts NeMo models with FastConformer encoder and CTC decoder
 to HuggingFace ParakeetCTC format. It handles:
 - FastConformer encoder extraction and conversion
-- CTC decoder head conversion
+- CTC decoder creation with proper encoder-decoder structure
 - Preprocessor configuration (mel-spectrogram, etc.)
 - Tokenizer and vocabulary conversion for CTC models
 - Model configuration extraction and metadata preservation
 
-The converted model creates a ParakeetCTC model that can be loaded via AutoModel
-and is fully compatible with HuggingFace ecosystem for CTC-based speech recognition.
+The converted model creates a ParakeetCTC model with clean encoder-decoder architecture
+that can be loaded via AutoModel and is fully compatible with HuggingFace ecosystem
+for CTC-based speech recognition.
 
 Usage:
     python convert_nemo_to_parakeet_ctc.py --path_to_nemo_model ./parakeet-ctc-1.1b.nemo --output_dir ./parakeet-ctc-hf
@@ -45,31 +46,31 @@ logger = logging.getLogger(__name__)
 
 # NeMo to HuggingFace weight mapping patterns
 # Regex patterns for converting NeMo FastConformer weights to HuggingFace format
-# Note: ParakeetCTC has structure: model.encoder.encoder.* (double encoder prefix)
+# Note: ParakeetCTC has clean structure: model.encoder.* (single encoder prefix)
 NEMO_TO_HF_WEIGHT_MAPPING = {
-    # Subsampling layer  
-    r"encoder\.pre_encode\.": r"encoder.encoder.subsampling.",
+    # Subsampling layer
+    r"encoder\.pre_encode\.": r"encoder.subsampling.",
     # Positional encoding (skip pe buffer)
     r"encoder\.pos_enc\.pe$": None,  # Skip buffer
-    r"encoder\.pos_enc\.": r"encoder.encoder.pos_enc.",
+    r"encoder\.pos_enc\.": r"encoder.pos_enc.",
     # Conformer layers - attention (NeMo already uses self_attn)
-    r"encoder\.layers\.(\d+)\.self_attn\.": r"encoder.encoder.layers.\1.self_attn.",
+    r"encoder\.layers\.(\d+)\.self_attn\.": r"encoder.layers.\1.self_attn.",
     # Conformer layers - feed forward (NeMo already uses feed_forward1/2)
-    r"encoder\.layers\.(\d+)\.feed_forward1\.": r"encoder.encoder.layers.\1.feed_forward1.",
-    r"encoder\.layers\.(\d+)\.feed_forward2\.": r"encoder.encoder.layers.\1.feed_forward2.",
+    r"encoder\.layers\.(\d+)\.feed_forward1\.": r"encoder.layers.\1.feed_forward1.",
+    r"encoder\.layers\.(\d+)\.feed_forward2\.": r"encoder.layers.\1.feed_forward2.",
     # Conformer layers - convolution (NeMo already uses conv not conv_module)
-    r"encoder\.layers\.(\d+)\.conv\.": r"encoder.encoder.layers.\1.conv.",
+    r"encoder\.layers\.(\d+)\.conv\.": r"encoder.layers.\1.conv.",
     # Conformer layers - layer norms (NeMo naming)
-    r"encoder\.layers\.(\d+)\.norm_feed_forward1\.": r"encoder.encoder.layers.\1.norm_feed_forward1.",
-    r"encoder\.layers\.(\d+)\.norm_feed_forward2\.": r"encoder.encoder.layers.\1.norm_feed_forward2.",
-    r"encoder\.layers\.(\d+)\.norm_self_att\.": r"encoder.encoder.layers.\1.norm_self_att.",
-    r"encoder\.layers\.(\d+)\.norm_conv\.": r"encoder.encoder.layers.\1.norm_conv.",
-    r"encoder\.layers\.(\d+)\.norm_out\.": r"encoder.encoder.layers.\1.norm_out.",
+    r"encoder\.layers\.(\d+)\.norm_feed_forward1\.": r"encoder.layers.\1.norm_feed_forward1.",
+    r"encoder\.layers\.(\d+)\.norm_feed_forward2\.": r"encoder.layers.\1.norm_feed_forward2.",
+    r"encoder\.layers\.(\d+)\.norm_self_att\.": r"encoder.layers.\1.norm_self_att.",
+    r"encoder\.layers\.(\d+)\.norm_conv\.": r"encoder.layers.\1.norm_conv.",
+    r"encoder\.layers\.(\d+)\.norm_out\.": r"encoder.layers.\1.norm_out.",
     # Decoder (CTC head) - Conv1d to Linear conversion handled separately
-    r"decoder\.decoder_layers\.0\.weight": r"ctc_head.weight",
-    r"decoder\.decoder_layers\.0\.bias": r"ctc_head.bias",
+    r"decoder\.decoder_layers\.0\.weight": r"decoder.ctc_head.weight",
+    r"decoder\.decoder_layers\.0\.bias": r"decoder.ctc_head.bias",
     # Catch-all pattern for any remaining encoder patterns (must be last)
-    r"^encoder\.": r"encoder.encoder.",
+    r"^encoder\.": r"encoder.",
 }
 
 
@@ -88,7 +89,7 @@ def convert_nemo_keys_to_hf_keys(state_dict_keys):
                 new_text = re.sub(pattern, "", new_text)  # Skip this key
                 continue
             new_text = re.sub(pattern, replacement, new_text)
-        
+
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
 
     return output_dict
@@ -198,19 +199,19 @@ def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> dict[str, int]:
         Dictionary mapping tokens to IDs
     """
     vocab_dict = {}
-    
+
     logger.info(f"Processing vocabulary file: {vocab_file_path}")
 
     try:
         with open(vocab_file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
-            
+
         logger.info(f"Read {len(lines)} lines from vocabulary file")
-        
+
         # Detect format by checking first few lines
         sample_lines = lines[:5]
-        has_tabs = any('\t' in line for line in sample_lines)
-        
+        has_tabs = any("\t" in line for line in sample_lines)
+
         if has_tabs:
             logger.info("Detected SentencePiece format (token\\tscore)")
             # SentencePiece vocab format: token \t score
@@ -243,6 +244,7 @@ def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> dict[str, int]:
     except Exception as e:
         logger.error(f"Failed to convert vocab file {vocab_file_path}: {e}")
         import traceback
+
         logger.error(f"Traceback: {traceback.format_exc()}")
         # Return a minimal vocab as fallback
         logger.warning("Creating minimal fallback vocabulary")
@@ -429,7 +431,7 @@ def create_hf_config_from_nemo(
     if model_info["is_ctc_model"]:
         # Get vocab_size from state dict if available
         vocab_size = 1024  # default
-        if any("ctc_head.weight" in key or "decoder_layers.0.weight" in key for key in state_dict.keys()):
+        if any("decoder.ctc_head.weight" in key or "decoder_layers.0.weight" in key for key in state_dict.keys()):
             # Find the decoder weight to get vocab_size
             decoder_keys = [k for k in state_dict.keys() if "decoder_layers.0.weight" in k]
             if decoder_keys:
@@ -457,7 +459,7 @@ def create_hf_config_from_nemo(
         ctc_config = ParakeetCTCConfig(
             vocab_size=vocab_size,  # Total size including blank token
             blank_token_id=blank_id,
-            ctc_loss_reduction="mean", 
+            ctc_loss_reduction="mean",
             ctc_zero_infinity=True,
             encoder_config=fastconformer_config,
         )
@@ -514,13 +516,11 @@ def convert_weights(nemo_state_dict: dict[str, torch.Tensor], model_info: dict[s
 
     # Get key mapping
     all_keys = list(nemo_state_dict.keys())
-    
+
     # Debug: Show sample original NeMo parameter names
     logger.info(f"Sample original NeMo parameter names: {all_keys[:10]}")
-    
-    key_mapping = convert_nemo_keys_to_hf_keys(all_keys)
-    
 
+    key_mapping = convert_nemo_keys_to_hf_keys(all_keys)
 
     hf_state_dict = {}
 
@@ -532,7 +532,7 @@ def convert_weights(nemo_state_dict: dict[str, torch.Tensor], model_info: dict[s
             continue
 
         # Special handling for CTC decoder weights (Conv1d -> Linear)
-        if hf_key == "ctc_head.weight" and tensor.dim() == 3 and tensor.size(2) == 1:
+        if hf_key == "decoder.ctc_head.weight" and tensor.dim() == 3 and tensor.size(2) == 1:
             # NeMo uses Conv1d (shape: [out_channels, in_channels, kernel_size])
             # HF uses Linear (shape: [out_features, in_features])
             tensor = tensor.squeeze(2)
@@ -559,8 +559,8 @@ def create_hf_model(
         else:
             # Fallback: create ParakeetCTCConfig if we somehow still have FastConformerConfig
             vocab_size = 1024  # default
-            if "ctc_head.weight" in hf_state_dict:
-                vocab_size = hf_state_dict["ctc_head.weight"].shape[0]
+            if "decoder.ctc_head.weight" in hf_state_dict:
+                vocab_size = hf_state_dict["decoder.ctc_head.weight"].shape[0]
                 logger.info(f"Detected vocab_size: {vocab_size} from CTC head")
 
             logger.info("Creating ParakeetCTC model with new ParakeetCTCConfig...")
@@ -588,8 +588,6 @@ def create_hf_model(
     # Load weights
     model_state_dict = model.state_dict()
     updated_state_dict = model_state_dict.copy()
-
-
 
     matched_params = 0
     shape_mismatches = 0
@@ -753,7 +751,8 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
             "Weights loaded from NeMo checkpoint without using NeMo library",
             f"Converted to {type(hf_model).__name__}",
             "Uses regex-based weight key mapping for FastConformer encoder",
-            "CTC decoder head properly converted from Conv1d to Linear",
+            "Clean encoder-decoder structure: model.encoder.* and model.decoder.*",
+            "CTC head weights converted from Conv1d to Linear format",
             "Numerically equivalent to original NeMo model",
             f"Tokenizer: {'✅ Created with CTC decoding support' if conversion_info_extra['has_tokenizer'] else '❌ Not available'}",
         ],
@@ -812,9 +811,14 @@ def verify_conversion(output_dir: str) -> bool:
 def main():
     parser = argparse.ArgumentParser(description="Convert NeMo CTC models to HuggingFace ParakeetCTC format")
     parser.add_argument(
-        "--path_to_nemo_model", type=str, required=True, help="Path to .nemo file or extracted NeMo CTC model directory"
+        "--path_to_nemo_model",
+        type=str,
+        required=True,
+        help="Path to .nemo file or extracted NeMo CTC model directory",
     )
-    parser.add_argument("--output_dir", type=str, required=True, help="Output directory for HuggingFace ParakeetCTC model")
+    parser.add_argument(
+        "--output_dir", type=str, required=True, help="Output directory for HuggingFace ParakeetCTC model"
+    )
     parser.add_argument(
         "--verify", action="store_true", help="Verify conversion by testing ParakeetCTC model loading and forward pass"
     )

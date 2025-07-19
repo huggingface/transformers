@@ -29,8 +29,90 @@ from torch import nn
 from ...modeling_outputs import CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils.generic import can_return_tuple
-from ..auto import AutoModel
+from ..fastconformer import FastConformerEncoder
 from .configuration_parakeet_ctc import ParakeetCTCConfig
+
+
+class ParakeetCTCDecoder(nn.Module):
+    """
+    CTC decoder for Parakeet models.
+
+    This decoder implements Connectionist Temporal Classification (CTC) decoding
+    for speech recognition. It consists of a linear projection layer that maps
+    encoder hidden states to vocabulary logits.
+
+    Args:
+        config (ParakeetCTCConfig): Configuration containing decoder parameters
+    """
+
+    def __init__(self, config: ParakeetCTCConfig):
+        super().__init__()
+        self.config = config
+
+        # CTC head - linear projection from encoder hidden size to vocabulary size
+        self.ctc_head = nn.Linear(config.encoder_config.hidden_size, config.vocab_size)
+
+        # Store CTC-specific parameters for easy access
+        self.blank_token_id = config.blank_token_id
+        self.ctc_loss_reduction = config.ctc_loss_reduction
+        self.ctc_zero_infinity = config.ctc_zero_infinity
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through CTC decoder.
+
+        Args:
+            hidden_states: Encoder output of shape (batch_size, sequence_length, hidden_size)
+
+        Returns:
+            CTC logits of shape (batch_size, sequence_length, vocab_size)
+        """
+        return self.ctc_head(hidden_states)
+
+    def compute_ctc_loss(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+        input_lengths: torch.Tensor,
+        label_lengths: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Compute CTC loss.
+
+        Args:
+            logits: Model predictions of shape (batch_size, sequence_length, vocab_size)
+            labels: Target labels of shape (batch_size, max_label_length)
+            input_lengths: Actual lengths of input sequences
+            label_lengths: Actual lengths of label sequences
+
+        Returns:
+            CTC loss value
+        """
+        # Convert logits to log probabilities and transpose for CTC loss
+        log_probs = F.log_softmax(logits, dim=-1)
+        log_probs = log_probs.transpose(0, 1)  # (sequence_length, batch_size, vocab_size)
+
+        # Prepare targets by removing padding and special tokens
+        targets = []
+        for i, label_length in enumerate(label_lengths):
+            label = labels[i, :label_length]
+            label = label[label != -100]  # Remove padding tokens
+            targets.append(label)
+
+        targets = torch.cat(targets)
+
+        # Compute CTC loss
+        loss = F.ctc_loss(
+            log_probs=log_probs,
+            targets=targets,
+            input_lengths=input_lengths,
+            target_lengths=label_lengths,
+            blank=self.blank_token_id,
+            reduction=self.ctc_loss_reduction,
+            zero_infinity=self.ctc_zero_infinity,
+        )
+
+        return loss
 
 
 class ParakeetCTCPreTrainedModel(PreTrainedModel):
@@ -73,28 +155,44 @@ def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_nu
 
 
 class ParakeetCTC(ParakeetCTCPreTrainedModel):
+    """
+    ParakeetCTC model for CTC-based speech recognition.
+
+    This model follows an encoder-decoder architecture where:
+    - Encoder: FastConformer model for processing audio features
+    - Decoder: CTC decoder for speech recognition output
+
+    Args:
+        config (ParakeetCTCConfig): Model configuration
+    """
+
     def __init__(self, config: ParakeetCTCConfig):
         super().__init__(config)
 
-        # Use composition pattern - create the FastConformer encoder
-        self.encoder = AutoModel.from_config(config.encoder_config)
+        # Encoder: FastConformer for audio feature processing
+        self.encoder = FastConformerEncoder(config.encoder_config)
 
-        # CTC head uses vocab_size from the CTC config
-        self.ctc_head = nn.Linear(config.encoder_config.hidden_size, config.vocab_size)
-
-        # Store CTC-specific parameters
-        self.blank_token_id = config.blank_token_id
-        self.ctc_loss_reduction = config.ctc_loss_reduction
-        self.ctc_zero_infinity = config.ctc_zero_infinity
+        # Decoder: CTC decoder for speech recognition
+        self.decoder = ParakeetCTCDecoder(config)
 
         # Initialize weights
         self.post_init()
 
     def get_encoder(self):
+        """Get the encoder component."""
         return self.encoder
 
     def set_encoder(self, encoder):
+        """Set the encoder component."""
         self.encoder = encoder
+
+    def get_decoder(self):
+        """Get the decoder component."""
+        return self.decoder
+
+    def set_decoder(self, decoder):
+        """Set the decoder component."""
+        self.decoder = decoder
 
     @can_return_tuple
     def forward(
@@ -121,8 +219,8 @@ class ParakeetCTC(ParakeetCTCPreTrainedModel):
 
         hidden_states = encoder_outputs.last_hidden_state
 
-        # Apply CTC head
-        logits = self.ctc_head(hidden_states)
+        # Forward through decoder to get CTC logits
+        logits = self.decoder(hidden_states)
 
         loss = None
         if labels is not None:
@@ -151,27 +249,15 @@ class ParakeetCTC(ParakeetCTCPreTrainedModel):
             else:
                 encoder_lengths = torch.full((logits.size(0),), logits.size(1), dtype=torch.long, device=logits.device)
 
-            # Calculate CTC loss using the configured parameters
-            label_lengths = torch.sum((labels != -100) & (labels != self.blank_token_id), dim=-1)
-            log_probs = F.log_softmax(logits, dim=-1)
-            log_probs = log_probs.transpose(0, 1)
+            # Calculate label lengths (excluding padding and blank tokens)
+            label_lengths = torch.sum((labels != -100) & (labels != self.decoder.blank_token_id), dim=-1)
 
-            targets = []
-            for i, label_length in enumerate(label_lengths):
-                label = labels[i, :label_length]
-                label = label[label != -100]
-                targets.append(label)
-
-            targets = torch.cat(targets)
-
-            loss = F.ctc_loss(
-                log_probs=log_probs,
-                targets=targets,
+            # Compute CTC loss using the decoder
+            loss = self.decoder.compute_ctc_loss(
+                logits=logits,
+                labels=labels,
                 input_lengths=encoder_lengths,
-                target_lengths=label_lengths,
-                blank=self.blank_token_id,
-                reduction=self.ctc_loss_reduction,
-                zero_infinity=self.ctc_zero_infinity,
+                label_lengths=label_lengths,
             )
 
         return CausalLMOutput(
@@ -248,8 +334,8 @@ class ParakeetCTC(ParakeetCTCPreTrainedModel):
                 prev_token = None
 
                 for token_id in sequence.tolist():
-                    # Skip blank tokens (using the configured blank token ID)
-                    if token_id == self.blank_token_id:
+                    # Skip blank tokens (using the decoder's blank token ID)
+                    if token_id == self.decoder.blank_token_id:
                         prev_token = token_id
                         continue
 
@@ -264,4 +350,4 @@ class ParakeetCTC(ParakeetCTCPreTrainedModel):
             return decoded_sequences
 
 
-__all__ = ["ParakeetCTC", "ParakeetCTCPreTrainedModel"]
+__all__ = ["ParakeetCTC", "ParakeetCTCDecoder", "ParakeetCTCPreTrainedModel"]
