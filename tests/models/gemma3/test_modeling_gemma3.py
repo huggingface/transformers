@@ -53,6 +53,7 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
+        Gemma3ForSequenceClassification,
         Gemma3Model,
         Gemma3Processor,
         Gemma3TextModel,
@@ -246,6 +247,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         (
             Gemma3Model,
             Gemma3ForConditionalGeneration,
+            Gemma3ForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -346,6 +348,14 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
     )
     def test_initialization(self):
+        pass
+
+    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
+    def test_load_with_mismatched_shapes(self):
+        pass
+
+    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
 
     def test_automodelforcausallm(self):
