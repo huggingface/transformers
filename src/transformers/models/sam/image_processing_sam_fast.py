@@ -271,7 +271,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: ImageInput = None,
+        segmentation_maps: Optional[ImageInput] = None,
         **kwargs: Unpack[SamFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""

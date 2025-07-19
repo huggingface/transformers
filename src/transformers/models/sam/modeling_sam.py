@@ -189,10 +189,10 @@ def eager_attention_forward(
     **kwargs,
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
-        attn_weights = torch.softmax(attn_weights, dim=-1)
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -217,6 +217,7 @@ class SamAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         if self.internal_dim % config.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // config.num_attention_heads) ** -0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
@@ -255,27 +256,26 @@ class SamAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamAttention
-        scale = query.shape[-1] ** -0.5
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
             query,
             key,
             value,
             attention_mask=attention_similarity,
             dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
 
-        out = self._recombine_heads(attn_output, point_batch_size)
-        out = self.out_proj(out)
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
 
-        return out
+        return attn_output, attn_weights
 
 
 class SamTwoWayAttentionBlock(nn.Module):
@@ -322,10 +322,10 @@ class SamTwoWayAttentionBlock(nn.Module):
     ):
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(query=queries, key=queries, value=queries)
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
         else:
             query = queries + query_point_embedding
-            attn_out = self.self_attn(query=query, key=query, value=queries)
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
             queries = queries + attn_out
         queries = self.layer_norm1(queries)
 
@@ -333,7 +333,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(
+        attn_out, _ = self.cross_attn_token_to_image(
             query=query, key=key, value=keys, attention_similarity=attention_similarity
         )
         queries = queries + attn_out
@@ -349,7 +349,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
@@ -406,7 +406,7 @@ class SamTwoWayTransformer(nn.Module):
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
-        attn_out = self.final_attn_token_to_image(query=query, key=key, value=keys)
+        attn_out, _ = self.final_attn_token_to_image(query=query, key=key, value=keys)
 
         queries = queries + attn_out
         queries = self.layer_norm_final_attn(queries)
@@ -492,12 +492,12 @@ class SamMaskDecoder(nn.Module):
                 Whether to return multiple masks or a single mask.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
-        point_batch_size = sparse_prompt_embeddings.shape[1]
+        point_batch_size = sparse_prompt_embeddings.shape[1] if sparse_prompt_embeddings is not None else 1
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        if sparse_prompt_embeddings.shape[0] != 0:
+        if sparse_prompt_embeddings is not None:
             tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=2)
         else:
             tokens = output_tokens
@@ -636,11 +636,7 @@ class SamPromptEncoder(nn.Module):
 
         # This is required for the ONNX export. The dtype, device need to be explicitly
         # specified as otherwise torch.onnx.export interprets as double
-        point_embedding = torch.where(
-            labels[..., None] != -10,
-            point_embedding,
-            torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
-        )
+        point_embedding = torch.where(labels[..., None] != -10, point_embedding, torch.zeros_like(point_embedding))
 
         point_embedding = torch.where(
             (labels == 0)[:, :, :, None],
@@ -687,9 +683,8 @@ class SamPromptEncoder(nn.Module):
         """
         sparse_embeddings = None
         batch_size = 1
-        target_device = self.shared_embedding.positional_embedding.device
         if input_points is not None:
-            batch_size, point_batch_size = input_points.shape[:2]
+            batch_size = input_points.shape[0]
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
@@ -707,9 +702,6 @@ class SamPromptEncoder(nn.Module):
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
                 batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
-
-        if sparse_embeddings is None:
-            sparse_embeddings = torch.zeros((0, 1, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
@@ -1141,6 +1133,8 @@ class SamModel(SamPreTrainedModel):
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
         self.prompt_encoder = SamPromptEncoder(config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
