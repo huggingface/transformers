@@ -111,8 +111,8 @@ print(model._tp_plan)
 ```py
 class ParallelInterface(MutableMapping):
     """
-    허용된 attention 함수를 추적하는 딕셔너리 같은 객체입니다. `register()` 호출로 새로운 attention 함수를 쉽게 추가할 수 있습니다. 
-    모델이 기존 attention 함수(예: `sdpa`)를 로컬에서 덮어쓰려면 `modeling_<model>.py` 내부에서 이 클래스의 새 인스턴스를 선언하고 
+    허용된 어텐션 함수를 추적하는 딕셔너리 같은 객체입니다. `register()` 호출로 새로운 어텐션 함수를 쉽게 추가할 수 있습니다. 
+    모델이 기존 어텐션 함수(예: `sdpa`)를 로컬에서 덮어쓰려면 `modeling_<model>.py` 내부에서 이 클래스의 새 인스턴스를 선언하고 
     해당 인스턴스에서 선언해야 합니다.
     """
     _global_mapping = {
