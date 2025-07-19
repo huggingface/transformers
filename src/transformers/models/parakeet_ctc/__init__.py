@@ -1,0 +1,44 @@
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from typing import TYPE_CHECKING
+
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
+
+
+# Import structure for lazy loading
+_import_structure = {
+    "configuration_parakeet_ctc": [
+        "ParakeetCTCConfig",
+    ],
+    "tokenization_parakeet_ctc": ["ParakeetCTCTokenizer"],
+}
+
+_import_structure["modeling_parakeet_ctc"] = [
+    "ParakeetCTC",
+    "ParakeetCTCPreTrainedModel",
+]
+
+if TYPE_CHECKING:
+    from .configuration_parakeet_ctc import ParakeetCTCConfig
+    from .modeling_parakeet_ctc import (
+        ParakeetCTC,
+        ParakeetCTCPreTrainedModel,
+    )
+    from .tokenization_parakeet_ctc import ParakeetCTCTokenizer
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__) 
