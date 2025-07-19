@@ -48,7 +48,7 @@ rendered properly in your Markdown viewer.
 Transformers는 `tp_plan`매개변수를 활용할 수 있는 모델에 대해 텐서 병렬 처리를 지원합니다. 모델 분할 방식은 두 가지가 있습니다.
 
 - `auto` 텐서 병렬화 계획은 사전 정의된 구성을 기반으로 모델(위에 언급된 지원 모델)을 자동으로 분할합니다.
-- 고유한 분할 계획을 수동으로 지정하고 [`~PreTrainedModel.from_pretrained`]의 `tp_plan` 매개변수에 전달할 수도 있습니다.
+- 사용자 지정 분할 계획을 직접 정의하여 [~PreTrainedModel.from_pretrained] 메소드의 `tp_plan` 매개변수로 전달할 수 있습니다.
 
 <hfoptions id="sharding">
 <hfoption id="auto plan">
@@ -81,10 +81,10 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-각 레이어에 대한 텐서 병렬 계획을 `tp_plan`에 정의한 후 [`~PreTrainedModel.from_pretrained`]에 전달하세요. 아래 예시는 열 및 행 분할의 조합을 사용합니다. 다른 지원되는 분할 전략에 대해 알아보려면 [분할 전략](#partitioning-strategies) 섹션을 참조하세요.
+각 레이어에 대한 텐서 병렬 계획을 `tp_plan`에 정의한 후 [`~PreTrainedModel.from_pretrained`]에 전달하세요. 아래 예시는 열 및 행 분할을 조합하여 사용합니다. 지원되는 다른 분할 전략은 [분할 전략](#partitioning-strategies) 섹션을 참고하세요.
 
 > [!WARNING]
-> 고유한 분할 계획을 수동으로 지정하려면 모델 아키텍처와 분할 전략이 함께 상호 작용하는 방식에 대한 충분한 이해가 필요합니다. 분할 전략을 잘못 설정하면 모델이 매우 느려지거나, 오류가 발생하거나, 부정확한 결과를 낼 수 있습니다. 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)을 참조하세요.
+> 사용자 지정 분할 계획을 수동으로 지정하려면 모델 아키텍처와 분할 전략이 함께 상호 작용하는 방식에 대한 충분한 이해가 필요합니다. 분할 전략을 잘못 설정하면 모델이 매우 느려지거나, 오류가 발생하거나, 부정확한 결과를 낼 수 있습니다. 자세히 알아보려면 [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism)을 참고하세요.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -106,7 +106,7 @@ print(model._tp_plan)
 
 ## 분할 전략[[partitioning-strategies]]
 
-모든 분할 전략은 문자열을 전략 구현에 매핑하는 [`ParallelInterface`] 클래스에서 정의됩니다. [`~PreTrainedModel.from_pretrained`]의 `tp_plan`으로 모든 전략이 설정되므로 이 클래스와 직접 상호 작용할 필요는 없지만, 사용 가능한 전략을 확인하는 데 유용합니다.
+모든 분할 전략은 문자열을 전략 구현에 매핑하는 [`ParallelInterface`] 클래스에서 정의됩니다. 모든 전략은 [`~PreTrainedModel.from_pretrained`]의 `tp_plan`을 통해 설정되므로 이 클래스와 직접 상호 작용할 필요는 없지만, 어떤 전략을 사용할 수 있는지 확인할 때 유용합니다.
 
 ```py
 class ParallelInterface(MutableMapping):
@@ -145,7 +145,7 @@ class ParallelInterface(MutableMapping):
 
 ### 패킹된 전략[[packed-strategies]]
 
-가중치 패킹은 여러 선형 레이어를 하나의 더 큰 레이어로 패킹합니다. 패킹된 전략인 `PackedColwiseParallel`과 `PackedRowwiseParallel`은 패킹된 가중치를 분할하는 데 사용됩니다. 더 기본적인 `ColwiseParallel`이나 `RowwiseParallel`은 패킹된 가중치를 잘못 분할합니다.
+가중치 패킹은 여러 선형 레이어를 하나의 더 큰 레이어로 합치는 기법입니다. 패킹된 전략인 `PackedColwiseParallel`과 `PackedRowwiseParallel`은 패킹된 가중치를 분할하는 데 사용됩니다. 기본적인 `ColwiseParallel`이나 `RowwiseParallel`은 패킹된 가중치를 올바르게 분할하지 못합니다.
 
 아래 예시는 `up_proj`와 `gate_proj`를 단일 `gate_up_proj` 모듈로 패킹하고 `gate_up_proj`를 분할하기 위해 `PackedRowwiseParallel` 전략이 필요합니다.
 
@@ -165,7 +165,7 @@ def forward(self, hidden_states):
 ```
 
 > [!TIP]
-> `Packed*`를 사용해야 하는 이유에 대한 시각적 표현은 [이 주석](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)을 참조하세요.
+> `Packed*`를 사용해야 하는 이유에 대한 시각적 표현은 [이 주석](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)을 참고하세요.
 
 ### 로컬 전략[[local-strategies]]
 
@@ -181,11 +181,11 @@ Readd this when I get the exact error message
 
 사용자 정의 분할 전략은 [`TensorParallelLayer`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py)를 상속하고 `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn`을 구현해야 합니다.
 
-그런 다음 `tp_plan`에서 지정될 때 디스패칭 로직이 찾을 수 있도록 `ParallelInterface` 매핑에 등록되어야 합니다.
+그런 다음 `tp_plan`에서 해당 전략을 지정했을 때 디스패칭 로직이 찾을 수 있도록 `ParallelInterface` 매핑에 등록해야 합니다.
 
 아래 예시는 이 워크플로우로 `ColwiseParallel`을 구현하는 방법을 보여줍니다.
 
-1. `TensorParallelLayer`를 상속합니다. `__init__` 메서드에서 입력 및 출력 텐서가 기기에 어떻게 배치되어야 하는지 설명하는 `input_layouts`과 `output_layouts`을 정의합니다. `desired_input_layouts` 속성은 입력이 기기에 어떻게 배치*되어야* 하는지 지정하는 데 사용됩니다.
+1. `TensorParallelLayer`를 상속합니다. `__init__` 메소드에서 입력 및 출력 텐서가 기기에 어떻게 배치되어야 하는지 설명하는 `input_layouts`과 `output_layouts`을 정의합니다. `desired_input_layouts` 속성은 입력이 기기에 어떻게 배치*되어야만* 하는지를 명시하는 데 사용됩니다.
 
     ```python
     class ColwiseParallel(TensorParallelLayer):
@@ -206,7 +206,7 @@ Readd this when I get the exact error message
 
 2. `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn` 메서드를 구현합니다.
 
-    `partition_tensor` 메서드는 텐서를 분할하고 분할된 텐서로 `empty_param`을 채웁니다. 유틸리티 함수 `get_tensor_shard`를 사용하여 주어진 랭크에 대한 원본 매개변수의 올바른 분할을 얻고, 패킹된 가중치에 대해서는 `get_packed_weights`를 사용하세요.
+    `partition_tensor` 메소드는 텐서를 분할하고 분할된 텐서로 `empty_param`을 채웁니다. 유틸리티 함수 `get_tensor_shard`를 사용하여 주어진 랭크에 대한 원본 매개변수의 올바른 분할을 얻고, 패킹된 가중치에 대해서는 `get_packed_weights`를 사용하세요.
 
     ```python
     def partition_tensor(
@@ -222,7 +222,7 @@ Readd this when I get the exact error message
         ...
     ```
 
-    `_prepare_input_fn`과 `_prepare_output_fn` 메서드는 [사전 포워드](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) 및 [포워드](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) 훅에서 사용됩니다. `__init__`에서 지정된 대로 입력과 출력을 원하는 레이아웃으로 재분배합니다.
+    `_prepare_input_fn`과 `_prepare_output_fn` 메소드는 [사전 포워드](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) 및 [포워드](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) 훅에서 사용됩니다. `__init__`에서 지정된 대로 입력과 출력을 원하는 레이아웃으로 재분배합니다.
 
     ```python
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
