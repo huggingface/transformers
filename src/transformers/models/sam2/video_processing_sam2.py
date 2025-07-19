@@ -56,7 +56,7 @@ class Sam2VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        size: Optional[SizeDict],
+        size: SizeDict,
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
