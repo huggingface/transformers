@@ -3788,6 +3788,7 @@ class ModelTesterMixin:
                 "sam_hq",
                 "zamba2",
                 "sam_vision_model",
+                "sam2_vision_model",
                 "sam_hq_vision_model",
             ]:
                 self.skipTest(
