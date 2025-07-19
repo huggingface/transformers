@@ -379,6 +379,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmDepthDecoderModel",  # Building part of a bigger model
     "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
     "CsmForConditionalGeneration",  # Building part of a bigger model
+    "VocosModel",
 ]
 
 # DO NOT edit this list!
@@ -1183,6 +1184,7 @@ def check_public_method_exists(documented_methods_map):
                 pass
 
     if len(failures) > 0:
+        print("failures : ", failures)
         raise Exception("\n".join(failures))
 
 
