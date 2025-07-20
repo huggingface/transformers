@@ -59,6 +59,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
+        ("beit3", "Beit3Model"),
         ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
         ("big_bird", "BigBirdModel"),
@@ -851,6 +852,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
         ("beit", "BeitForImageClassification"),
+        ("beit3", "Beit3ForImageClassification"),
         ("bit", "BitForImageClassification"),
         ("clip", "CLIPForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
@@ -1413,6 +1415,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("beit3", "Beit3ForQuestionAnswering"),
         ("blip", "BlipForQuestionAnswering"),
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("vilt", "ViltForQuestionAnswering"),
