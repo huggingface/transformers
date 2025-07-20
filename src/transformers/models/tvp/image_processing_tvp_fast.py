@@ -25,7 +25,6 @@ from ...image_processing_utils_fast import (
     reorder_images,
     validate_kwargs,
 )
-from ...image_utils import pil_torch_interpolation_mapping
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -34,6 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     is_valid_image,
+    pil_torch_interpolation_mapping,
 )
 from ...utils import (
     TensorType,
@@ -59,10 +59,10 @@ if is_torchvision_available():
 class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """Valid kwargs for TvpImageProcessorFast."""
 
-    do_flip_channel_order: Optional[bool] = None
-    pad_size: Optional[SizeDict] = None
-    constant_values: Optional[Union[float, list[float]]] = None
-    pad_mode: Optional[str] = None
+    do_flip_channel_order: Optional[bool]
+    pad_size: Optional[SizeDict] 
+    constant_values: Optional[Union[float, list[float]]]
+    pad_mode: Optional[str]
 
 
 @auto_docstring
@@ -89,88 +89,47 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[TvpFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @auto_docstring
-    def preprocess(
+    def _process_image(
         self,
-        videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
-        **kwargs: Unpack[TvpFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        videos (`ImageInput` or `list[ImageInput]` or `list[list[ImageInput]]`):
-            The video frames to preprocess.
+        image: ImageInput,
+        do_convert_rgb: Optional[bool] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
+    ) -> "torch.Tensor":
         """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-
-        # Prepare input videos
-        videos = self._prepare_input_videos(
-            videos=videos, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        # Extract required parameters for _preprocess
-        do_resize = kwargs.pop("do_resize")
-        size = kwargs.pop("size")
-        interpolation = kwargs.pop("interpolation")
-        do_center_crop = kwargs.pop("do_center_crop")
-        crop_size = kwargs.pop("crop_size")
-        do_rescale = kwargs.pop("do_rescale")
-        rescale_factor = kwargs.pop("rescale_factor")
-        do_pad = kwargs.pop("do_pad", self.do_pad)
-        pad_size = kwargs.pop("pad_size", self.pad_size)
-        constant_values = kwargs.pop("constant_values", self.constant_values)
-        pad_mode = kwargs.pop("pad_mode", self.pad_mode)
-        do_normalize = kwargs.pop("do_normalize")
-        image_mean = kwargs.pop("image_mean")
-        image_std = kwargs.pop("image_std")
-        do_flip_channel_order = kwargs.pop("do_flip_channel_order", self.do_flip_channel_order)
-        return_tensors = kwargs.pop("return_tensors")
-        disable_grouping = kwargs.pop("disable_grouping")
-
-        return self._preprocess(
-            videos,
-            do_resize=do_resize,
-            size=size,
-            interpolation=interpolation,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_pad=do_pad,
-            pad_size=pad_size,
-            constant_values=constant_values,
-            pad_mode=pad_mode,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_flip_channel_order=do_flip_channel_order,
-            return_tensors=return_tensors,
-            disable_grouping=disable_grouping,
-            **kwargs
-        )
+        Process a single image to torch tensor.
+        
+        This fast implementation only accepts torch tensors as input to avoid PIL conversion.
+        """
+        if not isinstance(image, torch.Tensor):
+            raise ValueError(
+                f"TvpImageProcessorFast only accepts torch.Tensor inputs. Got {type(image)}. "
+                "Please convert your images to torch tensors before passing to the fast processor."
+            )
+        
+        # Ensure the tensor is in the correct format
+        if image.dim() == 2:
+            # Single channel image, add channel dimension
+            image = image.unsqueeze(0)
+        elif image.dim() == 3:
+            # Check if channels are in the right place
+            if input_data_format == ChannelDimension.LAST or (
+                input_data_format is None and image.shape[-1] in [1, 3]
+            ):
+                # Channels last, convert to channels first
+                image = image.permute(2, 0, 1).contiguous()
+        elif image.dim() != 3:
+            raise ValueError(f"Expected 2D or 3D tensor, got {image.dim()}D tensor")
+        
+        # Ensure float32 for processing
+        if image.dtype != torch.float32:
+            image = image.float()
+        
+        # Move to device if specified
+        if device is not None:
+            image = image.to(device)
+        
+        return image
 
     def _prepare_input_videos(
         self,
@@ -247,10 +206,12 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 if do_center_crop:
                     stacked_frames = self.center_crop(stacked_frames, crop_size)
                 
-                # Fused rescale and normalize
-                stacked_frames = self.rescale_and_normalize(
-                    stacked_frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                )
+                # Rescale and normalize separately (following original TVP behavior)
+                if do_rescale:
+                    stacked_frames = self.rescale(stacked_frames, rescale_factor)
+                
+                if do_normalize:
+                    stacked_frames = self.normalize(stacked_frames, image_mean, image_std)
                 
                 # Pad if needed
                 if do_pad:
@@ -342,18 +303,18 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
         
         # Handle longest_edge case (TVP-specific)
-        if size.longest_edge is not None:
+        if size["longest_edge"]:
             # Get current dimensions
             current_height, current_width = image.shape[-2:]
             
             # Calculate new dimensions maintaining aspect ratio
             if current_height >= current_width:
                 ratio = current_width * 1.0 / current_height
-                new_height = size.longest_edge
+                new_height = size["longest_edge"]
                 new_width = int(new_height * ratio)
             else:
                 ratio = current_height * 1.0 / current_width
-                new_width = size.longest_edge
+                new_width = size["longest_edge"]
                 new_height = int(new_width * ratio)
             
             new_size = (new_height, new_width)
@@ -365,9 +326,92 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     def _flip_channel_order(self, frames: "torch.Tensor") -> "torch.Tensor":
         """Flip channel order from RGB to BGR."""
         # Assuming frames are in channels_first format (C, H, W)
-        if frames.shape[1] == 3:  # 3 channels
-            return frames.flip(dims=[1])  # Flip along channel dimension
+        if frames.shape[-3] == 3:  # 3 channels in the last dimension
+            return frames.flip(dims=[-3])  # Flip along channel dimension
         return frames
+
+    @auto_docstring
+    def preprocess(
+        self,
+        videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
+        **kwargs: Unpack[TvpFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        videos (`ImageInput` or `list[ImageInput]` or `list[list[ImageInput]]`):
+            The video frames to preprocess. Must be torch tensors for the fast processor.
+        """
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+        # Set default kwargs from self. This ensures that if a kwarg is not provided
+        # by the user, it gets its default value from the instance, or is set to None.
+        for kwarg_name in self.valid_kwargs.__annotations__:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+
+        # Extract parameters that are only used for preparing the input images
+        do_convert_rgb = kwargs.pop("do_convert_rgb")
+        input_data_format = kwargs.pop("input_data_format")
+        device = kwargs.pop("device")
+
+        # Prepare input videos
+        videos = self._prepare_input_videos(
+            videos=videos, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+
+        # Update kwargs that need further processing before being validated
+        kwargs = self._further_process_kwargs(**kwargs)
+
+        # Validate kwargs
+        self._validate_preprocess_kwargs(**kwargs)
+
+        # torch resize uses interpolation instead of resample
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
+
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("default_to_square")
+        kwargs.pop("data_format")
+
+        # Extract required parameters for _preprocess
+        do_resize = kwargs.pop("do_resize")
+        size = kwargs.pop("size")
+        interpolation = kwargs.pop("interpolation")
+        do_center_crop = kwargs.pop("do_center_crop")
+        crop_size = kwargs.pop("crop_size")
+        do_rescale = kwargs.pop("do_rescale")
+        rescale_factor = kwargs.pop("rescale_factor")
+        do_pad = kwargs.pop("do_pad", self.do_pad)
+        pad_size = kwargs.pop("pad_size", self.pad_size)
+        constant_values = kwargs.pop("constant_values", self.constant_values)
+        pad_mode = kwargs.pop("pad_mode", self.pad_mode)
+        do_normalize = kwargs.pop("do_normalize")
+        image_mean = kwargs.pop("image_mean")
+        image_std = kwargs.pop("image_std")
+        do_flip_channel_order = kwargs.pop("do_flip_channel_order", self.do_flip_channel_order)
+        return_tensors = kwargs.pop("return_tensors")
+        disable_grouping = kwargs.pop("disable_grouping")
+
+        return self._preprocess(
+            videos,
+            do_resize=do_resize,
+            size=size,
+            interpolation=interpolation,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_pad=do_pad,
+            pad_size=pad_size,
+            constant_values=constant_values,
+            pad_mode=pad_mode,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_flip_channel_order=do_flip_channel_order,
+            return_tensors=return_tensors,
+            disable_grouping=disable_grouping,
+            **kwargs
+        )
 
 
 __all__ = ["TvpImageProcessorFast", "TvpFastImageProcessorKwargs"] 

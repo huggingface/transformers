@@ -135,9 +135,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in [self.image_processing_class, self.fast_image_processing_class]:
-            if image_processing_class is None:
-                continue
+        for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -150,9 +148,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "pad_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in [self.image_processing_class, self.fast_image_processing_class]:
-            if image_processing_class is None:
-                continue
+        for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"longest_edge": 40})
 
@@ -160,11 +156,10 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"longest_edge": 12})
 
     def test_call_pil(self):
-        for image_processing_class in [self.image_processing_class, self.fast_image_processing_class]:
-            if image_processing_class is None:
-                continue
+        # Only test PIL with slow processor since fast processor only accepts tensors
+        if self.image_processing_class is not None:
             # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
+            image_processing = self.image_processing_class(**self.image_processor_dict)
             # create random PIL videos
             video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
             for video in video_inputs:
@@ -199,10 +194,51 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
+    def test_call_tensor_fast(self):
+        """Test that the fast processor only accepts tensor inputs."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+        
+        # Initialize fast image_processing
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
+        
+        # Create tensor video inputs
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], torch.Tensor)
+
+        # Test not batched input
+        expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
+        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_videos.shape,
+            (
+                1,
+                self.image_processor_tester.num_frames,
+                self.image_processor_tester.num_channels,
+                expected_height,
+                expected_width,
+            ),
+        )
+
+        # Test batched
+        expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs, batched=True)
+        encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_videos.shape,
+            (
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_frames,
+                self.image_processor_tester.num_channels,
+                expected_height,
+                expected_width,
+            ),
+        )
+
     def test_call_numpy(self):
-        for image_processing_class in [self.image_processing_class, self.fast_image_processing_class]:
-            if image_processing_class is None:
-                continue
+        # Test numpy with both processors (numpy can be converted to tensor for fast processor)
+        for image_processing_class in self.image_processor_list:
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -240,9 +276,8 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_numpy_4_channels(self):
-        for image_processing_class in [self.image_processing_class, self.fast_image_processing_class]:
-            if image_processing_class is None:
-                continue
+        # Test numpy with both processors (numpy can be converted to tensor for fast processor)
+        for image_processing_class in self.image_processor_list:
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -285,9 +320,8 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.image_processor_tester.num_channels = 3
 
     def test_call_pytorch(self):
-        for image_processing_class in [self.image_processing_class, self.fast_image_processing_class]:
-            if image_processing_class is None:
-                continue
+        # Test PyTorch tensors with both processors
+        for image_processing_class in self.image_processor_list:
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -324,6 +358,50 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
+    def test_fast_processor_tensor_only(self):
+        """Test that the fast processor correctly rejects PIL inputs and only accepts tensors."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+        
+        # Initialize fast image_processing
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
+        
+        # Test that it accepts tensor inputs
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+        try:
+            result = image_processing(video_inputs[0], return_tensors="pt")
+            self.assertIn("pixel_values", result)
+        except Exception as e:
+            self.fail(f"Fast processor should accept tensor inputs: {e}")
+        
+        # Test that it rejects PIL inputs
+        pil_video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
+        with self.assertRaises(ValueError) as context:
+            image_processing(pil_video_inputs[0], return_tensors="pt")
+        
+        self.assertIn("only accepts torch.Tensor", str(context.exception))
+
+    def test_fast_processor_separated_operations(self):
+        """Test that the fast processor has separated rescale and normalize operations."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processor not available")
+        
+        # Initialize fast image_processing
+        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
+        
+        # Check that it has separate rescale and normalize methods
+        self.assertTrue(hasattr(image_processing, 'rescale'), "Fast processor should have rescale method")
+        self.assertTrue(hasattr(image_processing, 'normalize'), "Fast processor should have normalize method")
+        
+        # Check that it has the inherited rescale_and_normalize method
+        self.assertTrue(hasattr(image_processing, 'rescale_and_normalize'), 
+                       "Fast processor should have rescale_and_normalize method (inherited)")
+        
+        # Verify inheritance from BaseImageProcessorFast
+        from transformers.image_processing_utils_fast import BaseImageProcessorFast
+        self.assertIn(BaseImageProcessorFast, image_processing.__class__.__mro__,
+                     "Fast processor should inherit from BaseImageProcessorFast")
+
     def test_slow_fast_equivalence(self):
         """Test that the slow and fast image processors produce equivalent results."""
         if self.fast_image_processing_class is None:
@@ -335,7 +413,6 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         
         # Create test video inputs
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
-        
         # Process with both processors
         slow_output = slow_processor(video_inputs[0], return_tensors="pt")
         fast_output = fast_processor(video_inputs[0], return_tensors="pt")
