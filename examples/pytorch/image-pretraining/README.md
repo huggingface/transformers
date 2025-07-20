@@ -18,7 +18,7 @@ limitations under the License.
 
 This directory contains Python scripts that allow you to pre-train Transformer-based vision models (like [ViT](https://huggingface.co/docs/transformers/model_doc/vit), [Swin Transformer](https://huggingface.co/docs/transformers/model_doc/swin)) on your own data, after which you can easily load the weights into a [`AutoModelForImageClassification`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForImageClassification). It currently includes scripts for:
 - [SimMIM](#simmim) (by Microsoft Research)
-- [MAE](#mae) (by Facebook AI).
+- [MAE](#mae) (by Facebook AI)
 
 NOTE: If you encounter problems/have suggestions for improvement, open an issue on Github and tag @NielsRogge.
 
@@ -38,7 +38,7 @@ The goal for the model is to predict raw pixel values for the masked patches, us
 
 Here we show how to pre-train a `ViT` from scratch for masked image modeling on the [cifar10](https://huggingface.co/datasets/cifar10) dataset.
 
-Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "google/vit-base-patch16-224-in21k" for example (and not specifying the `model_type` argument).
+Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [Hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "google/vit-base-patch16-224-in21k" for example (and not specifying the `model_type` argument).
 
 ```bash
 !python run_mim.py \
@@ -191,7 +191,7 @@ alt="drawing" width="300"/>
 
 <small> Original hyperparameters. Taken from the <a href="https://huggingface.co/papers/2111.06377">original paper</a>. </small>
 
-Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "facebook/vit-mae-base" for example.
+Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [Hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "facebook/vit-mae-base" for example.
 
 
 ### Using your own data
@@ -229,9 +229,9 @@ python run_mae.py \
 
 ## Sharing your model on 🤗 Hub
 
-0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
+0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account.
 
-1. Make sure you have `git-lfs` installed and git set up.
+1. Make sure you have `git-lfs` installed and git set up:
 
 ```bash
 $ apt install git-lfs
@@ -239,7 +239,7 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `huggingface-cli`:
 
 ```bash
 $ huggingface-cli login
