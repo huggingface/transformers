@@ -20,9 +20,9 @@ rendered properly in your Markdown viewer.
 
 compressed-tensors는 [PEFT](https://huggingface.co/docs/peft)를 사용한 파인튜닝을 지원하며, 다음과 같은 기능들을 제공합니다.
 
-- fp8, int4, int8 가중치 및 활성화 정밀도.
+- fp8, int4, int8 가중치 및 활성화 함수 출력 정밀도.
 - [tensor, channel, group, block, token](https://github.com/neuralmagic/compressed-tensors/blob/83b2e7a969d70606421a76b9a3d112646077c8de/src/compressed_tensors/quantization/quant_args.py#L43-L52) 수준의 양자화 스케일과 영점 전략을 제공합니다.
-- 토큰별 동적 활성화 양자화(또는 정적 전략)를 지원합니다.
+- 토큰별 동적 활성화 함수 기반 양자화(또는 정적 전략)를 지원합니다.
 - 구조화되지 않은 형태 또는 2:4와 같은 반구조화된 형태의 가중치 희소성을 양자화와 결합하여 극한의 압축을 달성할 수 있습니다.
 - [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) 모듈뿐만 아니라 어떤 모듈이든 양자화할 수 있습니다.
 - 모듈 이름 또는 클래스별 양자화 대상을 지정할 수 있습니다.
@@ -93,7 +93,7 @@ compressed-tensor 모델은 구성 항목을 통해 정의됩니다. 다음 예�
 },
 ```
 
-구성 파일은 구성 그룹(`group_0`)의 양자화를 지정하며, 정적 per-tensor 전략으로 가중치와 활성화를 fp8로 양자화합니다. `ignore` 키에 명시된 것처럼 `lm_head` 모듈은 양자화되지 않습니다.
+구성 파일은 구성 그룹(`group_0`)의 양자화를 지정하며, 정적 per-tensor 전략으로 가중치와 활성화 함수 기반 양자화를 fp8로 양자화합니다. `ignore` 키에 명시된 것처럼 `lm_head` 모듈은 양자화되지 않습니다.
 
 모델 가중치를 더 자세히 보려면, 모델 카드의 [safetensors 뷰어](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf?show_file_info=model.safetensors.index.json)를 사용하여 모든 [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) 모듈의 양자화된 가중치, 입력 스케일, 가중치 스케일을 확인할 수 있습니다.
 
