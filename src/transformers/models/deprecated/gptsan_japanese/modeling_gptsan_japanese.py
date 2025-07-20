@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch GPTSANJapanese model."""
 
-import copy
 from typing import Optional, Union
 
 import torch
@@ -673,7 +672,7 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = GPTSanJapaneseConfig
+    config: GPTSanJapaneseConfig
     base_model_prefix = "gptsan_japanese"
     supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSanJapaneseBlock"]
@@ -849,7 +848,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
-        self.config = copy.deepcopy(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.last_project = nn.Linear(config.d_model, config.d_model, bias=True)
         self.act = ACT2FN["swish"]
@@ -919,7 +917,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         num_batch = input_ids.shape[0]
         pasts_or_spout_value = None
         if past_key_values is not None:
-            num_pasts_contexts = past_key_values[0][0].shape[2]
+            num_pasts_contexts = past_key_values.get_seq_length()
         elif self.config.d_spout and spout is not None:
             # `spout` is a special input vector specific to GPTSAN
             # This controls the output by projecting embedded information such as the class of sentences during learning.

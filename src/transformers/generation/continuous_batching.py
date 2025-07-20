@@ -27,6 +27,8 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+from tokenizers import Tokenizer
+from tokenizers.decoders import DecodeStream
 from torch.profiler import profile, schedule, tensorboard_trace_handler
 from tqdm import tqdm
 
@@ -72,6 +74,7 @@ class GenerationOutput:
     error: Optional[str] = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
+    next_token: Optional[int] = field(default_factory=int)
 
 
 @dataclass
@@ -96,6 +99,7 @@ class RequestState:
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
     error: Optional[str] = None
+    next_token: Optional[str] = None
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -122,6 +126,11 @@ class RequestState:
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
 
+        # Only add the token if we're not finishing due to max length
+        # (EOS tokens should still be added to the output)
+        if not (is_max_len and not is_eos):
+            self.static_outputs.extend([token_id])
+
         if is_eos or is_max_len:
             self.status = RequestStatus.FINISHED
             return True
@@ -139,6 +148,7 @@ class RequestState:
             generated_tokens=self.static_outputs,
             logprobs=[],
             error=self.error,
+            next_token=self.next_token,
         )
 
 
@@ -152,6 +162,7 @@ class PagedAttentionCache(Cache):
         dtype: torch.dtype = torch.float16,
         layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
         initial_prompt_shapes: Optional[list[list[int]]] = None,
+        tp_size: Optional[int] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
 
@@ -186,7 +197,16 @@ class PagedAttentionCache(Cache):
 
         self.block_size = block_size
         self.num_blocks = num_blocks
-        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
+        num_key_value_heads = self.num_key_value_heads
+        if tp_size is not None and tp_size > 1:
+            if num_key_value_heads % tp_size != 0:
+                raise ValueError(
+                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+                )
+            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
+            num_key_value_heads //= tp_size
+
+        self.cache_shape = (num_key_value_heads, num_blocks, self.block_size, self.head_dim)
 
         self.dtype = dtype
         self.device = device
@@ -630,7 +650,7 @@ def compute_optimal_blocks(
     memory_per_token = 2 * num_kv_heads * head_dim * dtype_size * num_hidden_layers  # For K and V caches
 
     # Estimate sequence length requirements
-    tokens_to_generate = getattr(generation_config, "max_new_tokens", 20)
+    tokens_to_generate = getattr(generation_config, "max_new_tokens") or 20
 
     if median_prefill_length is None and inputs:
         non_empty_inputs = [len(seq) for seq in inputs if seq]
@@ -763,6 +783,9 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(self.max_batch_tokens)
 
         self.setup_static_tensors()
+
+        self.tokenizer = Tokenizer.from_pretrained(self.config._name_or_path)
+        self.decode_stream = DecodeStream(skip_special_tokens=True)
 
     @traced(standalone=True)
     def setup_static_tensors(self):
@@ -925,7 +948,7 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
-        logger.warning(
+        logger.info(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
@@ -995,7 +1018,7 @@ class ContinuousBatchProcessor:
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
         if self.streaming:
-            state.next_token = token
+            state.next_token = self.decode_stream.step(self.tokenizer, state.static_outputs[-1])
             self.output_queue.put(state.to_generation_output())
         elif state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
@@ -1011,7 +1034,6 @@ class ContinuousBatchProcessor:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
-                state.static_outputs.extend([token])
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
                     self.metrics.record_request_completion(state.created_time, state.request_id)
@@ -1102,6 +1124,7 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
+        self.decode_stream = DecodeStream(skip_special_tokens=True)
 
     @traced
     def start(self):
@@ -1268,6 +1291,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
+                tp_size=getattr(self.model, "tp_size"),
             )
 
             scheduler = None

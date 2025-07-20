@@ -21,7 +21,7 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
-from .args_doc import (
+from .auto_docstring import (
     ClassAttrs,
     ClassDocstring,
     ImageProcessorArgs,
@@ -47,10 +47,10 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
-    LossKwargs,
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    TransformersKwargs,
     cached_property,
     can_return_loss,
     can_return_tuple,
@@ -182,6 +182,7 @@ from .import_utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_matplotlib_available,
+    is_mistral_common_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
@@ -248,6 +249,7 @@ from .import_utils import (
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,

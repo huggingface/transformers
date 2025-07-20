@@ -25,9 +25,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
-from transformers.models.jamba.modeling_jamba import JambaAttentionDecoderLayer
+from transformers.models.jamba.modeling_jamba import HybridMambaAttentionDynamicCache, JambaAttentionDecoderLayer
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -43,6 +42,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
+from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -99,7 +99,7 @@ class BambaFlashAttentionKwargs(TypedDict, total=False):
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache for the v2 mixer
-class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynamicCache):
+class HybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache, Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -114,7 +114,7 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
     """
 
     def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__(config, batch_size, dtype, device)
+        Cache.__init__()
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
@@ -805,14 +805,14 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
 
 @auto_docstring
 class BambaPreTrainedModel(PreTrainedModel):
-    config_class = BambaConfig
+    config: BambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports HybridMambaAttentionDynamicCache
+    # Note: only supports HybridMambaAttentionDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
