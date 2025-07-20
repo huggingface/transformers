@@ -14,92 +14,92 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Caching
-Imagine you're having a conversation with someone, and instead of remembering what they previously said, they have to start from scratch every time you respond. This would be slow and inefficient, right?
+# 캐싱[[caching]]
+누군가와 대화를 나누고 있는데, 상대방이 이전에 했던 말을 기억하지 못하고 당신이 대답할 때마다 처음부터 다시 시작해야 한다고 상상해 보세요. 이는 느리고 비효율적이겠죠?
 
-You can extend this analogy to transformer models. Autoregressive model generation can be slow because it makes a prediction one token at a time. Each new prediction is dependent on all the previous context.
+이 비유를 트랜스포머 모델에도 적용할 수 있습니다. 자기회귀 모델 생성은 한 번에 하나의 토큰씩 예측하기 때문에 느릴 수 있습니다. 각각의 새로운 예측은 이전의 모든 문맥에 의존합니다.
 
-To predict the 1000th token, the model requires information from the previous 999 tokens. The information is represented as matrix multiplications across the token representations.
+1000번째 토큰을 예측하려면, 모델은 이전 999개 토큰의 정보가 필요합니다. 이 정보는 토큰 표현에 걸친 행렬 곱셈으로 표현됩니다.
 
-To predict the 1001th token, you need the same information from the previous 999 tokens in addition to any information from the 1000th token. This is a lot of matrix multiplications a model has to compute over and over for each token!
+1001번째 토큰을 예측하려면, 이전 999개 토큰의 동일한 정보에 더하여 1000번째 토큰의 정보도 필요합니다. 이렇게 되면 토큰마다 모델은 반복적으로 많은 행렬 연산을 수행해야 합니다!
 
-A key-value (KV) cache eliminates this inefficiency by storing kv pairs derived from the attention layers of previously processed tokens. The stored kv pairs are retrieved from the cache and reused for subsequent tokens, avoiding the need to recompute.
+이러한 비효율성을 제거하기 위해 KV 캐시(Key-Value Cache)를 사용합니다. 어텐션 레이어에서 이전에 처리한 토큰으로부터 얻은 키와 값 쌍을 저장해두고, 이후 토큰 예측 시 이를 재사용하여 연산을 줄이는 방식입니다.
 
 > [!WARNING]
-> Caching should only be used for **inference**. It may cause unexpected errors if it's enabled during training.
+> 캐싱은 **추론**에만 사용해야 합니다. 학습 중에 활성화되면 예상치 못한 오류가 발생할 수 있습니다.
 
-To better understand how and why caching works, let's take a closer look at the structure of the attention matrices.
+캐싱이 어떻게 그리고 왜 작동하는지 더 잘 이해하기 위해, 어텐션 행렬의 구조를 자세히 살펴보겠습니다.
 
-## Attention matrices
+## 어텐션 행렬[[attention-matrices]]
 
-The **scaled dot-product attention** is calculated as shown below for a batch of size `b`, number of attention heads `h`, sequence length so far `T`, and dimension per attention head `d_head`.
+**스케일드 닷-프로덕트 어텐션**은 배치 크기 `b`, 어텐션 헤드 수 `h`, 현재까지의 시퀀스 길이 `T`, 어텐션 헤드당 차원 `d_head`에 대해 아래와 같이 계산됩니다.
 
 $$
 \text{Attention}(Q, K, V) = \text{softmax}\left( \frac{Q K^\top}{\sqrt{d_{\text{head}}}} \times \text{mask} \right) V
 $$
 
-The query (`Q`), key (`K`), and value (`V`) matrices are projections from the input embeddings of shape `(b, h, T, d_head)`.
+쿼리(`Q`), 키(`K`), 값(`V`) 행렬은 `(b, h, T, d_head)` 형태의 입력 임베딩에서의 투영입니다.
 
-For causal attention, the mask prevents the model from attending to future tokens. Once a token is processed, its representation never changes with respect to future tokens, which means \\( K_{\text{past}} \\) and \\( V_{\text{past}} \\) can be cached and reused to compute the last token's representation.
+인과적 어텐션의 경우, 마스크는 모델이 미래 토큰에 어텐션 하는 것을 방지합니다. 토큰이 한 번 처리되면, 그 표현은 미래 토큰과 관련하여 절대 변하지 않습니다. 이는 \\( K_{\text{past}} \\)와 \\( V_{\text{past}} \\)를 캐시하여 마지막 토큰의 표현을 계산하는 데 재사용할 수 있음을 의미합니다.
 
 $$
 \text{Attention}(q_t, [\underbrace{k_1, k_2, \dots, k_{t-1}}_{\text{cached}}, k_{t}], [\underbrace{v_1, v_2, \dots, v_{t-1}}_{\text{cached}}, v_{t}])
 $$
 
-At inference time, you only need the last token's query to compute the representation \\( x_t \\) that predicts the next token \\( t+1 \\). At each step, the new key and value vectors are **stored** in the cache and **appended** to the past keys and values.
+추론 시에는 다음 토큰 \\( t+1 \\)을 예측하는 표현 \\( x_t \\)를 계산하기 위해 마지막 토큰의 쿼리만 필요합니다. 단계에서 새로운 키와 값 벡터가 캐시에 **저장**되고 과거 키와 값에 **추가**됩니다.
 
 $$
 K_{\text{cache}} \leftarrow \text{concat}(K_{\text{past}}, k_t), \quad V_{\text{cache}} \leftarrow \text{concat}(V_{\text{past}}, v_t)
 $$
 
-Attention is calculated independently in each layer of the model, and caching is done on a per-layer basis.
+어텐션은 모델의 각 레이어에서 독립적으로 계산되며, 캐싱은 레이어별로 수행됩니다.
 
-Refer to the table below to compare how caching improves efficiency.
+캐싱이 효율성을 어떻게 개선하는지 비교한 아래 표를 참조하세요.
 
-| without caching | with caching |
+| 캐싱 없음 | 캐싱 사용 |
 |---|---|
-| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` 
-| attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |
+| 단계마다 이전의 모든 `K`와 `V`를 재계산  | 단계마다 현재의 `K`와 `V`만 계산 |
+| 단계당 어텐션 비용이 시퀀스 길이에 대해 **제곱** | 단계당 어텐션 비용이 시퀀스 길이에 대해 **선형** (메모리는 선형적으로 증가하지만, 토큰당 계산은 낮게 유지됨) |
 
 
 
-## Cache class
+## 캐시 클래스[[cache-class]]
 
-A basic KV cache interface takes a key and value tensor for the current token and returns the updated `K` and `V` tensors. This is internally managed by a model's `forward` method.
+기본 KV 캐시 인터페이스는 현재 토큰의 키와 값 텐서를 받아서 업데이트된 `K`와 `V` 텐서를 반환합니다. 이는 모델의 `forward` 메소드에 의해 내부적으로 관리됩니다.
 
 ```py
 new_K, new_V = cache.update(k_t, v_t, layer_idx)
 attn_output = attn_layer_idx_fn(q_t, new_K, new_V)
 ```
 
-When you use Transformers' [`Cache`] class, the self-attention module performs several critical steps to integrate past and present information.
+Transformers의 [`Cache`] 클래스를 사용할 때, 셀프 어텐션 모듈은 과거와 현재 정보를 통합하기 위해 몇 가지 중요한 단계를 수행합니다.
 
-1. The attention module concatenates current kv pairs with past kv pairs stored in the cache. This creates attentions weights with the shape `(new_tokens_length, past_kv_length + new_tokens_length)`. The current and past kv pairs are essentially combined to compute the attention scores, ensuring a model is aware of previous context and the current input.
+1. 어텐션 모듈은 현재 kv 쌍을 캐시에 저장된 과거 kv 쌍과 연결합니다. 이는 `(new_tokens_length, past_kv_length + new_tokens_length)` 형태의 어텐션 가중치를 생성합니다. 현재와 과거 kv 쌍이 본질적으로 결합해 어텐션 점수를 계산하며, 모델이 이전 문맥과 현재 입력을 인식하도록 보장합니다.
 
-2. When the `forward` method is called iteratively, it's crucial that the attention mask shape matches the combined length of the past and current kv pairs. The attention mask should have the shape `(batch_size, past_kv_length + new_tokens_length)`. This is typically handled internally in [`~GenerationMixin.generate`], but if you want to implement your own generation loop with [`Cache`], keep this in mind! The attention mask should hold the past and current token values.
+2. `forward` 메소드가 반복적으로 호출될 때, 어텐션 마스크 형태가 과거와 현재 kv 쌍의 결합된 길이와 일치하는 것이 중요합니다. 어텐션 마스크는 `(batch_size, past_kv_length + new_tokens_length)` 형태여야 합니다. 이는 일반적으로 [`~GenerationMixin.generate`]에서 내부적으로 처리되지만, [`Cache`]로 자체 생성 루프를 구현하고 싶다면 이를 염두에 두세요! 어텐션 마스크는 과거와 현재 토큰값을 보유해야 합니다.
 
-3. It is also important to be aware of the `cache_position`. This is important if you want to reuse a prefilled [`Cache`] with the `forward` method because you have to pass a valid `cache_position` value. This indicates the input positions in a sequence. `cache_position` is unaffected by padding, and it always adds one more position for each token. For example, if a kv cache contains 10 tokens - regardless of pad tokens - the cache position for the next token should be `torch.tensor([10])`.
+3. `cache_position`을 인식하는 것도 중요합니다. 이는 유효한 `cache_position` 값을 전달해야 하므로 `forward` 메소드로 미리 채워진 [`Cache`]를 재사용하고 싶을 때 중요합니다. 이는 시퀀스에서의 입력 위치를 나타냅니다. `cache_position`은 패딩에 영향받지 않으며, 각 토큰에 대해 항상 하나씩 더 많은 위치를 추가합니다. 예를 들어, kv 캐시가 10개의 토큰을 포함하면 - 패드 토큰과 관계없이 - 다음 토큰의 캐시 위치는 `torch.tensor([10])`이어야 합니다.
 
-## Cache storage implementation
+## 캐시 저장소 구현[[cache-storage-implementation]]
 
-The actual storage of key-value pairs varies between cache implementations. As an example, consider the [`DynamicCache`].
+키-값 쌍의 실제 저장소는 캐시 구현에 따라 다릅니다. 예시로 [`DynamicCache`]를 고려해 보겠습니다.
 
 
-In [`DynamicCache`], the key-value pairs are stored as two lists of tensors. Each tensor in the lists have the shape `[batch_size, num_heads, seq_len, head_dim]`.
-- `key_cache`: A list of tensors, one for each layer.
-- `value_cache`: A list of tensors, one for each layer.
+[`DynamicCache`]에서 키-값 쌍은 두 개의 텐서 리스트로 저장됩니다. 리스트의 각 텐서는 `[batch_size, num_heads, seq_len, head_dim]` 형태를 갖습니다.
+- `key_cache`: 각 레이어에 대한 텐서 리스트.
+- `value_cache`: 각 레이어에 대한 텐서 리스트.
 
-When new tokens are processed:
+새로운 토큰이 처리될 때:
 
-1. For each layer, the new key and value states are concatenated with the existing cache.
+1. 각 레이어에 대해, 새로운 키와 값 상태가 기존 캐시와 연결됩니다.
 ```py
 self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
 self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 ```
 
-2. The cache grows dynamically as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token.
+2. 캐시는 더 많은 토큰이 처리됨에 따라 동적으로 증가합니다. 시퀀스 길이 차원(`seq_len`)은 각 새로운 토큰과 함께 증가합니다.
 
-The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
+아래 예제는 [`DynamicCache`]로 생성 루프를 만드는 방법을 보여줍니다. 논의된 바와 같이, 어텐션 마스크는 과거와 현재 토큰값의 연결이며 다음 토큰을 위해 캐시 위치에 `1`이 추가됩니다.
 
 ```py
 import torch
@@ -119,29 +119,29 @@ max_new_tokens = 10
 
 for _ in range(max_new_tokens):
     outputs = model(**inputs, cache_position=cache_position, past_key_values=past_key_values, use_cache=True)
-    # Greedily sample one next token
+    # 탐욕적으로 다음 토큰 하나를 샘플링
     next_token_ids = outputs.logits[:, -1:].argmax(-1)
     generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)
-    # Prepare inputs for the next generation step by leaving unprocessed tokens, in our case we have only one new token
-    # and expanding attn mask for the new token, as explained above
+    # 처리되지 않은 토큰을 남겨두어 다음 생성 단계를 위한 입력을 준비합니다. 우리의 경우 새로운 토큰 하나만 있고
+    # 위에서 설명한 대로 새로운 토큰을 위해 어텐션 마스크를 확장합니다
     attention_mask = inputs["attention_mask"]
     attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
     inputs = {"input_ids": next_token_ids, "attention_mask": attention_mask}
-    cache_position = cache_position[-1:] + 1 # add one more position for the next token
+    cache_position = cache_position[-1:] + 1 # 다음 토큰을 위해 하나 더 위치 추가
 
 print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
 ```
-## Legacy cache format
+## 레거시 캐시 형식[[legacy-cache-format]]
 
-Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].
+[`Cache`] 클래스 이전에는 캐시가 텐서의 튜플의 튜플로 저장되었습니다. 이 형식은 텍스트가 생성됨에 따라 증가하기 때문에 동적이며, [`DynamicCache`]와 유사합니다.
 
-The legacy format is essentially the same data structure but organized differently.
-- It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer.
-- The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
-- The format is less flexible and doesn't support features like quantization or offloading.
+레거시 형식은 본질적으로 동일한 데이터 구조이지만 다르게 조직화되었습니다.
+- 각 내부 튜플은 레이어의 키와 값 텐서를 포함하는 튜플의 튜플입니다.
+- 텐서는 동일한 형태 `[batch_size, num_heads, seq_len, head_dim]`를 갖습니다.
+- 이 형식은 덜 유연하며 양자화나 오프로딩과 같은 기능을 지원하지 않습니다.
 
-If your project depends on this legacy format, we recommend to convert to [`DynamicCache`] with [`~DynamicCache.from_legacy_cache`]. Note that legacy cache format is deprecated and not used anymore in `Transformers`. You can convert back to tuple format with [`DynamicCache.to_legacy_cache`] functions, which is helpful if you have custom logic for manipulating a cache in a specific format.
+프로젝트가 이 레거시 형식에 의존한다면, [`~DynamicCache.from_legacy_cache`]를 사용하여 [`DynamicCache`]로 변환하는 것을 권장합니다. 레거시 캐시 형식은 사용이 중단되었으며 `Transformers`에서 더 이상 사용되지 않습니다. 특정 형식에서 캐시를 조작하는 커스텀 로직이 있는 경우 도움이 되는 [`DynamicCache.to_legacy_cache`] 함수를 사용하여 튜플 형식으로 다시 변환할 수 있습니다.
 
 ```py
 import torch
@@ -151,8 +151,8 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 
-# `return_dict_in_generate=True` is required to return the cache and `return_legacy_cache` forces the returned cache
-# in the legacy format
+# 캐시를 반환하려면 `return_dict_in_generate=True`가 필요하고 `return_legacy_cache`는 반환된 캐시를
+# 레거시 형식으로 강제합니다
 generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
 
 cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)
