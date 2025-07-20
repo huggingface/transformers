@@ -185,9 +185,7 @@ class PhimoeConfig(PretrainedConfig):
                     f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}"
                 )
             if not isinstance(rope_scaling_long_mscale, (int, float)):
-                raise TypeError(
-                    f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}"
-                )
+                raise TypeError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
 
         rope_config_validation(self)
 
