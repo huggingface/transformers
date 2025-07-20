@@ -1,18 +1,33 @@
+<!--
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+<div style="float: right;">
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
+</div>
 
 # OLMoE
 
-<<<<<<< Updated upstream
-The OLMoE model was proposed in [OLMoE: Open Mixture-of-Experts Language Models](https://arxiv.org/abs/2409.02060) by Niklas Muennighoff, Luca Soldaini, Dirk Groeneveld, Kyle Lo, Jacob Morrison, Sewon Min, Weijia Shi, Pete Walsh, Oyvind Tafjord, Nathan Lambert, Yuling Gu, Shane Arora, Akshita Bhagia, Dustin Schwenk, David Wadden, Alexander Wettig, Binyuan Hui, Tim Dettmers, Douwe Kiela, Ali Farhadi, Noah A. Smith, Pang Wei Koh, Amanpreet Singh, Hannaneh Hajishirzi.
 =======
-[OLMoE](https://huggingface.co/papers/2409.02060) stands for **O**pen **L**anguage **Mo**dels using sparse **M**ixture-**o**f-**E**xperts, created by AllenAI. Released with open data and training code, the model is a [Mixture of Experts](https://huggingface.co/blog/moe) (MoE) : a neural network architecture that replaces dense layers with multiple specialized "expert" networks and uses a gating mechanism to route different parts of the input to only the most relevant experts, allowing the model to be much larger while using the same computational resources during inference. 
->>>>>>> Stashed changes
+[OLMoE](https://huggingface.co/papers/2409.02060) is a sparse Mixture-of-Experts (MoE) language model with 7B parameters but only 1B parameters are used per input token. It has similar inference costs as dense models but trains ~3x faster. OLMoE uses fine-grained routing with 64 small experts in each layer and uses a dropless token-based routing algorithm.
 
-You can find all the original OLMoE checkpoints under the [OLMoE](https://huggingface.co/collections/allenai/olmoe-january-2025-67992134f9ebea0a941706ca) collection.
+You can find all the original OLMoE checkpoints under the [OLMoE](https://huggingface.co/collections/allenai/olmoe-november-2024-66cf678c047657a30c8cd3da) collection.
 
 > [!TIP]
 > This model was contributed by [Muennighoff](https://hf.co/Muennighoff).
@@ -22,7 +37,7 @@ You can find all the original OLMoE checkpoints under the [OLMoE](https://huggin
 The example below demonstrates how to generate text with [`Pipeline`] or the [`OlmoeForCausalLM`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py
 import torch
@@ -40,34 +55,34 @@ print(result)
 ```
 
 </hfoption>
-<hfoption id="OlmoeForCausalLM">
+<hfoption id="AutoModel">
 
 ```py
-from transformers import OlmoeForCausalLM, AutoTokenizer
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Load different ckpts via passing e.g. `revision=step10000-tokens41B`
-model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0125").to(DEVICE)
-tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0125")
-inputs = tokenizer("The 26th letter of the alphabet is", return_tensors="pt")
-inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
-out = model.generate(**inputs, max_length=64)
-print(tokenizer.decode(out[0]))
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto").to(device)
+tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
+
+inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = {k: v.to(device) for k, v in inputs.items()}
+output = model.generate(**inputs, max_length=64)
+print(tokenizer.decode(output[0]))
 ```
 
 ## Quantization
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization overview](https://huggingface.co/docs/transformers/en/quantization/overview) for more available quantization backends.
-
-The example below uses [BitsAndBytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to quantize the weights to 4-bit precision.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-# Configure 4-bit quantization
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 quantization_config = BitsAndBytesConfig(
    load_in_4bit=True,
    bnb_4bit_compute_dtype=torch.float16,
@@ -75,19 +90,13 @@ quantization_config = BitsAndBytesConfig(
    bnb_4bit_quant_type="nf4"
 )
 
-# Load quantized OLMoE model
-model = AutoModelForCausalLM.from_pretrained(
-   "allenai/OLMoE-1B-7B-0125",
-   quantization_config=quantization_config,
-   device_map="auto"
-)
-tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0125")
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
+tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
-# Use the quantized model
-inputs = tokenizer("How many arms does an octopus have?", return_tensors="pt")
-with torch.no_grad():
-   outputs = model.generate(**inputs, max_length=64, do_sample=True, temperature=0.7)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = {k: v.to(device) for k, v in inputs.items()}
+output = model.generate(**inputs, max_length=64)
+print(tokenizer.decode(output[0]))
 ```
 
 ## OlmoeConfig
