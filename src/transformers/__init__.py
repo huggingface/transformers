@@ -462,6 +462,7 @@ else:
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["optimization"] = [
         "Adafactor",
+        "Muon",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -788,6 +789,7 @@ if TYPE_CHECKING:
     # Optimization
     from .optimization import (
         Adafactor,
+        Muon,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,

@@ -971,3 +971,157 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
 
     """
     return AdafactorSchedule(optimizer, initial_lr)
+
+
+def zeropower_via_newtonschulz5(G, steps: int):
+    """
+    Newton-Schulz iteration to compute the zeroth power / orthogonalization of G. We opt to use a
+    quintic iteration whose coefficients are selected to maximize the slope at zero. For the purpose
+    of minimizing steps, it turns out to be empirically effective to keep increasing the slope at
+    zero even beyond the point where the iteration no longer converges all the way to one everywhere
+    on the interval. This iteration therefore does not produce UV^T but rather something like US'V^T
+    where S' is diagonal with S_{ii}' ~ Uniform(0.5, 1.5), which turns out not to hurt model
+    performance at all relative to UV^T, where USV^T = G is the SVD.
+    """
+    assert G.ndim >= 2  # batched Muon implementation by @scottjmaddox, and put into practice in the record by @YouJiacheng
+    a, b, c = (3.4445, -4.7750, 2.0315)
+    X = G.bfloat16()
+    if G.size(-2) > G.size(-1):
+        X = X.mT
+
+    # Ensure spectral norm is at most 1
+    X = X / (X.norm(dim=(-2, -1), keepdim=True) + 1e-7)
+    # Perform the NS iterations
+    for _ in range(steps):
+        A = X @ X.mT
+        B = b * A + c * A @ A  # quintic computation strategy adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
+        X = a * X + B @ X
+
+    if G.size(-2) > G.size(-1):
+        X = X.mT
+    return X
+
+
+def muon_update(grad, momentum, beta=0.95, ns_steps=5, nesterov=True):
+    momentum.lerp_(grad, 1 - beta)
+    update = grad.lerp_(momentum, beta) if nesterov else momentum
+    
+    # Only apply orthogonalization to 2D+ parameters (matrices)
+    if update.ndim >= 2:
+        if update.ndim == 4:  # for the case of conv filters
+            update = update.view(len(update), -1)
+        update = zeropower_via_newtonschulz5(update, steps=ns_steps)
+        update *= max(1, grad.size(-2) / grad.size(-1))**0.5
+    
+    return update
+
+
+class Muon(Optimizer):
+    """
+    Muon - MomentUm Orthogonalized by Newton-schulz
+
+    https://kellerjordan.github.io/posts/muon/
+
+    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-
+    processing step, in which each 2D parameter's update is replaced with the nearest orthogonal
+    matrix. For efficient orthogonalization we use a Newton-Schulz iteration, which has the
+    advantage that it can be stably run in bfloat16 on the GPU.
+
+    Muon should only be used for hidden weight layers. The input embedding, final output layer,
+    and any internal gains or biases should be optimized using a standard method such as AdamW.
+    Hidden convolutional weights can be trained using Muon by viewing them as 2D and then
+    collapsing their last 3 dimensions.
+
+    Arguments:
+        params (`Iterable[nn.parameter.Parameter]`):
+            Iterable of parameters to optimize or dictionaries defining parameter groups.
+        lr (`float`, *optional*, defaults to 0.02):
+            The learning rate, in units of spectral norm per update.
+        weight_decay (`float`, *optional*, defaults to 0.0):
+            The AdamW-style weight decay.
+        momentum (`float`, *optional*, defaults to 0.95):
+            The momentum. A value of 0.95 here is usually fine.
+        ns_steps (`int`, *optional*, defaults to 5):
+            Number of Newton-Schulz iteration steps for orthogonalization.
+        nesterov (`bool`, *optional*, defaults to `True`):
+            Whether to use Nesterov momentum.
+
+    Example:
+
+    ```python
+    # Optimizer for hidden weight layers only
+    hidden_params = [p for n, p in model.named_parameters() if p.ndim >= 2 and "embed" not in n and "head" not in n]
+    optimizer = Muon(hidden_params, lr=0.02, momentum=0.95)
+    ```
+    """
+
+    def __init__(
+        self, 
+        params, 
+        lr: float = 0.02, 
+        weight_decay: float = 0.0, 
+        momentum: float = 0.95, 
+        ns_steps: int = 5,
+        nesterov: bool = True
+    ):
+        if not 0.0 <= lr:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if not 0.0 <= weight_decay:
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
+        if not 0.0 <= momentum <= 1.0:
+            raise ValueError(f"Invalid momentum value: {momentum}")
+        if not isinstance(ns_steps, int) or ns_steps < 1:
+            raise ValueError(f"Invalid ns_steps value: {ns_steps}")
+
+        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum, ns_steps=ns_steps, nesterov=nesterov)
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        """
+        Performs a single optimization step.
+
+        Args:
+            closure (`Callable`, *optional*):
+                A closure that reevaluates the model and returns the loss.
+        """
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+
+                grad = p.grad
+                if grad.dtype in (torch.float16, torch.bfloat16):
+                    grad = grad.float()
+
+                state = self.state[p]
+                
+                # State initialization
+                if len(state) == 0:
+                    state["momentum_buffer"] = torch.zeros_like(p)
+
+                # Apply weight decay
+                if group["weight_decay"] != 0:
+                    p.mul_(1 - group["lr"] * group["weight_decay"])
+
+                # Get momentum buffer
+                momentum_buffer = state["momentum_buffer"]
+                
+                # Compute update
+                update = muon_update(
+                    grad, 
+                    momentum_buffer, 
+                    beta=group["momentum"], 
+                    ns_steps=group["ns_steps"],
+                    nesterov=group["nesterov"]
+                )
+
+                # Apply update
+                p.add_(update.reshape(p.shape), alpha=-group["lr"])
+
+        return loss
