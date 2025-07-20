@@ -175,6 +175,8 @@
     title: (번역중) Quantization
   - local: llm_optims
     title: LLM 추론 최적화
+  - local: cache_explanation
+    title: 어텐션 행렬 캐싱
   - sections:
     - local: in_translation
       title: (번역중) Methods and tools for efficient training on a single GPU
