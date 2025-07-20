@@ -983,7 +983,9 @@ def zeropower_via_newtonschulz5(G, steps: int):
     where S' is diagonal with S_{ii}' ~ Uniform(0.5, 1.5), which turns out not to hurt model
     performance at all relative to UV^T, where USV^T = G is the SVD.
     """
-    assert G.ndim >= 2  # batched Muon implementation by @scottjmaddox, and put into practice in the record by @YouJiacheng
+    assert (
+        G.ndim >= 2
+    )  # batched Muon implementation by @scottjmaddox, and put into practice in the record by @YouJiacheng
     a, b, c = (3.4445, -4.7750, 2.0315)
     X = G.bfloat16()
     if G.size(-2) > G.size(-1):
@@ -994,7 +996,9 @@ def zeropower_via_newtonschulz5(G, steps: int):
     # Perform the NS iterations
     for _ in range(steps):
         A = X @ X.mT
-        B = b * A + c * A @ A  # quintic computation strategy adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
+        B = (
+            b * A + c * A @ A
+        )  # quintic computation strategy adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
         X = a * X + B @ X
 
     if G.size(-2) > G.size(-1):
@@ -1005,14 +1009,14 @@ def zeropower_via_newtonschulz5(G, steps: int):
 def muon_update(grad, momentum, beta=0.95, ns_steps=5, nesterov=True):
     momentum.lerp_(grad, 1 - beta)
     update = grad.lerp_(momentum, beta) if nesterov else momentum
-    
+
     # Only apply orthogonalization to 2D+ parameters (matrices)
     if update.ndim >= 2:
         if update.ndim == 4:  # for the case of conv filters
             update = update.view(len(update), -1)
         update = zeropower_via_newtonschulz5(update, steps=ns_steps)
-        update *= max(1, grad.size(-2) / grad.size(-1))**0.5
-    
+        update *= max(1, grad.size(-2) / grad.size(-1)) ** 0.5
+
     return update
 
 
@@ -1056,13 +1060,13 @@ class Muon(Optimizer):
     """
 
     def __init__(
-        self, 
-        params, 
-        lr: float = 0.02, 
-        weight_decay: float = 0.0, 
-        momentum: float = 0.95, 
+        self,
+        params,
+        lr: float = 0.02,
+        weight_decay: float = 0.0,
+        momentum: float = 0.95,
         ns_steps: int = 5,
-        nesterov: bool = True
+        nesterov: bool = True,
     ):
         if not 0.0 <= lr:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -1073,7 +1077,13 @@ class Muon(Optimizer):
         if not isinstance(ns_steps, int) or ns_steps < 1:
             raise ValueError(f"Invalid ns_steps value: {ns_steps}")
 
-        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum, ns_steps=ns_steps, nesterov=nesterov)
+        defaults = {
+            "lr": lr,
+            "weight_decay": weight_decay,
+            "momentum": momentum,
+            "ns_steps": ns_steps,
+            "nesterov": nesterov,
+        }
         super().__init__(params, defaults)
 
     @torch.no_grad()
@@ -1100,7 +1110,7 @@ class Muon(Optimizer):
                     grad = grad.float()
 
                 state = self.state[p]
-                
+
                 # State initialization
                 if len(state) == 0:
                     state["momentum_buffer"] = torch.zeros_like(p)
@@ -1111,14 +1121,14 @@ class Muon(Optimizer):
 
                 # Get momentum buffer
                 momentum_buffer = state["momentum_buffer"]
-                
+
                 # Compute update
                 update = muon_update(
-                    grad, 
-                    momentum_buffer, 
-                    beta=group["momentum"], 
+                    grad,
+                    momentum_buffer,
+                    beta=group["momentum"],
                     ns_steps=group["ns_steps"],
-                    nesterov=group["nesterov"]
+                    nesterov=group["nesterov"],
                 )
 
                 # Apply update
