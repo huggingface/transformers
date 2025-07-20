@@ -28,10 +28,10 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    PILImageResampling,
-    SizeDict,
     ChannelDimension,
     ImageInput,
+    PILImageResampling,
+    SizeDict,
     is_valid_image,
     pil_torch_interpolation_mapping,
 )
@@ -60,7 +60,7 @@ class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """Valid kwargs for TvpImageProcessorFast."""
 
     do_flip_channel_order: Optional[bool]
-    pad_size: Optional[SizeDict] 
+    pad_size: Optional[SizeDict]
     constant_values: Optional[Union[float, list[float]]]
     pad_mode: Optional[str]
 
@@ -106,7 +106,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 f"TvpImageProcessorFast only accepts torch.Tensor inputs. Got {type(image)}. "
                 "Please convert your images to torch tensors before passing to the fast processor."
             )
-        
+
         # Ensure the tensor is in the correct format
         if image.dim() == 2:
             # Single channel image, add channel dimension
@@ -120,15 +120,15 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 image = image.permute(2, 0, 1).contiguous()
         elif image.dim() != 3:
             raise ValueError(f"Expected 2D or 3D tensor, got {image.dim()}D tensor")
-        
+
         # Ensure float32 for processing
         if image.dtype != torch.float32:
             image = image.float()
-        
+
         # Move to device if specified
         if device is not None:
             image = image.to(device)
-        
+
         return image
 
     def _prepare_input_videos(
@@ -191,44 +191,44 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         TVP image processor but uses torchvision operations for better performance.
         """
         processed_videos = []
-        
+
         for video in videos:
             # Group frames by shape for efficient processing
             grouped_frames, grouped_frames_index = group_images_by_shape(video, disable_grouping=disable_grouping)
             processed_frames_grouped = {}
-            
+
             for shape, stacked_frames in grouped_frames.items():
                 # Resize if needed
                 if do_resize:
                     stacked_frames = self.resize(stacked_frames, size, interpolation)
-                
+
                 # Center crop if needed
                 if do_center_crop:
                     stacked_frames = self.center_crop(stacked_frames, crop_size)
-                
+
                 # Rescale and normalize separately (following original TVP behavior)
                 if do_rescale:
                     stacked_frames = self.rescale(stacked_frames, rescale_factor)
-                
+
                 if do_normalize:
                     stacked_frames = self.normalize(stacked_frames, image_mean, image_std)
-                
+
                 # Pad if needed
                 if do_pad:
                     stacked_frames = self._pad_frames(
                         stacked_frames, pad_size, constant_values, pad_mode
                     )
-                
+
                 # Flip channel order if needed (RGB to BGR)
                 if do_flip_channel_order:
                     stacked_frames = self._flip_channel_order(stacked_frames)
-                
+
                 processed_frames_grouped[shape] = stacked_frames
-            
+
             # Reorder frames back to original order
             processed_frames = reorder_images(processed_frames_grouped, grouped_frames_index)
             processed_videos.append(processed_frames)
-        
+
         # Convert to tensor format if requested
         if return_tensors == "pt" and processed_videos:
             # Stack frames for each video
@@ -240,7 +240,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 else:
                     # Handle empty video case
                     stacked_videos.append(torch.empty(0, 3, pad_size["height"], pad_size["width"]))
-            
+
             # Stack videos if we have multiple videos
             if len(stacked_videos) > 1:
                 pixel_values = torch.stack(stacked_videos)
@@ -249,7 +249,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 pixel_values = stacked_videos[0].unsqueeze(0)
         else:
             pixel_values = processed_videos
-        
+
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
     def _pad_frames(
@@ -262,15 +262,15 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         """Pad frames to the specified size."""
         if frames.shape[-2:] == (pad_size["height"], pad_size["width"]):
             return frames
-        
+
         # Calculate padding
         current_height, current_width = frames.shape[-2:]
         pad_bottom = pad_size["height"] - current_height
         pad_right = pad_size["width"] - current_width
-        
+
         if pad_bottom < 0 or pad_right < 0:
             raise ValueError("The padding size must be greater than frame size")
-        
+
         # Apply padding
         padding = [0, 0, pad_right, pad_bottom]  # [left, top, right, bottom]
         return F.pad(frames, padding, fill=constant_values, padding_mode=pad_mode)
@@ -301,12 +301,12 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             `torch.Tensor`: The resized image.
         """
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        
+
         # Handle longest_edge case (TVP-specific)
         if size["longest_edge"]:
             # Get current dimensions
             current_height, current_width = image.shape[-2:]
-            
+
             # Calculate new dimensions maintaining aspect ratio
             if current_height >= current_width:
                 ratio = current_width * 1.0 / current_height
@@ -316,10 +316,10 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 ratio = current_height * 1.0 / current_width
                 new_width = size["longest_edge"]
                 new_height = int(new_width * ratio)
-            
+
             new_size = (new_height, new_width)
             return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
-        
+
         # Use base class resize method for other cases
         return super().resize(image, size, interpolation, antialias, **kwargs)
 
@@ -414,4 +414,4 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         )
 
 
-__all__ = ["TvpImageProcessorFast", "TvpFastImageProcessorKwargs"] 
+__all__ = ["TvpImageProcessorFast", "TvpFastImageProcessorKwargs"]

@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers.image_transforms import PaddingMode
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available, is_torchvision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
 
@@ -198,10 +198,10 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """Test that the fast processor only accepts tensor inputs."""
         if self.fast_image_processing_class is None:
             self.skipTest("Fast image processor not available")
-        
+
         # Initialize fast image_processing
         image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-        
+
         # Create tensor video inputs
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
         for video in video_inputs:
@@ -362,10 +362,10 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """Test that the fast processor correctly rejects PIL inputs and only accepts tensors."""
         if self.fast_image_processing_class is None:
             self.skipTest("Fast image processor not available")
-        
+
         # Initialize fast image_processing
         image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-        
+
         # Test that it accepts tensor inputs
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
         try:
@@ -373,30 +373,30 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertIn("pixel_values", result)
         except Exception as e:
             self.fail(f"Fast processor should accept tensor inputs: {e}")
-        
+
         # Test that it rejects PIL inputs
         pil_video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
         with self.assertRaises(ValueError) as context:
             image_processing(pil_video_inputs[0], return_tensors="pt")
-        
+
         self.assertIn("only accepts torch.Tensor", str(context.exception))
 
     def test_fast_processor_separated_operations(self):
         """Test that the fast processor has separated rescale and normalize operations."""
         if self.fast_image_processing_class is None:
             self.skipTest("Fast image processor not available")
-        
+
         # Initialize fast image_processing
         image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-        
+
         # Check that it has separate rescale and normalize methods
         self.assertTrue(hasattr(image_processing, 'rescale'), "Fast processor should have rescale method")
         self.assertTrue(hasattr(image_processing, 'normalize'), "Fast processor should have normalize method")
-        
+
         # Check that it has the inherited rescale_and_normalize method
-        self.assertTrue(hasattr(image_processing, 'rescale_and_normalize'), 
+        self.assertTrue(hasattr(image_processing, 'rescale_and_normalize'),
                        "Fast processor should have rescale_and_normalize method (inherited)")
-        
+
         # Verify inheritance from BaseImageProcessorFast
         from transformers.image_processing_utils_fast import BaseImageProcessorFast
         self.assertIn(BaseImageProcessorFast, image_processing.__class__.__mro__,
@@ -406,21 +406,21 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """Test that the slow and fast image processors produce equivalent results."""
         if self.fast_image_processing_class is None:
             self.skipTest("Fast image processor not available")
-        
+
         # Initialize both processors
         slow_processor = self.image_processing_class(**self.image_processor_dict)
         fast_processor = self.fast_image_processing_class(**self.image_processor_dict)
-        
+
         # Create test video inputs
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
         # Process with both processors
         slow_output = slow_processor(video_inputs[0], return_tensors="pt")
         fast_output = fast_processor(video_inputs[0], return_tensors="pt")
-        
+
         # Compare outputs with relaxed tolerance for video processing
         torch.testing.assert_close(
-            slow_output.pixel_values, 
-            fast_output.pixel_values, 
+            slow_output.pixel_values,
+            fast_output.pixel_values,
             atol=5e-1,  # Much more relaxed for video processing
             rtol=1e-1   # Much more relaxed for video processing
         )
@@ -429,22 +429,22 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """Test that the slow and fast image processors produce equivalent results for batched inputs."""
         if self.fast_image_processing_class is None:
             self.skipTest("Fast image processor not available")
-        
+
         # Initialize both processors
         slow_processor = self.image_processing_class(**self.image_processor_dict)
         fast_processor = self.fast_image_processing_class(**self.image_processor_dict)
-        
+
         # Create test video inputs
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
-        
+
         # Process with both processors
         slow_output = slow_processor(video_inputs, return_tensors="pt")
         fast_output = fast_processor(video_inputs, return_tensors="pt")
-        
+
         # Compare outputs with relaxed tolerance for video processing
         torch.testing.assert_close(
-            slow_output.pixel_values, 
-            fast_output.pixel_values, 
+            slow_output.pixel_values,
+            fast_output.pixel_values,
             atol=5e-1,  # Much more relaxed for video processing
             rtol=1e-1   # Much more relaxed for video processing
         )
