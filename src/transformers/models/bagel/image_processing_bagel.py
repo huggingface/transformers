@@ -91,9 +91,9 @@ class BagelImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        max_size: int = 980,
-        min_size: int = 224,
-        stride: int = 14,
+        max_size: dict = {"vit": 980, "vae": 1024},
+        min_size: dict = {"vit": 224, "vae": 512},
+        stride: dict = {"vit": 14, "vae": 16},
         max_pixels: int = 14 * 14 * 9 * 1024,
         image_number: int = 1,
         do_resize: bool = True,
@@ -134,6 +134,9 @@ class BagelImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        max_size: Optional[int] = None,
+        min_size: Optional[int] = None,
+        stride: Optional[int] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -167,22 +170,22 @@ class BagelImageProcessor(BaseImageProcessor):
         height, width = get_image_size(image, input_data_format)
 
         # Calculate initial scale
-        scale = min(self.max_size / max(width, height), 1.0)
-        scale = max(scale, self.min_size / min(width, height))
+        scale = min(max_size / max(width, height), 1.0)
+        scale = max(scale, min_size / min(width, height))
 
         # Apply initial scaling and make divisible
-        new_width = max(self.stride, int(round(width * scale / self.stride) * self.stride))
-        new_height = max(self.stride, int(round(height * scale / self.stride) * self.stride))
+        new_width = max(stride, int(round(width * scale / stride) * stride))
+        new_height = max(stride, int(round(height * scale / stride) * stride))
 
         # Apply pixel limit constraint
         if new_width * new_height > self.max_pixels / self.image_number:
             scale = (self.max_pixels / self.image_number) / (new_width * new_height)
-            new_width = max(self.stride, int(round(new_width * scale / self.stride) * self.stride))
-            new_height = max(self.stride, int(round(new_height * scale / self.stride) * self.stride))
+            new_width = max(stride, int(round(new_width * scale / stride) * stride))
+            new_height = max(stride, int(round(new_height * scale / stride) * stride))
 
         # Apply max size constraint
-        if max(new_width, new_height) > self.max_size:
-            scale = self.max_size / max(new_width, new_height)
+        if max(new_width, new_height) > max_size:
+            scale = max_size / max(new_width, new_height)
             new_width = max(self.stride, int(round(new_width * scale / self.stride) * self.stride))
             new_height = max(self.stride, int(round(new_height * scale / self.stride) * self.stride))
 
@@ -213,6 +216,8 @@ class BagelImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        transforms_type: Optional[str] = None,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -270,6 +275,11 @@ class BagelImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        # Lets fetch the required params based on transforms_type
+        max_size = self.max_size.get(transforms_type, self.max_size["vit"])
+        min_size = self.min_size.get(transforms_type, self.min_size["vit"])
+        stride = self.stride.get(transforms_type, self.stride["vit"])
+
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
         images = make_flat_list_of_images(images)
@@ -310,7 +320,7 @@ class BagelImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, resample=resample, input_data_format=input_data_format)
+                image = self.resize(image, resample, max_size, min_size, stride, input_data_format)
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
             if do_normalize:

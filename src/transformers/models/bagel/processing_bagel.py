@@ -38,12 +38,13 @@ DEFAULT_SYSTEM_PROMPT = (
 
 class BagelTextKwargs(TextKwargs, total=False):
     generation_mode: str
+    transforms_type: str # Cleanup later as it's image kwargs
 
 
 class BagelProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: BagelTextKwargs
     _defaults = {
-        "text_kwargs": {"padding": False, "generation_mode": "text"},
+        "text_kwargs": {"padding": False, "generation_mode": "text", "transforms_type": "vit"},
         "common_kwargs": {"return_tensors": "pt"},
     }
 
@@ -136,6 +137,7 @@ class BagelProcessor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
+        transforms_type = output_kwargs["text_kwargs"].pop("transforms_type")
 
         # Replace the image token with expanded image tokens.
         prompt_strings = []
@@ -153,9 +155,9 @@ class BagelProcessor(ProcessorMixin):
 
         # Process images if pixel values are provided.
         if images is not None and generation_mode != "image":
-            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["images_kwargs"])[
-                "pixel_values"
-            ]
+            data["pixel_values"] = self.image_processor(
+                images=images, **output_kwargs["images_kwargs"], transforms_type=transforms_type
+            )["pixel_values"]
 
         return BatchFeature(data=data)
 
