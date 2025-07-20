@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for TVP."""
 
-from typing import Optional, Union, Unpack
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -88,7 +88,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = TvpFastImageProcessorKwargs
     model_input_names = ["pixel_values"]
 
-    def __init__(self, **kwargs: Unpack[TvpFastImageProcessorKwargs]):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def _process_image(
@@ -415,9 +415,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
 
     @auto_docstring
     def preprocess(
-        self,
-        videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
-        **kwargs: Unpack[TvpFastImageProcessorKwargs],
+        self, videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]], **kwargs
     ) -> BatchFeature:
         r"""
         videos (`ImageInput` or `list[ImageInput]` or `list[list[ImageInput]]`):
