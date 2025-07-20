@@ -336,6 +336,11 @@ class WhisperGenerationMixin(GenerationMixin):
         if num_input_ids is not None:
             weights = weights[:, :, num_input_ids:, :]
 
+        # Since we ignore `decoder_input_ids` in the DTW and in the case where we generated only one token (for which we don't have cross attentions, see below comments),
+        # the DTW sequence length is 0 and we should return only 0.0s for the token timestamps
+        if weights.shape[2] == 0:
+            return timestamps
+
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
             std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
@@ -366,9 +371,12 @@ class WhisperGenerationMixin(GenerationMixin):
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
 
-            # each predicted token has a corresponding timestamp, expect the eos token for which we don't retrieve cross attentions
+            # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
+            # (indeed contrary to OAI that re-run a full foward to retreive cross attentions for each token and therefore also the last one predicted, we retreive
+            # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
+            # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0
-            # 2. for the eos token, we simply duplicate the timestamp of the last non-eos token
+            # 2. for the eos token (or last predicted token), we simply duplicate the timestamp of the last non-eos token
             timestamps[batch_idx] = torch.cat(
                 [torch.zeros(num_input_ids), torch.tensor(jump_times), torch.tensor([jump_times[-1]])]
             )
@@ -421,10 +429,11 @@ class WhisperGenerationMixin(GenerationMixin):
         Parameters:
             input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
                 Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
-                loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-                [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+                loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`,
+                *e.g.*  via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+                To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel
+                features, padding and conversion into a tensor of type `torch.FloatTensor`.
+                See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -1143,7 +1152,7 @@ class WhisperGenerationMixin(GenerationMixin):
                             for v in [cache_cls.key_cache, cache_cls.value_cache]:
                                 layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
+                    return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
                 else:
                     all_past_key_values = []
                     for v in range(len(values)):
@@ -1190,7 +1199,6 @@ class WhisperGenerationMixin(GenerationMixin):
                     for i in range(len(seek_outputs[0][key]))
                 )
             elif key == "past_key_values":
-                past_key_value_type = kwargs.get("past_key_values")
                 if seek_outputs[0][key] is not None:
                     outputs[key] = tuple(
                         tuple(
@@ -1199,8 +1207,8 @@ class WhisperGenerationMixin(GenerationMixin):
                         )
                         for i in range(len(seek_outputs[0][key]))
                     )
-                    if past_key_value_type is not None and isinstance(past_key_value_type, EncoderDecoderCache):
-                        outputs[key] = past_key_value_type.from_legacy_cache(outputs[key])
+                    if isinstance(seek_outputs[0][key], EncoderDecoderCache):
+                        outputs[key] = EncoderDecoderCache.from_legacy_cache(outputs[key])
                 else:
                     outputs[key] = None
 
@@ -1590,7 +1598,7 @@ class WhisperGenerationMixin(GenerationMixin):
         Parameters:
             input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
                 Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
-                loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
+                loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
                 the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
                 tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.

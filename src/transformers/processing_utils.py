@@ -15,6 +15,7 @@
 Processing saving/loading class for common processors.
 """
 
+import bisect
 import copy
 import inspect
 import json
@@ -24,7 +25,7 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
@@ -33,7 +34,7 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
+from .image_utils import ChannelDimension, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
 from .video_utils import VideoMetadata, load_video
 
@@ -74,6 +75,9 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+# type hinting: specifying the type of processor class that inherits from ProcessorMixin
+SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor from their names.
 transformers_module = direct_transformers_import(Path(__file__).parent)
@@ -248,7 +252,7 @@ class VideosKwargs(TypedDict, total=False):
             Metadata of the video containing information about total duration, fps and total number of frames.
         num_frames (`int`, *optional*):
             Maximum number of frames to sample when `do_sample_frames=True`.
-        fps (`int`, *optional*):
+        fps (`int` or `float`, *optional*):
             Target frames to sample per second when `do_sample_frames=True`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
@@ -277,7 +281,7 @@ class VideosKwargs(TypedDict, total=False):
     device: Optional[str]
     do_sample_frames: Optional[bool]
     video_metadata: Optional[Union[VideoMetadata, dict]]
-    fps: Optional[int]
+    fps: Optional[Union[int, float]]
     num_frames: Optional[int]
 
 
@@ -1097,9 +1101,13 @@ class ProcessorMixin(PushToHubMixin):
             processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
         )
 
-        # remove args that are in processor_dict to avoid duplicate arguments
-        args_to_remove = [i for i, arg in enumerate(accepted_args_and_kwargs) if arg in processor_dict]
-        args = [arg for i, arg in enumerate(args) if i not in args_to_remove]
+        # update args that are already in processor_dict to avoid duplicate arguments
+        args_to_update = {
+            i: valid_kwargs.pop(arg)
+            for i, arg in enumerate(accepted_args_and_kwargs)
+            if (arg in valid_kwargs and i < len(args))
+        }
+        args = [arg if i not in args_to_update else args_to_update[i] for i, arg in enumerate(args)]
 
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
@@ -1242,7 +1250,7 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: type[SpecificProcessorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -1250,7 +1258,7 @@ class ProcessorMixin(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ):
+    ) -> SpecificProcessorType:
         r"""
         Instantiate a processor associated with a pretrained model.
 
@@ -1406,64 +1414,6 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    def prepare_and_validate_optional_call_args(self, *args):
-        """
-        Matches optional positional arguments to their corresponding names in `optional_call_args`
-        in the processor class in the order they are passed to the processor call.
-
-        Note that this should only be used in the `__call__` method of the processors with special
-        arguments. Special arguments are arguments that aren't `text`, `images`, `audio`, nor `videos`
-        but also aren't passed to the tokenizer, image processor, etc. Examples of such processors are:
-            - `CLIPSegProcessor`
-            - `LayoutLMv2Processor`
-            - `OwlViTProcessor`
-
-        Also note that passing by position to the processor call is now deprecated and will be disallowed
-        in future versions. We only have this for backward compatibility.
-
-        Example:
-            Suppose that the processor class has `optional_call_args = ["arg_name_1", "arg_name_2"]`.
-            And we define the call method as:
-            ```python
-            def __call__(
-                self,
-                text: str,
-                images: Optional[ImageInput] = None,
-                *arg,
-                audio=None,
-                videos=None,
-            )
-            ```
-
-            Then, if we call the processor as:
-            ```python
-            images = [...]
-            processor("What is common in these images?", images, arg_value_1, arg_value_2)
-            ```
-
-            Then, this method will return:
-            ```python
-            {
-                "arg_name_1": arg_value_1,
-                "arg_name_2": arg_value_2,
-            }
-            ```
-            which we could then pass as kwargs to `self._merge_kwargs`
-        """
-        if len(args):
-            warnings.warn(
-                "Passing positional arguments to the processor call is now deprecated and will be disallowed in v4.47. "
-                "Please pass all arguments as keyword arguments."
-            )
-        if len(args) > len(self.optional_call_args):
-            raise ValueError(
-                f"Expected *at most* {len(self.optional_call_args)} optional positional arguments in processor call"
-                f"which will be matched with {' '.join(self.optional_call_args)} in the order they are passed."
-                f"However, got {len(args)} positional arguments instead."
-                "Please pass all arguments as keyword arguments instead (e.g. `processor(arg_name_1=..., arg_name_2=...))`."
-            )
-        return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
-
     @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
     def apply_chat_template(
         self,
@@ -1519,6 +1469,8 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 chat_template = chat_template
 
+        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
                 raise ValueError(
@@ -1526,6 +1478,15 @@ class ProcessorMixin(PushToHubMixin):
                 )
             if kwargs.get("return_assistant_tokens_mask", False):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if kwargs.get("return_assistant_tokens_mask", False):
+            if not is_tokenizers_fast:
+                raise ValueError(
+                    "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
+                    "If the error persists, open an issue to support a Fast tokenizer for your model."
+                )
+            else:
+                kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
 
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
@@ -1656,19 +1617,27 @@ class ProcessorMixin(PushToHubMixin):
                 video_metadata=batch_video_metadata,
                 **kwargs,
             )
+
             if return_dict:
                 if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
                     assistant_masks = []
+                    offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
+                        offsets = offset_mapping[i]
+                        offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
+                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
+                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+
+                            if not (
+                                start_pos >= 0
+                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
+                            ):
                                 # start_token is out of bounds maybe due to truncation.
-                                break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                                continue
+                            for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
@@ -1712,64 +1681,6 @@ class ProcessorMixin(PushToHubMixin):
                     f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
                     "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
                 )
-
-
-def _validate_images_text_input_order(images, text):
-    """
-    For backward compatibility: reverse the order of `images` and `text` inputs if they are swapped.
-    This method should only be called for processors where `images` and `text` have been swapped for uniformization purposes.
-    Note that this method assumes that two `None` inputs are valid inputs. If this is not the case, it should be handled
-    in the processor's `__call__` method before calling this method.
-    """
-
-    def is_url(val) -> bool:
-        return isinstance(val, str) and val.startswith("http")
-
-    def _is_valid_images_input_for_processor(imgs):
-        # If we have an list of images, make sure every image is valid
-        if isinstance(imgs, (list, tuple)):
-            for img in imgs:
-                if not _is_valid_images_input_for_processor(img):
-                    return False
-        # If not a list or tuple, we have been given a single image or batched tensor of images
-        elif not (is_valid_image(imgs) or is_url(imgs)):
-            return False
-        return True
-
-    def _is_valid_text_input_for_processor(t):
-        if isinstance(t, str):
-            # Strings are fine
-            return True
-        elif isinstance(t, (list, tuple)):
-            # List are fine as long as they are...
-            if len(t) == 0:
-                # ... not empty
-                return False
-            for t_s in t:
-                return _is_valid_text_input_for_processor(t_s)
-        return False
-
-    def _is_valid(input, validator):
-        return validator(input) or input is None
-
-    images_is_valid = _is_valid(images, _is_valid_images_input_for_processor)
-    images_is_text = _is_valid_text_input_for_processor(images)
-
-    text_is_valid = _is_valid(text, _is_valid_text_input_for_processor)
-    text_is_images = _is_valid_images_input_for_processor(text)
-    # Handle cases where both inputs are valid
-    if images_is_valid and text_is_valid:
-        return images, text
-
-    # Handle cases where inputs need to and can be swapped
-    if (images is None and text_is_images) or (text is None and images_is_text) or (images_is_text and text_is_images):
-        logger.warning_once(
-            "You may have used the wrong order for inputs. `images` should be passed before `text`. "
-            "The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47."
-        )
-        return text, images
-
-    raise ValueError("Invalid input type. Check that `images` and/or `text` are valid inputs.")
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

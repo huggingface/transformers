@@ -83,6 +83,11 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
             Whether to flip the color channels from RGB to BGR. Can be overridden by the `do_flip_channel_order`
             parameter in the `preprocess` method.
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
+            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
+            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
+            background label will be replaced by 255. Can be overridden by the `do_reduce_labels` parameter in the
+            `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -97,6 +102,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         crop_size: Optional[dict[str, int]] = None,
         do_flip_channel_order: bool = True,
+        do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -113,6 +119,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_flip_channel_order = do_flip_channel_order
+        self.do_reduce_labels = do_reduce_labels
 
     # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize with PILImageResampling.BICUBIC->PILImageResampling.BILINEAR
     def resize(
@@ -183,6 +190,15 @@ class MobileViTImageProcessor(BaseImageProcessor):
         """
         return flip_channel_order(image, data_format=data_format, input_data_format=input_data_format)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.reduce_label
+    def reduce_label(self, label: ImageInput) -> np.ndarray:
+        label = to_numpy_array(label)
+        # Avoid using underflow conversion
+        label[label == 0] = 255
+        label = label - 1
+        label[label == 254] = 255
+        return label
+
     def __call__(self, images, segmentation_maps=None, **kwargs):
         """
         Preprocesses a batch of images and optionally segmentation maps.
@@ -195,6 +211,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def _preprocess(
         self,
         image: ImageInput,
+        do_reduce_labels: bool,
         do_resize: bool,
         do_rescale: bool,
         do_center_crop: bool,
@@ -205,6 +222,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         crop_size: Optional[dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
+        if do_reduce_labels:
+            image = self.reduce_label(image)
+
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
@@ -246,6 +266,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         image = self._preprocess(
             image=image,
+            do_reduce_labels=False,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -264,6 +285,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
+        do_reduce_labels: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         do_center_crop: Optional[bool] = None,
@@ -284,6 +306,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         segmentation_map = self._preprocess(
             image=segmentation_map,
+            do_reduce_labels=do_reduce_labels,
             do_resize=do_resize,
             size=size,
             resample=PILImageResampling.NEAREST,
@@ -312,6 +335,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[dict[str, int]] = None,
         do_flip_channel_order: Optional[bool] = None,
+        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -342,6 +366,10 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Size of the center crop if `do_center_crop` is set to `True`.
             do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
                 Whether to flip the channel order of the image.
+            do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+                Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+                is used for background, and background itself is not included in all classes of a dataset (e.g.
+                ADE20k). The background label will be replaced by 255.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -373,6 +401,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
+
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         images = make_list_of_images(images)
 
@@ -426,6 +456,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
             segmentation_maps = [
                 self._preprocess_mask(
                     segmentation_map=segmentation_map,
+                    do_reduce_labels=do_reduce_labels,
                     do_resize=do_resize,
                     size=size,
                     do_center_crop=do_center_crop,

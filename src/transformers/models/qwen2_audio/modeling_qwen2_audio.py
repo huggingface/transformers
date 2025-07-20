@@ -188,7 +188,7 @@ class Qwen2AudioAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->Qwen2Audio, WHISPER->QWEN2AUDIO
@@ -231,7 +231,7 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -252,22 +252,17 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
 @auto_docstring
 class Qwen2AudioPreTrainedModel(PreTrainedModel):
-    config_class = Qwen2AudioConfig
+    config: Qwen2AudioConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -283,6 +278,9 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -305,7 +303,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     """
 
     # Ignore copy
-    config_class = Qwen2AudioEncoderConfig
+    config: Qwen2AudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
 
@@ -357,12 +355,6 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     ):
         r"""
         Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
                 Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -737,12 +729,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Qwen2AudioCausalLMOutputWithPast]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 

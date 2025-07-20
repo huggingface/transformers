@@ -232,7 +232,7 @@ class BatchEncoding(UserDict):
 
         self._encodings = encoding
 
-        if n_sequences is None and encoding is not None and len(encoding):
+        if n_sequences is None and encoding is not None and encoding:
             n_sequences = encoding[0].n_sequences
 
         self._n_sequences = n_sequences
@@ -801,14 +801,13 @@ class BatchEncoding(UserDict):
             [`BatchEncoding`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
-        import torch
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             self.data = {
-                k: v.to(device=device, non_blocking=non_blocking) if isinstance(v, torch.Tensor) else v
+                k: v.to(device=device, non_blocking=non_blocking) if hasattr(v, "to") and callable(v.to) else v
                 for k, v in self.data.items()
             }
         else:

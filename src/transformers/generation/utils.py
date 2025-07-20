@@ -68,7 +68,6 @@ from .candidate_generator import (
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
-    _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
@@ -567,15 +566,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 1. Handle BC:
         model_inputs = {}
-        # - some models don't have `Cache` support (which implies they don't expect `cache_position` in `forward`)
-        if self._supports_cache_class:
-            model_inputs["cache_position"] = cache_position
-        # - `cache_position` was not a mandatory input in `prepare_inputs_for_generation` for those models, and this
-        #   function may be called outside of `generate`. Handle most use cases by creating `cache_position` on the fly
-        #   (this alternative is not as robust as calling `generate` and letting it create `cache_position`)
-        elif cache_position is None:
-            past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-            cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
+        model_inputs["cache_position"] = cache_position
 
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
@@ -656,6 +647,7 @@ class GenerationMixin(ContinuousMixin):
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
                 token_type_ids = getattr(model_input, "token_type_ids", None)
+                position_ids = getattr(model_input, position_ids_key, None)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
                 attention_mask = causal_mask_creation_function(
@@ -665,6 +657,7 @@ class GenerationMixin(ContinuousMixin):
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,
+                    position_ids=position_ids,
                     token_type_ids=token_type_ids,
                 )
             else:
@@ -733,7 +726,9 @@ class GenerationMixin(ContinuousMixin):
         # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
         # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
         if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
-            if not self.config.is_encoder_decoder:
+            if model_kwargs["inputs_embeds"] is None:
+                model_kwargs.pop("inputs_embeds")
+            elif not self.config.is_encoder_decoder:
                 has_inputs_embeds_forwarding = "inputs_embeds" in set(
                     inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
                 )
@@ -748,10 +743,11 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
                     inputs, bos_token_id, model_kwargs=model_kwargs
                 )
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
             else:
                 if inputs is not None:
                     raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
@@ -1008,12 +1004,6 @@ class GenerationMixin(ContinuousMixin):
             ).to(past_positions.device)
             model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
         return model_kwargs
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        raise NotImplementedError(
-            f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to"
-            f" enable beam search for {self.__class__}"
-        )
 
     def _get_candidate_generator(
         self,
@@ -1549,18 +1539,11 @@ class GenerationMixin(ContinuousMixin):
         else:
             if tokenizer is None or assistant_tokenizer is None:
                 raise ValueError(
-                    f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
+                    f"The main and assistant models have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
                 )
 
     def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
-        # If a `Cache` instance is passed, checks whether the model is compatible with it
-        if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support an instance of `Cache` as `past_key_values`. Please "
-                "check the model documentation for supported cache formats."
-            )
-
         # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
@@ -1773,6 +1756,10 @@ class GenerationMixin(ContinuousMixin):
                     ):
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
+                # edge case: we may set `temperature=0.0` and `do_sample=False`, but the model defaults to
+                # `do_sample=True`
+                if generation_config.temperature == 0.0:
+                    generation_config.do_sample = False
                 if use_model_defaults is None and len(modified_values) > 0:
                     logger.warning_once(
                         f"`generation_config` default values have been modified to match model-specific defaults: "
@@ -1954,6 +1941,9 @@ class GenerationMixin(ContinuousMixin):
                 "device": device,
                 "layer_device_map": layer_device_map,
             }
+            if cache_implementation in ["static", "hybrid", "offloaded_static"]:
+                cache_kwargs.update({"tp_size": self.tp_size})
+
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
@@ -1963,20 +1953,23 @@ class GenerationMixin(ContinuousMixin):
             self._cache.reset()
         return self._cache
 
-    def _supports_default_dynamic_cache(self) -> bool:
+    @classmethod
+    def _supports_default_dynamic_cache(cls) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
-        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
+        This adds exception for some models like `Jamba` model which uses its own `HybridMambaAttentionDynamicCache`
+        and do not need to initialize the Cache in advance in order to save memory (because no back and forth
+        `to_legacy_cache` and `from_legacy_cache` will be performed for `HybridMambaAttentionDynamicCache`).
         """
-        return (
-            self._supports_cache_class
-            and "jamba" not in self.__class__.__name__.lower()
-            and "zamba" not in self.__class__.__name__.lower()
-            and "bamba" not in self.__class__.__name__.lower()
-            and "minimax" not in self.__class__.__name__.lower()
+        # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
+        return not cls._is_stateful and all(
+            special_model_name not in cls.__name__.lower()
+            for special_model_name in [
+                "reformer",
+                "minimax",
+                "xlnet",
+                "lfm2",
+            ]
         )
 
     def _prepare_cache_for_generation(
@@ -2063,7 +2056,7 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
-                if not self._supports_quantized_cache:
+                if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
                     raise ValueError(
                         "This model does not support the quantized cache. If you want your model to support quantized "
                         "cache, please open an issue and tag @zucchini-nlp."
@@ -3695,33 +3688,6 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
-    # Auxiliary functions for beam search
-    def _temporary_reorder_cache(self, past_key_values, beam_idx):
-        """
-        Temporary function to handle the different types of cache reordering processes while we roll out `Cache`.
-
-        TODO: standardize cache formats and make all models compatible with `Cache`. It would remove the need
-        for this function, with `Cache.reorder_cache` being the sole remaining code path
-        """
-        model_class = self.__class__.__name__.lower()
-        # Exception 1: code path for models using the legacy cache format
-        if isinstance(past_key_values, (tuple, list)):
-            past_key_values = self._reorder_cache(past_key_values, beam_idx)
-        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
-        # cache format is standardized, to avoid adding complexity to the codebase.
-        elif "gptbigcode" in model_class:
-            if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
-                raise TypeError(
-                    f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
-                    "legacy tuple format or `DynamicCache`"
-                )
-            past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-        # Standard code path: use the `Cache.reorder_cache`
-        else:
-            past_key_values.reorder_cache(beam_idx)
-        return past_key_values
-
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
         """[batch_size, num_beams, ...] -> [batch_size * num_beams, ...]"""
@@ -3755,11 +3721,11 @@ class GenerationMixin(ContinuousMixin):
         return gathered_tensor
 
     @staticmethod
-    def _beam_search_has_unfinished_sequences(
+    def _check_early_stop_heuristic(
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         running_beam_scores: torch.Tensor,
         beam_scores: torch.Tensor,
         is_sent_finished: torch.Tensor,
-        next_token_hits_stopping_criteria: torch.Tensor,
         cur_len: int,
         max_length: int,
         decoder_prompt_len: int,
@@ -3767,22 +3733,52 @@ class GenerationMixin(ContinuousMixin):
         length_penalty: float,
     ):
         """
-        Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
+        Determine whether early stopping is possible by checking if the best possible score of running beams
+        could still improve upon the finished ones.
+
+        Mechanism:
+        - Without a length penalty, beam scores typically decrease as more tokens are generated.
+        So, if the *best possible* score from any running beam is already worse than the *worst* finished beam,
+        we can safely stop early.
+        - With a length penalty, scores may increase with longer sequences. In this case, we use heuristics
+        to estimate the best possible score — though this estimate may not always be correct — and stop
+        if no further improvement seems likely.
+
+        We apply different heuristics depending on the value of `early_stopping`:
+        1. `early_stopping == False`:
+        -> Use a heuristic that assumes the best score comes from the current length minus the decoder prompt length.
+        -> See detailed discussion: https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+
+        2. `early_stopping == "never"`:
+        -> Estimate the best score using either `max_length` or `cur_len`, depending on the sign of `length_penalty`.
+        -> A positive length penalty favors longer sequences, so we use `max_length` in that case.
+
+        NOTE: the canonical beam search implementation can be replicated with `early_stopping="never"` and
+        `length_penalty=0.0`, which are NOT the default flags. The default behavior was empirically found to produce
+        better sequences (prior to 2022), and changing it is BC breaking.
         """
-        # a. Can the open beams improve the top completed scores?
-        # early_stopping == False -> apply heuristic = always get the best score from
-        #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
-        #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
-        # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
-        #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
-        #   `max_length` there.
         if early_stopping == "never" and length_penalty > 0.0:
             best_hypothetical_length = max_length - decoder_prompt_len
         else:
             best_hypothetical_length = cur_len - decoder_prompt_len
         best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
         worst_finished_score = torch.where(is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9)
-        improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
+        return is_early_stop_heuristic_unsatisfied & torch.any(
+            best_possible_running_score > worst_finished_score, dim=-1, keepdim=True
+        )
+
+    @staticmethod
+    def _beam_search_has_unfinished_sequences(
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
+        is_sent_finished: torch.Tensor,
+        next_token_hits_stopping_criteria: torch.Tensor,
+        early_stopping: Union[bool, str],
+    ):
+        """
+        Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
+        """
+        # a. Can the open beams improve the top completed scores?
+        improvement_possible = torch.any(is_early_stop_heuristic_unsatisfied)
 
         # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
         # enabled, where we want to finish as soon as all beams have a completed sequence.
@@ -3878,6 +3874,7 @@ class GenerationMixin(ContinuousMixin):
         topk_log_probs: torch.Tensor,
         beam_indices: torch.Tensor,
         topk_running_beam_indices: torch.Tensor,
+        is_early_stop_heuristic_unsatisfied: torch.Tensor,
         is_sent_finished: torch.Tensor,
         next_token_hits_stopping_criteria: torch.Tensor,
         top_num_beam_mask: torch.Tensor,
@@ -3902,6 +3899,9 @@ class GenerationMixin(ContinuousMixin):
         # - make sure no scores can be added anymore if beam is full and early stopping is on
         beams_in_batch_are_full = torch.all(is_sent_finished, axis=-1, keepdims=True) & (early_stopping is True)
         topk_log_probs += beams_in_batch_are_full.to(torch.float32) * -1.0e9
+        # - make sure no scores can be added anymore if improvement is not possible
+        topk_log_probs += (~is_early_stop_heuristic_unsatisfied).to(torch.float32) * -1.0e9
+
         # - make sure still running sequences cannot be chosen as finalized beam
         topk_log_probs += (~did_top_num_beams_just_finished) * -1.0e9
 
@@ -4053,6 +4053,9 @@ class GenerationMixin(ContinuousMixin):
         # per batch, beam-item state bit indicating if sentence has finished.
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
 
+        # per batch state bit indicating if there is a possibility to improve the best finished sentence.
+        is_early_stop_heuristic_unsatisfied = torch.ones((batch_size, 1), dtype=torch.bool, device=input_ids.device)
+
         # per batch, beam-item state bit indicating if there are valid continuations.
         next_token_hits_stopping_criteria = torch.zeros(
             (batch_size, num_beams), dtype=torch.bool, device=input_ids.device
@@ -4165,6 +4168,7 @@ class GenerationMixin(ContinuousMixin):
                 topk_log_probs=topk_log_probs,
                 beam_indices=beam_indices,
                 topk_running_beam_indices=topk_running_beam_indices,
+                is_early_stop_heuristic_unsatisfied=is_early_stop_heuristic_unsatisfied,
                 is_sent_finished=is_sent_finished,
                 next_token_hits_stopping_criteria=next_token_hits_stopping_criteria,
                 top_num_beam_mask=top_num_beam_mask,
@@ -4179,23 +4183,31 @@ class GenerationMixin(ContinuousMixin):
             # beam search as a whole (as opposed to individual beams, i.e. `stopping_criteria`)
 
             # pluck the cache from the beam indices that will be used in the next iteration
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    past_key_values=model_kwargs["past_key_values"],
-                    beam_idx=self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len]),
-                )
+                beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
 
             cur_len = cur_len + 1
+            is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
+                is_early_stop_heuristic_unsatisfied=is_early_stop_heuristic_unsatisfied,
+                running_beam_scores=running_beam_scores,
+                beam_scores=beam_scores,
+                is_sent_finished=is_sent_finished,
+                cur_len=cur_len,
+                max_length=max_length,
+                decoder_prompt_len=decoder_prompt_len,
+                early_stopping=early_stopping,
+                length_penalty=length_penalty,
+            )
             this_peer_finished = not self._beam_search_has_unfinished_sequences(
-                running_beam_scores,
-                beam_scores,
+                is_early_stop_heuristic_unsatisfied,
                 is_sent_finished,
                 next_token_hits_stopping_criteria,
-                cur_len,
-                max_length,
-                decoder_prompt_len,
                 early_stopping,
-                length_penalty,
             )
 
         # 5. prepare outputs
@@ -4480,10 +4492,14 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], reordering_indices
-                )
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(
+                        model_kwargs["past_key_values"], reordering_indices
+                    )
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(reordering_indices)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -4717,10 +4733,12 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], beam_idx
-                )
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple(beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices)))
@@ -4945,8 +4963,7 @@ class GenerationMixin(ContinuousMixin):
             new_cur_len = input_ids.shape[1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
-            new_cache_size = new_cur_len - 1
-            outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
+            outputs.past_key_values.crop(new_cur_len - 1)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)

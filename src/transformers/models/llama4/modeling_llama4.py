@@ -34,7 +34,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Causal
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -430,14 +430,13 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
-    config_class = Llama4Config
+    config: Llama4Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
 
@@ -472,7 +471,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
-    config_class = Llama4TextConfig
+    config: Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
         super().__init__(config)
@@ -510,7 +509,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -552,6 +551,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
+                "position_ids": position_ids,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -581,7 +581,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=freq_cis,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -603,15 +603,12 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
-    config_class = Llama4TextConfig
+    config: Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
         super().__init__(config)
@@ -656,7 +653,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -730,7 +727,7 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -1079,7 +1076,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
     _no_split_modules = ["Llama4VisionEncoderLayer"]
-    config_class = Llama4VisionConfig
+    config: Llama4VisionConfig
 
     def __init__(self, config: Llama4VisionConfig):
         super().__init__(config)
@@ -1214,7 +1211,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
     base_model_prefix = ""
-    config_class = Llama4Config
+    config: Llama4Config
 
     def __init__(self, config: Llama4Config):
         super().__init__(config)
@@ -1282,7 +1279,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -1294,7 +1291,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: torch.Tensor = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Llama4CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1358,27 +1355,28 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
-            original_inputs_embeds_shape = inputs_embeds.shape
 
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            final_mask = special_image_mask.to(inputs_embeds.device)
-            inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
 
-            final_mask_1d = final_mask[..., 0].reshape(-1)
-            num_tokens_to_fill = final_mask_1d.sum()
+            n_image_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
-            if num_tokens_to_fill != projected_vision_flat.size(0):
+            if n_image_tokens != projected_vision_flat.size(0):
                 raise ValueError(
-                    f"Mismatch: final_mask wants {num_tokens_to_fill} embeddings, "
+                    f"Mismatch: final_mask wants {n_image_tokens} embeddings, "
                     f"but multi_modal_projector returned {projected_vision_flat.size(0)}"
                 )
-
-            expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
-            inputs_embeds = inputs_embeds.masked_scatter(expanded_mask, projected_vision_flat)
-            inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
+            projected_vision_flat = projected_vision_flat.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, projected_vision_flat)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
