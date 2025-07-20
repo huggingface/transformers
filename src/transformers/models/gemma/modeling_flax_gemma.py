@@ -350,7 +350,7 @@ class FlaxGemmaMLP(nn.Module):
 
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
         if self.config.hidden_activation is None:
-            logger.warning_once(
+            logger.warning(
                 "Gemma's activation function should be approximate GeLU and not exact GeLU. "
                 "Changing the activation function to `gelu_pytorch_tanh`."
                 f"if you want to use the legacy `{self.config.hidden_act}`, "
