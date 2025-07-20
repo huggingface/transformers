@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Image processor class for TVP."""
 
-from dataclasses import dataclass
 from typing import Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature
@@ -54,10 +53,13 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-@dataclass
-@auto_docstring(custom_intro="Fast image processor kwargs for TVP.")
 class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """Valid kwargs for TvpImageProcessorFast."""
+    """
+    do_flip_channel_order (`bool`, *optional*): Whether to flip the channel order of the image from RGB to BGR.
+    pad_size (`Dict[str, int]` or `SizeDict`, *optional*): Size dictionary specifying the desired height and width for padding.
+    constant_values (`float` or `List[float]`, *optional*): Value used to fill the padding area when `pad_mode` is `'constant'`.
+    pad_mode (`str`, *optional*): Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
+    """
 
     do_flip_channel_order: Optional[bool]
     pad_size: Optional[SizeDict]
@@ -98,7 +100,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     ) -> "torch.Tensor":
         """
         Process a single image to torch tensor.
-        
+
         This fast implementation only accepts torch tensors as input to avoid PIL conversion.
         """
         if not isinstance(image, torch.Tensor):
@@ -113,9 +115,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             image = image.unsqueeze(0)
         elif image.dim() == 3:
             # Check if channels are in the right place
-            if input_data_format == ChannelDimension.LAST or (
-                input_data_format is None and image.shape[-1] in [1, 3]
-            ):
+            if input_data_format == ChannelDimension.LAST or (input_data_format is None and image.shape[-1] in [1, 3]):
                 # Channels last, convert to channels first
                 image = image.permute(2, 0, 1).contiguous()
         elif image.dim() != 3:
@@ -166,14 +166,14 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         self,
         videos: list[list["torch.Tensor"]],
         do_resize: bool,
-        size: SizeDict,
+        size: Union[SizeDict, dict],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
-        crop_size: SizeDict,
+        crop_size: Union[SizeDict, dict],
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,
-        pad_size: SizeDict,
+        pad_size: Union[SizeDict, dict],
         constant_values: Union[float, list[float]],
         pad_mode: str,
         do_normalize: bool,
@@ -186,7 +186,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess videos using the fast image processor.
-        
+
         This method processes each video frame through the same pipeline as the original
         TVP image processor but uses torchvision operations for better performance.
         """
@@ -206,18 +206,14 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
                 if do_center_crop:
                     stacked_frames = self.center_crop(stacked_frames, crop_size)
 
-                # Rescale and normalize separately (following original TVP behavior)
-                if do_rescale:
-                    stacked_frames = self.rescale(stacked_frames, rescale_factor)
-
-                if do_normalize:
-                    stacked_frames = self.normalize(stacked_frames, image_mean, image_std)
+                # Rescale and normalize using fused method for consistency
+                stacked_frames = self.rescale_and_normalize(
+                    stacked_frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
 
                 # Pad if needed
                 if do_pad:
-                    stacked_frames = self._pad_frames(
-                        stacked_frames, pad_size, constant_values, pad_mode
-                    )
+                    stacked_frames = self._pad_frames(stacked_frames, pad_size, constant_values, pad_mode)
 
                 # Flip channel order if needed (RGB to BGR)
                 if do_flip_channel_order:
@@ -255,18 +251,24 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     def _pad_frames(
         self,
         frames: "torch.Tensor",
-        pad_size: SizeDict,
+        pad_size: Union[SizeDict, dict],
         constant_values: Union[float, list[float]],
         pad_mode: str,
     ) -> "torch.Tensor":
         """Pad frames to the specified size."""
-        if frames.shape[-2:] == (pad_size["height"], pad_size["width"]):
+        # Handle both SizeDict and regular dict
+        if hasattr(pad_size, "height") and hasattr(pad_size, "width"):
+            height, width = pad_size.height, pad_size.width
+        else:
+            height, width = pad_size["height"], pad_size["width"]
+
+        if frames.shape[-2:] == (height, width):
             return frames
 
         # Calculate padding
         current_height, current_width = frames.shape[-2:]
-        pad_bottom = pad_size["height"] - current_height
-        pad_right = pad_size["width"] - current_width
+        pad_bottom = height - current_height
+        pad_right = width - current_width
 
         if pad_bottom < 0 or pad_right < 0:
             raise ValueError("The padding size must be greater than frame size")
@@ -278,7 +280,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     def resize(
         self,
         image: "torch.Tensor",
-        size: SizeDict,
+        size: Union[SizeDict, dict],
         interpolation: "F.InterpolationMode" = None,
         antialias: bool = True,
         **kwargs,
@@ -289,7 +291,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to resize.
-            size (`SizeDict`):
+            size (`SizeDict` or `dict`):
                 Size dictionary. If `size` has `longest_edge`, resize the longest edge to that value
                 while maintaining aspect ratio. Otherwise, use the base class resize method.
             interpolation (`F.InterpolationMode`, *optional*):
@@ -302,19 +304,25 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         """
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
 
+        # Handle both SizeDict and regular dict
+        if hasattr(size, "longest_edge"):
+            longest_edge = size.longest_edge
+        else:
+            longest_edge = size.get("longest_edge")
+
         # Handle longest_edge case (TVP-specific)
-        if size["longest_edge"]:
+        if longest_edge:
             # Get current dimensions
             current_height, current_width = image.shape[-2:]
 
             # Calculate new dimensions maintaining aspect ratio
             if current_height >= current_width:
                 ratio = current_width * 1.0 / current_height
-                new_height = size["longest_edge"]
+                new_height = longest_edge
                 new_width = int(new_height * ratio)
             else:
                 ratio = current_height * 1.0 / current_width
-                new_width = size["longest_edge"]
+                new_width = longest_edge
                 new_height = int(new_width * ratio)
 
             new_size = (new_height, new_width)
@@ -324,11 +332,86 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         return super().resize(image, size, interpolation, antialias, **kwargs)
 
     def _flip_channel_order(self, frames: "torch.Tensor") -> "torch.Tensor":
-        """Flip channel order from RGB to BGR."""
+        """
+        Flip channel order from RGB to BGR.
+
+        The slow processor puts the red channel at the end (BGR format),
+        but the channel order is different. We need to match the exact
+        channel order of the slow processor:
+
+        Slow processor:
+        - Channel 0: Blue (originally Red)
+        - Channel 1: Green
+        - Channel 2: Red (originally Blue)
+        """
         # Assuming frames are in channels_first format (C, H, W)
-        if frames.shape[-3] == 3:  # 3 channels in the last dimension
-            return frames.flip(dims=[-3])  # Flip along channel dimension
+        if frames.shape[0] == 3:  # 3 channels in the first dimension
+            # Use indexing to match the exact channel order of the slow processor
+            return torch.stack([frames[2], frames[1], frames[0]], dim=0)
         return frames
+
+    def _fuse_mean_std_and_rescale_factor(
+        self,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        device: Optional["torch.device"] = None,
+    ) -> tuple:
+        """
+        Custom implementation for TVP to ensure proper normalization.
+        When do_rescale=False and do_normalize=True, we need to ensure proper normalization
+        to match the slow processor behavior.
+        """
+        if do_rescale and do_normalize:
+            # Fused rescale and normalize
+            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+            do_rescale = False
+        else:
+            # Convert to tensor for consistency
+            image_mean = torch.tensor(image_mean, device=device)
+            image_std = torch.tensor(image_std, device=device)
+
+        return image_mean, image_std, do_rescale
+
+    def rescale_and_normalize(
+        self,
+        images: "torch.Tensor",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
+    ) -> "torch.Tensor":
+        """
+        Custom implementation for TVP to ensure proper normalization.
+        This matches the behavior of the slow processor more closely.
+
+        The key difference is that the slow processor works with numpy arrays
+        with values in [0, 255], while the fast processor works with tensors
+        with values in [0, 1]. We need to adjust for this difference.
+        """
+        # Convert to float32 for normalization
+        if images.dtype != torch.float32:
+            images = images.to(dtype=torch.float32)
+
+        # Scale up to [0, 255] range to match the slow processor's input
+        if images.max() <= 1.0:
+            images = images * 255.0
+
+        # Apply operations in the same order as the slow processor
+        if do_rescale:
+            images = self.rescale(images, rescale_factor)
+
+        if do_normalize:
+            # Convert mean and std to tensors
+            image_mean = torch.tensor(image_mean, device=images.device)
+            image_std = torch.tensor(image_std, device=images.device)
+            images = self.normalize(images, image_mean, image_std)
+
+        return images
 
     @auto_docstring
     def preprocess(
@@ -339,6 +422,18 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         r"""
         videos (`ImageInput` or `list[ImageInput]` or `list[list[ImageInput]]`):
             The video frames to preprocess. Must be torch tensors for the fast processor.
+
+        do_flip_channel_order (`bool`, *optional*):
+            Whether to flip the channel order of the image from RGB to BGR.
+
+        pad_size (`Dict[str, int]` or `SizeDict`, *optional*):
+            Size dictionary specifying the desired height and width for padding.
+
+        constant_values (`float` or `List[float]`, *optional*):
+            Value used to fill the padding area when pad_mode is 'constant'.
+
+        pad_mode (`str`, *optional*):
+            Padding mode to use. Can be 'constant', 'edge', 'reflect', or 'symmetric'.
         """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
@@ -410,8 +505,8 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             do_flip_channel_order=do_flip_channel_order,
             return_tensors=return_tensors,
             disable_grouping=disable_grouping,
-            **kwargs
+            **kwargs,
         )
 
 
-__all__ = ["TvpImageProcessorFast", "TvpFastImageProcessorKwargs"]
+__all__ = ["TvpImageProcessorFast"]
