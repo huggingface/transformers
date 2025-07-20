@@ -332,7 +332,7 @@ if __name__ == "__main__":
 
     doc_test_results = {}
     # `artifact_key` is the artifact path
-    for artifact_key, artifact_obj in available_artifacts.items():
+    for artifact_obj in available_artifacts.values():
         artifact_path = artifact_obj.paths[0]
         if not artifact_path["path"].startswith("doc_tests_gpu_test_reports_"):
             continue

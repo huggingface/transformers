@@ -135,14 +135,13 @@ class InternVLVisionAttention(JanusVisionAttention):
 
 @auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
-    config_class = InternVLVisionConfig
+    config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
