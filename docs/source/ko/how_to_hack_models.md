@@ -13,14 +13,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 모델 구성 요소 맞춤 설정하기\[\[customizing-model-components]]
+# 모델 구성 요소 맞춤 설정하기[[customizing-model-components]]
 
-모델을 완전히 새로 작성하는 대신 구성 요소를 수정하여 모델을 커스터마이징하는 방법이 있습니다. 이를 통해 특정 사용 사례에 맞게 모델을 조정할 수 있습니다. 예를 들어, 새로운 레이어를 추가하거나 아키텍처의 어텐션 메커니즘을 최적화할 수 있습니다. 이러한 커스터마이징은 `Transformers` 모델에 직접 적용되므로, \[`Trainer`], \[`PreTrainedModel`] 및 [PEFT](https://huggingface.co/docs/peft/en/index) 라이브러리와 같은 기능을 계속 사용할 수 있습니다.
+모델을 완전히 새로 작성하는 대신 구성 요소를 수정하여 모델을 맞춤 설정하는 방법이 있습니다. 이 방법으로 모델을 특정 사용 사례에 맞게 모델을 조정할 수 있습니다. 예를 들어, 새로운 레이어를 추가하거나 아키텍처의 어텐션 메커니즘을 최적화할 수 있습니다. 이러한 맞춤 설정은 트랜스포머 모델에 직접 적용되므로, [`Trainer`], [`PreTrainedModel`] 및 [PEFT](https://huggingface.co/docs/peft/en/index) 라이브러리와 같은 기능을 계속 사용할 수 있습니다.
 
-이 가이드에서는 모델의 어텐션 메커니즘을 커스터마이징하여 [Low-Rank Adaptation (LoRA)](https://huggingface.co/docs/peft/conceptual_guides/adapter#low-rank-adaptation-lora)를 적용하는 방법을 설명합니다.
+이 가이드에서는 모델의 어텐션 메커니즘을 맞춤 설정하여 [Low-Rank Adaptation (LoRA)](https://huggingface.co/docs/peft/conceptual_guides/adapter#low-rank-adaptation-lora)를 적용하는 방법을 설명합니다.
 
-> \[!TIP]
-> 모델 코드를 반복적으로 수정하고 개발할 때 [clear\_import\_cache](https://github.com/huggingface/transformers/blob/9985d06add07a4cc691dc54a7e34f54205c04d40/src/transformers/utils/import_utils.py#L2286) 유틸리티가 매우 유용합니다. 이 기능은 캐시된 모든 `Transformers` 모듈을 제거하여 Python이 환경을 재시작하지 않고도 수정된 코드를 다시 로드할 수 있도록 합니다.
+> [!TIP]
+> 모델 코드를 반복적으로 수정하고 개발할 때 [clear_import_cache](https://github.com/huggingface/transformers/blob/9985d06add07a4cc691dc54a7e34f54205c04d40/src/transformers/utils/import_utils.py#L2286) 유틸리티가 매우 유용합니다. 이 기능은 캐시된 모든 트랜스포머 모듈을 제거하여 Python이 환경을 재시작하지 않고도 수정된 코드를 다시 가져올 수 있도록 합니다.
 >
 > ```py
 > from transformers import AutoModel
@@ -28,17 +28,17 @@ rendered properly in your Markdown viewer.
 >
 > model = AutoModel.from_pretrained("bert-base-uncased")
 > # 모델 코드 수정
-> # 캐시를 지워 수정된 코드를 다시 로드
+> # 캐시를 지워 수정된 코드를 다시 가져오기
 > clear_import_cache()
-> # 업데이트된 코드를 사용하기 위해 다시 임포트
+> # 업데이트된 코드를 사용하기 위해 다시 가져오기
 > model = AutoModel.from_pretrained("bert-base-uncased")
 > ```
 
-## 어텐션 클래스\[\[attention-class]]
+## 어텐션 클래스[[attention-class]]
 
 [Segment Anything](./model_doc/sam)은 이미지 분할 모델로, 어텐션 메커니즘에서 query-key-value(`qkv`) 프로젝션을 결합합니다. 학습 가능한 파라미터 수와 연산 부담을 줄이기 위해 `qkv` 프로젝션에 LoRA를 적용할 수 있습니다. 이를 위해서는 `qkv` 프로젝션을 분리하여 `q`와 `v`에 LoRA를 개별적으로 적용해야 합니다.
 
-1. 원래의 `SamVisionAttention` 클래스를 상속하여 `SamVisionAttentionSplit`이라는 커스텀 어텐션 클래스를 만듭니다. `__init__`에서 결합된 `qkv`를 삭제하고, `q`, `k`, `v`를 위한 개별 선형 레이어를 생성합니다.
+1. 원래의 `SamVisionAttention` 클래스를 상속하여 `SamVisionAttentionSplit`이라는 사용자 정의 어텐션 클래스를 만듭니다. `__init__`에서 결합된 `qkv`를 삭제하고, `q`, `k`, `v`를 위한 개별 선형 레이어를 생성합니다.
 
 ```py
 import torch
@@ -57,7 +57,7 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
         self._register_load_state_dict_pre_hook(self.split_q_k_v_load_hook)
 ```
 
-2. `_split_qkv_load_hook` 함수는 사전 학습된 `qkv` 가중치를 모델 로딩 시 `q`, `k`, `v`로 분리하여 기존 사전 학습 모델과의 호환성을 보장합니다.
+2. `_split_qkv_load_hook` 함수는 모델을 가져올 때, 사전 훈련된 `qkv` 가중치를 `q`, `k`, `v`로 분리하여 사전 훈련된 모델과의 호환성을 보장합니다.
 
 ```py
     def split_q_k_v_load_hook(self, state_dict, prefix, *args):
@@ -70,7 +70,7 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
                 state_dict[key.replace("qkv.", "q.")] = q
                 state_dict[key.replace("qkv.", "k.")] = k
                 state_dict[key.replace("qkv.", "v.")] = v
-                # 기존 qkv 키 삭제 마크
+                # 기존 qkv 키를 삭제 대상으로 표시
                 keys_to_delete.append(key)
         
         # 기존 qkv 키 제거
@@ -103,27 +103,27 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
         return outputs
 ```
 
-커스텀 `SamVisionAttentionSplit` 클래스를 원본 모델의 `SamVisionAttention` 모듈에 할당하여 교체합니다. 모델 내 모든 `SamVisionAttention` 인스턴스는 분리된 어텐션 버전으로 대체됩니다.
+사용자 정의 `SamVisionAttentionSplit` 클래스를 원본 모델의 `SamVisionAttention` 모듈에 할당하여 교체합니다. 모델 내 모든 `SamVisionAttention` 인스턴스는 분리된 어텐션 버전으로 대체됩니다.
 
-\[`~PreTrainedModel.from_pretrained`]로 모델을 로드하세요.
+[`~PreTrainedModel.from_pretrained`]로 모델을 가져오세요.
 
 ```py
 from transformers import SamModel
 
-# 사전 학습된 SAM 모델 로드
+# 사전 훈련된 SAM 모델 가져오기
 model = SamModel.from_pretrained("facebook/sam-vit-base")
 
-# vision_encoder 모듈에서 어텐션 클래스 교체
+# 비전-인코더 모듈에서 어텐션 클래스 교체
 for layer in model.vision_encoder.layers:
     if hasattr(layer, "attn"):
         layer.attn = SamVisionAttentionSplit(model.config.vision_config, model.config.vision_config.window_size)
 ```
 
-## LoRA\[\[lora]]
+## LoRA[[lora]]
 
-`q`, `k`, `v` 프로젝션을 분리한 후, `q`와 `v`에 LoRA를 적용합니다.
+분리된 `q`, `k`, `v` 프로젝션을 사용할 때 , `q`와 `v`에 LoRA를 적용합니다.
 
-[LoraConfig](https://huggingface.co/docs/peft/package_reference/config#peft.PeftConfig)를 생성하고, 순위 `r`, `lora_alpha`, `lora_dropout`, `task_type`을 지정하며, 가장 중요한 `target_modules`를 설정합니다.
+[LoraConfig](https://huggingface.co/docs/peft/package_reference/config#peft.PeftConfig)를 생성하고, 랭크 `r`, `lora_alpha`, `lora_dropout`, `task_type`, 그리고 가장 중요한 적용될 모듈을 지정합니다.
 
 ```py
 from peft import LoraConfig, get_peft_model
@@ -144,7 +144,7 @@ config = LoraConfig(
 model = get_peft_model(model, config)
 ```
 
-[print\_trainable\_parameters](https://huggingface.co/docs/peft/package_reference/peft_model#peft.PeftMixedModel.print_trainable_parameters)를 호출하여 훈련되는 파라미터 수와 전체 파라미터 대비 비율을 확인하세요.
+[print_trainable_parameters](https://huggingface.co/docs/peft/package_reference/peft_model#peft.PeftMixedModel.print_trainable_parameters)를 호출하여 전체 파라미터 수 대비 훈련되는 파라미터 수를 확인하세요.
 
 ```py
 model.print_trainable_parameters()
