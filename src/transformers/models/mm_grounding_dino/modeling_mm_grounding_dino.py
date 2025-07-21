@@ -14,17 +14,11 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_timm_available,
-    replace_return_docstrings,
-    requires_backends,
-)
+from ...file_utils import ModelOutput, is_timm_available, requires_backends
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
+from ...utils import auto_docstring
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_mm_grounding_dino import MMGroundingDinoConfig
@@ -32,8 +26,6 @@ from .configuration_mm_grounding_dino import MMGroundingDinoConfig
 
 if is_timm_available():
     from timm import create_model
-
-_CONFIG_FOR_DOC = "MMGroundingDinoConfig"
 
 
 class MMGroundingDinoContrastiveEmbedding(nn.Module):
@@ -116,28 +108,20 @@ class MultiScaleDeformableAttention(nn.Module):
 
 
 @dataclass
-class MMGroundingDinoDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of the MMGroundingDinoDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
+    """
+)
+class MMGroundingDinoDecoderOutput(ModelOutput):
+    r"""
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -280,156 +264,6 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
         output = self.output_proj(output)
 
         return output, attention_weights
-
-
-class MMGroundingDinoMultiheadAttention(nn.Module):
-    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
-
-    def __init__(self, config, num_attention_heads=None):
-        super().__init__()
-        if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({num_attention_heads})"
-            )
-
-        self.num_attention_heads = num_attention_heads
-        self.attention_head_size = int(config.hidden_size / num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-
-        self.dropout = nn.Dropout(config.attention_dropout)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self,
-        queries: torch.Tensor,
-        keys: torch.Tensor,
-        values: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor]:
-        query_layer = self.transpose_for_scores(self.query(queries))
-        key_layer = self.transpose_for_scores(self.key(keys))
-        value_layer = self.transpose_for_scores(self.value(values))
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MMGroundingDinoModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        context_layer = self.out_proj(context_layer)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-class MMGroundingDinoTextEnhancerLayer(nn.Module):
-    """Vanilla Transformer with text embeddings as input"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.self_attn = MMGroundingDinoMultiheadAttention(
-            config, num_attention_heads=config.encoder_attention_heads // 2
-        )
-
-        # Implementation of Feedforward model
-        self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
-
-        self.layer_norm_before = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-        self.layer_norm_after = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-
-        self.activation = ACT2FN[config.activation_function]
-        self.num_heads = config.encoder_attention_heads // 2
-        self.dropout = config.text_enhancer_dropout
-
-    def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
-        return hidden_state if position_embeddings is None else hidden_state + position_embeddings
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_masks: Optional[torch.BoolTensor] = None,
-        position_embeddings: Optional[torch.FloatTensor] = None,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
-        """Text self-attention to enhance projection of text features generated by
-        the text encoder (AutoModel based on text_config) within MMGroundingDinoEncoderLayer
-
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
-                Text features generated by the text encoder.
-            attention_masks (`torch.BoolTensor`, *optional*):
-                Attention mask for text self-attention. False for real tokens and True for padding tokens.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings to be added to the hidden states.
-
-        Returns:
-            `tuple(torch.FloatTensor)` comprising two elements:
-            - **hidden_states** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) --
-                Output of the text self-attention layer.
-            - **attention_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length,
-              sequence_length)`) --
-                Attention weights of the text self-attention layer.
-        """
-
-        # repeat attn mask
-        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
-            # batch_size, num_queries, num_keys
-            attention_masks = attention_masks[:, None, :, :]
-            attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
-
-            dtype = hidden_states.dtype
-            attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
-            attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
-
-        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
-        attention_output, attention_weights = self.self_attn(
-            queries=queries,
-            keys=keys,
-            values=hidden_states,
-            attention_mask=attention_masks,
-            output_attentions=True,
-        )
-        attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + attention_output
-        hidden_states = self.layer_norm_before(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + residual
-        hidden_states = self.layer_norm_after(hidden_states)
-
-        return hidden_states, attention_weights
 
 
 class MMGroundingDinoBiMultiHeadAttention(nn.Module):
@@ -614,7 +448,7 @@ class MMGroundingDinoDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class MMGroundingDinoFusionLayer(nn.Module):
@@ -630,8 +464,8 @@ class MMGroundingDinoFusionLayer(nn.Module):
         # add layer scale for training stability
         self.drop_path = MMGroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         init_values = 1e-4
-        self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
-        self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.vision_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
+        self.text_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
 
     def forward(
         self,
@@ -680,205 +514,76 @@ class MMGroundingDinoFusionLayer(nn.Module):
         return (vision_features, vision_attn), (text_features, text_attn)
 
 
-class MMGroundingDinoDeformableLayer(nn.Module):
-    def __init__(self, config: MMGroundingDinoConfig):
+class MMGroundingDinoMultiheadAttention(nn.Module):
+    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
+
+    def __init__(self, config, num_attention_heads=None):
         super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = MMGroundingDinoMultiscaleDeformableAttention(
-            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
+        if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({num_attention_heads})"
+            )
+
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(config.hidden_size / num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.dropout = nn.Dropout(config.attention_dropout)
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        output_attentions: bool = False,
-    ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Input to the layer.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-                Attention mask.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings, to be added to `hidden_states`.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes of the backbone feature maps.
-            spatial_shapes_list (`List[Tuple[int, int]]`, *optional*):
-                Spatial shapes of the backbone feature maps (but as list for export compatibility).
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-
-        # Apply Multi-scale Deformable Attention Module on the multi-scale feature maps.
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            output_attentions=output_attentions,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> tuple[torch.Tensor]:
+        batch_size, seq_length, _ = queries.shape
+        query_layer = (
+            self.query(queries)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(keys).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(values).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in MMGroundingDinoModel forward() function)
+            attention_scores = attention_scores + attention_mask
 
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
 
-        if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        context_layer = torch.matmul(attention_probs, value_layer)
 
-        return hidden_states, attn_weights
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
 
+        context_layer = self.out_proj(context_layer)
 
-# Based on https://github.com/IDEA-Research/MMGroundingDino/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/MMGroundingDino/models/MMGroundingDino/utils.py#L24
-def get_sine_pos_embed(
-    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
-) -> Tensor:
-    """
-    Generate sine position embeddings from a position tensor.
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-    Args:
-        pos_tensor (torch.Tensor):
-            Tensor containing positions. Shape: [..., n].
-        num_pos_feats (`int`, *optional*, defaults to 128):
-            Projected shape for each float in the tensor.
-        temperature (`int`, *optional*, defaults to 10000):
-            Temperature in the sine/cosine function.
-        exchange_xy (`bool`, *optional*, defaults to `True`):
-            Exchange pos x and pos y. For example, input tensor is [x,y], the results will be [pos(y), pos(x)].
-
-    Returns:
-        position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
-    """
-    scale = 2 * math.pi
-    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-
-    def sine_func(x: torch.Tensor):
-        sin_x = x * scale / dim_t
-        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
-        return sin_x
-
-    pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
-    position_embeddings = [sine_func(x) for x in pos_tensor]
-    if exchange_xy:
-        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
-    position_embeddings = torch.cat(position_embeddings, dim=-1)
-    return position_embeddings
-
-
-class MMGroundingDinoEncoderLayer(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-
-        self.d_model = config.d_model
-
-        self.text_enhancer_layer = MMGroundingDinoTextEnhancerLayer(config)
-        self.fusion_layer = MMGroundingDinoFusionLayer(config)
-        self.deformable_layer = MMGroundingDinoDeformableLayer(config)
-
-    def get_text_position_embeddings(
-        self,
-        text_features: Tensor,
-        text_position_embedding: Optional[torch.Tensor],
-        text_position_ids: Optional[torch.Tensor],
-    ) -> Tensor:
-        batch_size, seq_length, _ = text_features.shape
-        if text_position_embedding is None and text_position_ids is None:
-            text_position_embedding = torch.arange(seq_length, device=text_features.device)
-            text_position_embedding = text_position_embedding.float()
-            text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
-            text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
-            text_position_embedding = get_sine_pos_embed(
-                text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
-            )
-        if text_position_ids is not None:
-            text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
-            )
-
-        return text_position_embedding
-
-    def forward(
-        self,
-        vision_features: Tensor,
-        vision_position_embedding: Tensor,
-        spatial_shapes: Tensor,
-        spatial_shapes_list: list[tuple[int, int]],
-        level_start_index: Tensor,
-        key_padding_mask: Tensor,
-        reference_points: Tensor,
-        text_features: Optional[Tensor] = None,
-        text_attention_mask: Optional[Tensor] = None,
-        text_position_embedding: Optional[Tensor] = None,
-        text_self_attention_masks: Optional[Tensor] = None,
-        text_position_ids: Optional[Tensor] = None,
-    ):
-        text_position_embedding = self.get_text_position_embeddings(
-            text_features, text_position_embedding, text_position_ids
-        )
-
-        (vision_features, vision_fused_attn), (text_features, text_fused_attn) = self.fusion_layer(
-            vision_features=vision_features,
-            text_features=text_features,
-            attention_mask_vision=key_padding_mask,
-            attention_mask_text=text_attention_mask,
-        )
-
-        (text_features, text_enhanced_attn) = self.text_enhancer_layer(
-            hidden_states=text_features,
-            attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
-            position_embeddings=(text_position_embedding if text_position_embedding is not None else None),
-        )
-
-        (vision_features, vision_deformable_attn) = self.deformable_layer(
-            hidden_states=vision_features,
-            attention_mask=~key_padding_mask,
-            position_embeddings=vision_position_embedding,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-        )
-
-        return (
-            (vision_features, text_features),
-            (vision_fused_attn, text_fused_attn, text_enhanced_attn, vision_deformable_attn),
-        )
+        return outputs
 
 
 class MMGroundingDinoDecoderLayer(nn.Module):
@@ -999,6 +704,44 @@ class MMGroundingDinoDecoderLayer(nn.Module):
         return outputs
 
 
+# Based on https://github.com/IDEA-Research/MMGroundingDino/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/MMGroundingDino/models/MMGroundingDino/utils.py#L24
+def get_sine_pos_embed(
+    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
+) -> Tensor:
+    """
+    Generate sine position embeddings from a position tensor.
+
+    Args:
+        pos_tensor (torch.Tensor):
+            Tensor containing positions. Shape: [..., n].
+        num_pos_feats (`int`, *optional*, defaults to 128):
+            Projected shape for each float in the tensor.
+        temperature (`int`, *optional*, defaults to 10000):
+            Temperature in the sine/cosine function.
+        exchange_xy (`bool`, *optional*, defaults to `True`):
+            Exchange pos x and pos y. For example, input tensor is [x,y], the results will be [pos(y), pos(x)].
+
+    Returns:
+        position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
+    """
+    scale = 2 * math.pi
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+
+    def sine_func(x: torch.Tensor):
+        sin_x = x * scale / dim_t
+        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
+        return sin_x
+
+    pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
+    position_embeddings = [sine_func(x) for x in pos_tensor]
+    if exchange_xy:
+        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
+    position_embeddings = torch.cat(position_embeddings, dim=-1)
+    return position_embeddings
+
+
+@auto_docstring
 class MMGroundingDinoPreTrainedModel(PreTrainedModel):
     config_class = MMGroundingDinoConfig
     base_model_prefix = "model"
@@ -1045,16 +788,18 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             module.out_vision_proj.bias.data.fill_(0)
             nn.init.xavier_uniform_(module.out_text_proj.weight)
             module.out_text_proj.bias.data.fill_(0)
-        elif isinstance(module, (MMGroundingDinoEncoderLayer, MMGroundingDinoDecoderLayer)):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.normal_(p, mean=0.0, std=std)
+        elif isinstance(module, MMGroundingDinoFusionLayer):
+            module.vision_param.data.fill_(1e-4)
+            module.text_param.data.fill_(1e-4)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1147,7 +892,7 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
-            spatial_shapes_list (`List[Tuple[int, int]]`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of the feature maps (but as list for export compatibility).
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
@@ -1316,30 +1061,27 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
 
 
 @dataclass
-class MMGroundingDinoEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
     - vision and text last hidden states
     - vision and text intermediate hidden states
-
-    Args:
-        last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the vision encoder.
-        last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the text encoder.
-        vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-            output of each layer plus the initial embedding outputs.
-        text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-            each layer plus the initial embedding outputs.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
-            multi-scale deformable attention heads.
+    """
+)
+class MMGroundingDinoEncoderOutput(ModelOutput):
+    r"""
+    last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the vision encoder.
+    last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the text encoder.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+        output of each layer plus the initial embedding outputs.
+    text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+        each layer plus the initial embedding outputs.
     """
 
     last_hidden_state_vision: Optional[torch.FloatTensor] = None
@@ -1350,55 +1092,49 @@ class MMGroundingDinoEncoderOutput(ModelOutput):
 
 
 @dataclass
-class MMGroundingDinoModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of the Grounding DINO encoder-decoder model.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
-            plus the initial embedding outputs.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-        encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-            output of each layer plus the initial embedding outputs.
-        encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-            each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
-            multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
-            bi-attention heads.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
-            region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
-            background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
-        encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Logits of top `config.num_queries` scoring bounding boxes in the first stage.
-        encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-            Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
+    """
+)
+class MMGroundingDinoModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+        output of each layer plus the initial embedding outputs.
+    encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+        each layer plus the initial embedding outputs.
+    encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+        sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+        weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
+        multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
+        bi-attention heads.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
+        region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
+        background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+        Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+    encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+        Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -1593,6 +1329,252 @@ class MMGroundingDinoSinePositionEmbedding(nn.Module):
         return pos
 
 
+class MMGroundingDinoTextEnhancerLayer(nn.Module):
+    """Vanilla Transformer with text embeddings as input"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.self_attn = MMGroundingDinoMultiheadAttention(
+            config, num_attention_heads=config.encoder_attention_heads // 2
+        )
+
+        # Implementation of Feedforward model
+        self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
+
+        self.layer_norm_before = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.layer_norm_after = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+
+        self.activation = ACT2FN[config.activation_function]
+        self.num_heads = config.encoder_attention_heads // 2
+        self.dropout = config.text_enhancer_dropout
+
+    def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
+        return hidden_state if position_embeddings is None else hidden_state + position_embeddings
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_masks: Optional[torch.BoolTensor] = None,
+        position_embeddings: Optional[torch.FloatTensor] = None,
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+        """Text self-attention to enhance projection of text features generated by
+        the text encoder (AutoModel based on text_config) within MMGroundingDinoEncoderLayer
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
+                Text features generated by the text encoder.
+            attention_masks (`torch.BoolTensor`, *optional*):
+                Attention mask for text self-attention. False for real tokens and True for padding tokens.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings to be added to the hidden states.
+
+        Returns:
+            `tuple(torch.FloatTensor)` comprising two elements:
+            - **hidden_states** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) --
+                Output of the text self-attention layer.
+            - **attention_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length,
+              sequence_length)`) --
+                Attention weights of the text self-attention layer.
+        """
+
+        # repeat attn mask
+        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
+            # batch_size, num_queries, num_keys
+            attention_masks = attention_masks[:, None, :, :]
+            attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
+
+            dtype = hidden_states.dtype
+            attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
+            attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
+
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
+        attention_output, attention_weights = self.self_attn(
+            queries=queries,
+            keys=keys,
+            values=hidden_states,
+            attention_mask=attention_masks,
+            output_attentions=True,
+        )
+        attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + attention_output
+        hidden_states = self.layer_norm_before(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.activation(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + residual
+        hidden_states = self.layer_norm_after(hidden_states)
+
+        return hidden_states, attention_weights
+
+
+class MMGroundingDinoDeformableLayer(nn.Module):
+    def __init__(self, config: MMGroundingDinoConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+        self.self_attn = MMGroundingDinoMultiscaleDeformableAttention(
+            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: Optional[torch.Tensor] = None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        level_start_index=None,
+        output_attentions: bool = False,
+    ):
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Input to the layer.
+            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+                Attention mask.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings, to be added to `hidden_states`.
+            reference_points (`torch.FloatTensor`, *optional*):
+                Reference points.
+            spatial_shapes (`torch.LongTensor`, *optional*):
+                Spatial shapes of the backbone feature maps.
+            spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
+                Spatial shapes of the backbone feature maps (but as list for export compatibility).
+            level_start_index (`torch.LongTensor`, *optional*):
+                Level start index.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        # Apply Multi-scale Deformable Attention Module on the multi-scale feature maps.
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            level_start_index=level_start_index,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        if self.training:
+            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        return hidden_states, attn_weights
+
+
+class MMGroundingDinoEncoderLayer(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+
+        self.d_model = config.d_model
+
+        self.text_enhancer_layer = MMGroundingDinoTextEnhancerLayer(config)
+        self.fusion_layer = MMGroundingDinoFusionLayer(config)
+        self.deformable_layer = MMGroundingDinoDeformableLayer(config)
+
+    def get_text_position_embeddings(
+        self,
+        text_features: Tensor,
+        text_position_embedding: Optional[torch.Tensor],
+        text_position_ids: Optional[torch.Tensor],
+    ) -> Tensor:
+        batch_size, seq_length, _ = text_features.shape
+        if text_position_embedding is None and text_position_ids is None:
+            text_position_embedding = torch.arange(seq_length, device=text_features.device)
+            text_position_embedding = text_position_embedding.float()
+            text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
+            text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
+            text_position_embedding = get_sine_pos_embed(
+                text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
+            )
+        if text_position_ids is not None:
+            text_position_embedding = get_sine_pos_embed(
+                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
+            )
+
+        return text_position_embedding
+
+    def forward(
+        self,
+        vision_features: Tensor,
+        vision_position_embedding: Tensor,
+        spatial_shapes: Tensor,
+        spatial_shapes_list: list[tuple[int, int]],
+        level_start_index: Tensor,
+        key_padding_mask: Tensor,
+        reference_points: Tensor,
+        text_features: Optional[Tensor] = None,
+        text_attention_mask: Optional[Tensor] = None,
+        text_position_embedding: Optional[Tensor] = None,
+        text_self_attention_masks: Optional[Tensor] = None,
+        text_position_ids: Optional[Tensor] = None,
+    ):
+        text_position_embedding = self.get_text_position_embeddings(
+            text_features, text_position_embedding, text_position_ids
+        )
+
+        (vision_features, vision_fused_attn), (text_features, text_fused_attn) = self.fusion_layer(
+            vision_features=vision_features,
+            text_features=text_features,
+            attention_mask_vision=key_padding_mask,
+            attention_mask_text=text_attention_mask,
+        )
+
+        (text_features, text_enhanced_attn) = self.text_enhancer_layer(
+            hidden_states=text_features,
+            attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
+            position_embeddings=(text_position_embedding if text_position_embedding is not None else None),
+        )
+
+        (vision_features, vision_deformable_attn) = self.deformable_layer(
+            hidden_states=vision_features,
+            attention_mask=~key_padding_mask,
+            position_embeddings=vision_position_embedding,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            level_start_index=level_start_index,
+        )
+
+        return (
+            (vision_features, text_features),
+            (vision_fused_attn, text_fused_attn, text_enhanced_attn, vision_deformable_attn),
+        )
+
+
 class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
@@ -1675,7 +1657,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of each feature map.
-            spatial_shapes_list (`List[Tuple[int, int]]`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of each feature map (but as list for export compatibility).
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
                 Starting index of each feature map.
@@ -1776,75 +1758,6 @@ def build_position_encoding(config):
     return position_embedding
 
 
-MM_GROUNDING_DINO_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MMGroundingDinoConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MM_GROUNDING_DINO_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it.
-
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`MMGroundingDinoImageProcessor.__call__`] for
-            details.
-
-        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
-
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
-
-            [What are token type IDs?](../glossary#token-type-ids)
-
-        attention_mask (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are real (i.e. **not masked**),
-            - 0 for tokens that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state_vision`, *optional*: `last_hidden_state_text`, *optional*:
-            `vision_hidden_states`, *optional*: `text_hidden_states`, *optional*: `attentions`)
-            `last_hidden_state_vision` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence
-            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the
-            decoder.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 # these correspond to [CLS], [SEP], . and ?
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
@@ -1888,12 +1801,11 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     return attention_mask, position_ids.to(torch.long)
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The bare Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
     hidden-states without any specific head on top.
-    """,
-    MM_GROUNDING_DINO_START_DOCSTRING,
+    """
 )
 class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
     def __init__(self, config: MMGroundingDinoConfig):
@@ -2044,8 +1956,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         object_query = self.enc_output_norm(self.enc_output(object_query))
         return object_query, output_proposals
 
-    @add_start_docstrings_to_model_forward(MM_GROUNDING_DINO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MMGroundingDinoModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -2059,7 +1970,16 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        Returns:
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
 
         Examples:
 
@@ -2326,73 +2246,62 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
 
 
 @dataclass
-class MMGroundingDinoObjectDetectionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`MMGroundingDinoForObjectDetection`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
-            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-            scale-invariant IoU loss.
-        loss_dict (`Dict`, *optional*):
-            A dictionary containing the individual losses. Useful for logging.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
-            Classification logits (including no-object) for all queries.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~MMGroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
-            unnormalized bounding boxes.
-        auxiliary_outputs (`List[Dict]`, *optional*):
-            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-            `pred_boxes`) for each decoder layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
-            plus the initial embedding outputs.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-        encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-            output of each layer plus the initial embedding outputs.
-        encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-            each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
-            multi-scale deformable attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
-            region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
-            background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
-        encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Logits of top `config.num_queries` scoring bounding boxes in the first stage.
-        encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-            Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Encoded candidate labels sequence. Used in processor to post process object detection result.
+    """
+)
+class MMGroundingDinoObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~MMGroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
+        unnormalized bounding boxes.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+        output of each layer plus the initial embedding outputs.
+    encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+        each layer plus the initial embedding outputs.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
+        region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
+        background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+        Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+    encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+        Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
+    input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Encoded candidate labels sequence. Used in processor to post process object detection result.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -2485,12 +2394,11 @@ def build_text_mask(logits, attention_mask):
     return text_mask.bool()
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,
     for tasks such as COCO detection.
-    """,
-    MM_GROUNDING_DINO_START_DOCSTRING,
+    """
 )
 class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = [
@@ -2537,8 +2445,7 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MM_GROUNDING_DINO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MMGroundingDinoObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2553,13 +2460,21 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         labels: Optional[list[dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
     ):
         r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
 
         Examples:
 
