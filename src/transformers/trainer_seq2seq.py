@@ -384,3 +384,21 @@ class Seq2SeqTrainer(Trainer):
         )
         padded_tensor[:, : tensor.shape[-1]] = tensor
         return padded_tensor
+
+    def compute_loss(
+        self,
+        model: nn.Module,
+        inputs: dict[str, Union[torch.Tensor, Any]],
+        return_outputs: bool = False,
+        **kwargs,  # capturamos aquí num_items_in_batch y cualquier otro extra
+    ) -> Union[torch.Tensor, tuple[torch.Tensor, Any]]:
+        """
+        Sobrescribe para eliminar `decoder_inputs_embeds` cuando también
+        se hayan pasado `decoder_input_ids` (fixes #39542).
+        """
+        # Si llegan ambos, preferimos los IDs y borramos los embeddings
+        if "decoder_input_ids" in inputs and "decoder_inputs_embeds" in inputs:
+            inputs.pop("decoder_inputs_embeds")
+        # Ignoramos kwargs adicionales (p.ej. num_items_in_batch)
+        # y delegamos en la implementación original:
+        return super().compute_loss(model, inputs, return_outputs=return_outputs)
