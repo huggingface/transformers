@@ -286,6 +286,10 @@ class GotOcr2ModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
