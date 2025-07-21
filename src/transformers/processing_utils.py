@@ -1184,7 +1184,7 @@ class ProcessorMixin(PushToHubMixin):
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:
+        for modality in default_kwargs:  # noqa: PLC0206
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
@@ -1202,7 +1202,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
-        for modality in output_kwargs:
+        for modality, output_kwarg in output_kwargs.items():
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
@@ -1220,7 +1220,7 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     kwarg_value = "__empty__"
                 if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
-                    output_kwargs[modality][modality_key] = kwarg_value
+                    output_kwarg[modality_key] = kwarg_value
                     used_keys.add(modality_key)
 
         # Determine if kwargs is a flat dictionary or contains nested dictionaries
@@ -1234,18 +1234,18 @@ class ProcessorMixin(PushToHubMixin):
                             used_keys.add(subkey)
         else:
             # kwargs is a flat dictionary
-            for key in kwargs:
+            for key, kwarg in kwargs.items():
                 if key not in used_keys:
                     if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
-                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                        output_kwargs["common_kwargs"][key] = kwarg
                     elif key not in possible_modality_keywords:
                         logger.warning_once(
                             f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                         )
 
         # all modality-specific kwargs are updated with common kwargs
-        for modality in output_kwargs:
-            output_kwargs[modality].update(output_kwargs["common_kwargs"])
+        for kwarg in output_kwargs.values():
+            kwarg.update(output_kwargs["common_kwargs"])
         return output_kwargs
 
     @classmethod
