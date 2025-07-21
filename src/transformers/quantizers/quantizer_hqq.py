@@ -171,7 +171,7 @@ class HqqHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            return (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear)) and tensor_name != "weight"
+            return (isinstance(module, (torch.nn.Linear, HQQLinear))) and tensor_name != "weight"
         else:
             return (
                 isinstance(module, torch.nn.Linear)

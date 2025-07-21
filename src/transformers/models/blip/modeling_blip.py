@@ -443,7 +443,7 @@ class BlipPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
-        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
             module.weight.data.normal_(mean=0.0, std=factor)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()

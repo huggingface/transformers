@@ -1359,7 +1359,7 @@ class TapexTokenizer(PreTrainedTokenizer):
 
     def truncate_cell(self, cell_value):
         # do not process on these cases
-        if isinstance(cell_value, int) or isinstance(cell_value, float):
+        if isinstance(cell_value, (int, float)):
             return cell_value
         if cell_value.strip() != "":
             try_tokens = self.tokenize(cell_value)

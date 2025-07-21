@@ -1672,7 +1672,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             elif isinstance(y, dict):
                 # If the labels are a dict, match keys from the output by name
                 y_pred = {key: val for key, val in y_pred.items() if key in y}
-            elif isinstance(y, tuple) or isinstance(y, list):
+            elif isinstance(y, (tuple, list)):
                 # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
                 if list(y_pred.keys())[0] == "loss":
                     y_pred = y_pred.to_tuple()[1:]
@@ -1779,7 +1779,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         elif isinstance(y, dict):
             # If the labels are a dict, match keys from the output by name
             y_pred = {key: val for key, val in y_pred.items() if key in y}
-        elif isinstance(y, tuple) or isinstance(y, list):
+        elif isinstance(y, (tuple, list)):
             # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
             if list(y_pred.keys())[0] == "loss":
                 y_pred = y_pred.to_tuple()[1:]

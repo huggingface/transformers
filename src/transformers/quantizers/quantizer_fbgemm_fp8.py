@@ -231,7 +231,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, FbgemmFp8Linear) or isinstance(module, FbgemmFp8Llama4TextExperts):
+            if isinstance(module, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")

@@ -51,9 +51,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         processor = SeamlessM4TProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        tokenizer_instance = isinstance(processor.tokenizer, SeamlessM4TTokenizerFast) or isinstance(
-            processor.tokenizer, SeamlessM4TTokenizer
-        )
+        tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
         self.assertTrue(tokenizer_instance)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
@@ -75,9 +73,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
 
-        tokenizer_instance = isinstance(processor.tokenizer, SeamlessM4TTokenizerFast) or isinstance(
-            processor.tokenizer, SeamlessM4TTokenizer
-        )
+        tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
         self.assertTrue(tokenizer_instance)
 
     # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->SeamlessM4T

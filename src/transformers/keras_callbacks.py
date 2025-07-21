@@ -242,7 +242,7 @@ class KerasMetricCallback(keras.callbacks.Callback):
                 labels = {key: batch[key].numpy() for key in self.label_cols}
             elif isinstance(labels, dict):
                 labels = {key: array.numpy() for key, array in labels.items()}
-            elif isinstance(labels, list) or isinstance(labels, tuple):
+            elif isinstance(labels, (list, tuple)):
                 labels = [array.numpy() for array in labels]
             elif isinstance(labels, tf.Tensor):
                 labels = labels.numpy()

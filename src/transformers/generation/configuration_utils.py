@@ -631,8 +631,7 @@ class GenerationConfig(PushToHubMixin):
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
             if not (
-                isinstance(self.watermarking_config, WatermarkingConfig)
-                or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
+                isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))
             ):
                 minor_issues["watermarking_config"] = (
                     "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
