@@ -58,7 +58,7 @@ Comencemos cargando el dataset MInDS-14 con la biblioteca de 🤗 Datasets:
 >>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Divide el conjunto de ```train``` (entrenamiento) en un conjunto de entrenamiento y prueba mas pequeño con el método [`~datasets.Dataset.train_test_split`]. De esta forma, tendrás la oportunidad para experimentar y asegúrate de que todo función antes de invertir más tiempo entrenando con el dataset entero.
+Divide el conjunto de `train` (entrenamiento) en un conjunto de entrenamiento y prueba mas pequeño con el método [`~datasets.Dataset.train_test_split`]. De esta forma, tendrás la oportunidad para experimentar y asegúrate de que todo función antes de invertir más tiempo entrenando con el dataset entero.
 
 ```py
 >>> minds = minds.train_test_split(test_size=0.2)
@@ -80,7 +80,7 @@ DatasetDict({
 })
 ```
 
-Aunque el dataset contiene mucha información útil, como los campos ```land_id``` (identificador del lenguaje) y ```english_transcription``` (transcripción al inglés), en esta guía nosfocaremos en los campos ```audio``` y ```intent_class``` (clase de intención). Puedes quitar las otras columnas con cel método [`~datasets.Dataset.remove_columns`]:
+Aunque el dataset contiene mucha información útil, como los campos `land_id` (identificador del lenguaje) y `english_transcription` (transcripción al inglés), en esta guía nosfocaremos en los campos `audio` y `intent_class` (clase de intención). Puedes quitar las otras columnas con cel método [`~datasets.Dataset.remove_columns`]:
 
 ```py
 >>> minds = minds.remove_columns(["path", "transcription", "english_transcription", "lang_id"])
@@ -99,7 +99,7 @@ Aquí está un ejemplo:
 
 Hay dos campos:
 
-- `audio`: un ```array``` (arreglo) unidimensional de la señal de habla que debe ser invocado para cargar y re-muestrear el archivo de audio.
+- `audio`: un `array` (arreglo) unidimensional de la señal de habla que debe ser invocado para cargar y re-muestrear el archivo de audio.
 - `intent_class`: representa el identificador de la clase de la intención del hablante.
 
 Crea un diccionario que asigne el nombre de etiqueta a un número entero y viceversa para facilitar la obtención del nombre de la etiqueta a partir de su identificador.
@@ -129,7 +129,7 @@ Seguidamente carga el feature extractor (función de extracción de característ
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-El dataset MInDS-14 tiene una tasa de muestreo de 8_000 kHz (puedes encontrar esta información en su [tarjeta de dataset](https://huggingface.co/datasets/PolyAI/minds14) ), lo que significa que tendrás re-muestrear el dataset a 16_000 kHZ para poder usar el modelo Wav2Vec2 pre-entranado:
+El dataset MInDS-14 tiene una tasa de muestreo de 8_000 kHz (puedes encontrar esta información en su [tarjeta de dataset](https://huggingface.co/datasets/PolyAI/minds14)), lo que significa que tendrás re-muestrear el dataset a 16_000 kHZ para poder usar el modelo Wav2Vec2 pre-entranado:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
