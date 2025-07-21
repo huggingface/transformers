@@ -615,6 +615,8 @@
         title: (번역중) ViTMAE
       - local: in_translation
         title: (번역중) ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
       - local: in_translation
         title: (번역중) YOLOS
       title: (번역중) 비전 모델
