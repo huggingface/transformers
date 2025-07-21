@@ -26,6 +26,7 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
+    MODEL_FOR_AUDIO_TOKENIZATION_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
@@ -40,7 +41,11 @@ from transformers import (
 )
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
-from transformers.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, is_tokenizers_available
+from transformers.utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    is_tokenizers_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -261,6 +266,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_conflict(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -313,6 +320,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_with_extra_attributes(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -352,6 +361,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -386,6 +397,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -394,6 +407,13 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
         self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
+
+    def test_auto_processor_save_load(self):
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            second_processor = AutoProcessor.from_pretrained(tmp_dir)
+            self.assertEqual(second_processor.__class__.__name__, processor.__class__.__name__)
 
 
 @is_staging_test

@@ -38,7 +38,7 @@ However, no method can be called on that object:
 ```python
 >>> DetrImageProcessorFast.from_pretrained()
 ImportError: 
-DetrImageProcessorFast requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
+DetrImageProcessorFast requires the Torchvision library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 ```
@@ -83,6 +83,19 @@ class Trainer:
 ```
 
 Backends that can be added here are all the backends that are available in the `import_utils.py` module.
+
+Additionally, specific versions can be specified in each backend. For example, this is how you would specify
+a requirement on torch>=2.6 on the `Trainer` class:
+
+```python
+from .utils.import_utils import requires
+
+@requires(backends=("torch>=2.6", "accelerate"))
+class Trainer:
+    ...
+```
+
+You can specify the following operators: `==`, `>`, `>=`, `<`, `<=`, `!=`.
 
 ## Methods
 

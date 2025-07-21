@@ -21,10 +21,14 @@ from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    Expectations,
+    backend_empty_cache,
+    get_device_properties,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_torchao,
     require_torchao_version_greater_or_equal,
+    torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
 
@@ -39,16 +43,18 @@ if is_torchao_available():
         TensorCoreTiledLayout,
     )
     from torchao.quantization import (
-        AOPerModuleConfig,
         Int8WeightOnlyConfig,
         IntxWeightOnlyConfig,
         MappingType,
+        ModuleFqnToConfig,
         PerAxis,
     )
     from torchao.quantization.autoquant import AQMixin
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
         from torchao.dtypes import Int4CPULayout
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
+        from torchao.dtypes import Int4XPULayout
 
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
@@ -56,7 +62,13 @@ def check_torchao_int4_wo_quantized(test_module, qlayer):
     test_module.assertEqual(weight.quant_min, 0)
     test_module.assertEqual(weight.quant_max, 15)
     test_module.assertTrue(isinstance(weight, AffineQuantizedTensor))
-    layout = Int4CPULayout if weight.device.type == "cpu" else TensorCoreTiledLayout
+    layout = None
+    if weight.device.type == "cpu":
+        layout = Int4CPULayout
+    elif weight.device.type == "xpu":
+        layout = Int4XPULayout
+    elif weight.device.type == "cuda":
+        layout = TensorCoreTiledLayout
     test_module.assertTrue(isinstance(weight.tensor_impl._layout, layout))
 
 
@@ -120,7 +132,6 @@ class TorchAoConfigTest(unittest.TestCase):
 class TorchAoTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
-    EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     device = "cpu"
     quant_scheme_kwargs = (
@@ -129,9 +140,14 @@ class TorchAoTest(unittest.TestCase):
         else {"group_size": 32}
     )
 
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_int4wo_quant(self):
@@ -201,7 +217,7 @@ class TorchAoTest(unittest.TestCase):
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
     @require_torchao_version_greater_or_equal("0.11.0")
-    def test_include_embedding(self):
+    def test_include_input_output_embeddings(self):
         weight_dtype = torch.int8
         granularity = PerAxis(0)
         mapping_type = MappingType.ASYMMETRIC
@@ -210,9 +226,11 @@ class TorchAoTest(unittest.TestCase):
             granularity=granularity,
             mapping_type=mapping_type,
         )
-        config = AOPerModuleConfig({"_default": None, "model.embed_tokens": embedding_config})
-        # need set `include_embedding` to True
-        quant_config = TorchAoConfig(quant_type=config, include_embedding=True)
+        config = ModuleFqnToConfig(
+            {"_default": None, "model.embed_tokens": embedding_config, "lm_head": embedding_config}
+        )
+        # need set `include_input_output_embeddings` to True
+        quant_config = TorchAoConfig(quant_type=config, include_input_output_embeddings=True)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device,
@@ -220,6 +238,7 @@ class TorchAoTest(unittest.TestCase):
         )
         # making sure embedding is quantized
         self.assertTrue(isinstance(quantized_model.model.embed_tokens.weight, AffineQuantizedTensor))
+        self.assertTrue(isinstance(quantized_model.lm_head.weight, AffineQuantizedTensor))
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
@@ -234,7 +253,7 @@ class TorchAoTest(unittest.TestCase):
     @require_torchao_version_greater_or_equal("0.11.0")
     def test_per_module_config_skip(self):
         linear_config = Int8WeightOnlyConfig()
-        config = AOPerModuleConfig({"_default": linear_config, "model.layers.0.self_attn.q_proj": None})
+        config = ModuleFqnToConfig({"_default": linear_config, "model.layers.0.self_attn.q_proj": None})
         quant_config = TorchAoConfig(quant_type=config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
@@ -255,10 +274,24 @@ class TorchAoTest(unittest.TestCase):
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
 
-@require_torch_gpu
-class TorchAoGPUTest(TorchAoTest):
-    device = "cuda"
+@require_torch_accelerator
+class TorchAoAcceleratorTest(TorchAoTest):
+    device = torch_device
     quant_scheme_kwargs = {"group_size": 32}
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # fmt: off
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+            }
+        )
+        # fmt: on
+        cls.EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
     def test_int4wo_offload(self):
         """
@@ -306,16 +339,27 @@ class TorchAoGPUTest(TorchAoTest):
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
+        # fmt: off
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+            }
+        )
+        # fmt: on
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        EXPECTED_OUTPUT = "What are we having for dinner?\n- 2. What is the temperature outside"
+        generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
-        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+        self.assertEqual(generated_text, EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
-    def test_int4wo_quant_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_int4wo_quant_multi_accelerator(self):
         """
-        Simple test that checks if the quantized model int4 weight only is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
+        Simple test that checks if the quantized model int4 weight only is working properly with multiple accelerators
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 CUDA GPUs
+        set ZE_AFFINITY_MASK=0,1 if you have more than 2 Intel XPUs
         """
 
         quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
@@ -367,7 +411,6 @@ class TorchAoGPUTest(TorchAoTest):
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
-    EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     quant_scheme = "int4_weight_only"
     quant_scheme_kwargs = (
@@ -381,6 +424,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
 
     def setUp(self):
         self.quant_config = TorchAoConfig(self.quant_scheme, **self.quant_scheme_kwargs)
@@ -394,7 +438,7 @@ class TorchAoSerializationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_original_model_expected_output(self):
@@ -424,58 +468,92 @@ class TorchAoSerializationTest(unittest.TestCase):
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_dynamic_activation_int8_weight", {}
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-
-    @require_torch_gpu
-    def test_serialization_expected_output_on_cuda(self):
-        """
-        Test if we can serialize on device (cpu) and load/infer the model on cuda
-        """
-        self.check_serialization_expected_output("cuda", self.EXPECTED_OUTPUT)
-
-
-class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-
-    @require_torch_gpu
-    def test_serialization_expected_output_on_cuda(self):
-        """
-        Test if we can serialize on device (cpu) and load/infer the model on cuda
-        """
-        self.check_serialization_expected_output("cuda", self.EXPECTED_OUTPUT)
-
-
-@require_torch_gpu
-class TorchAoSerializationGPTTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
-    device = "cuda:0"
-
-
-@require_torch_gpu
-class TorchAoSerializationW8A8GPUTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = "int8_dynamic_activation_int8_weight", {}
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
-
-
-@require_torch_gpu
-class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
-
-
-@require_torch_gpu
-@require_torchao_version_greater_or_equal("0.10.0")
-class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
+        super().setUpClass()
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+
+    @require_torch_accelerator
+    def test_serialization_expected_output_on_accelerator(self):
+        """
+        Test if we can serialize on device (cpu) and load/infer the model on accelerator
+        """
+        self.check_serialization_expected_output(torch_device, self.EXPECTED_OUTPUT)
+
+
+class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
+    quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+
+    @require_torch_accelerator
+    def test_serialization_expected_output_on_accelerator(self):
+        """
+        Test if we can serialize on device (cpu) and load/infer the model on accelerator
+        """
+        self.check_serialization_expected_output(torch_device, self.EXPECTED_OUTPUT)
+
+
+@require_torch_accelerator
+class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
+    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
+    device = f"{torch_device}:0"
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # fmt: off
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
+            }
+        )
+        # fmt: on
+        cls.EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+
+
+@require_torch_accelerator
+class TorchAoSerializationW8A8AcceleratorTest(TorchAoSerializationTest):
+    quant_scheme, quant_scheme_kwargs = "int8_dynamic_activation_int8_weight", {}
+    device = f"{torch_device}:0"
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+
+
+@require_torch_accelerator
+class TorchAoSerializationW8AcceleratorTest(TorchAoSerializationTest):
+    quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
+    device = f"{torch_device}:0"
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+
+
+@require_torch_accelerator
+@require_torchao_version_greater_or_equal("0.10.0")
+class TorchAoSerializationFP8AcceleratorTest(TorchAoSerializationTest):
+    device = f"{torch_device}:0"
+
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        device_type, major, minor = get_device_properties()
+        if device_type == "cuda" and major < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Float8WeightOnlyConfig
@@ -485,17 +563,19 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
 
         super().setUpClass()
 
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
-@require_torch_gpu
+
+@require_torch_accelerator
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
+    device = f"{torch_device}:0"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
+        device_type, major, minor = get_device_properties()
+        if device_type == "cuda" and major < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Int8DynamicActivationInt4WeightConfig
@@ -504,6 +584,8 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
         cls.quant_scheme_kwargs = {}
 
         super().setUpClass()
+
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
 
 
 if __name__ == "__main__":

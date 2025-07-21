@@ -456,7 +456,8 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -841,11 +842,8 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
-    image1 = Image.open(dataset[0]["file"]).convert("RGB")
-    image2 = Image.open(dataset[0]["file"]).convert("RGB")
-
-    return image1, image2
+    ds = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    return list(ds["image"][:2])
 
 
 def normalize(img):

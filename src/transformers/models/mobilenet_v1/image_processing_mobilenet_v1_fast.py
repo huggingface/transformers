@@ -15,19 +15,15 @@
 """Fast Image processor class for MobileNetV1."""
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     Unpack,
 )
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...utils import add_start_docstrings
+from ...utils import auto_docstring
 
 
-@add_start_docstrings(
-    "Constructs a fast MobileNetV1 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class MobileNetV1ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN

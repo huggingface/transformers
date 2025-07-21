@@ -43,7 +43,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
-        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype)
+        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
         examples = [
             {
@@ -161,11 +161,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             [
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they",
                 },
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable",
+                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they",
                 },
             ],
         )
@@ -176,8 +176,8 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         prompt = "a photo of"
 
-        outputs = pipe([image, image], text=[prompt, prompt])
-        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2)
+        outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=10)
+        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
 
     @slow

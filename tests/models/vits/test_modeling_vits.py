@@ -22,6 +22,7 @@ import numpy as np
 
 from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     is_torch_available,
     require_torch,
@@ -454,13 +455,21 @@ class VitsModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(outputs.waveform.shape, (1, 87040))
         # fmt: off
-        EXPECTED_LOGITS = torch.tensor(
-            [
+        expected_logits = Expectations({
+            ("cuda", None): [
                 0.0101,  0.0318,  0.0489,  0.0627,  0.0728,  0.0865,  0.1053,  0.1279,
                 0.1514,  0.1703,  0.1827,  0.1829,  0.1694,  0.1509,  0.1332,  0.1188,
                 0.1066,  0.0978,  0.0936,  0.0867,  0.0724,  0.0493,  0.0197, -0.0141,
                 -0.0501, -0.0817, -0.1065, -0.1223, -0.1311, -0.1339
+            ],
+            ("rocm", (9, 5)): [
+                0.0097,  0.0315,  0.0486,  0.0626,  0.0728,  0.0865,  0.1053,  0.1279,
+                0.1515,  0.1703,  0.1827,  0.1829,  0.1694,  0.1509,  0.1333,  0.1189,
+                0.1066,  0.0978,  0.0937,  0.0868,  0.0726,  0.0496,  0.0200, -0.0138,
+                -0.0500, -0.0817, -0.1067, -0.1225, -0.1313, -0.1340
             ]
-        ).to(torch.float16)
+        })
+        EXPECTED_LOGITS = torch.tensor(expected_logits.get_expectation(), dtype=torch.float16)
+
         # fmt: on
         torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
