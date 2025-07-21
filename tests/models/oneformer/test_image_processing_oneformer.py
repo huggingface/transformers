@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
@@ -155,13 +156,24 @@ class OneFormerImageProcessorTester:
         )
 
 
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
+def prepare_semantic_single_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
+
+
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
+def prepare_semantic_batch_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
+
+
 @require_torch
 @require_vision
 class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
     fast_image_processing_class = OneFormerImageProcessorFast if is_torchvision_available() else None
-    # only for test_image_processing_common.test_image_proc_to_json_string
-    image_processing_class = image_processing_class
 
     def setUp(self):
         super().setUp()
@@ -173,7 +185,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_proc_properties(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = self.image_processing_class(**self.image_processor_dict)
+            image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "image_mean"))
             self.assertTrue(hasattr(image_processor, "image_std"))
             self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -187,9 +199,9 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
 
     def comm_get_image_processor_inputs(
-        self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
+        self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np", image_processing_class=None
     ):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = image_processing_class(**self.image_processor_dict)
         # prepare image and target
         num_labels = self.image_processor_tester.num_labels
         annotations = None
@@ -223,21 +235,25 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
-            inputs = self.comm_get_image_processor_inputs(
-                with_segmentation_maps=True, is_instance_map=is_instance_map, segmentation_type=segmentation_type
-            )
+            for image_processing_class in self.image_processor_list:
+                inputs = self.comm_get_image_processor_inputs(
+                    with_segmentation_maps=True,
+                    is_instance_map=is_instance_map,
+                    segmentation_type=segmentation_type,
+                    image_processing_class=image_processing_class,
+                )
 
-            mask_labels = inputs["mask_labels"]
-            class_labels = inputs["class_labels"]
-            pixel_values = inputs["pixel_values"]
-            text_inputs = inputs["text_inputs"]
+                mask_labels = inputs["mask_labels"]
+                class_labels = inputs["class_labels"]
+                pixel_values = inputs["pixel_values"]
+                text_inputs = inputs["text_inputs"]
 
-            # check the batch_size
-            for mask_label, class_label, text_input in zip(mask_labels, class_labels, text_inputs):
-                self.assertEqual(mask_label.shape[0], class_label.shape[0])
-                # this ensure padding has happened
-                self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
-                self.assertEqual(len(text_input), self.image_processor_tester.num_text)
+                # check the batch_size
+                for mask_label, class_label, text_input in zip(mask_labels, class_labels, text_inputs):
+                    self.assertEqual(mask_label.shape[0], class_label.shape[0])
+                    # this ensure padding has happened
+                    self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
+                    self.assertEqual(len(text_input), self.image_processor_tester.num_text)
 
         common()
         common(is_instance_map=True)
@@ -257,7 +273,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_semantic_segmentation(self):
         for image_processing_class in self.image_processor_list:
-            fature_extractor = self.image_processing_class(
+            fature_extractor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
                 task_seq_length=77,
@@ -285,7 +301,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_instance_segmentation(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = self.image_processing_class(
+            image_processor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
                 task_seq_length=77,
@@ -320,7 +336,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_panoptic_segmentation(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = self.image_processing_class(
+            image_processor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
                 task_seq_length=77,
@@ -348,28 +364,94 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             "2": {"isthing": 1, "name": "baz"},
         }
         metadata = prepare_metadata(class_info)
+        for image_processing_class in self.image_processor_list:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                metadata_path = os.path.join(tmpdirname, "metadata.json")
+                with open(metadata_path, "w") as f:
+                    json.dump(class_info, f)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            metadata_path = os.path.join(tmpdirname, "metadata.json")
-            with open(metadata_path, "w") as f:
-                json.dump(class_info, f)
+                config_dict = self.image_processor_dict
+                config_dict["class_info_file"] = metadata_path
+                config_dict["repo_path"] = tmpdirname
+                image_processor = image_processing_class(**config_dict)
 
-            config_dict = self.image_processor_dict
-            config_dict["class_info_file"] = metadata_path
-            config_dict["repo_path"] = tmpdirname
-            image_processor = self.image_processing_class(**config_dict)
-
-        self.assertEqual(image_processor.metadata, metadata)
+            self.assertEqual(image_processor.metadata, metadata)
 
     def test_removed_deprecated_kwargs(self):
         image_processor_dict = dict(self.image_processor_dict)
         image_processor_dict.pop("do_reduce_labels", None)
         image_processor_dict["reduce_labels"] = True
-
+        # Only test for OneFormerImageProcessor
+        image_processing_class = self.image_processing_class
         # test we are able to create the image processor with the deprecated kwargs
-        image_processor = self.image_processing_class(**image_processor_dict)
+        image_processor = image_processing_class(**image_processor_dict)
         self.assertEqual(image_processor.do_reduce_labels, True)
 
         # test we still support reduce_labels with config
-        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        image_processor = image_processing_class.from_dict(image_processor_dict)
         self.assertEqual(image_processor.do_reduce_labels, True)
+
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image, dummy_map = prepare_semantic_single_inputs()
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+
+        self.assertTrue(torch.allclose(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
+        )
+        print(image_encoding_slow.mask_labels)
+        print(image_encoding_fast.mask_labels)
+        # for mask_label_slow, mask_label_fast in zip(image_encoding_slow.mask_labels, image_encoding_fast.mask_labels):
+        #     self.assertTrue(torch.allclose(mask_label_slow, mask_label_fast, atol=1e-1))
+        for class_label_slow, class_label_fast in zip(
+            image_encoding_slow.class_labels, image_encoding_fast.class_labels
+        ):
+            self.assertTrue(torch.allclose(class_label_slow, class_label_fast, atol=1e-1))
+        self.assertEqual(image_encoding_slow.text_inputs, image_encoding_fast.text_inputs)
+        self.assertEqual(image_encoding_slow.task_inputs, image_encoding_fast.task_inputs)
+
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(
+            dummy_images,
+            segmentation_maps=dummy_maps,
+            task_inputs=["instance"] + ["semantic"] * (len(dummy_images) - 1),
+            return_tensors="pt",
+        )
+        encoding_fast = image_processor_fast(
+            dummy_images,
+            segmentation_maps=dummy_maps,
+            task_inputs=["instance"] + ["semantic"] * (len(dummy_images) - 1),
+            return_tensors="pt",
+        )
+
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+        )

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for OneFormer."""
 
-from typing import Dict, List, Optional, Set, Tuple, Union, Unpack
+from typing import Optional, Union, Unpack
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -27,14 +27,17 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
 )
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
     logging,
 )
 from .image_processing_oneformer import load_metadata, prepare_metadata
@@ -45,10 +48,15 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.nn import functional as F
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
-def make_pixel_mask(image: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
 
@@ -157,21 +165,20 @@ def compute_segments(
     pred_labels,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Optional[Tuple[int, int]] = None,
+    label_ids_to_fuse: Optional[set[int]] = None,
+    target_size: Optional[tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
     segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: List[Dict] = []
+    segments: list[dict] = []
 
     if target_size is not None:
-        mask_probs = nn.functional.interpolate(
+        mask_probs = F.resize(
             mask_probs.unsqueeze(0),
             size=target_size,
-            mode="bilinear",
-            align_corners=False,
+            interpolation=F.InterpolationMode.BILINEAR,
         )[0]
 
     current_segment_id = 0
@@ -179,7 +186,7 @@ def compute_segments(
     mask_probs *= pred_scores.view(-1, 1, 1)
     mask_labels = mask_probs.argmax(0)  # [height, width]
 
-    stuff_memory_list: Dict[str, int] = {}
+    stuff_memory_list: dict[str, int] = {}
     for k in range(pred_labels.shape[0]):
         pred_class = pred_labels[k].item()
         should_fuse = pred_class in label_ids_to_fuse
@@ -212,7 +219,7 @@ def compute_segments(
 
 def convert_segmentation_map_to_binary_masks_fast(
     segmentation_map: "torch.Tensor",
-    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
 ):
@@ -251,8 +258,8 @@ def convert_segmentation_map_to_binary_masks_fast(
 
 
 def get_oneformer_resize_output_image_size(
-    image: torch.Tensor,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+    image: "torch.Tensor",
+    size: Union[int, tuple[int, int], list[int], tuple[int]],
     max_size: Optional[int] = None,
     default_to_square: bool = True,
 ) -> tuple:
@@ -301,17 +308,31 @@ def get_oneformer_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
-@add_start_docstrings("Constructs a fast OneFormer image processor.")
 class OneFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
+        Path to a local directory or Hugging Face Hub repository containing model metadata.
+    class_info_file (`str`, *optional*):
+        Path to the JSON file within the repository that contains class metadata.
+    num_text (`int`, *optional*):
+        Number of text queries for the text encoder, used as task-guiding prompts.
+    num_labels (`int`, *optional*):
+        Number of semantic classes for segmentation, determining the output layer's size.
+    ignore_index (`int`, *optional*):
+        Label to ignore in segmentation maps, often used for padding.
+    do_reduce_labels (`bool`, *optional*, defaults to `False`):
+        Whether to decrement all label values by 1, mapping the background class to `ignore_index`.
+    """
+
     repo_path: Optional[str]
     class_info_file: Optional[str]
     num_text: Optional[int]
     num_labels: Optional[int]
-    task_inputs: Optional[List[str]]
     ignore_index: Optional[int]
     do_reduce_labels: Optional[bool]
 
 
+@auto_docstring
 class OneFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -331,116 +352,74 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     class_info_file = None
     num_text = None
     num_labels = None
-
+    valid_kwargs = OneFormerFastImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
     def __init__(self, **kwargs: Unpack[OneFormerFastImageProcessorKwargs]):
-        repo_path = kwargs.get("repo_path", "shi-labs/oneformer_demo")
-        class_info_file = kwargs.get("class_info_file")
-        num_text = kwargs.get("num_text")
-        num_labels = kwargs.get("num_labels")
-
         super().__init__(**kwargs)
+        if self.class_info_file:
+            self.metadata = prepare_metadata(load_metadata(self.repo_path, self.class_info_file))
 
-        if not hasattr(self, "do_resize"):
-            self.do_resize = kwargs.get("do_resize", True)
-        if not hasattr(self, "do_rescale"):
-            self.do_rescale = kwargs.get("do_rescale", True)
-        if not hasattr(self, "do_normalize"):
-            self.do_normalize = kwargs.get("do_normalize", True)
-        if not hasattr(self, "do_center_crop"):
-            self.do_center_crop = kwargs.get("do_center_crop", False)
-        if not hasattr(self, "do_convert_rgb"):
-            self.do_convert_rgb = kwargs.get("do_convert_rgb", True)
-        if not hasattr(self, "default_to_square"):
-            self.default_to_square = kwargs.get("default_to_square", False)
-
-        if not hasattr(self, "size"):
-            size = kwargs.get("size")
-            if size is None:
-                self.size = {"shortest_edge": 800, "longest_edge": 1333}
-            else:
-                self.size = size
-
-        if not hasattr(self, "resample"):
-            self.resample = kwargs.get("resample", PILImageResampling.BILINEAR)
-        if not hasattr(self, "rescale_factor"):
-            self.rescale_factor = kwargs.get("rescale_factor", 1 / 255)
-        if not hasattr(self, "image_mean"):
-            self.image_mean = kwargs.get("image_mean", IMAGENET_DEFAULT_MEAN)
-        if not hasattr(self, "image_std"):
-            self.image_std = kwargs.get("image_std", IMAGENET_DEFAULT_STD)
-        if not hasattr(self, "ignore_index"):
-            self.ignore_index = kwargs.get("ignore_index", None)
-        if not hasattr(self, "do_reduce_labels"):
-            self.do_reduce_labels = kwargs.get("do_reduce_labels", False)
-        if not hasattr(self, "crop_size"):
-            self.crop_size = kwargs.get("crop_size", None)
-
-        self.repo_path = repo_path
-        self.class_info_file = class_info_file
-        self.num_text = num_text
-        self.num_labels = num_labels
-
-        if class_info_file:
-            self.metadata = prepare_metadata(load_metadata(repo_path, class_info_file))
-
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[OneFormerFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-    def resize(
+    @auto_docstring
+    def preprocess(
         self,
-        image: ImageInput,
-        size: Dict[str, int],
-        interpolation: "F.InterpolationMode" = None,
-        antialias: bool = True,
-        **kwargs,
-    ):
-        return super().resize(
-            image=image,
-            size=size,
-            interpolation=interpolation,
-            antialias=antialias,
-            **kwargs,
-        )
-
-    def rescale(
-        self,
-        image: ImageInput,
-        rescale_factor: float,
-    ) -> ImageInput:
-        return super().rescale(
-            image=image,
-            rescale_factor=rescale_factor,
-        )
-
-    def convert_segmentation_map_to_binary_masks(
-        self,
-        segmentation_map: "torch.Tensor",
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
-        ignore_index: Optional[int] = None,
-        do_reduce_labels: bool = False,
-    ):
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
-        ignore_index = ignore_index if ignore_index is not None else self.ignore_index
-        return convert_segmentation_map_to_binary_masks_fast(
-            segmentation_map=segmentation_map,
-            instance_id_to_semantic_id=instance_id_to_semantic_id,
-            ignore_index=ignore_index,
-            do_reduce_labels=do_reduce_labels,
-        )
-
-    def __call__(self, images, task_inputs=None, segmentation_maps=None, **kwargs) -> BatchFeature:
-        return self.preprocess(
+        images: ImageInput,
+        task_inputs: Optional[list[str]] = None,
+        segmentation_maps: Optional[ImageInput] = None,
+        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
+        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        task_inputs (`list[str]`, *optional*):
+            List of tasks (`"panoptic"`, `"instance"`, `"semantic"`) for each image in the batch.
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps.
+        instance_id_to_semantic_id (`Union[list[dict[int, int]], dict[int, int]]`, *optional*):
+            A mapping from instance IDs to semantic IDs.
+        """
+        return super().preprocess(
             images,
-            task_inputs=task_inputs,
-            segmentation_maps=segmentation_maps,
+            task_inputs,
+            segmentation_maps,
+            instance_id_to_semantic_id,
             **kwargs,
         )
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        task_inputs: Optional[list[str]],
+        segmentation_maps: ImageInput,
+        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        To be overriden by subclasses when image-like inputs other than images should be processed.
+        It can be used for segmentation maps, depth maps, etc.
+        """
+        # Prepare input images
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        if segmentation_maps is not None:
+            segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+        return self._preprocess(images, task_inputs, segmentation_maps, instance_id_to_semantic_id, **kwargs)
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
+        task_inputs: Optional[list[str]],
+        segmentation_maps: list["torch.Tensor"],
+        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -449,17 +428,15 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
-        task_inputs: Optional[List[str]],
-        segmentation_maps: Optional[List["torch.Tensor"]] = None,
-        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
-        ignore_index: Optional[int] = None,
-        do_reduce_labels: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        ignore_index: Optional[int],
+        do_reduce_labels: Optional[bool],
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
 
         processed_images_grouped = {}
 
@@ -492,7 +469,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                 if do_resize:
                     seg_map = self.resize(
                         seg_map.unsqueeze(0),
-                        size=(size.height, size.width),
+                        size=size,
                         interpolation=F.InterpolationMode.NEAREST,
                     ).squeeze(0)
                 processed_segmentation_maps.append(seg_map)
@@ -535,15 +512,13 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
 
-        # F.pad expects padding in format [pad_left, pad_right, pad_top, pad_bottom]
-        # Since we only pad bottom and right: [0, pad_right, 0, pad_bottom]
-        padded_image = F.pad(image, pad=[0, pad_right, 0, pad_bottom], value=constant_values)
+        padded_image = F.pad(image, padding=[0, 0, pad_right, pad_bottom], fill=constant_values)
 
         return padded_image
 
     def pad(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
@@ -592,6 +567,22 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    def convert_segmentation_map_to_binary_masks(
+        self,
+        segmentation_map: "torch.Tensor",
+        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+        ignore_index: Optional[int] = None,
+        do_reduce_labels: bool = False,
+    ):
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        ignore_index = ignore_index if ignore_index is not None else self.ignore_index
+        return convert_segmentation_map_to_binary_masks_fast(
+            segmentation_map=segmentation_map,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
+            ignore_index=ignore_index,
+            do_reduce_labels=do_reduce_labels,
+        )
+
     def get_semantic_annotations(self, label, num_class_obj):
         annotation_classes = label["classes"]
         annotation_masks = label["masks"]
@@ -603,9 +594,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
-            if not torch.any(mask):
+            if not torch.all(mask == 0):
                 if class_id not in classes:
-                    cls_name = self.metadata[str(class_id)]
+                    cls_name = self.metadata[str(class_id.cpu().item())]
                     classes.append(class_id)
                     masks.append(mask)
                     num_class_obj[cls_name] += 1
@@ -623,9 +614,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     texts[num] = f"a photo with a {cls_name}"
                     num += 1
 
-        device = annotation_masks[0].device if annotation_masks else "cpu"
-        classes = torch.tensor(classes, device=device)
-        masks = torch.stack(masks, dim=0) if masks else torch.zeros((0,), device=device)
+        classes = torch.stack(classes)
+        masks = torch.stack(masks)
         return classes, masks, texts
 
     def get_instance_annotations(self, label, num_class_obj):
@@ -641,8 +631,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             mask = annotation_masks[idx]
 
             if class_id in self.metadata["thing_ids"]:
-                if not torch.any(mask):
-                    cls_name = self.metadata[str(class_id)]
+                if not torch.all(mask == 0):
+                    cls_name = self.metadata[str(class_id.cpu().item())]
                     classes.append(class_id)
                     masks.append(mask)
                     num_class_obj[cls_name] += 1
@@ -656,8 +646,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     texts[num] = f"a photo with a {cls_name}"
                     num += 1
 
-        classes = torch.tensor(classes)
-        masks = torch.tensor(masks)
+        classes = torch.stack(classes)
+        masks = torch.stack(masks)
         return classes, masks, texts
 
     def get_panoptic_annotations(self, label, num_class_obj):
@@ -667,12 +657,11 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         texts = ["an panoptic photo"] * self.num_text
         classes = []
         masks = []
-
         for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx] if hasattr(annotation_masks[idx], "data") else annotation_masks[idx]
-            if not torch.any(mask):
-                cls_name = self.metadata[str(class_id)]
+            if not torch.all(mask == 0):
+                cls_name = self.metadata[str(class_id.cpu().item())]
                 classes.append(class_id)
                 masks.append(mask)
                 num_class_obj[cls_name] += 1
@@ -686,16 +675,16 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     texts[num] = f"a photo with a {cls_name}"
                     num += 1
 
-        classes = torch.tensor(classes)
-        masks = torch.tensor(masks)
+        classes = torch.stack(classes)
+        masks = torch.stack(masks)
         return classes, masks, texts
 
     def _encode_inputs_fast(
         self,
-        pixel_values_list: List["torch.Tensor"],
-        task_inputs: Optional[List[str]] = None,
-        segmentation_maps: Optional[List["torch.Tensor"]] = None,
-        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        pixel_values_list: list["torch.Tensor"],
+        task_inputs: Optional[list[str]] = None,
+        segmentation_maps: Optional[list["torch.Tensor"]] = None,
+        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -712,7 +701,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         for image in pixel_values_list:
             pad_bottom = pad_size[0] - image.shape[1]
             pad_right = pad_size[1] - image.shape[2]
-            padded_image = F.pad(image, pad=[0, pad_right, 0, pad_bottom], value=0)
+            padded_image = F.pad(image, padding=[0, 0, pad_right, pad_bottom], fill=0)
             padded_images.append(padded_image)
 
             mask = torch.zeros(pad_size, dtype=torch.int64, device=image.device)
@@ -746,7 +735,6 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                 )
 
                 annotations.append({"masks": masks, "classes": classes})
-
             # Process annotations using existing methods (they work with torch tensors)
             if annotations:
                 mask_labels = []
@@ -765,7 +753,6 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                         classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
                     else:
                         raise ValueError(f"{task} was not expected, expected `semantic`, `instance` or `panoptic`")
-
                     # Pad masks to max size using torch operations
                     padded_masks = []
                     for mask in masks:
@@ -779,8 +766,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
                         padded_mask = F.pad(
                             mask_tensor,
-                            pad=[0, pad_right, 0, pad_bottom],
-                            value=ignore_index if ignore_index is not None else 0,
+                            padding=[0, 0, pad_right, pad_bottom],
+                            fill=ignore_index if ignore_index is not None else 0,
                         )
                         padded_masks.append(padded_mask)
 
@@ -806,7 +793,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
+        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
@@ -844,11 +831,10 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
             semantic_segmentation = []
             for idx in range(batch_size):
-                resized_logits = torch.nn.functional.interpolate(
+                resized_logits = F.resize(
                     segmentation[idx].unsqueeze(dim=0),
                     size=target_sizes[idx],
-                    mode="bilinear",
-                    align_corners=False,
+                    interpolation=F.InterpolationMode.BILINEAR,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
@@ -866,7 +852,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
     ):
         """
@@ -916,11 +902,11 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         num_classes = class_queries_logits.shape[-1] - 1
 
         # Loop over items in batch size
-        results: List[Dict[str, torch.Tensor]] = []
+        results: list[dict[str, torch.Tensor]] = []
 
         for i in range(batch_size):
             # [Q, K]
-            scores = torch.nn.functional.softmax(class_queries_logits[i], dim=-1)[:, :-1]
+            scores = nn.functional.softmax(class_queries_logits[i], dim=-1)[:, :-1]
             labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
 
             # scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.num_queries, sorted=False)
@@ -984,9 +970,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[Set[int]] = None,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
-    ) -> List[Dict]:
+        label_ids_to_fuse: Optional[set[int]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
+    ) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
@@ -1039,7 +1025,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
