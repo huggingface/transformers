@@ -175,7 +175,7 @@ There are three supported implementations available.
 - [xFormers](https://github.com/facebookresearch/xformers) or Memory-Efficient Attention is able to support models with the fp32 torch type.
 - C++ implementation of scaled dot product attention
 
-SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `head_mask` and `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation.
+SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `head_mask` and `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation. You can also change the attention implementation after loading the model for most architectures. For details, check out the [attention interfaces documentation](./attention_interface).
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -234,7 +234,7 @@ FlashAttention2 support is currently limited to Instinct MI210, Instinct MI250 a
 </hfoption>
 </hfoptions>
 
-Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [`~PreTrainedModel.from_pretrained`]. FlashAttention2 is only supported for models with the fp16 or bf16 torch type. Make sure to cast your model to the appropriate data type first.
+Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [`~PreTrainedModel.from_pretrained`] or by setting `model.set_attention_implementation("flash_attention_2")` to dynamically update the [attention interface](./attention_interface). FlashAttention2 is only supported for models with the fp16 or bf16 torch type. Make sure to cast your model to the appropriate data type first.
 
 ```py
 from transformers import AutoModelForCausalLM

@@ -132,6 +132,35 @@ for _ in range(max_new_tokens):
 print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
 ```
+
+### Cache Position Usage
+
+The cache position tracks where the new tokens should be inserted in the attention cache. It represents the *absolute* position of each token in the context, independent of padding or batch structure. Suppose that you have already cached `N` tokens and you are now processing `K` new tokens. Then the cache position for the new tokens will range from `N` to `N + K - 1`. In other words, you're processing tokens at positions - `[N, N + 1, N + 2, ..., N + K - 1]`
+
+Cache position is used internally for two purposes:
+
+1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven’t been cached yet are passed to the model's `forward`.
+2. Storing key/value pairs at the correct positions in the cache. Especially important for fixed-size caches like [`StaticCache`] that preallocate certain length for cache in advance.
+
+Usually you don't have to worry about cache position as the generation loop takes care of it. Yet, in cases where you are writing your own custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
+
+There is an example usage with simple custom generation loop above, so let's create a more complex example here. 
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+model_id = "meta-llama/Llama-2-7b-chat-hf"
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+messages = [{"role": "user", "content": "You are a helpful assistant."}]
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
+
+```
+
+
 ## Legacy cache format
 
 Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].

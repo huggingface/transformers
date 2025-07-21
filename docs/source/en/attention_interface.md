@@ -72,6 +72,34 @@ model(torch.ones(1, 5, dtype=int))
 and it will stop printing the statements, as it now uses the `sdpa` attention.  
 This allows to quickly change an attention function, without needing to reload the model!
 
+## Different attention per backbone in multimodal models
+
+For multimodal models, you may want to load different backbones with different attention functions. For example, some vision backbones perform better with full precision only and are incompatible with Flash Attention. If you want to take advantage of Flash Attention while keeping your vision encoder in fp32, you can configure different attention implementations per backbone.
+
+```python
+from transformers import AutoModelForImageTextToText
+
+model_id = "facebook/chameleon-7b"
+
+attention_implementation_per_backbone = {"vision_config": "sdpa", "text_config": "flash_attention_2"}
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation=attention_implementation_per_backbone)
+
+# NOTE: keys in the attention implementation have to be the same as the sub-config names
+for key in attention_implementation_per_backbone:
+    assert key in model.config.sub_configs, f"Invalid key in `attention_implementation`"
+
+# You can omit certain backbones - the default attention function (SDPA) will be used
+# This is equivalent to the previous example
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"text_config": "flash_attention_2"})
+
+
+# Set the same attention implementation for all backbones with single string, same as in non-multimodal models
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation="eager")
+
+# Alternatively use a dict with an empty key for global configuration
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"": "eager"})
+```
+
 ## What about new args needed in my custom attention function?
 
 But indeed, what if the new function requires a new arg to be properly used? It's no issue! Models supporting the
