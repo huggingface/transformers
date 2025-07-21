@@ -35,7 +35,7 @@ processed_sample
 
 특징 추출기는 모델이 바로 사용할 수 있는 입력값인 `input_values`를 반환합니다.
 
-지금부터는 특징 추출기 클래스와 오디오 데이터 전처리 방법에 대해 안내합니다.
+이 가이드에서는 특징 추출기 클래스와 오디오 데이터 전처리 방법에 대해 안내합니다.
 
 ## 특징 추출기 클래스[[feature-extractor-classes]]
 
@@ -51,7 +51,7 @@ Transformers 특징 추출기는 [`FeatureExtractionMixin`]을 서브클래싱�
 
 [AutoClass](./model_doc/auto) API는 주어진 모델에 맞는 특징 추출기를 자동으로 로드합니다.
 
-[`~AutoFeatureExtractor.from_pretrained`]를 사용하여 특징 추출기를 로드합니다.
+[`~AutoFeatureExtractor.from_pretrained`]를 사용하여 특징 추출기를 로드하세요.
 
 ```py
 from transformers import AutoFeatureExtractor
@@ -77,9 +77,9 @@ feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-tiny
 
 ## 전처리[[preprocess]]
 
-특징 추출기는 특정 형태의 PyTorch 텐서를 입력으로 기대합니다. 정확한 입력 형태는 사용 중인 특정 오디오 모델에 따라 다를 수 있습니다.
+특징 추출기는 특정 형태의 PyTorch 텐서를 입력으로 받습니다. 정확한 입력 형태는 사용 중인 특정 오디오 모델에 따라 다를 수 있습니다.
 
-예를 들어, [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper)는 `input_features`가 `(batch_size, feature_size, sequence_length)` 형태의 텐서이기를 기대하지만 [Wav2Vec2](https://hf.co/docs/transformers/model_doc/wav2vec2)는 `input_values`가 `(batch_size, sequence_length)` 형태의 텐서이기를 기대합니다.
+예를 들어, [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper)는 `input_features`로 `(batch_size, feature_size, sequence_length)` 형태의 텐서를 입력받지만, [Wav2Vec2](https://hf.co/docs/transformers/model_doc/wav2vec2)는 `input_values`로 `(batch_size, sequence_length)` 형태의 텐서를 입력받습니다.
 
 특징 추출기는 사용 중인 오디오 모델에 맞는 올바른 입력 형태를 생성합니다.
 
