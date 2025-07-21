@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Using Transformers as a Backend for Inference Servers
 
-## What’s an inference backend, and why should you care?
-
 An inference backend is the part of your system that actually runs the model and returns outputs. Think of it as the engine behind APIs, chatbots, and anything else using generative Language Model in production.
 
 Instead of each server implementing its own model logic, many of them now rely on Transformers to do the heavy lifting. That means if your model works in 🤗 Transformers, it can also work **out of the box** in any inference server that uses Transformers as a backend.
@@ -28,12 +26,6 @@ You can find the list of currently supported backends below. This list is still 
 
 ### vLLM
 
-https://docs.vllm.ai/en/latest/models/supported_models.html#transformers
-
-* How vLLM integrates with Transformers backend
-* Any known caveats or limitations
-* Example usage / deployment snippet
-
 [vLLM](https://github.com/vllm-project/vllm) is a high-performance inference engine optimized for serving LLMs at scale. It supports many models implemented in the 🤗 Transformers library through its transformers backend, including all decoder-only LLMs and several vision-language models. For VLMs, currently only image inputs are supported, supporting video inputs is planned. 
 
 vLLM automatically selects the best backend. If the model isn’t natively supported, it falls back to Transformers. You can also force the use of the Transformers backend by setting `model_impl="transformers"`.
@@ -41,6 +33,13 @@ vLLM automatically selects the best backend. If the model isn’t natively suppo
 ```python
 from vllm import LLM
 llm = LLM(model="meta-llama/Llama-3.2-1B", model_impl="transformers")
+```
+or launch a server with
+
+```
+vllm serve meta-llama/Llama-3.2-1B \
+    --task generate \
+    --model-impl transformers
 ```
 
 Refer to the official [vLLM docs](https://docs.vllm.ai/en/latest/models/transformers_backend.html) to see more usage examples and tips with Transformers backend.
@@ -71,7 +70,7 @@ python3 -m sglang.launch_server \
 
 For more, refer to [SGLang's official docs](https://github.com/InternLM/sglang).
 
-## TGI
+### TGI
 
 [TGI](https://huggingface.co/docs/text-generation-inference/index) can serve models that aren't [natively implemented](https://huggingface.co/docs/text-generation-inference/supported_models) by falling back on the Transformers implementation of the model. Some of TGIs high-performance features aren't available in the Transformers implementation, but other features like continuous batching and streaming are still supported.
 
@@ -99,9 +98,9 @@ To make your custom model work out of the box with backends like vLLM and SGLang
 
 For a model to be supported via the Transformers backend:
 
-1. It must be Transformers-compatible following [custom model guidelines](https://huggingface.co/docs/transformers/model_sharing#custom-code). That means the model has to be supported in the core library or with custom code in the Hub. You can contribute your model to the core library following [these rules](https://huggingface.co/docs/transformers/en/add_new_model) or available as a [custom model](https://huggingface.co/docs/transformers/v4.53.2/en/custom_models) in the Hub. Make sure that the model has a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
+1. It must be Transformers-compatible following model guidelines. That means the model has to be supported in the core library  following [these rules](https://huggingface.co/docs/transformers/en/add_new_model) or contain custom code in the Hub following [custom code sharing guidelines](https://huggingface.co/docs/transformers/en/custom_models) in the Hub. Make sure that the model has a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
 
-2. The model's attention module needs to be backend configurable to benefit from performance features of various inference servers. For that the model needs to support the new [AttentionInterface](https://huggingface.co/docs/transformers/en/attention_interface) which allows anyone to register their custom and optimized attention functions to be used in the model. All you have to do is to use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` all the way through your base `MyModel` class to the attention layers, because some custom attention fucntions require a new arg in its `forward`. And don't forget to set `_supports_attention_backend = True` in you `MyPreTrainedModel` class.
+2. The model's attention module needs to be backend configurable to benefit from performance features of various inference servers. For that the model needs to support the new [AttentionInterface](https://huggingface.co/docs/transformers/en/attention_interface) which allows anyone to register their custom and optimized attention functions to be used in the model. All you have to do is to use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` all the way through your base `MyModel` class to the attention layers. Finally don't forget to set `_supports_attention_backend = True` in you `MyPreTrainedModel` class. Expand the below section for an example pseudo-code.
 
 <details>
 <summary>modeling_my_model.py</summary>
@@ -131,43 +130,41 @@ class MyModel(PreTrainedModel):
 
 </details>
 
-3. Optionally, if you want the model to support tensor parallel and/or pipeline parallel features, you can the following keys in the config file: 
+3. Optionally, if you want the model to support tensor parallel and/or pipeline parallel features, you can add the following keys in the config file: 
+
+    <details>
+    <summary>configuration_my_model.py</summary>
+
+    ```python
+
+    from transformers import PretrainedConfig
+
+    class MyConfig(PretrainedConfig):
+        base_model_tp_plan = {
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+        base_model_pp_plan = {
+            "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+            "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+            "norm": (["hidden_states"], ["hidden_states"]),
+        }
+    ```
+    </details>
+
     * `base_model_tp_plan` for [tensor parallelism](https://huggingface.co/docs/transformers/perf_infer_gpu_multi) - a dict that maps fully qualified layer name patterns to tensor parallel styles (currently only "colwise" and "rowwise" are supported).
     * `base_model_pp_plan` for pipeline parallelism - a dict that maps direct child layer names to tuples of lists of strs.The list in the first element of the tuple contains the names of the input arguments. The list in the last element of the tuple contains the names of the variables the layer outputs to in your modeling code
-
-<details>
-<summary>configuration_my_model.py</summary>
-
-```python
-
-from transformers import PretrainedConfig
-
-class MyConfig(PretrainedConfig):
-    base_model_tp_plan = {
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-```
-</details>
 
 
 ### Multimodal Requirements
 
-To enable seamless support for vision-language models in inference servers, your model needs to follow a few extra conventions on top of the general ones. These rules ensure that your model integrates properly with multimodal data handling.
+To enable seamless support for vision-language models in inference servers, your model needs to follow a few extra conventions on top of the general ones. These rules ensure that your model integrates properly with multimodal data.
 
-
-1. Your model must have a base class (e.g. MyMultimodalModel) that handles multimodal fusion without an LM head and a separate generative class that adds the language modeling head and inherits from `GenerationMixin`. The base model must implement a get_image_features() method that takes in image pixel values and returns the vision tower’s encoded outputs. These will later be merged with language embeddings. The shape of returned features should match the number of input images. If your encoder returns variable-length outputs (e.g., patch-based), return a list of 2D tensors of shape `(image_seq_len, image_dim)` - one per image.
-
- 
+1. Your model must have a base `MyMultimodalModel` class that handles multimodal fusion without a language modeling head and a separate generative class that adds a head on top. The base model needs to implement a `get_image_features()` method that takes in image pixel values and returns encoded outputs. These will later be merged with language embeddings and thus should not require any postprocessing after. The shape of returned features has to match the number of input images. If the vision encoder returns variable-length outputs (e.g., patch-based), you can return a list of 2D tensors of size `(image_seq_len, image_dim)` - one per image. 
 <details>
 <summary>modeling_my_multimodal_model.py</summary>
 
@@ -201,30 +198,14 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
 </details>
 
 
-2. Your config must be nested, with the minimal set of the following fields:
-
-    * text_config: decoder config
+2. Your config must be nested, with a minimal set of the following fields:
+    * text_config: decoder language model config
     * vision_config: vision encoder config
     * image_token_id: ID of the image placeholder token used in input to indicate image position
 
-<details>
-<summary>configuration_my_multimodal_model.py</summary>
+3. The model's processing class must have `self.image_token` and `self.image_token_ids` attributes. These are the placeholder tokens used to indicate image positions in the input. Note that it is the same token used by users when constructing a input prompt and the token that is used to masked scatter image features. Additionally, the class needs a `self._get_num_multimodal_tokens()` helper method that computes the number of placeholder tokens needed for multimodal inputs with given sizes and returns a `MultiModalData` object. Note that placeholder for row and column tokens are not counted as image placholders, only tokens that will actually be replaced by image features are computed.
 
-```python
-from transformers import PretrainedConfig
-
-class MyMultimodalConfig(PretrainedConfig):
-    def __init__(self, text_config, vision_config, image_token_id, **kwargs):
-        self.image_token_id = image_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        super().__init__(**kwargs)
-```
-</details>
-
-3. The model's processing class must have `self.image_token` and `self.image_token_ids` attributes. These are the placeholder tokens used to indicate image positions in the input. Note that it is the same tokens used by users when constructing a input prompt and the model when merging image features with text features. Additionally, the class needs a `self._get_num_multimodal_tokens()` helper method that computes the number of placeholder tokens needed for multimodal inputs with given sizes and returns a `MultiModalData` object. Note, that placeholder for row and column tokens are not counted as image placholders, only tokens tha will be replaced by image features are considered.
-
-Finally, when `return_mm_token_type_ids=True`, the class must return `mm_token_type_ids` indicating whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
+Finally, when `return_mm_token_type_ids=True`, the class has to return `mm_token_type_ids` indicating whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
 
 <details>
 <summary>processing_my_multimodal_model.py</summary>
