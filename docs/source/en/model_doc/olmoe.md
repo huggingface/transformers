@@ -24,7 +24,6 @@ rendered properly in your Markdown viewer.
 
 # OLMoE
 
-=======
 [OLMoE](https://huggingface.co/papers/2409.02060) is a sparse Mixture-of-Experts (MoE) language model with 7B parameters but only 1B parameters are used per input token. It has similar inference costs as dense models but trains ~3x faster. OLMoE uses fine-grained routing with 64 small experts in each layer and uses a dropless token-based routing algorithm.
 
 You can find all the original OLMoE checkpoints under the [OLMoE](https://huggingface.co/collections/allenai/olmoe-november-2024-66cf678c047657a30c8cd3da) collection.
