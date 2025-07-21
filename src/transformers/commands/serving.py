@@ -295,7 +295,7 @@ class ToolState:
 
 class TimedModel:
     """
-    A class that holds a PreTrainedModel instance and its associated processor/processor.
+    A class that holds a PreTrainedModel instance and its associated processor.
     Automatically deletes the instances after a specified timeout.
     """
 
