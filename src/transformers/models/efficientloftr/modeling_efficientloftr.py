@@ -184,7 +184,7 @@ class EfficientLoFTRepVGG(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
 
-        stages = [EfficientLoFTRRepVGGStage(config, stage_idx) for stage_idx in range(len(config.stage_in_channels))]
+        stages = [EfficientLoFTRRepVGGStage(config, stage_idx) for stage_idx in range(len(config.stage_stride))]
         self.stages = nn.ModuleList(stages)
 
     def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:

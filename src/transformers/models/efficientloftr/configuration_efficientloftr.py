@@ -28,8 +28,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        stage_block_dims (`List`, *optional*, defaults to [64, 64, 128, 256]):
-            The hidden size of the features in the blocks of each stage
         stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):
             The number of blocks in each stages
         stage_out_channels (`List`, *optional*, defaults to [64, 64, 128, 256]):
@@ -112,7 +110,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        stage_block_dims: Optional[list[int]] = None,
         stage_num_blocks: Optional[list[int]] = None,
         stage_out_channels: Optional[list[int]] = None,
         stage_stride: Optional[list[int]] = None,
@@ -142,20 +139,19 @@ class EfficientLoFTRConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        self.stage_block_dims = stage_block_dims if stage_block_dims is not None else [64, 64, 128, 256]
+        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
         self.stage_out_channels = stage_out_channels if stage_out_channels is not None else [64, 64, 128, 256]
         self.stage_in_channels = [1] + self.stage_out_channels[:-1]
         self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
-        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
         self.stage_block_stride = [
-            [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(self.stage_stride, self.stage_num_blocks)
+            [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(stage_stride, self.stage_num_blocks)
         ]
 
-        self.fine_fusion_dims = list(reversed(self.stage_block_dims))[:-1]
+        self.fine_fusion_dims = list(reversed(self.stage_out_channels))[:-1]
         self.hidden_size = hidden_size
-        if self.hidden_size != self.stage_block_dims[-1]:
+        if self.hidden_size != self.stage_out_channels[-1]:
             raise ValueError(
-                f"hidden_size should be equal to the last value in stage_block_dims. hidden_size = {self.hidden_size}, stage_blck_dims = {self.stage_block_dims}"
+                f"hidden_size should be equal to the last value in stage_out_channels. hidden_size = {self.hidden_size}, stage_out_channels = {self.stage_out_channels}"
             )
 
         self.activation_function = activation_function
