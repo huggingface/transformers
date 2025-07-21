@@ -117,15 +117,17 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor = self.get_video_processor()
         tokenizer = self.get_tokenizer()
         qformer_tokenizer = self.get_qformer_tokenizer()
+        processor_kwargs = self.prepare_processor_dict()
 
         processor = InstructBlipVideoProcessor(
-            tokenizer=tokenizer, video_processor=video_processor, qformer_tokenizer=qformer_tokenizer
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            qformer_tokenizer=qformer_tokenizer,
+            **processor_kwargs,
         )
 
         input_str = ["lower newer"]
-
         encoded_processor = processor(text=input_str)
-
         encoded_tokens = tokenizer(input_str, return_token_type_ids=False)
         encoded_tokens_qformer = qformer_tokenizer(input_str, return_token_type_ids=False)
 

@@ -60,7 +60,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=32, **kwargs):
         if not hasattr(tokenizer, "video_token"):
             self.video_token = AddedToken("<video>", normalized=False, special=True)
             tokenizer.add_tokens([self.video_token], special_tokens=True)
@@ -98,8 +98,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify at least one of images or text.")
 
-        encoding = BatchFeature()
-
+        encoding = {}
         if text is not None:
             if isinstance(text, str):
                 text = [text]
@@ -129,6 +128,8 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
             # InstrucBLIP works with 4 frames only
+            if max_length is not None:
+                max_length -= self.num_query_tokens
             text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,
@@ -148,27 +149,28 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 **kwargs,
             )
 
-            video_tokens = self.video_token.content * self.num_query_tokens * 4
-            video_text_encoding = self.tokenizer(
-                video_tokens,
-                add_special_tokens=False,  # required to concatenate below
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                return_tensors=None,
-            )
-            for k in text_encoding:
-                text_encoding[k] = [video_text_encoding[k] + sample for sample in text_encoding[k]]
-
+            if images is not None:
+                video_tokens = self.video_token.content * self.num_query_tokens * 4
+                video_text_encoding = self.tokenizer(
+                    video_tokens,
+                    add_special_tokens=False,  # required to concatenate below
+                    return_attention_mask=return_attention_mask,
+                    return_overflowing_tokens=return_overflowing_tokens,
+                    return_special_tokens_mask=return_special_tokens_mask,
+                    return_offsets_mapping=return_offsets_mapping,
+                    return_token_type_ids=return_token_type_ids,
+                    return_length=return_length,
+                    return_tensors=None,
+                )
+                for k in text_encoding:
+                    text_encoding[k] = [video_text_encoding[k] + sample for sample in text_encoding[k]]
             encoding.update(text_encoding)
 
         if images is not None:
             image_encoding = self.video_processor(images, return_tensors=return_tensors)
             encoding.update(image_encoding)
 
+        encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer

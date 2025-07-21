@@ -114,7 +114,6 @@ class InstructBlipProcessor(ProcessorMixin):
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         encoding = {}
-
         if text is not None:
             if isinstance(text, str):
                 text = [text]
@@ -130,22 +129,23 @@ class InstructBlipProcessor(ProcessorMixin):
                 output_kwargs["text_kwargs"]["max_length"] -= self.num_query_tokens
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-            # Image tokens should not be padded/truncated or prepended with special BOS token
-            image_tokens = self.image_token.content * self.num_query_tokens
-            output_kwargs["text_kwargs"]["add_special_tokens"] = False
-            output_kwargs["text_kwargs"]["padding"] = False
-            output_kwargs["text_kwargs"]["truncation"] = False
-            image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
-            for k in text_encoding:
-                text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]
+            if images is not None:
+                # Image tokens should not be padded/truncated or prepended with special BOS token
+                image_tokens = self.image_token.content * self.num_query_tokens
+                output_kwargs["text_kwargs"]["add_special_tokens"] = False
+                output_kwargs["text_kwargs"]["padding"] = False
+                output_kwargs["text_kwargs"]["truncation"] = False
+                image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
+                for k in text_encoding:
+                    text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]
             encoding.update(text_encoding)
-
-            encoding = BatchFeature(data=encoding, tensor_type=return_tensors)
 
         if images is not None:
             image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
 
+        # Cast to desired return tensors type
+        encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
