@@ -147,10 +147,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
         target_device: "torch.device",
         state_dict: Dict[str, Any],
         unexpected_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
         from ..integrations import quantize_to_mxfp4, Mxfp4OpenAIMoeExperts, shuffle_weight, convert_moe_packed_tensors
         from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
         from ..modeling_utils import _load_parameter_into_model
+        from ..integrations.tensor_parallel import shard_and_distribute_module
 
         if not self.pre_quantized:
             module, _ = get_module_from_name(model, param_name)
@@ -187,14 +189,21 @@ class Mxfp4HfQuantizer(HfQuantizer):
         else:
             module, _ = get_module_from_name(model, param_name)
             if isinstance(module, Mxfp4OpenAIMoeExperts):
+                tp_mode = kwargs.get("device_mesh", None) is not None
                 if "gate_up_proj" in param_name:
                     if module.gate_up_proj_blocks.device.type == "meta" and module.gate_up_proj_scales.device.type == "meta":
-                        _load_parameter_into_model(model, param_name, param_value)
+                        if tp_mode:
+                            shard_and_distribute_module(model, param_value, kwargs.get("empty_param"), param_name, kwargs.get("casting_dtype"), kwargs.get("to_contiguous"), kwargs.get("rank"), kwargs.get("device_mesh"))
+                        else:
+                            _load_parameter_into_model(model, param_name, param_value)
                         return
                     else:
-                        # In this case the weights are already on the device, so param_value should be the scale value 
+                        # In this case the weights or the scales are already on the correct device, so param_value should be the other missing param
                         if (module.gate_up_proj_blocks.device != "meta" and "scales" in param_name) or (module.gate_up_proj_scales.device != "meta" and "blocks" in param_name):
-                            _load_parameter_into_model(model, param_name, param_value)
+                            if tp_mode:
+                                shard_and_distribute_module(model, param_value, kwargs.get("empty_param"), param_name, kwargs.get("casting_dtype"), kwargs.get("to_contiguous"), kwargs.get("rank"), kwargs.get("device_mesh"))
+                            else:
+                                _load_parameter_into_model(model, param_name, param_value)
                         else: 
                             raise ValueError(f"Something went horribly wrong mate in gate_up_proj")
                         
@@ -220,11 +229,17 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
                 elif "down_proj" in param_name:
                     if module.down_proj_blocks.device.type == "meta" and module.down_proj_scales.device.type == "meta":
-                        _load_parameter_into_model(model, param_name, param_value)
+                        if tp_mode:
+                            shard_and_distribute_module(model, param_value, kwargs.get("empty_param"), param_name, kwargs.get("casting_dtype"), kwargs.get("to_contiguous"), kwargs.get("rank"), kwargs.get("device_mesh"))
+                        else:
+                            _load_parameter_into_model(model, param_name, param_value)
                         return
                     else:
                         if (module.down_proj_blocks.device != "meta" and "scales" in param_name) or (module.down_proj_scales.device != "meta" and "blocks" in param_name):
-                            _load_parameter_into_model(model, param_name, param_value)
+                            if tp_mode:
+                                shard_and_distribute_module(model, param_value, kwargs.get("empty_param"), param_name, kwargs.get("casting_dtype"), kwargs.get("to_contiguous"), kwargs.get("rank"), kwargs.get("device_mesh"))
+                            else:
+                                _load_parameter_into_model(model, param_name, param_value)
                         else: 
                             raise ValueError(f"Something went horribly wrong mate in down_proj")
                         
@@ -311,6 +326,37 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def update_tp_plan(self, config):
+        config.base_model_tp_plan = {
+        # "embed_tokens": "vocab_parallel_rowwise",
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.self_attn.sinks": "local_rowwise",
+            "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
+            "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
+            "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
+            "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
+            "layers.*.mlp.experts.down_proj_scales": "local_colwise",
+            "layers.*.mlp.experts.down_proj_bias": "local_colwise",
+            # "layers.*.mlp": "gather",
+        }
+        config.base_model_ep_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.self_attn.sinks": "local_rowwise",
+            "layers.*.mlp.experts": "gather",
+            "layers.*.mlp.router": "ep_router",
+            "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
+            "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
+            "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
+        }
+
         return config
 
     def is_serializable(self, safe_serialization=None):

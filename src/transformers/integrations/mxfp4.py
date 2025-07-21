@@ -122,9 +122,6 @@ def convert_moe_packed_tensors(
 # maybe subclass
 class Mxfp4OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
-        from triton_kernels.matmul_ogs import InFlexData, FlexCtx, PrecisionConfig, MicroscalingCtx
-
-        from triton_kernels.numerics_details.mxfp import downcast_to_mxfp, SwizzlingType
 
         super().__init__()
         self.num_experts = config.num_experts if hasattr(config, "num_experts") else config.num_local_experts
@@ -196,7 +193,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                                     value=0)
 
             apply_router_weight_on_input = False
-            
+
             intermediate_cache1 = matmul_ogs(hidden_states,
                                             self.gate_up_proj,
                                             self.gate_up_proj_bias.to(torch.float32),
@@ -228,7 +225,7 @@ def mlp_forward(self, hidden_states):
     from triton_kernels.routing import routing
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False)
+    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False, simulated_ep=2)
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
 

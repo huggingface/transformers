@@ -798,7 +798,19 @@ def _load_state_dict_into_meta_model(
             hf_quantizer,
         )
 
-        if device_mesh is not None:  # In this case, the param is already on the correct device!
+        if device_mesh is not None and (
+                not is_quantized
+                or (not hf_quantizer.requires_parameters_quantization)
+                or (
+                    not hf_quantizer.check_quantized_param(
+                        model,
+                        param,
+                        param_name,
+                        state_dict,
+                        device_map=device_map,
+                    )
+                )
+            ):  # In this case, the param is already on the correct device!
             shard_and_distribute_module(
                 model,
                 param,
@@ -808,6 +820,25 @@ def _load_state_dict_into_meta_model(
                 to_contiguous,
                 device_mesh.get_local_rank(),
                 device_mesh,
+            )
+        elif device_mesh is not None: # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+            sharding_kwargs = {
+                "empty_param": empty_param,
+                "casting_dtype": casting_dtype,
+                "to_contiguous": to_contiguous,
+                "rank": device_mesh.get_local_rank(),
+                "device_mesh": device_mesh
+            }
+            if device_map is None:
+                param_device = "cpu"
+            else:
+                module_layer = re.search(device_map_regex, param_name)
+                if not module_layer:
+                    raise ValueError(f"{param_name} doesn't have any device set.")
+                else:
+                    param_device = device_map[module_layer.group()]
+            hf_quantizer.create_quantized_param(
+                    model, param, param_name, param_device, state_dict, unexpected_keys, **sharding_kwargs
             )
         else:
             param = param[...]
