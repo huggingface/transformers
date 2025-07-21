@@ -605,17 +605,20 @@ class BLTLocalEncoder(nn.Module):
                     hidden_states,
                     position_embeddings,
                     attention_mask,
-                    None,  # past_key_value
-                    False,  # output_attentions
-                    False,  # use_cache
-                    None,  # cache_position
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
                     attention_mask=attention_mask,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
 
@@ -738,9 +741,10 @@ class BLTLocalDecoder(nn.Module):
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
 
-        # Use sequence length from embeds (standard transformers pattern)
-        seq_len = embeds.shape[1]
-        position_ids = torch.arange(seq_len, device=embeds.device).unsqueeze(0).expand(batch_size, -1)
+        # Use passed position_ids if available, otherwise compute from sequence length
+        if position_ids is None:
+            seq_len = embeds.shape[1]
+            position_ids = torch.arange(seq_len, device=embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
@@ -767,17 +771,20 @@ class BLTLocalDecoder(nn.Module):
                     hidden_states,
                     position_embeddings,
                     attention_mask,
-                    None,  # past_key_value
-                    False,  # output_attentions
-                    False,  # use_cache
-                    None,  # cache_position
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
                     attention_mask=attention_mask,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
 
@@ -940,17 +947,20 @@ class BLTGlobalTransformer(nn.Module):
                     hidden_states,
                     position_embeddings,
                     attention_mask,
-                    None,  # past_key_value
-                    False,  # output_attentions
-                    False,  # use_cache
-                    None,  # cache_position
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
                     attention_mask=attention_mask,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
 
@@ -1271,6 +1281,10 @@ class BLTModel(BLTPreTrainedModel):
                 input_embeds=encoder_embeds,
                 patch_embeds=None,
                 attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
                 cross_mask=cross_attn_mask_enc,
                 full_text_row_masked_out_mask=full_text_row_masked_out_mask_enc,
                 num_patches=patch_lengths.shape[1],
@@ -1284,16 +1298,21 @@ class BLTModel(BLTPreTrainedModel):
         global_cache_position = torch.arange(
             0, global_hidden_states.shape[1], device=global_hidden_states.device
         )
+        global_position_ids = global_cache_position.unsqueeze(0)
         global_causal_mask = self._update_causal_mask(
             None,  # attention_mask
             global_hidden_states,
             global_cache_position,
-            None,  # past_key_values
+            None,  # past_key_values - global transformer doesn't use cache
             False  # output_attentions
         )
         global_hidden_states, _, _ = self.global_transformer(
             input_embeds=global_hidden_states,
             attention_mask=global_causal_mask,
+            position_ids=global_position_ids,
+            past_key_values=None,  # Global transformer doesn't use cache
+            use_cache=False,
+            cache_position=global_cache_position,
             output_attentions=False,
             output_hidden_states=False,
         )
@@ -1312,6 +1331,10 @@ class BLTModel(BLTPreTrainedModel):
             embeds=encoder_hidden_states,
             patch_embeds=global_hidden_states,
             attention_mask=causal_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
             mask=None,
             cross_mask=cross_attn_mask_dec,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask_dec,
