@@ -134,8 +134,6 @@ class EvollaConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for the RMS-norm layer in the llama model.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            The pretraining task. 1 for language modeling, 2 for protein sequence modeling.
         rope_theta (`float`, *optional*, defaults to 500000.0):
             The threshold value for the RoPE layer in the llama model.
         rope_scaling (`float`, *optional*):
@@ -211,7 +209,6 @@ class EvollaConfig(PretrainedConfig):
         hidden_act="silu",  # llama activation function
         max_position_embeddings=8192,  # llama rope max length
         rms_norm_eps=1e-05,
-        pretraining_tp=1,
         rope_theta=500000.0,
         rope_scaling=None,
         attention_bias=False,
@@ -230,16 +227,10 @@ class EvollaConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=128000,
         eos_token_id=128009,
-        output_attentions=False,
-        output_hidden_states=False,
         use_cache=False,
         tie_word_embeddings=False,
         **kwargs,
     ):
-        if protein_encoder_config is None:
-            protein_encoder_config = {}
-            logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")
-
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -249,7 +240,6 @@ class EvollaConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
         self.tie_word_embeddings = tie_word_embeddings
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
@@ -258,8 +248,8 @@ class EvollaConfig(PretrainedConfig):
         self.aligner_enable_bias = aligner_enable_bias
         self.aligner_attention_probs_dropout_prob = aligner_attention_probs_dropout_prob
         self.aligner_num_add_layers = aligner_num_add_layers
-
-        self.protein_encoder_config = SaProtConfig(**protein_encoder_config)
+        self.use_cache = use_cache
+        self.initializer_range = initializer_range
 
         self.resampler_depth = resampler_depth
         self.resampler_dim_head = resampler_dim_head
@@ -275,35 +265,19 @@ class EvollaConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        self.initializer_range = initializer_range
+        # Subconfig
+        if protein_encoder_config is None:
+            protein_encoder_config = {}
+            logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")
+        self.protein_encoder_config = SaProtConfig(**protein_encoder_config)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
-        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
-        # updates the config object with `kwargs` from from_pretrained, so during the instantiation
-        # of this object many attributes have default values and haven't yet been overridden.
-        # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
-
-    @classmethod
-    def from_text_vision_configs(cls, protein_encoder_config: SaProtConfig, **kwargs):
-        r"""
-        Instantiate a [`EvollaConfig`] (or a derived class) from evolla protein encoder configuration
-        configuration.
-
-        Returns:
-            [`EvollaConfig`]: An instance of a configuration object
-        """
-
-        return cls(protein_encoder_config=protein_encoder_config.to_dict(), **kwargs)
 
 
 __all__ = ["EvollaConfig"]
