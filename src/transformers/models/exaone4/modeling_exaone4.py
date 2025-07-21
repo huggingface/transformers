@@ -26,7 +26,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, HybridCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -252,10 +252,7 @@ class Exaone4Attention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
@@ -456,13 +453,7 @@ class Exaone4Model(Exaone4PreTrainedModel):
             batch_size, seq_len, _ = inputs_embeds.shape
             # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
             if self.config.sliding_window is None:
-                past_key_values = StaticCache(
-                    self.config,
-                    max_batch_size=batch_size,
-                    max_cache_len=seq_len,
-                    dtype=inputs_embeds.dtype,
-                    device=self.device,
-                )
+                past_key_values = DynamicCache()
             else:
                 past_key_values = HybridCache(
                     self.config,

@@ -21,7 +21,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, HybridCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
@@ -40,7 +40,6 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -48,6 +47,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..olmo2.modeling_olmo2 import Olmo2MLP
 
 
 logger = logging.get_logger(__name__)
@@ -341,10 +341,7 @@ class Exaone4Attention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
@@ -382,12 +379,8 @@ class Exaone4Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Exaone4MLP(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class Exaone4MLP(Olmo2MLP):
+    pass
 
 
 class Exaone4DecoderLayer(nn.Module):
@@ -493,13 +486,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
             batch_size, seq_len, _ = inputs_embeds.shape
             # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
             if self.config.sliding_window is None:
-                past_key_values = StaticCache(
-                    self.config,
-                    max_batch_size=batch_size,
-                    max_cache_len=seq_len,
-                    dtype=inputs_embeds.dtype,
-                    device=self.device,
-                )
+                past_key_values = DynamicCache()
             else:
                 past_key_values = HybridCache(
                     self.config,
