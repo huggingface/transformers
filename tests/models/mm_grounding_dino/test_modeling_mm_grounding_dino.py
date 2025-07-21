@@ -56,6 +56,7 @@ if is_vision_available():
     from transformers import AutoProcessor
 
 
+# Copied from tests.models.grounding_dino.test_modeling_grounding_dino.generate_fake_bounding_boxes
 def generate_fake_bounding_boxes(n_boxes):
     """Generate bounding boxes in the format (center_x, center_y, width, height)"""
     # Validate the input
@@ -89,6 +90,7 @@ def generate_fake_bounding_boxes(n_boxes):
     return bounding_boxes
 
 
+# Copied from tests.models.grounding_dino.test_modeling_grounding_dino.GroundingDinoModelTester with GroundingDino->MMGroundingDino
 class MMGroundingDinoModelTester:
     def __init__(
         self,
@@ -243,6 +245,7 @@ class MMGroundingDinoModelTester:
 
 
 @require_torch
+# Copied from tests.models.grounding_dino.test_modeling_grounding_dino.GroundingDinoModelTest with Grounding->MMGrounding
 class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MMGroundingDinoModel, MMGroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -306,15 +309,15 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="MM Grounding DINO does not use inputs_embeds")
+    @unittest.skip(reason="MMGrounding DINO does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="MM Grounding DINO does not have a get_input_embeddings method")
+    @unittest.skip(reason="MMGrounding DINO does not have a get_input_embeddings method")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="MM Grounding DINO does not use token embeddings")
+    @unittest.skip(reason="MMGrounding DINO does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -587,7 +590,6 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                         or "value_proj" in name
                         or "output_proj" in name
                         or "reference_points" in name
-                        or "class_embed" in name
                     ):
                         continue
                     self.assertIn(
@@ -596,6 +598,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_two_stage_training with DeformableDetr->MMGroundingDino
     def test_two_stage_training(self):
         model_class = MMGroundingDinoForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
