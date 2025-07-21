@@ -588,10 +588,9 @@ class BLTLocalEncoder(nn.Module):
 
         hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training)
 
-        if position_ids is None:
-            position_ids = (
-                torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-            )
+        position_ids = (
+            torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+        )
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
@@ -742,10 +741,10 @@ class BLTLocalDecoder(nn.Module):
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
 
+        # Use passed position_ids if available, otherwise compute from sequence length
         if position_ids is None:
-            position_ids = (
-                torch.arange(embeds.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
-            )
+            seq_len = embeds.shape[1]
+            position_ids = torch.arange(seq_len, device=embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
@@ -935,10 +934,7 @@ class BLTGlobalTransformer(nn.Module):
 
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
 
-        if position_ids is None:
-            position_ids = (
-                torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
-            )
+        position_ids = torch.arange(seq_len, device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, layer in enumerate(self.layers):
@@ -1286,9 +1282,9 @@ class BLTModel(BLTPreTrainedModel):
                 patch_embeds=None,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=None,
-                use_cache=False,
-                cache_position=None, 
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
                 cross_mask=cross_attn_mask_enc,
                 full_text_row_masked_out_mask=full_text_row_masked_out_mask_enc,
                 num_patches=patch_lengths.shape[1],
@@ -1307,16 +1303,16 @@ class BLTModel(BLTPreTrainedModel):
             None,  # attention_mask
             global_hidden_states,
             global_cache_position,
-            None,  # past_key_values 
+            None,  # past_key_values - global transformer doesn't use cache
             False  # output_attentions
         )
         global_hidden_states, _, _ = self.global_transformer(
             input_embeds=global_hidden_states,
             attention_mask=global_causal_mask,
             position_ids=global_position_ids,
-            past_key_values=None,
+            past_key_values=None,  # Global transformer doesn't use cache
             use_cache=False,
-            cache_position=None, 
+            cache_position=global_cache_position,
             output_attentions=False,
             output_hidden_states=False,
         )
