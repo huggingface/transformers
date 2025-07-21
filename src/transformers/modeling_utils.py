@@ -1905,12 +1905,12 @@ class ModuleUtilsMixin:
 class EmbeddingAccessMixin:
     """
     Base utilities to regroup getters and setters for embeddings.
-    Introduces the `input_layer_embed` attribute, which indicates 
+    Introduces the `input_layer_embed` attribute, which indicates
     where the input embeddings come from and where they
     should be set.
     """
 
-    _input_embed_layer = "embed_tokens"  # default layer that holds input embeddings. 
+    _input_embed_layer = "embed_tokens"  # default layer that holds input embeddings.
 
     def get_input_embeddings(self) -> nn.Module:
         """
@@ -1959,7 +1959,7 @@ class EmbeddingAccessMixin:
 
         # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
         name = getattr(self, "_input_embed_layer", "embed_tokens")
-        if hasattr(self, "model") and hasattr(self.model, name): 
+        if hasattr(self, "model") and hasattr(self.model, name):
             setattr(self.model, name, value)
         # 2) as well as vanilla decoder‑only architectures
         elif hasattr(self, name):
@@ -1972,7 +1972,6 @@ class EmbeddingAccessMixin:
             raise NotImplementedError(
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
             )
-
 
     def get_output_embeddings(self):
         if not hasattr(self, "lm_head"):
@@ -2095,7 +2094,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_attention_backend = False
     _can_record_outputs = None
 
-    # This attribute sets the default parameter to be 
+    # This attribute sets the default parameter to be
 
     @property
     @torch._dynamo.allow_in_graph
