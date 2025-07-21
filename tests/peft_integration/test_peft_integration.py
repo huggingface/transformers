@@ -757,7 +757,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.load_adapter(tmpdirname, is_trainable=True)
 
                     for name, module in model.named_modules():
-                        if len(list(module.children())):
+                        if list(module.children()):
                             # only check leaf modules
                             continue
 
