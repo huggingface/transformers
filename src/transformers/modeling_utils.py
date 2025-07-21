@@ -1572,8 +1572,8 @@ def _find_mismatched_keys(
         # Fix the key names
         new_state_dict = {keys_to_rename_mapping[k]: v for k, v in state_dict.items() if k in keys_to_rename_mapping}
 
-        for key in new_state_dict.keys():
-            if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
+        for key, tensor in new_state_dict.items():
+            if key in model_state_dict and tensor.shape != model_state_dict[key].shape:
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
@@ -1582,7 +1582,7 @@ def _find_mismatched_keys(
                     and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
-                    mismatched_shapes.append((new_state_dict[key].shape, model_state_dict[key].shape))
+                    mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
 
     return mismatched_keys, mismatched_shapes
 
@@ -2088,7 +2088,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
-            raise ValueError(
+            raise TypeError(
                 f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
                 "`PretrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
@@ -4522,7 +4522,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
                 # TODO: make device_mesh support multiple dimensions
-                if device_mesh.ndim == 1:
+                if device_mesh.ndim != 1:
                     raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
                 device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 

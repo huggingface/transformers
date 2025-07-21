@@ -1260,7 +1260,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         "SeamlessM4Tv2TextToUnitDecoderLayer",
     ]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -1280,7 +1280,10 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, SeamlessM4Tv2TextToUnitDecoder):
+            module.pos_emb_alpha_char.data.fill_(1)
+            module.pos_emb_alpha.data.fill_(1)
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
@@ -2636,16 +2639,20 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
         return hidden_states, lengths
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan._init_weights
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.apply_weight_norm
     def apply_weight_norm(self):
@@ -2943,7 +2950,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     """
 )
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
-    _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
+    _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
     _tied_weights_keys = [
