@@ -1271,7 +1271,7 @@ class ServeCommand(BaseTransformersCLICommand):
         audio_model, audio_processor = self.load_audio_model_and_processor(model_id_and_revision)
 
         generation_streamer = TextIteratorStreamer(
-            audio_processor.processor, skip_special_tokens=True, skip_prompt=True
+            audio_processor.tokenizer, skip_special_tokens=True, skip_prompt=True
         )
         generation_config = create_generation_config_from_req(
             req, model_generation_config=audio_model.generation_config
