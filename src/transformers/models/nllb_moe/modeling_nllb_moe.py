@@ -850,7 +850,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         std = self.config.init_std
         if isinstance(module, nn.Linear):
@@ -861,6 +861,9 @@ class NllbMoePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):

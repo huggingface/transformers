@@ -40,36 +40,16 @@ from .configuration_mamba import MambaConfig
 logger = logging.get_logger(__name__)
 
 
-def is_fast_path_available():
-    if is_mamba_ssm_available():
-        from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-        from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    else:
-        selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+if is_mamba_ssm_available():
+    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+else:
+    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-    if is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-    else:
-        causal_conv1d_update, causal_conv1d_fn = None, None
-
-    return (
-        all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)),
-        selective_state_update,
-        selective_scan_fn,
-        mamba_inner_fn,
-        causal_conv1d_update,
-        causal_conv1d_fn,
-    )
-
-
-(
-    is_fast_path_available,
-    selective_state_update,
-    selective_scan_fn,
-    mamba_inner_fn,
-    causal_conv1d_update,
-    causal_conv1d_fn,
-) = is_fast_path_available()
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 class MambaCache:
@@ -162,7 +142,8 @@ class MambaCache:
         return self.conv_states[layer_idx]
 
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states[layer_idx].device)
+        self.ssm_states[layer_idx].zero_()
+        self.ssm_states[layer_idx] += new_ssm_state.to(self.ssm_states[layer_idx].device)
         return self.ssm_states[layer_idx]
 
     def reset(self):
@@ -224,6 +205,9 @@ class MambaMixer(nn.Module):
         self.warn_slow_implementation()
 
     def warn_slow_implementation(self):
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
         if not is_fast_path_available:
             if self.use_mambapy:
                 if is_mambapy_available():
@@ -438,6 +422,9 @@ class MambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
@@ -769,37 +756,26 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
-
-        cache_params_not_initialized = cache_params is None
-        if use_cache:
-            if cache_params_not_initialized:
-                max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
-                cache_params = MambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
-                cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
-            # `cache_position` should have been initialized in `generate`
-            if cache_position is None:
-                raise ValueError(
-                    "`cache_position` should not be None as it should have been initialized in "
-                    "`model.generate`, you are responsible for passing in a valid `cache_position` if "
-                    "you are calling `prepare_inputs_for_generation` directly with `use_cache=True`"
-                )
-            if cache_position[0] > 0:
-                input_ids = input_ids[:, -1].unsqueeze(-1)
-
-                if attention_mask is not None:
-                    attention_mask = None
-
+        model_inputs = {"input_ids": input_ids.contiguous()}
+        if use_cache and cache_params is None:
+            # we initialize the `cache_position` to full size of `conv_states` at prefill stage
+            # considering padding will be applied when input length is shorter, and truncation
+            # will be applied when it is longer, so it will be equivalent to always have it match
+            # the length of `cache_params.conv_states`, which is `config.conv_kernel`
+            cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
+            if inputs_embeds is not None:
+                model_inputs = {"inputs_embeds": inputs_embeds}
+                max_batch_size = inputs_embeds.size(0)
             else:
-                # we initialize the `cache_position` to full size of `conv_states` at prefill stage
-                # considering padding will be applied when input length is shorter, and truncation
-                # will be applied when it is longer, so it will be equivalent to always have it match
-                # the length of `cache_params.conv_states`, which is `config.conv_kernel`
-                cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
+                max_batch_size = input_ids.size(0)
+            cache_params = MambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
 
-        if inputs_embeds is not None and cache_params_not_initialized:
+        if use_cache and cache_position[0] > 0:
+            model_inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1).contiguous()
+            attention_mask = None
+
+        if not use_cache and inputs_embeds is not None:
             model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs.update(
             {

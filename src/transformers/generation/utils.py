@@ -1955,9 +1955,9 @@ class GenerationMixin(ContinuousMixin):
     def _supports_default_dynamic_cache(cls) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This adds exception for some models like `Jamba` model which uses its own `HybridMambaAttentionDynamicCache`
+        This adds exception for some models like `Mamba` models which use their own caches
         and do not need to initialize the Cache in advance in order to save memory (because no back and forth
-        `to_legacy_cache` and `from_legacy_cache` will be performed for `HybridMambaAttentionDynamicCache`).
+        `to_legacy_cache` and `from_legacy_cache` will be performed for mamba-based models).
         """
         # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
         return not cls._is_stateful and all(

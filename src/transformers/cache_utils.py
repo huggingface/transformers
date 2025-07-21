@@ -2252,31 +2252,90 @@ class StaticCacheConfig(CacheConfig):
         self.max_cache_len = max_cache_len
         self.device = device
 
-    def validate(self):
-        """Validates if the arguments passed are correct"""
+    def initialise_cache_layer(self, layer_idx, key_states):
+        """Overridden to use the correct device if offloaded layer (and pin memory)."""
+        if len(self.key_cache) > layer_idx:
+            return
 
-        incorrect_arg_msg = (
-            "Some of the keys in `cache_config` are defined incorrectly. `{key}` should be {correct_value}` "
-            "but found {found_value}"
-        )
+        num_key_value_heads = key_states.shape[1]
+        device = key_states.device if self.is_sliding[layer_idx] else self.offload_device
+        pin_memory = not self.is_sliding[layer_idx]
+        global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self.sliding_window, self.head_dim)
+        # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+        # breaks when updating the cache.
+        cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
+        new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=device, pin_memory=pin_memory)
+        new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=device, pin_memory=pin_memory)
+        torch._dynamo.mark_static_address(new_layer_key_cache)
+        torch._dynamo.mark_static_address(new_layer_value_cache)
+        self.key_cache.append(new_layer_key_cache)
+        self.value_cache.append(new_layer_value_cache)
 
-        if self.batch_size <= 0:
-            raise ValueError(
-                incorrect_arg_msg.format(
-                    key="batch_size",
-                    correct_value="> 0",
-                    found_value=self.batch_size,
-                ),
-            )
+        # Make sure to initialize the on-device layer if it does not already exist
+        if self.device_key_cache is None and not self.is_sliding[layer_idx]:
+            self.device_key_cache = []
+            self.device_value_cache = []
+            # We need 2 layers to avoid race conditions when prefetching the next one
+            for _ in range(2):
+                device_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=key_states.device)
+                device_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=key_states.device)
+                torch._dynamo.mark_static_address(new_layer_key_cache)
+                torch._dynamo.mark_static_address(new_layer_value_cache)
+                self.device_key_cache.append(device_layer_key_cache)
+                self.device_value_cache.append(device_layer_value_cache)
 
-        if self.max_cache_len <= 0:
-            raise ValueError(
-                incorrect_arg_msg.format(
-                    key="max_cache_len",
-                    correct_value="> 0",
-                    found_value=self.max_cache_len,
-                ),
-            )
+    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
+        # Wait for prefetch stream if needed
+        if self._prefetch_stream is not None:
+            torch.cuda.default_stream(key_states.device).wait_stream(self._prefetch_stream)
+
+        # Get correct on-device layer
+        k_out = self.device_key_cache[self.active_device_layer]
+        v_out = self.device_value_cache[self.active_device_layer]
+
+        # Let's prefetch the next layer as soon as possible
+        self._prefetch_next_layer(layer_idx)
+
+        # Copy to on-device layer
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        # Copy to offloaded device
+        self.key_cache[layer_idx][:, :, cache_position] = key_states.to(self.offload_device)
+        self.value_cache[layer_idx][:, :, cache_position] = value_states.to(self.offload_device)
+
+        return k_out, v_out
+
+    def _prefetch_next_layer(self, layer_idx: int) -> None:
+        """Based on current layer_idx, prefetch next full layer to the device."""
+
+        # Switch the active layer
+        self.active_device_layer = 0 if self.active_device_layer == 1 else 1
+
+        # Find the next non-sliding layer
+        try:
+            next_layer = layer_idx + 1 + self.is_sliding[layer_idx + 1 :].index(False)
+        # In this case, we are at the last layer, and we go back to prefect the first one
+        except ValueError:
+            next_layer = self.is_sliding.index(False)
+
+        # Alternate between two on-device caches.
+        if self._prefetch_stream is not None:
+            with torch.cuda.stream(self._prefetch_stream):
+                self._prefetch_layer_in_context(next_layer)
+        else:
+            self._prefetch_layer_in_context(next_layer)
+
+    def _prefetch_layer_in_context(self, layer_idx: int) -> None:
+        """Performs the actual copy of the layer to device cache."""
+        if len(self.key_cache) > layer_idx:
+            self.device_key_cache[self.active_device_layer].copy_(self.key_cache[layer_idx], non_blocking=True)
+            self.device_value_cache[self.active_device_layer].copy_(self.value_cache[layer_idx], non_blocking=True)
+        # The layer was not yet initialized
+        else:
+            self.device_key_cache[self.active_device_layer].fill_(0.0)
+            self.device_value_cache[self.active_device_layer].fill_(0.0)
 
 
 # TODO (manuel, joao): remove this class, it is here only for backwards compatibility

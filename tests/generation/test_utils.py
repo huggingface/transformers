@@ -2303,8 +2303,8 @@ class GenerationTesterMixin:
         max_new_tokens = 3
         support_flag = {
             "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn_2",
-            "flash_attention_3": "_supports_flash_attn_3",
+            "flash_attention_2": "_supports_flash_attn",
+            "flash_attention_3": "_supports_flash_attn",
         }
 
         set_model_tester_for_less_flaky_test(self)

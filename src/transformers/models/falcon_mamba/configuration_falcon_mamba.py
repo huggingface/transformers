@@ -81,7 +81,8 @@ class FalconMambaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
         use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
-            Determines the fallback strategy during training if the CUDA-based official implementation of FalconMamba is not available. If `True`, the falcon_mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+            This argument corresponds to `use_mambapy` in MambaConfig.
+            Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
 
