@@ -257,7 +257,7 @@ class BarkProcessor(ProcessorMixin):
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] object containing the output of the `tokenizer`.
             If a voice preset is provided, the returned object will include a `"history_prompt"` key
-            containing a [`BatchFeature`] , i.e the voice preset with the right tensors type.
+            containing a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
             if (
