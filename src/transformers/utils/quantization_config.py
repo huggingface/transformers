@@ -1199,7 +1199,7 @@ class VptqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        for layer_name, layer_param in self.config_for_layers.items():
+        for layer_param in self.config_for_layers.values():
             VptqLayerConfig(**layer_param)
         if self.enable_proxy_error is True:
             raise ValueError("enable_proxy_error should always be False until we support training")
