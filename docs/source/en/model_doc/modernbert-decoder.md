@@ -35,7 +35,7 @@ You can find all the original ModernBERT Decoder checkpoints under the [jhu-clsp
 >
 > Click on the ModernBERT Decoder models in the right sidebar for more examples of how to apply ModernBERT Decoder to different text generation tasks.
 
-The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`] (with and without quantization), and from the command line. 
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -115,6 +115,43 @@ print(f"Prediction probabilities: {predictions}")
 ```
 
 </hfoption>
+
+<hfoption id="AutoModel (w/quantization)">
+
+```
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+)
+
+tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-1b")
+model = AutoModelForCausalLM.from_pretrained(
+    "jhu-clsp/ettin-decoder-1b",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+prompt = "The future of artificial intelligence is"
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model.generate(
+        **inputs,
+        max_length=50,
+        num_return_sequences=1,
+        temperature=0.7,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id
+    )
+
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(f"Generated text: {generated_text}")
+```
+</hfoption>
+
 <hfoption id="transformers CLI">
 
 ```bash
@@ -123,6 +160,7 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 </hfoption>
 </hfoptions>
+
 
 ## ModernBertDecoderConfig
 
@@ -145,15 +183,6 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 [[autodoc]] ModernBertDecoderForSequenceClassification
     - forward
-
-### Usage tips
-
-The ModernBertDecoder model can be fine-tuned for various text generation tasks using the HuggingFace Transformers library. It supports efficient inference with features like:
-
-- **Causal attention**: Ensures autoregressive generation by masking future tokens
-- **Sliding window attention**: Alternates between local and global attention patterns for efficiency
-- **Rotary positional embeddings**: Enables handling of longer sequences up to 8000 tokens
-- **FlashAttention support**: Optimized attention computation for faster training and inference
 
 </pt>
 </frameworkcontent>
