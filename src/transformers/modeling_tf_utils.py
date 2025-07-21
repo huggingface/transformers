@@ -1662,7 +1662,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             # This next block matches outputs to label keys. Tensorflow's standard method for doing this
             # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
             if isinstance(y, dict) and len(y) == 1:
-                if list(y.keys())[0] in y_pred.keys():
+                if list(y.keys())[0] in y_pred:
                     y_pred = y_pred[list(y.keys())[0]]
                 elif list(y_pred.keys())[0] == "loss":
                     y_pred = y_pred[1]
@@ -1769,7 +1769,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         # This next block matches outputs to label keys. Tensorflow's standard method for doing this
         # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
         if isinstance(y, dict) and len(y) == 1:
-            if list(y.keys())[0] in y_pred.keys():
+            if list(y.keys())[0] in y_pred:
                 y_pred = y_pred[list(y.keys())[0]]
             elif list(y_pred.keys())[0] == "loss":
                 y_pred = y_pred[1]
@@ -2464,11 +2464,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
             # in distributed settings to avoid race conditions.
             weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
-            if (
-                filename.startswith(weights_no_suffix)
-                and os.path.isfile(full_filename)
-                and filename not in shards.keys()
-            ):
+            if filename.startswith(weights_no_suffix) and os.path.isfile(full_filename) and filename not in shards:
                 os.remove(full_filename)
 
         if index is None:

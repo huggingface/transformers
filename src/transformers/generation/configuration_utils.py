@@ -1263,7 +1263,7 @@ class GenerationConfig(PushToHubMixin):
         if decoder_config is not model_config:
             default_generation_config = GenerationConfig()
             decoder_config_dict = decoder_config.to_dict()
-            for attr in generation_config.to_dict().keys():
+            for attr in generation_config.to_dict():
                 is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
                 if attr in decoder_config_dict and is_unset:
                     setattr(generation_config, attr, decoder_config_dict[attr])

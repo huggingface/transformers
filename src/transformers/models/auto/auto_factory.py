@@ -425,7 +425,7 @@ class _BaseAutoModelClass:
     def from_config(cls, config, **kwargs):
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
-        has_local_code = type(config) in cls._model_mapping.keys()
+        has_local_code = type(config) in cls._model_mapping
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
@@ -451,13 +451,13 @@ class _BaseAutoModelClass:
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
-        elif type(config) in cls._model_mapping.keys():
+        elif type(config) in cls._model_mapping:
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
+            f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping)}."
         )
 
     @classmethod
@@ -560,7 +560,7 @@ class _BaseAutoModelClass:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
-        has_local_code = type(config) in cls._model_mapping.keys()
+        has_local_code = type(config) in cls._model_mapping
         upstream_repo = None
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
@@ -593,7 +593,7 @@ class _BaseAutoModelClass:
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
-        elif type(config) in cls._model_mapping.keys():
+        elif type(config) in cls._model_mapping:
             model_class = _get_model_class(config, cls._model_mapping)
             if model_class.config_class == config.sub_configs.get("text_config", None):
                 config = config.get_text_config()
@@ -602,7 +602,7 @@ class _BaseAutoModelClass:
             )
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
+            f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping)}."
         )
 
     @classmethod
@@ -820,7 +820,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         mapping_keys = [
             self._load_attr_from_module(key, name)
             for key, name in self._config_mapping.items()
-            if key in self._model_mapping.keys()
+            if key in self._model_mapping
         ]
         return mapping_keys + list(self._extra_content.keys())
 
@@ -837,7 +837,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         mapping_values = [
             self._load_attr_from_module(key, name)
             for key, name in self._model_mapping.items()
-            if key in self._config_mapping.keys()
+            if key in self._config_mapping
         ]
         return mapping_values + list(self._extra_content.values())
 
@@ -847,8 +847,8 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
                 self._load_attr_from_module(key, self._config_mapping[key]),
                 self._load_attr_from_module(key, self._model_mapping[key]),
             )
-            for key in self._model_mapping.keys()
-            if key in self._config_mapping.keys()
+            for key in self._model_mapping
+            if key in self._config_mapping
         ]
         return mapping_items + list(self._extra_content.items())
 
@@ -869,7 +869,7 @@ class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue
         """
         if hasattr(key, "__name__") and key.__name__ in self._reverse_config_mapping:
             model_type = self._reverse_config_mapping[key.__name__]
-            if model_type in self._model_mapping.keys() and not exist_ok:
+            if model_type in self._model_mapping and not exist_ok:
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
 
         self._extra_content[key] = value

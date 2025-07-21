@@ -109,7 +109,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
         ):
             device_map_without_lm_head = {
-                key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
+                key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
             if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass

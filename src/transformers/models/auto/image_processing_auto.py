@@ -603,7 +603,7 @@ class AutoImageProcessor:
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in IMAGE_PROCESSOR_MAPPING_NAMES.keys())}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in IMAGE_PROCESSOR_MAPPING_NAMES)}"
         )
 
     @staticmethod

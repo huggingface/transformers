@@ -1478,11 +1478,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         }
 
         # remove text encoder, audio encoder and decoder kwargs from kwargs
-        for key in kwargs_text_encoder.keys():
+        for key in kwargs_text_encoder:
             del kwargs["text_encoder_" + key]
-        for key in kwargs_audio_encoder.keys():
+        for key in kwargs_audio_encoder:
             del kwargs["audio_encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder

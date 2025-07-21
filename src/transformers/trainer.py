@@ -438,7 +438,7 @@ class Trainer:
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
         if args.batch_eval_metrics and compute_metrics is not None:
-            if "compute_result" not in inspect.signature(compute_metrics).parameters.keys():
+            if "compute_result" not in inspect.signature(compute_metrics).parameters:
                 raise ValueError(
                     "When using `batch_eval_metrics`, your `compute_metrics` function must take a `compute_result`"
                     " boolean argument which will be triggered after the last batch of the eval set to signal that the"
@@ -5245,7 +5245,7 @@ class Trainer:
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 
-        if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
+        if "use_gather_object" in inspect.signature(self.gather_function).parameters:
             self.gather_function = functools.partial(
                 self.gather_function, use_gather_object=self.args.eval_use_gather_object
             )

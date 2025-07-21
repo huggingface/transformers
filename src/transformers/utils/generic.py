@@ -830,7 +830,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs]
                 invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message

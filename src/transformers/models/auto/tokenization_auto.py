@@ -998,7 +998,7 @@ class AutoTokenizer:
             if tokenizer_class_tuple is None:
                 raise ValueError(
                     f"Passed `tokenizer_type` {tokenizer_type} does not exist. `tokenizer_type` should be one of "
-                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES.keys())}."
+                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES)}."
                 )
 
             tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
@@ -1118,7 +1118,7 @@ class AutoTokenizer:
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
+            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING)}."
         )
 
     @staticmethod

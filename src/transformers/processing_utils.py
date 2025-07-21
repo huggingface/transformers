@@ -1187,7 +1187,7 @@ class ProcessorMixin(PushToHubMixin):
         for modality in default_kwargs:  # noqa: PLC0206
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
                 # init with tokenizer init kwargs if necessary
                 if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
@@ -1203,7 +1203,7 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -1236,7 +1236,7 @@ class ProcessorMixin(PushToHubMixin):
             # kwargs is a flat dictionary
             for key, kwarg in kwargs.items():
                 if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
                         output_kwargs["common_kwargs"][key] = kwarg
                     elif key not in possible_modality_keywords:
                         logger.warning_once(
@@ -1495,7 +1495,7 @@ class ProcessorMixin(PushToHubMixin):
         }
 
         for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
                 value = kwargs.pop(key, default_value)

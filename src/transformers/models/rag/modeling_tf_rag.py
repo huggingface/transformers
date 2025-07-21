@@ -322,9 +322,9 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         }
 
         # remove question_encoder, generator kwargs from kwargs
-        for key in kwargs_question_encoder.keys():
+        for key in kwargs_question_encoder:
             del kwargs["question_encoder_" + key]
-        for key in kwargs_generator.keys():
+        for key in kwargs_generator:
             del kwargs["generator_" + key]
 
         # Load and initialize the question_encoder and generator
