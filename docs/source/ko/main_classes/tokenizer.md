@@ -64,7 +64,7 @@ print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
 ## PreTrainedTokenizerFast[[transformers.PreTrainedTokenizerFast]]
 
 [`PreTrainedTokenizerFast`]는 [tokenizers](https://huggingface.co/docs/tokenizers) 라이브러리에 의존합니다. 🤗 tokenizers 라이브러리에서 얻은 토크나이저는
-🤗 transformers로 매우 간단하게 가져올 수 있습니다. 어떻게 하는지 알아보려면 [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) 페이지를 참조하세요.
+🤗 transformers로 매우 간단하게 가져올 수 있습니다. 어떻게 하는지 알아보려면 [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) 페이지를 참고하세요.
 
 [[autodoc]] PreTrainedTokenizerFast
     - __call__
