@@ -2618,7 +2618,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
                     "flash_attention_2"
                 ]
-                applicable_attn_implementation = repo_id"
+                applicable_attn_implementation = repo_id
             except FileNotFoundError as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "

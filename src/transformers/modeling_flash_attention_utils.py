@@ -275,10 +275,16 @@ def _lazy_imports(impl: Optional[str]):
             return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, False
 
         except ImportError as e:
-            print(
-                "Official flash attention import did not work, do you want to try to use `kernels-community/flash-attn` (trust remote code)?"
-            )
-            if input("Yes / No") == "Yes":
+            if not globals().get("use_remote_fa2", None):
+                use_remote_fa2 = (
+                    input(
+                        "Unable to import the official flash attention, do you want to try to use `kernels-community/flash-attn` (trust remote code) Yes or No? "
+                    )
+                    .strip()
+                    .lower()
+                )
+                globals()["use_remote_fa2"] = use_remote_fa2 in {"yes", "y", "1"}
+            if globals()["use_remote_fa2"]:
                 if not is_kernels_available():
                     raise ImportError("You need to install kernels: `pip install kernels`")
                 from kernels import get_kernel
@@ -358,7 +364,20 @@ def _flash_attention_forward(
     implementation: Optional[str] = None,
     **kwargs,
 ):
-    flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3 = _lazy_imports(implementation)
+    if not all(k in globals() for k in ("_flash_fn", "_flash_varlen_fn", "_pad_fn", "_unpad_fn", "_is_fa3")):
+        flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3 = _lazy_imports(implementation)
+        globals()["_flash_fn"] = flash_fn
+        globals()["_flash_varlen_fn"] = flash_varlen_fn
+        globals()["_pad_fn"] = pad_fn
+        globals()["_unpad_fn"] = unpad_fn
+        globals()["_is_fa3"] = is_fa3
+    else:
+        flash_fn = globals()["_flash_fn"]
+        flash_varlen_fn = globals()["_flash_varlen_fn"]
+        pad_fn = globals()["_pad_fn"]
+        unpad_fn = globals()["_unpad_fn"]
+        is_fa3 = globals()["_is_fa3"]
+
     causal = is_causal and not (use_top_left_mask and query_length == 1)
     use_sw = (
         (_flash_supports_window or "window_size" in inspect.signature(flash_varlen_fn).parameters)
