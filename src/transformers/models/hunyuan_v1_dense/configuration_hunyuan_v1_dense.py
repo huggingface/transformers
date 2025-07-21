@@ -1,10 +1,9 @@
 # coding=utf-8
 # Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-""" HunYuan model configuration"""
-from torch import nn
+"""HunYuan model configuration"""
+
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
-from typing import List, Union, Optional
 
 
 logger = logging.get_logger(__name__)
@@ -12,7 +11,7 @@ logger = logging.get_logger(__name__)
 
 class HunYuanDenseV1Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HunYuanModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`HunYuanDenseV1Config`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the HunYuan-7B.
 
@@ -21,9 +20,11 @@ class HunYuanDenseV1Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 290943):
             Vocabulary size of the HunYuan model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`HunYuanModel`]
+            `inputs_ids` passed when calling [`HunYuanDenseV1Config`]
+        org_vocab_size (`int`, *optional*, defaults to 290943):
+            Original vocabulary size of the pre-trained model before any modification.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -40,23 +41,46 @@ class HunYuanDenseV1Config(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
+        attention_head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
+        eod_token_id (int, *optional*, defaults to 3):
+            Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
+            Example: In multi-document processing, this token helps the model distinguish between separate documents.
+        im_start_id (int, *optional*, defaults to 4):
+            Token ID marking the start of an "instruction message" (e.g., system prompt or command input).
+            Typically used in conversational models to delineate meta-instructions from user/content text.
+        im_end_id (int, *optional*, defaults to 5):
+            Token ID marking the end of an instruction message. Paired with `im_start_id` to encapsulate
+            non-content segments like system directives or role definitions (e.g., "assistant:").
+        text_start_id (int, *optional*, defaults to 6):
+            Token ID indicating the beginning of actual content text. Helps the model separate metadata
+            (like instructions) from the primary textual content to be processed or generated.
+        text_end_id (int, *optional*, defaults to 7):
+            Token ID signaling the end of content text. Often used with `text_start_id` to define clear
+            boundaries for the model's text processing scope.
+        im_newline_id (int, *optional*, defaults to 11):
+            Special token ID for newline characters within instruction blocks. Differentiates from regular
+            newlines to handle formatting in structured prompts (e.g., bullet points in system messages).
+        mask_init_id (int, *optional*, defaults to 12):
+            Initial token ID for masking operations. Used in tasks like masked language modeling (MLM)
+            or sequence masking, where this value may serve as a base offset for dynamic mask generation.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -76,14 +100,36 @@ class HunYuanDenseV1Config(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj and down_proj layers in the MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether query and key in attention use norm
+        use_rotary_pos_emb (`bool`, *optional*, defaults to `True`):
+            Whether to use rotary_pos_emb.
         use_cla (`bool`, *optional*, defaults to `False`):
             Whether to use CLA in attention
         cla_share_factor (`int`, *optional*, defaults to 1):
             The share factor of CLA
+        norm_type (str, *optional*, defaults to `"hf_rms"`):
+            Normalization type to use. Supported values are `"hf_rms"` (HuggingFace RMSNorm),
+            `"layer_norm"` (standard LayerNorm), or `"no_norm"` (disabled normalization).
+        add_classification_head (bool, *optional*, defaults to `False`):
+            Whether to add a task-specific classification head on top of the model.
+            If True, requires `class_num` to be set to a positive value.
+        class_num (int, *optional*, defaults to 0):
+            Number of classes for classification task. Ignored if `add_classification_head` is False.
+            Must be >=1 when classification is enabled.
+        pool_type (str, *optional*, defaults to `"last"`):
+            Pooling strategy for sequence outputs. Options:
+            - `"last"`: Use the last token's hidden state
+            - `"mean"`: Mean pooling of all tokens
+        pad_id (int, *optional*, defaults to -1):
+            Token id used for padding sequences. Values <= -1 typically indicate no padding.
+            Should match the tokenizer's pad_token_id if padding is enabled.
+        head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension.
     """
 
     model_type = "hunyuan_v1_dense"
@@ -94,7 +140,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
         vocab_size=290943,
         org_vocab_size=290943,
         hidden_size=4096,
-        intermediate_size: int=11008,
+        intermediate_size: int = 11008,
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
@@ -220,4 +266,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         if rope_scaling_alpha is not None:
             if not isinstance(rope_scaling_alpha, float) or rope_scaling_alpha <= 1.0:
                 raise ValueError(f"`rope_scaling`'s alpha field must be a float > 1.0, got {rope_scaling_alpha}")
+
+
 __all__ = ["HunYuanDenseV1Config"]

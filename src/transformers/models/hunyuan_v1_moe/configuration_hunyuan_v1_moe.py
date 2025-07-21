@@ -1,10 +1,11 @@
 # coding=utf-8
 # Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-""" HunYuan model configuration"""
-from torch import nn
+"""HunYuan model configuration"""
+
+from typing import Optional, Union
+
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
-from typing import List, Union, Optional
 
 
 logger = logging.get_logger(__name__)
@@ -21,9 +22,11 @@ class HunYuanMoeV1Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 290943):
             Vocabulary size of the HunYuan model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`HunYuanModel`]
+        org_vocab_size (`int`, *optional*, defaults to 290943):
+            Original vocabulary size of the pre-trained model before any modification.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -42,23 +45,54 @@ class HunYuanMoeV1Config(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
+        attention_head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
+        eod_token_id (int, *optional*, defaults to 3):
+            Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
+            Example: In multi-document processing, this token helps the model distinguish between separate documents.
+        sep_token_id (`int`, *optional*, defaults to 4):
+            Token ID representing the separator token (`[SEP]`), used to demarcate boundaries between different text segments.
+        im_start_id (int, *optional*, defaults to 5):
+            Token ID marking the start of an "instruction message" (e.g., system prompt or command input).
+            Typically used in conversational models to delineate meta-instructions from user/content text.
+        im_end_id (int, *optional*, defaults to 6):
+            Token ID marking the end of an instruction message. Paired with `im_start_id` to encapsulate
+            non-content segments like system directives or role definitions (e.g., "assistant:").
+        text_start_id (int, *optional*, defaults to 7):
+            Token ID indicating the beginning of actual content text. Helps the model separate metadata
+            (like instructions) from the primary textual content to be processed or generated.
+        text_end_id (int, *optional*, defaults to 8):
+            Token ID signaling the end of content text. Often used with `text_start_id` to define clear
+            boundaries for the model's text processing scope.
+        image_token_id (`int`, *optional*, defaults to 9):
+            Token ID for image embeddings in multimodal models. Marks the start of visual feature inputs (e.g., CLIP embeddings or ViT patch tokens).
+        video_start_id (`int`, *optional*, defaults to 10):
+            Token ID indicating the beginning of video sequence inputs. Used to encapsulate frame-level features or temporal embeddings in video-language tasks.
+        video_end_id (`int`, *optional*, defaults to 11):
+            Token ID signaling the end of video sequences. Paired with `video_start_id` to delineate temporal boundaries in video processing pipelines.
+        im_newline_id (int, *optional*, defaults to 12):
+            Special token ID for newline characters within instruction blocks. Differentiates from regular
+            newlines to handle formatting in structured prompts (e.g., bullet points in system messages).
+        mask_init_id (int, *optional*, defaults to 13):
+            Initial token ID for masking operations. Used in tasks like masked language modeling (MLM)
+            or sequence masking, where this value may serve as a base offset for dynamic mask generation.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -78,24 +112,106 @@ class HunYuanMoeV1Config(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj and down_proj layers in the MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether query and key in attention use norm
+        use_rotary_pos_emb (`bool`, *optional*, defaults to `True`):
+            Whether to use rotary_pos_emb.
         use_cla (`bool`, *optional*, defaults to `False`):
             Whether to use CLA in attention
         cla_share_factor (`int`, *optional*, defaults to 1):
             The share factor of CLA
+        norm_type (str, *optional*, defaults to `"hf_rms"`):
+            Normalization type to use. Supported values are `"hf_rms"` (HuggingFace RMSNorm),
+            `"layer_norm"` (standard LayerNorm), or `"no_norm"` (disabled normalization).
         num_experts (`int` or `List`, *optional*, defaults to 1):
             The number of experts for moe. If it is a list, it will be used as the number of experts for each layer.
-        num_shared_expert (`int` or `List`, *optional*, defaults to 1):
-            The number of shared experts for moe. If it is a list, it will be used as the number of shared experts for each layer.
-        moe_topk (`int` or `List`, *optional*, defaults to 1):
-            The topk value for moe. If it is a list, it will be used as the topk value for each layer.
-        capacity_factor (Not used) (`float` or `List`, *optional*, defaults to 1.0):
-            The capacity factor for moe. If it is a list, it will be used as the capacity factor for each layer.
-        moe_layer_num_skipped (`int`, *optional*, defaults to 0):
-            First moe_layer_num_skipped layers do not use MoE.
+        use_mixed_mlp_moe (bool, *optional*, defaults to `False`):
+            Whether to mix MLP and MoE layers. If True, alternates between dense MLP and sparse MoE layers.
+        num_shared_expert (int or List, *optional*, defaults to 1):
+            Number of shared experts that process all tokens regardless of routing. List form allows per-layer configuration.
+        moe_topk (int or List, *optional*, defaults to 1):
+            Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
+        moe_drop_tokens (bool, *optional*, defaults to `False`):
+            Whether to drop tokens exceeding expert capacity instead of padding.
+        moe_random_routing_dropped_token (bool, *optional*, defaults to `False`):
+            If True, randomly routes dropped tokens to available experts.
+        use_mla (bool, *optional*, defaults to `False`):
+            Enables Multi-Level Attention mechanism for hierarchical routing.
+        kv_lora_rank (int, *optional*, defaults to 512):
+            LoRA rank for key/value projections in attention.
+        q_lora_rank (int, *optional*, defaults to 1536):
+            LoRA rank for query projections.
+        qk_rope_head_dim (int, *optional*, defaults to 64):
+            Head dimension for rotary position embeddings in Q/K.
+        v_head_dim (int, *optional*, defaults to 128):
+            Head dimension for value projections.
+        qk_nope_head_dim (int, *optional*, defaults to 128):
+            Head dimension for Q/K without positional encoding.
+        moe_layer_num_skipped (int, *optional*, defaults to 0):
+            Number of initial layers using standard FFN instead of MoE.
+        norm_topk_prob (bool, *optional*, defaults to `True`):
+            Whether to normalize Top-K expert probabilities.
+        routed_scaling_factor (float, *optional*, defaults to 1.0):
+            Scaling factor for routed expert outputs.
+        group_limited_greedy (bool, *optional*, defaults to `False`):
+            Limits expert selection within predefined groups.
+        n_group (int, *optional*):
+            Number of expert groups for constrained routing.
+        topk_group (int, *optional*):
+            Number of groups to select per token.
+        vit_path (str, *optional*):
+            Path to pretrained ViT weights for multimodal tasks.
+        num_media_embeds (int, *optional*, defaults to 257):
+            Maximum media embeddings for multimodal inputs.
+        vit_type (str, *optional*, defaults to `"AnyResVit"`):
+            ViT architecture variant.
+        vit_input_resolution (int, *optional*, defaults to 224):
+            Input image resolution for ViT.
+        vit_token (int, *optional*, defaults to 64):
+            Number of visual tokens per image.
+        vit_patch (int, *optional*, defaults to 1):
+            Patch size for ViT embedding.
+        vit_mapping_type (str, *optional*, defaults to `"simple_conv_mlp"`):
+            Visual feature mapping method.
+        vit_norm_type (str, *optional*, defaults to `"fused"`):
+            Normalization type in ViT.
+        vit_used_rms_norm (bool, *optional*, defaults to `True`):
+            Whether ViT uses RMSNorm.
+        vit_remove_prenorm (bool, *optional*, defaults to `True`):
+            Removes pre-normalization in ViT blocks.
+        vit_add_patchemb_bias (bool, *optional*, defaults to `True`):
+            Adds bias to patch embeddings.
+        anyres_vit_max_image_size (int, *optional*, defaults to 2048):
+            Maximum resolution for AnyResViT.
+        anyres_pooling_size (int, *optional*, defaults to 2):
+            Pooling size for adaptive resolution.
+        anyres_vit_two_views (bool, *optional*, defaults to `False`):
+            Processes both original and downsampled views.
+        skip_cls_token (bool, *optional*, defaults to `False`):
+            Omits [CLS] token in ViT outputs.
+        position_embedding_xdrope (bool, *optional*, defaults to `False`):
+            Enables cross-dimensional RoPE.
+        xdrope_section (int, *optional*):
+            Section size for cross-dimensional RoPE.
+        add_classification_head (bool, *optional*, defaults to `False`):
+            Whether to add a task-specific classification head on top of the model.
+            If True, requires `class_num` to be set to a positive value.
+        class_num (int, *optional*, defaults to 0):
+            Number of classes for classification task. Ignored if `add_classification_head` is False.
+            Must be >=1 when classification is enabled.
+        pool_type (str, *optional*, defaults to `"last"`):
+            Pooling strategy for sequence outputs. Options:
+            - `"last"`: Use the last token's hidden state
+            - `"mean"`: Mean pooling of all tokens
+        pad_id (int, *optional*, defaults to -1):
+            Token id used for padding sequences. Values <= -1 typically indicate no padding.
+            Should match the tokenizer's pad_token_id if padding is enabled.
+        head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension.
     """
 
     model_type = "hunyuan"
@@ -106,8 +222,8 @@ class HunYuanMoeV1Config(PretrainedConfig):
         vocab_size=290943,
         org_vocab_size=290943,
         hidden_size=4096,
-        intermediate_size: int=11008,
-        moe_intermediate_size: Union[int, List]=None,
+        intermediate_size: int = 11008,
+        moe_intermediate_size: Optional[Union[int, list]] = None,
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
@@ -143,10 +259,10 @@ class HunYuanMoeV1Config(PretrainedConfig):
         use_cla=False,
         cla_share_factor=1,
         norm_type="hf_rms",
-        num_experts: Union[int, List]=1,
+        num_experts: Union[int, list] = 1,
         use_mixed_mlp_moe=False,
-        num_shared_expert: Union[int, List]=1,
-        moe_topk: Union[int, List]=1,
+        num_shared_expert: Union[int, list] = 1,
+        moe_topk: Union[int, list] = 1,
         # capacity_factor: Union[int, List]=1.0,
         moe_drop_tokens=False,
         moe_random_routing_dropped_token=False,
@@ -207,7 +323,6 @@ class HunYuanMoeV1Config(PretrainedConfig):
             self.attention_head_dim = attention_head_dim
         else:
             self.attention_head_dim = self.hidden_size // num_attention_heads
-        
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -319,4 +434,6 @@ class HunYuanMoeV1Config(PretrainedConfig):
         if rope_scaling_alpha is not None:
             if not isinstance(rope_scaling_alpha, float) or rope_scaling_alpha <= 1.0:
                 raise ValueError(f"`rope_scaling`'s alpha field must be a float > 1.0, got {rope_scaling_alpha}")
+
+
 __all__ = ["HunYuanMoeV1Config"]

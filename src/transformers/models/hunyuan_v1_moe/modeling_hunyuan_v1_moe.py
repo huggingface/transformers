@@ -12,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-""" PyTorch HunYuan model."""
+"""PyTorch HunYuan model."""
 
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-from torch import Tensor
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from ...generation import GenerationMixin
+
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import (
@@ -36,7 +35,7 @@ from transformers.modeling_attn_mask_utils import (
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast
+    SequenceClassifierOutputWithPast,
 )
 from transformers.modeling_utils import PreTrainedModel
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
@@ -49,6 +48,8 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
+
+from ...generation import GenerationMixin
 from .configuration_hunyuan_v1_moe import HunYuanMoeV1Config
 
 
@@ -69,6 +70,7 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HunYuanMoeV1Config"
+
 
 def topkgating(logits: Tensor, topk: int):
     logits = logits.float()
@@ -134,7 +136,7 @@ def topkgating(logits: Tensor, topk: int):
     # expert_capacity].
     combine_weights = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
     exp_counts_capacity = torch.sum(dispatch_mask)
-    exp_capacity_rate = exp_counts_capacity / (logits.shape[0]*topk)
+    exp_capacity_rate = exp_counts_capacity / (logits.shape[0] * topk)
 
     return [l_aux, exp_capacity_rate], combine_weights, dispatch_mask, exp_counts
 
@@ -194,7 +196,7 @@ def top1gating(logits: Tensor, random_routing_dropped_token: bool = False):
     mask1_float = mask1.float()
     gates = gates * mask1_float
 
-    locations1_sc = F.one_hot(locations1_s, num_classes=capacity).float()   # one hot to float
+    locations1_sc = F.one_hot(locations1_s, num_classes=capacity).float()  # one hot to float
     combine_weights = torch.einsum("se,sc->sec", gates, locations1_sc)
 
     dispatch_mask = combine_weights.bool()
@@ -353,7 +355,7 @@ class HunYuanDynamicNTKAlphaRotaryEmbedding(HunYuanRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        base = self.base * self.scaling_alpha ** (self.dim / (self.dim-2))
+        base = self.base * self.scaling_alpha ** (self.dim / (self.dim - 2))
         inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -368,24 +370,14 @@ class HunYuanDynamicNTKAlphaRotaryEmbedding(HunYuanRotaryEmbedding):
 
 
 # Inverse dim formula to find dim based on number of rotations
-def yarn_find_correction_dim(
-    num_rotations, dim, base=10000, max_position_embeddings=2048
-):
-    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (
-        2 * math.log(base)
-    )
+def yarn_find_correction_dim(num_rotations, dim, base=10000, max_position_embeddings=2048):
+    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
 
 
 # Find dim range bounds based on rotations
-def yarn_find_correction_range(
-    low_rot, high_rot, dim, base=10000, max_position_embeddings=2048
-):
-    low = math.floor(
-        yarn_find_correction_dim(low_rot, dim, base, max_position_embeddings)
-    )
-    high = math.ceil(
-        yarn_find_correction_dim(high_rot, dim, base, max_position_embeddings)
-    )
+def yarn_find_correction_range(low_rot, high_rot, dim, base=10000, max_position_embeddings=2048):
+    low = math.floor(yarn_find_correction_dim(low_rot, dim, base, max_position_embeddings))
+    high = math.ceil(yarn_find_correction_dim(high_rot, dim, base, max_position_embeddings))
     return max(low, 0), min(high, dim - 1)  # Clamp values just in case
 
 
@@ -405,7 +397,6 @@ def yarn_linear_ramp_mask(min, max, dim):
 
 
 class DeepseekV2YarnRotaryEmbedding(HunYuanRotaryEmbedding):
-
     def __init__(
         self,
         dim,
@@ -431,14 +422,9 @@ class DeepseekV2YarnRotaryEmbedding(HunYuanRotaryEmbedding):
         self.max_seq_len_cached = seq_len
         dim = self.dim
 
-        freq_extra = 1.0 / (
-            self.base
-            ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
-        )
+        freq_extra = 1.0 / (self.base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
         freq_inter = 1.0 / (
-            self.scaling_factor
-            * self.base
-            ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
+            self.scaling_factor * self.base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
         )
 
         low, high = yarn_find_correction_range(
@@ -448,9 +434,7 @@ class DeepseekV2YarnRotaryEmbedding(HunYuanRotaryEmbedding):
             self.base,
             self.original_max_position_embeddings,
         )
-        inv_freq_mask = 1.0 - yarn_linear_ramp_mask(low, high, dim // 2).to(
-            device=device, dtype=torch.float32
-        )
+        inv_freq_mask = 1.0 - yarn_linear_ramp_mask(low, high, dim // 2).to(device=device, dtype=torch.float32)
         inv_freq = freq_inter * (1 - inv_freq_mask) + freq_extra * inv_freq_mask
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -464,18 +448,14 @@ class DeepseekV2YarnRotaryEmbedding(HunYuanRotaryEmbedding):
         )
 
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer(
-            "cos_cached", (emb.cos() * _mscale).to(dtype), persistent=False
-        )
-        self.register_buffer(
-            "sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False
-        )
+        self.register_buffer("cos_cached", (emb.cos() * _mscale).to(dtype), persistent=False)
+        self.register_buffer("sin_cached", (emb.sin() * _mscale).to(dtype), persistent=False)
 
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -511,6 +491,7 @@ class HunYuanMLP(nn.Module):
     """
     使用 SwiGLU 的 MLP
     """
+
     def __init__(self, config: HunYuanMoeV1Config, layer_idx=None, is_shared_mlp=False):
         super().__init__()
         self.config = config
@@ -618,7 +599,7 @@ class HunYuanAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         # layer_idx 从 0 开始
-        self.attention_type = 'cross' if config.use_cla and layer_idx % config.cla_share_factor != 0 else 'self'
+        self.attention_type = "cross" if config.use_cla and layer_idx % config.cla_share_factor != 0 else "self"
         if layer_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
@@ -640,10 +621,14 @@ class HunYuanAttention(nn.Module):
         self.use_qk_norm = config.use_qk_norm
         self.use_rotary_pos_emb = config.use_rotary_pos_emb
 
-        if self.attention_type == 'self':
+        if self.attention_type == "self":
             self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-            self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-            self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+            self.k_proj = nn.Linear(
+                self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            )
+            self.v_proj = nn.Linear(
+                self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            )
         else:
             self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
 
@@ -722,7 +707,7 @@ class HunYuanAttention(nn.Module):
         use_cache: bool = False,
         kv_states: torch.Tensor = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use "
@@ -835,7 +820,7 @@ class HunYuanFlashAttention2(HunYuanAttention):
         use_cache: bool = False,
         kv_states: torch.Tensor = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         # HunYuanFlashAttention2 attention does not support output_attentions
         if "padding_mask" in kwargs:
             warnings.warn(
@@ -1033,13 +1018,13 @@ class HunYuanSdpaAttention(HunYuanAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         kv_states: torch.Tensor = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             logger.warning_once(
-                'HunYuanModel is using HunYuanSdpaAttention,'
-                'but `torch.nn.functional.scaled_dot_product_attention`'
-                'does not support `output_attentions=True`. Falling back to the manual attention implementation, '
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. '
+                "HunYuanModel is using HunYuanSdpaAttention,"
+                "but `torch.nn.functional.scaled_dot_product_attention`"
+                "does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                 'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -1123,6 +1108,7 @@ HUNYUAN_ATTENTION_CLASSES = {
     "sdpa": HunYuanSdpaAttention,
 }
 
+
 class HunYuanDecoderLayer(nn.Module):
     def __init__(self, config: HunYuanMoeV1Config, layer_idx: int):
         super().__init__()
@@ -1132,12 +1118,12 @@ class HunYuanDecoderLayer(nn.Module):
         self.self_attn = HUNYUAN_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = HunYuanMoE(config, layer_idx=layer_idx)
-        
-        if config.norm_type == 'hf_rms' or config.norm_type == 'rms':
+
+        if config.norm_type == "hf_rms" or config.norm_type == "rms":
             self.input_layernorm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
             self.post_attention_layernorm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        elif config.norm_type == 'fused' or config.norm_type == 'torch_nn':
-            self.input_layernorm = norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        elif config.norm_type == "fused" or config.norm_type == "torch_nn":
+            self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
             self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
         else:
             assert False, "other norm_type are not supported"
@@ -1147,12 +1133,12 @@ class HunYuanDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        kv_states: Optional[Tuple[torch.Tensor]] = None,
+        kv_states: Optional[tuple[torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1369,13 +1355,13 @@ class HunYuanModel(HunYuanPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1417,7 +1403,7 @@ class HunYuanModel(HunYuanPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        
+
         # Fix lora with gradient checkpointing training
         if self.training and inputs_embeds.is_leaf:
             inputs_embeds.requires_grad = True
@@ -1472,7 +1458,7 @@ class HunYuanModel(HunYuanPreTrainedModel):
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    kv_states=prev_kv_states
+                    kv_states=prev_kv_states,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1550,14 +1536,14 @@ class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1656,7 +1642,7 @@ class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
         if self.add_classification_head:
-            output['reward'] = reward
+            output["reward"] = reward
 
         return output
 
@@ -1677,7 +1663,7 @@ class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
             # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length):]
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
             elif past_length < input_ids.shape[1]:
@@ -1698,7 +1684,7 @@ class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1]:]
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1763,14 +1749,14 @@ class HunYuanForSequenceClassification(HunYuanPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1846,6 +1832,8 @@ class HunYuanForSequenceClassification(HunYuanPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
 __all__ = [
     "HunYuanMoEV1ForCausalLM",
     "HunYuanModel",

@@ -2,10 +2,12 @@ import base64
 import logging
 import os
 import unicodedata
-from typing import Collection, Dict, List, Set, Tuple, Union
+from typing import Collection, Optional, Union
 
 import tiktoken
-from transformers import PreTrainedTokenizer, AddedToken
+
+from transformers import AddedToken, PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,8 @@ EXTRAS = tuple((f"<|extra_{i}|>" for i in range(205)))
 
 SPECIAL_START_ID = 127957
 
-def _load_tiktoken_bpe(tiktoken_bpe_file: str) -> Dict[bytes, int]:
+
+def _load_tiktoken_bpe(tiktoken_bpe_file: str) -> dict[bytes, int]:
     # with open(tiktoken_bpe_file, "rb") as f:
     #     contents = f.read()
     dic = {}
@@ -42,8 +45,9 @@ def _load_tiktoken_bpe(tiktoken_bpe_file: str) -> Dict[bytes, int]:
             dic[base64.b64decode(token)] = int(rank)
             rank += 1
     global SPECIAL_START_ID
-    SPECIAL_START_ID=rank
+    SPECIAL_START_ID = rank
     return dic
+
 
 # NOTE: Please use the code line to check `SPECIAL_START_ID` right, this will affect the SPECIAL_START_ID
 # _load_tiktoken_bpe('/apdcephfs/share_1502809/shaneshu/tokenizer_exp/other_tokenizer_vocab/hy/' + VOCAB_FILES_NAMES['vocab_file'])
@@ -65,7 +69,8 @@ SPECIAL_TOKENS = tuple(
     )
 )
 # NOTE: Unused Token ID starts from 127962
-SPECIAL_TOKENS_SET = set(t for i, t in SPECIAL_TOKENS)
+SPECIAL_TOKENS_SET = {t for _, t in SPECIAL_TOKENS}
+
 
 class HYTokenizer(PreTrainedTokenizer):
     """hunyuan tokenizer."""
@@ -83,13 +88,10 @@ class HYTokenizer(PreTrainedTokenizer):
 
         # how to handle errors in decoding UTF-8 byte sequences
         # use ignore if you are in streaming inference
-        self.errors = errors  
+        self.errors = errors
 
         self.mergeable_ranks = _load_tiktoken_bpe(vocab_file)  # type: Dict[bytes, int]
-        self.special_tokens = {
-            token: index
-            for index, token in SPECIAL_TOKENS
-        }
+        self.special_tokens = {token: index for index, token in SPECIAL_TOKENS}
 
         # try load extra vocab from file
         if extra_vocab_file is not None:
@@ -100,7 +102,7 @@ class HYTokenizer(PreTrainedTokenizer):
                     logger.info(f"extra token {token} exists, skipping")
                     continue
                 if index in used_ids:
-                    logger.info(f'the index {index} for extra token {token} exists, skipping')
+                    logger.info(f"the index {index} for extra token {token} exists, skipping")
                     continue
                 self.mergeable_ranks[token] = index
             # the index may be sparse after this, but don't worry tiktoken.Encoding will handle this
@@ -111,13 +113,11 @@ class HYTokenizer(PreTrainedTokenizer):
             mergeable_ranks=self.mergeable_ranks,
             special_tokens=self.special_tokens,
         )
-        assert (
-            len(self.mergeable_ranks) + len(self.special_tokens) == enc.n_vocab
-        ), f"{len(self.mergeable_ranks)} + {len(self.special_tokens)} != {enc.n_vocab} in encoding"
+        assert len(self.mergeable_ranks) + len(self.special_tokens) == enc.n_vocab, (
+            f"{len(self.mergeable_ranks)} + {len(self.special_tokens)} != {enc.n_vocab} in encoding"
+        )
 
-        self.decoder = {
-            v: k for k, v in self.mergeable_ranks.items()
-        }  # type: dict[int, bytes|str]
+        self.decoder = {v: k for k, v in self.mergeable_ranks.items()}  # type: dict[int, bytes|str]
         self.decoder.update({v: k for k, v in self.special_tokens.items()})
 
         self.tokenizer = enc  # type: tiktoken.Encoding
@@ -148,12 +148,10 @@ class HYTokenizer(PreTrainedTokenizer):
     def __len__(self) -> int:
         return self.tokenizer.n_vocab
 
-    def get_vocab(self) -> Dict[bytes, int]:
+    def get_vocab(self) -> dict[bytes, int]:
         return self.mergeable_ranks
 
-    def convert_tokens_to_ids(
-        self, tokens: Union[bytes, str, List[Union[bytes, str]]]
-    ) -> List[int]:
+    def convert_tokens_to_ids(self, tokens: Union[bytes, str, list[Union[bytes, str]]]) -> list[int]:
         ids = []
         if isinstance(tokens, (str, bytes)):
             if tokens in self.special_tokens:
@@ -169,7 +167,7 @@ class HYTokenizer(PreTrainedTokenizer):
 
     def _add_tokens(
         self,
-        new_tokens: Union[List[str], List[AddedToken]],
+        new_tokens: Union[list[str], list[AddedToken]],
         special_tokens: bool = False,
     ) -> int:
         if not special_tokens and new_tokens:
@@ -180,7 +178,7 @@ class HYTokenizer(PreTrainedTokenizer):
                 raise ValueError("Adding unknown special tokens is not supported")
         return 0
 
-    def save_vocabulary(self, save_directory: str, **kwargs) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, **kwargs) -> tuple[str]:
         """
         Save only the vocabulary of the tokenizer (vocabulary).
         Returns:
@@ -196,10 +194,10 @@ class HYTokenizer(PreTrainedTokenizer):
     def tokenize(
         self,
         text: str,
-        allowed_special: Union[Set, str] = "all",
+        allowed_special: Union[set, str] = "all",
         disallowed_special: Union[Collection, str] = (),
         **kwargs,
-    ) -> List[Union[bytes, str]]:
+    ) -> list[Union[bytes, str]]:
         """
         Converts a string in a sequence of tokens.
         Args:
@@ -220,13 +218,11 @@ class HYTokenizer(PreTrainedTokenizer):
         text = unicodedata.normalize("NFC", text)
 
         # this implementation takes a detour: text -> token id -> token surface forms
-        for t in self.tokenizer.encode(
-            text, allowed_special=allowed_special, disallowed_special=disallowed_special
-        ):
+        for t in self.tokenizer.encode(text, allowed_special=allowed_special, disallowed_special=disallowed_special):
             tokens.append(self.decoder[t])
         return tokens
 
-    def convert_tokens_to_string(self, tokens: List[Union[bytes, str]]) -> str:
+    def convert_tokens_to_string(self, tokens: list[Union[bytes, str]]) -> str:
         """
         Converts a sequence of tokens in a single string.
         """
@@ -274,9 +270,9 @@ class HYTokenizer(PreTrainedTokenizer):
 
     def _decode(
         self,
-        token_ids: Union[int, List[int]],
+        token_ids: Union[int, list[int]],
         skip_special_tokens: bool = False,
-        errors: str = None,
+        errors: Optional[str] = None,
         **kwargs,
     ) -> str:
         if isinstance(token_ids, int):
@@ -285,10 +281,11 @@ class HYTokenizer(PreTrainedTokenizer):
             token_ids = [i for i in token_ids if i < self.eod_id]
         return self.tokenizer.decode(token_ids, errors=errors or self.errors)
 
+
 # tests
 if __name__ == "__main__":
-    tokenizer = HYTokenizer.from_pretrained('/apdcephfs/share_1502809/shaneshu/tokenizer_exp/other_tokenizer_vocab/hy')
-    text = '你好，世界'
+    tokenizer = HYTokenizer.from_pretrained("/apdcephfs/share_1502809/shaneshu/tokenizer_exp/other_tokenizer_vocab/hy")
+    text = "你好，世界"
     tokens = tokenizer.tokenize(text)
     print(tokens)
     ids = tokenizer.convert_tokens_to_ids(tokens)
@@ -296,6 +293,4 @@ if __name__ == "__main__":
     text2 = tokenizer.convert_tokens_to_string(tokens)
     print(text2)
     ids2 = tokenizer.convert_tokens_to_ids(tokens)
-__all__ = [
-    "HYTokenizer"
-]
+__all__ = ["HYTokenizer"]
