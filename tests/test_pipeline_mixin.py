@@ -139,7 +139,7 @@ task_to_pipeline_and_spec_mapping = {
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
-for task, task_info in pipeline_test_mapping.items():
+for task_info in pipeline_test_mapping.values():
     test = task_info["test"]
     task_info["mapping"] = {
         "pt": getattr(test, "model_mapping", None),

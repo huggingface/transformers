@@ -925,21 +925,15 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     constructor argument. If set to `True`, the output will be stored in the pickle format.
     """
 
-    # Historically we have pipelines working with `tokenizer`, `feature_extractor`, and `image_processor`
-    # as separate processing components. While we have `processor` class that combines them, some pipelines
-    # might still operate with these components separately.
-    # With the addition of `processor` to `pipeline`, we want to avoid:
-    #  - loading `processor` for pipelines that still work with `image_processor` and `tokenizer` separately;
-    #  - loading `image_processor`/`tokenizer` as a separate component while we operate only with `processor`,
-    #    because `processor` will load required sub-components by itself.
-    # Below flags allow granular control over loading components and set to be backward compatible with current
-    # pipelines logic. You may override these flags when creating your pipeline. For example, for
-    # `zero-shot-object-detection` pipeline which operates with `processor` you should set `_load_processor=True`
-    # and all the rest flags to `False` to avoid unnecessary loading of the components.
-    _load_processor = False
-    _load_image_processor = True
-    _load_feature_extractor = True
-    _load_tokenizer = True
+    # These flags should be overridden for downstream pipelines. They indicate which preprocessing classes are
+    # used by each pipeline. The possible values are:
+    # - True (the class is mandatory, raise an error if it's not present in the repo)
+    # - None (the class is optional; it should be loaded if present in the repo but the pipeline can work without it)
+    # - False (the class is never used by the pipeline and should not be loaded even if present)
+    _load_processor = None
+    _load_image_processor = None
+    _load_feature_extractor = None
+    _load_tokenizer = None
 
     # Pipelines that call `generate` have shared logic, e.g. preparing the generation config.
     _pipeline_calls_generate = False
@@ -1033,7 +1027,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = device if device is not None else -1
 
-        if is_torch_available() and torch.distributed.is_initialized():
+        if is_torch_available() and torch.distributed.is_available() and torch.distributed.is_initialized():
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
@@ -1294,14 +1288,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if self.task in SUPPORTED_PEFT_TASKS:
                 supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
 
-            for _, model_name in supported_models.items():
+            for model_name in supported_models.values():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):
                     supported_models_names.extend(list(model_name))
                 else:
                     supported_models_names.append(model_name)
             if hasattr(supported_models, "_model_mapping"):
-                for _, model in supported_models._model_mapping._extra_content.items():
+                for model in supported_models._model_mapping._extra_content.values():
                     if isinstance(model_name, tuple):
                         supported_models_names.extend([m.__name__ for m in model])
                     else:

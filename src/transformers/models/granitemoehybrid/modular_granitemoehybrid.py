@@ -124,7 +124,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             # No attention weights for state space layers
             self_attn_weights = None
         else:
-            hidden_states, self_attn_weights, _ = self.self_attn(
+            hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 past_key_value=past_key_value,
@@ -155,9 +155,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (past_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
@@ -165,7 +162,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
 
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
-    config_class = GraniteMoeHybridConfig
+    config: GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
@@ -260,7 +257,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
@@ -282,9 +278,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 if layer_outputs[1] is not None:
                     # append attentions only of attention layers. Mamba layers return `None` as the attention weights
@@ -301,11 +294,12 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
@@ -360,7 +354,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
-        else:
+        elif use_cache:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
@@ -388,15 +382,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
             }
         )
         return model_inputs
-
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
-        and do not need to initialize the Cache in advance in order to save memory
-        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
 
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

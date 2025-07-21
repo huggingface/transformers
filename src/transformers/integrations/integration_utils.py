@@ -23,6 +23,7 @@ import json
 import numbers
 import os
 import pickle
+import re
 import shutil
 import sys
 import tempfile
@@ -33,6 +34,10 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
+
+
+if os.getenv("WANDB_MODE") == "offline":
+    print("⚙️  Running in WANDB offline mode")
 
 from .. import PreTrainedModel, TFPreTrainedModel, TrainingArguments
 from .. import __version__ as version
@@ -763,7 +768,7 @@ class WandbLogModel(str, Enum):
     @classmethod
     def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
-            raise ValueError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
+            raise TypeError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
         if value.upper() in ENV_VARS_TRUE_VALUES:
             raise DeprecationWarning(
                 f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
@@ -860,7 +865,7 @@ class WandbCallback(TrainerCallback):
                     **init_args,
                 )
             # add config parameters (run may have been created manually)
-            self._wandb.config.update(combined_dict, allow_val_change=True)
+            self._wandb.config.update(combined_dict or {}, allow_val_change=True)
 
             # define default x-axis (for latest wandb versions)
             if getattr(self._wandb, "define_metric", None):
@@ -1341,10 +1346,13 @@ class MLflowCallback(TrainerCallback):
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
 
+            # sanitize metric names to replace unsupported characters like parentheses
+            sanitized_metrics = {re.sub(r"[^0-9A-Za-z_\-\.\ :/]", "_", k): v for k, v in metrics.items()}
+
             if self._async_log:
-                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
+                self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step, synchronous=False)
             else:
-                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+                self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:

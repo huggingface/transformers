@@ -598,13 +598,13 @@ class SegGptDecoder(nn.Module):
 
 @auto_docstring
 class SegGptPreTrainedModel(PreTrainedModel):
-    config_class = SegGptConfig
+    config: SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -615,7 +615,7 @@ class SegGptPreTrainedModel(PreTrainedModel):
             )
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, SegGptAttention):

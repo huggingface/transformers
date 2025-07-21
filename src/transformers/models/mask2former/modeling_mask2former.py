@@ -512,7 +512,7 @@ class Mask2FormerLoss(nn.Module):
         self.importance_sample_ratio = config.importance_sample_ratio
 
         self.matcher = Mask2FormerHungarianMatcher(
-            cost_class=1.0,
+            cost_class=config.class_weight,
             cost_dice=config.dice_weight,
             cost_mask=config.mask_weight,
             num_points=self.num_points,
@@ -2085,7 +2085,7 @@ class Mask2FormerTransformerModule(nn.Module):
 
 @auto_docstring
 class Mask2FormerPreTrainedModel(PreTrainedModel):
-    config_class = Mask2FormerConfig
+    config: Mask2FormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

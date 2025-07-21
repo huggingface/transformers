@@ -172,9 +172,9 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
 
->>> def map_to_array(batch):
-...     batch["speech"] = batch["audio"]["array"]
-...     return batch
+>>> def map_to_array(example):
+...     example["speech"] = example["audio"]["array"]
+...     return example
 
 
 >>> # prepare speech data for batch inference
