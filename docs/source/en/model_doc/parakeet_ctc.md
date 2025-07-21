@@ -38,15 +38,12 @@ ds = ds.cast_column("audio", Audio(sampling_rate=16000))
 
 # Convert numpy array to tensor efficiently
 audio_array = ds[0]['audio']['array']
-raw_audio = torch.from_numpy(audio_array).unsqueeze(0)  # Add batch dimension
-audio_lengths = torch.tensor([len(audio_array)])
+raw_audio = torch.from_numpy(audio_array)
 
-# Extract mel-spectrogram features
+# Extract mel-spectrogram features (automatic padding)
 inputs = feature_extractor(
     raw_audio, 
-    audio_lengths=audio_lengths, 
-    sampling_rate=16000,
-    return_tensors="pt"
+    sampling_rate=16000
 )
 
 # Get CTC outputs
@@ -92,15 +89,12 @@ ds = ds.cast_column("audio", Audio(sampling_rate=16000))
 
 # Convert numpy array to tensor efficiently
 audio_array = ds[0]['audio']['array']
-raw_audio = torch.from_numpy(audio_array).unsqueeze(0)  # Add batch dimension
-audio_lengths = torch.tensor([len(audio_array)])
+raw_audio = torch.from_numpy(audio_array)
 
-# Extract features
+# Extract features (automatic length inference and padding)
 inputs = feature_extractor(
     raw_audio, 
-    audio_lengths=audio_lengths, 
-    sampling_rate=16000,
-    return_tensors="pt"
+    sampling_rate=16000
 )
 
 # Forward pass
@@ -124,7 +118,7 @@ print("Transcription:", text)
 
 ### Batch Processing
 
-ParakeetCTC efficiently handles batches of audio samples with different lengths:
+ParakeetCTC efficiently handles batches of audio samples with different lengths when passed as a list. The feature extractor automatically handles padding and length computation:
 
 ```python
 import torch
@@ -143,20 +137,11 @@ ds = ds.cast_column("audio", Audio(sampling_rate=16000))
 audio1 = torch.from_numpy(ds[0]['audio']['array'])  # First sample
 audio2 = torch.from_numpy(ds[1]['audio']['array'])  # Second sample
 
-# Pad to same length for batching
-max_length = max(len(audio1), len(audio2))
-padded_audio1 = torch.cat([audio1, torch.zeros(max_length - len(audio1))])
-padded_audio2 = torch.cat([audio2, torch.zeros(max_length - len(audio2))])
+batch_audio = [audio1, audio2]  # Simply pass as list for automatic padding
 
-batch_audio = torch.stack([padded_audio1, padded_audio2])
-audio_lengths = torch.tensor([len(audio1), len(audio2)])
-
-# Extract features with proper length handling
 inputs = feature_extractor(
     batch_audio,
-    audio_lengths=audio_lengths,
-    sampling_rate=16000,
-    return_tensors="pt"
+    sampling_rate=16000
 )
 
 # Process through model

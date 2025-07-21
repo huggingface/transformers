@@ -17,10 +17,12 @@ Feature extractor class for FastConformer
 """
 
 import warnings
+from collections.abc import Sequence
 from typing import Any, Optional, Union
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
+from ...tokenization_utils_base import AudioInput
 from ...utils import TensorType, is_librosa_available, is_torch_available, logging, requires_backends
 
 
@@ -72,8 +74,6 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             Mel filterbank normalization.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
-        return_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether to return attention mask for proper sequence length handling.
     """
 
     model_input_names = ["input_features"]
@@ -93,7 +93,6 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         mag_power=2.0,
         mel_scale="slaney",
         padding_value=0.0,
-        return_attention_mask=True,
         **kwargs,
     ):
         requires_backends(self, ["librosa"])
@@ -102,7 +101,6 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             feature_size=feature_size,
             sampling_rate=sampling_rate,
             padding_value=padding_value,
-            return_attention_mask=return_attention_mask,
             **kwargs,
         )
 
@@ -293,30 +291,74 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
 
         return normalized_mel.to(original_dtype)
 
+    def _get_audios_and_audio_lengths(self, audios: AudioInput) -> tuple["torch.Tensor", Sequence[int]]:
+        """
+        Coerces audio inputs to torch tensors and extracts audio lengths prior to stacking.
+
+        Args:
+            audios (`AudioInput`):
+                Audio sequence, numpy array, or torch tensor.
+        """
+        requires_backends(self, ["torch"])
+        import numpy as np
+
+        # Handle different input types
+        if isinstance(audios, np.ndarray):
+            # Single numpy array
+            audios = torch.from_numpy(audios)
+        elif isinstance(audios, (list, tuple)) and len(audios) > 0:
+            if isinstance(audios[0], np.ndarray):
+                # List of numpy arrays
+                audios = [torch.from_numpy(arr) for arr in audios]
+            elif not isinstance(audios[0], torch.Tensor):
+                # Convert list of numbers to tensor
+                audios = [torch.tensor(arr, dtype=torch.float32) for arr in audios]
+
+        if isinstance(audios, torch.Tensor):
+            if audios.ndim == 1:
+                audios = audios.unsqueeze(0)
+            if not torch.is_floating_point(audios):
+                audios = audios.float()
+
+            if audios.shape[0] > 1:
+                logger.warning("Audio samples are already collated; assuming they all have the same length")
+            lengths = [audios.shape[-1]] * audios.shape[0]
+            return audios, lengths
+
+        elif isinstance(audios, Sequence) and isinstance(audios[0], torch.Tensor):
+            if not torch.is_floating_point(audios[0]):
+                audios = [audio.float() for audio in audios]
+            lengths = [audio.shape[-1] if audio.dim() > 0 else audio.numel() for audio in audios]
+            # Squeeze and handle different tensor shapes
+            squeezed_audios = []
+            for audio in audios:
+                if audio.dim() > 1:
+                    squeezed_audios.append(audio.squeeze())
+                else:
+                    squeezed_audios.append(audio)
+            audios = torch.nn.utils.rnn.pad_sequence(squeezed_audios, batch_first=True, padding_value=0.0)
+            return audios, lengths
+
+        raise TypeError(f"Invalid audio provided. Audio should be torch tensors, numpy arrays, or sequences thereof. Got {type(audios)}")
+
     def __call__(
         self,
-        raw_speech: "torch.Tensor",
-        audio_lengths: Optional["torch.Tensor"] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
-        sampling_rate: Optional[int] = None,
+        audios: AudioInput,
+        sampling_rate: Optional[int] = 16000,
         device: Optional[str] = None,
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s).
+        Main method to featurize and prepare for the model one or several audio sequence(s).
 
         Args:
-            raw_speech (`torch.Tensor`):
-                Batch of audio sequences as a torch tensor with shape (B, T) where B is batch size and T is time.
-            audio_lengths (`torch.Tensor`, *optional*):
-                Tensor of shape (B,) containing the actual length of each audio sequence. If None, assumes all sequences use the full length.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
+            audios (`AudioInput`):
+                Audio sequence(s) as torch tensor(s), numpy array(s), or list of arrays. Can be:
+                - A single torch tensor of shape (T,) or (B, T)
+                - A list of torch tensors/numpy arrays of varying lengths
+                - A single numpy array
+                Audio lengths are automatically inferred and padding is handled internally.
             sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                The sampling rate at which the audio input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the call for clarity.
             device (`str`, *optional*):
                 The device to use for computation and output tensors. If None, uses the same device as the input tensor.
@@ -334,7 +376,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
                     f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
-                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided audio input"
                     f" was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
@@ -343,25 +385,12 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        # Validate input format
-        if not isinstance(raw_speech, torch.Tensor):
-            raise ValueError(f"Expected raw_speech to be a torch.Tensor, got {type(raw_speech)}")
+        # Get audio tensors and lengths using helper method
+        batch_audio, audio_lengths = self._get_audios_and_audio_lengths(audios)
+        batch_audio = batch_audio.float()
 
-        if raw_speech.dim() != 2:
-            raise ValueError(f"Expected raw_speech to have shape (B, T), got shape {raw_speech.shape}")
-
-        batch_audio = raw_speech.float()
-
-        # Get sequence lengths
-        if audio_lengths is None:
-            # Assume all sequences use the full length
-            audio_lengths = torch.full((batch_audio.shape[0],), batch_audio.shape[1], dtype=torch.long)
-        else:
-            # Validate provided audio_lengths
-            if audio_lengths.shape[0] != batch_audio.shape[0]:
-                raise ValueError(
-                    f"audio_lengths batch size {audio_lengths.shape[0]} != audio batch size {batch_audio.shape[0]}"
-                )
+        # Convert audio_lengths to tensor
+        audio_lengths = torch.tensor(audio_lengths, dtype=torch.long)
 
         # Determine target device: use explicit device parameter, otherwise use input tensor's device
         target_device = device if device is not None else batch_audio.device
@@ -387,7 +416,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         max_frames = input_features.shape[1]
         attention_mask = torch.arange(max_frames, device=target_device).unsqueeze(0) < seq_lens.unsqueeze(1)
 
-        # Prepare output
+        # Prepare output - always return PyTorch tensors
         encoded_inputs = BatchFeature(
             {
                 "input_features": input_features,
@@ -395,16 +424,6 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
                 "input_lengths": seq_lens,  # Add sequence lengths for encoder
             }
         )
-
-        # Convert to requested tensor format
-        if return_tensors is not None:
-            encoded_inputs = encoded_inputs.convert_to_tensors(return_tensors)
-
-        # Handle attention mask return
-        if return_attention_mask is False:
-            encoded_inputs.pop("attention_mask", None)
-        elif return_attention_mask is None and not self.return_attention_mask:
-            encoded_inputs.pop("attention_mask", None)
 
         return encoded_inputs
 

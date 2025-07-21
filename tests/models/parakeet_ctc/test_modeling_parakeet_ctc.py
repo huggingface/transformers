@@ -312,8 +312,8 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
         model.eval()
         model.to(torch_device)
 
-        audio = torch.tensor(audio).unsqueeze(0).to(torch_device)
-        features = feature_extractor(audio, sampling_rate=16000, return_tensors="pt")
+        audio = torch.tensor(audio).to(torch_device)
+        features = feature_extractor(audio, sampling_rate=16000)
 
         decoded_tokens = model.generate(features.input_features, features.attention_mask, features.input_lengths)
         print(decoded_tokens)

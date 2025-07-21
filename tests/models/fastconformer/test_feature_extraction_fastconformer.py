@@ -151,28 +151,13 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
             torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
 
             # Test single input
-            encoded_sequence = feat_extract(torch_speech_inputs[0].unsqueeze(0), return_tensors="pt")
+            encoded_sequence = feat_extract(torch_speech_inputs[0])
             self.assertTrue("input_features" in encoded_sequence)
             self.assertTrue("attention_mask" in encoded_sequence)
             self.assertTrue("input_lengths" in encoded_sequence)
 
-            # Test batched - pad to same length and create batch tensor
-            max_length = max(len(inp) for inp in torch_speech_inputs)
-            padded_inputs = []
-            audio_lengths = []
-
-            for inp in torch_speech_inputs:
-                audio_lengths.append(len(inp))
-                if len(inp) < max_length:
-                    padded = torch.cat([inp, torch.zeros(max_length - len(inp))])
-                else:
-                    padded = inp
-                padded_inputs.append(padded)
-
-            batch_tensor = torch.stack(padded_inputs)
-            lengths_tensor = torch.tensor(audio_lengths, dtype=torch.long)
-
-            encoded_sequences = feat_extract(batch_tensor, audio_lengths=lengths_tensor, return_tensors="pt")
+            # Test batched input with list of tensors (automatic padding)
+            encoded_sequences = feat_extract(torch_speech_inputs)
 
             self.assertTrue("input_features" in encoded_sequences)
             self.assertTrue("attention_mask" in encoded_sequences)
@@ -188,10 +173,7 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         torch_speech_inputs = [torch.tensor(speech_input, dtype=torch.float32) for speech_input in speech_inputs]
 
         # Test single input
-        batch_audio = torch_speech_inputs[0].unsqueeze(0)
-        audio_lengths = torch.tensor([len(torch_speech_inputs[0])], dtype=torch.long)
-
-        features = feat_extract(batch_audio, audio_lengths=audio_lengths, return_tensors="pt")
+        features = feat_extract(torch_speech_inputs[0])
 
         # Check output format
         self.assertEqual(features.input_features.dim(), 3)  # (batch, time, features)
@@ -204,17 +186,11 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         feat_extract = self.feature_extraction_class()
 
         # Create inputs of different lengths
-        short_audio = torch.randn(1, 4000)  # 0.25 seconds
-        long_audio = torch.randn(1, 12000)  # 0.75 seconds
+        short_audio = torch.randn(4000)  # 0.25 seconds
+        long_audio = torch.randn(12000)  # 0.75 seconds
 
-        # Pad to same length
-        max_length = 12000
-        padded_short = torch.cat([short_audio, torch.zeros(1, max_length - 4000)], dim=1)
-
-        batch_audio = torch.cat([padded_short, long_audio], dim=0)
-        audio_lengths = torch.tensor([4000, 12000], dtype=torch.long)
-
-        features = feat_extract(batch_audio, audio_lengths=audio_lengths, return_tensors="pt")
+        # Pass as list of tensors (automatic padding will be handled internally)
+        features = feat_extract([short_audio, long_audio])
 
         # Check attention mask
         attention_mask = features.attention_mask
@@ -243,7 +219,7 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
         ):
             with self.assertRaises(ImportError):
                 feat_extract = FastConformerFeatureExtractor()
-                audio = [[1, 2, 3, 4, 5]]
+                audio = [1, 2, 3, 4, 5]  # Simple list of numbers
                 feat_extract(audio)
 
 

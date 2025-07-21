@@ -23,20 +23,23 @@ For feature extraction or as a base for custom decoders, you can use the FastCon
 ```python
 import torch
 from transformers import FastConformerModel, FastConformerFeatureExtractor
+from datasets import load_dataset, Audio
 
 # Load encoder-only model
 encoder = FastConformerModel.from_pretrained("nvidia/parakeet-ctc-1.1b")
 feature_extractor = FastConformerFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
 # Note: When loading from ParakeetCTC checkpoint, you get only the encoder part
-raw_audio = torch.randn(1, 16000)  # 1 second of audio at 16kHz
-audio_lengths = torch.tensor([16000])
+# Load test audio
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+
+# Convert numpy array to tensor efficiently
+raw_audio = ds[0]['audio']['array']
 
 inputs = feature_extractor(
     raw_audio, 
-    audio_lengths=audio_lengths, 
-    sampling_rate=16000,
-    return_tensors="pt"
+    sampling_rate=16000
 )
 
 # Get encoder outputs
@@ -49,7 +52,7 @@ with torch.no_grad():
 
 encoder_hidden_states = outputs.last_hidden_state  # Shape: (batch, subsampled_time, hidden_size)
 print(f"Input shape: {inputs.input_features.shape}")  # (batch, time, mel_bins)
-print(f"Output shape: {inputs.shape}")   # (batch, time//8, hidden_size)
+print(f"Output shape: {encoder_hidden_states.shape}")   # (batch, time//8, hidden_size)
 ```
 
 ### Using FastConformer as a Base for Custom Decoders
@@ -71,15 +74,14 @@ config = FastConformerConfig(
 encoder = FastConformerEncoder(config)
 feature_extractor = FastConformerFeatureExtractor()
 
-# Process audio
-raw_audio = torch.randn(2, 16000)  # Batch of 2 audio samples
-audio_lengths = torch.tensor([16000, 12000])
+# Process audio - different length samples handled automatically
+audio1 = torch.randn(16000)  # 1 second of audio
+audio2 = torch.randn(12000)  # 0.75 seconds of audio  
+raw_audio = [audio1, audio2]  # Pass as list for automatic padding
 
 inputs = feature_extractor(
     raw_audio,
-    audio_lengths=audio_lengths,
-    sampling_rate=16000,
-    return_tensors="pt"
+    sampling_rate=16000
 )
 
 # Get encoder outputs for your custom decoder
