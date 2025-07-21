@@ -17,7 +17,6 @@ import os
 import re
 
 import torch
-from accelerate import Accelerator
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
@@ -135,7 +134,6 @@ def write_model(
     push_to_hub=False,
 ):
     os.makedirs(model_path, exist_ok=True)
-    accelerator = Accelerator()
     # ------------------------------------------------------------
     # EfficientLoFTR config
     # ------------------------------------------------------------
@@ -167,7 +165,7 @@ def write_model(
 
     print("Loading the checkpoint in a EfficientLoFTR model...")
 
-    device = accelerator.device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     with torch.device(device):
         model = EfficientLoFTRForKeypointMatching(config)
     model.load_state_dict(state_dict)
