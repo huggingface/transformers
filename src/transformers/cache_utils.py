@@ -225,7 +225,6 @@ class StaticLayer(CacheLayerMixin):
         self.dtype = dtype
         self.device = device
 
-        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         self.keys = torch.zeros(
             (batch_size, num_heads, self.max_cache_len, head_dim),
             dtype=dtype,
@@ -419,9 +418,13 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         if is_full:
             full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
             full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
+            # Fast decoding path -> here as the effective size is still sliding window, it is extremely important
+            # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed address
+            # in memory (the values are the same as the full states, but not the address!!)
             if key_states.shape[-2] == 1:
                 self.keys.copy_(full_key_states)
                 self.values.copy_(full_value_states)
+                return self.keys, self.values
         elif not is_full and cumulative_length + key_states.shape[2] > self.max_cache_len:
             if cumulative_length == 0:
                 full_key_states = key_states
@@ -560,7 +563,7 @@ class OffloadedCacheProcessor(CacheProcessor):
                 layer.keys = layer.keys.to(device)
                 layer.values = layer.values.to(device)
                 self.original_device.append(cache.layer_init_args["device"])
-            if len(cache) != cache.model_num_layers:
+            if len(cache) != cache.num_hidden_layers:
                 raise ValueError("If static layers are used, all cache layers must be initialized")
 
         self.prefetch_stream = (
@@ -1047,9 +1050,9 @@ class Cache:
         )
         processor_kwargs, kwargs = parse_processor_args(processor_class, kwargs)
         self.layer_init_args = parse_layer_args_from_model_config(config, **kwargs)
-        self.model_num_layers = getattr(config, "num_hidden_layers", 1)
+        self.num_hidden_layers = getattr(config, "num_hidden_layers", 1)
 
-        self.append_new_layers(self.model_num_layers - 1)
+        self.append_new_layers(self.num_hidden_layers - 1)
         self.cache_processor = processor_class(self, **processor_kwargs) if processor_class is not None else None
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1426,9 +1429,6 @@ class HybridCache(Cache):
             if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None
             else [StaticLayer]
         )
-        hybrid_chunked = kwargs.pop("hybrid_chunked", "llama4" in getattr(config, "model_type", ""))
-        if hybrid_chunked:
-            layer_classes = [ChunkedSlidingLayer if cls == SlidingWindowLayer else cls for cls in layer_classes]
         super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
 
 
@@ -1623,7 +1623,7 @@ class OffloadedStaticCache(StaticCache):
         super().__init__(*args, cache_processor=OffloadedCacheProcessor, **kwargs)
 
 
-class HybridChunkedCache(HybridCache):
+class HybridChunkedCache(Cache):
     """
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
     attention and global attention in every other layer, with support for prefill chunking (originally implemented
@@ -1654,8 +1654,13 @@ class HybridChunkedCache(HybridCache):
     """
 
     def __init__(self, config: PretrainedConfig, *args, **kwargs):
-        kwargs["hybrid_chunked"] = True
-        super().__init__(config=config, *args, **kwargs)
+        layer_classes = (
+            [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
+            if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None
+            else [StaticLayer]
+        )
+        layer_classes = [ChunkedSlidingLayer if cls == SlidingWindowLayer else cls for cls in layer_classes]
+        super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
 
 
 class OffloadedHybridCache(HybridChunkedCache):
