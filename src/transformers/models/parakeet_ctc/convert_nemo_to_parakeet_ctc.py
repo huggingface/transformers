@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
+
 NeMo to ParakeetCTC HuggingFace Converter
 
 This script converts NeMo models with FastConformer encoder and CTC decoder
@@ -759,11 +773,13 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
         **conversion_info_extra,  # Add tokenizer info
     }
 
-    with open(output_dir / "conversion_info.json", "w") as f:
-        json.dump(conversion_info, f, indent=2)
+    # Can be used for debugging
+    print(conversion_info)
+    # with open(output_dir / "conversion_info.json", "w") as f:
+    #     json.dump(conversion_info, f, indent=2)
 
-    logger.info("Conversion completed successfully!")
-    return conversion_info
+    # logger.info("Conversion completed successfully!")
+    # return conversion_info
 
 
 def verify_conversion(output_dir: str) -> bool:
@@ -872,21 +888,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# ParakeetCTC Conversion Script
-#
-# This script specifically handles conversion of NeMo models with:
-# - FastConformer encoder architecture
-# - CTC (Connectionist Temporal Classification) decoder
-# - Tokenizer and vocabulary for CTC decoding
-#
-# Future Extensions:
-# Similar conversion scripts should be created for other Parakeet variants:
-#    - parakeet_tdt/convert_nemo_to_parakeet_tdt.py (TDT decoder)
-#    - parakeet_rnnt/convert_nemo_to_parakeet_rnnt.py (RNN-T decoder)
-#
-# Current Status:
-#    - ParakeetCTC (FastConformer + CTC) - ✅ COMPLETE
-#    - ParakeetTDT (FastConformer + TDT) - 🔄 Future work
-#    - ParakeetRNNT (FastConformer + RNN-T) - 🔄 Future work

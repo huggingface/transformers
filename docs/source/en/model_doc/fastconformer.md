@@ -32,7 +32,7 @@ feature_extractor = FastConformerFeatureExtractor.from_pretrained("nvidia/parake
 raw_audio = torch.randn(1, 16000)  # 1 second of audio at 16kHz
 audio_lengths = torch.tensor([16000])
 
-features = feature_extractor(
+inputs = feature_extractor(
     raw_audio, 
     audio_lengths=audio_lengths, 
     sampling_rate=16000,
@@ -42,14 +42,14 @@ features = feature_extractor(
 # Get encoder outputs
 with torch.no_grad():
     outputs = encoder(
-        input_features=features.input_features,
-        attention_mask=features.attention_mask,
-        input_lengths=features.input_lengths
+        input_features=inputs.input_features,
+        attention_mask=inputs.attention_mask,
+        input_lengths=inputs.input_lengths
     )
 
 encoder_hidden_states = outputs.last_hidden_state  # Shape: (batch, subsampled_time, hidden_size)
-print(f"Input shape: {features.input_features.shape}")  # (batch, time, mel_bins)
-print(f"Output shape: {encoder_hidden_states.shape}")   # (batch, time//8, hidden_size)
+print(f"Input shape: {inputs.input_features.shape}")  # (batch, time, mel_bins)
+print(f"Output shape: {inputs.shape}")   # (batch, time//8, hidden_size)
 ```
 
 ### Using FastConformer as a Base for Custom Decoders
@@ -75,7 +75,7 @@ feature_extractor = FastConformerFeatureExtractor()
 raw_audio = torch.randn(2, 16000)  # Batch of 2 audio samples
 audio_lengths = torch.tensor([16000, 12000])
 
-features = feature_extractor(
+inputs = feature_extractor(
     raw_audio,
     audio_lengths=audio_lengths,
     sampling_rate=16000,
@@ -84,9 +84,9 @@ features = feature_extractor(
 
 # Get encoder outputs for your custom decoder
 encoder_outputs = encoder(
-    input_features=features.input_features,
-    attention_mask=features.attention_mask,
-    input_lengths=features.input_lengths,
+    input_features=inputs.input_features,
+    attention_mask=inputs.attention_mask,
+    input_lengths=inputs.input_lengths,
     output_hidden_states=True,  # Get all layer outputs
     output_attentions=True      # Get attention weights
 )

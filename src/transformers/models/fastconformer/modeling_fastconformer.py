@@ -589,18 +589,4 @@ class FastConformerModel(FastConformerPreTrainedModel):
         )
 
 
-# Future decoder configurations - placeholders for later implementation
-# class ParakeetTDTConfig(PretrainedConfig):
-#     """Configuration for Parakeet TDT models (FastConformer + TDT decoder)"""
-#     model_type = "parakeet_tdt"
-#
-# class ParakeetRNNTConfig(PretrainedConfig):
-#     """Configuration for Parakeet RNNT models (FastConformer + RNN-T decoder)"""
-#     model_type = "parakeet_rnnt"
-#
-# class CanaryAEDConfig(PretrainedConfig):
-#     """Configuration for Canary models (FastConformer + AED decoder)"""
-#     model_type = "canary"
-
-
 __all__ = ["FastConformerEncoder", "FastConformerModel", "FastConformerPreTrainedModel"]

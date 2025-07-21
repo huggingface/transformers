@@ -191,28 +191,6 @@ class FastConformerConfig(PretrainedConfig):
         self.activation_function = hidden_act
 
 
-# Future decoder configurations - placeholders for later implementation
-# class ParakeetTDTConfig(PretrainedConfig):
-#     """Configuration for Parakeet TDT models (FastConformer + TDT decoder)"""
-#     model_type = "parakeet_tdt"
-#
-# class ParakeetRNNTConfig(PretrainedConfig):
-#     """Configuration for Parakeet RNNT models (FastConformer + RNN-T decoder)"""
-#     model_type = "parakeet_rnnt"
-#
-# class CanaryAEDConfig(PretrainedConfig):
-#     """Configuration for Canary models (FastConformer + AED decoder)"""
-#     model_type = "canary"
-
-
-__all__ = [
-    "FastConformerConfig",
-    "FastConformerEncoder",
-    "FastConformerModel",
-    "FastConformerPreTrainedModel",
-]
-
-
 def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_num=1):
     """Calculates the output length of a Tensor passed through a convolution or max pooling layer"""
     add_pad: float = all_paddings - kernel_size
@@ -769,19 +747,9 @@ class FastConformerModel(FastConformerPreTrainedModel):
         )
 
 
-# Future model classes - placeholders for later implementation
-# class ParakeetTDT(FastConformerPreTrainedModel):
-#     """Parakeet model for TDT-based speech recognition"""
-#     config_class = ParakeetTDTConfig
-#
-# class ParakeetRNNT(FastConformerPreTrainedModel):
-#     """Parakeet model for RNN-T-based speech recognition"""
-#     config_class = ParakeetRNNTConfig
-#
-# class CanaryAED(FastConformerPreTrainedModel):
-#     """Canary model for AED-based multilingual speech recognition"""
-#     config_class = CanaryAEDConfig
-
-
-# Remove the commented examples since we now have actual implementations
-# # Future model-specific classes (examples):
+__all__ = [
+    "FastConformerConfig",
+    "FastConformerEncoder",
+    "FastConformerModel",
+    "FastConformerPreTrainedModel",
+]

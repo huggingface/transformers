@@ -42,7 +42,7 @@ raw_audio = torch.from_numpy(audio_array).unsqueeze(0)  # Add batch dimension
 audio_lengths = torch.tensor([len(audio_array)])
 
 # Extract mel-spectrogram features
-features = feature_extractor(
+inputs = feature_extractor(
     raw_audio, 
     audio_lengths=audio_lengths, 
     sampling_rate=16000,
@@ -52,9 +52,9 @@ features = feature_extractor(
 # Get CTC outputs
 with torch.no_grad():
     outputs = model(
-        input_features=features.input_features,
-        attention_mask=features.attention_mask,
-        input_lengths=features.input_lengths
+        input_features=inputs.input_features,
+        attention_mask=inputs.attention_mask,
+        input_lengths=inputs.input_lengths
     )
 
 # CTC logits for each time step
@@ -62,13 +62,13 @@ ctc_logits = outputs.logits  # Shape: (batch, time, vocab_size)
 
 # Generate decoded token sequences using CTC decoding
 decoded_sequences = model.generate(
-    input_features=features.input_features,
-    attention_mask=features.attention_mask,
-    input_lengths=features.input_lengths,
+    input_features=inputs.input_features,
+    attention_mask=inputs.attention_mask,
+    input_lengths=inputs.input_lengths,
 )
 
 # Decode to text using CTC-aware tokenizer
-text = tokenizer.decode(decoded_sequences[0], ctc_decode=True)
+text = tokenizer.decode(decoded_sequences[0])
 print("Transcription:", text)
 ```
 
@@ -96,7 +96,7 @@ raw_audio = torch.from_numpy(audio_array).unsqueeze(0)  # Add batch dimension
 audio_lengths = torch.tensor([len(audio_array)])
 
 # Extract features
-features = feature_extractor(
+inputs = feature_extractor(
     raw_audio, 
     audio_lengths=audio_lengths, 
     sampling_rate=16000,
@@ -106,19 +106,19 @@ features = feature_extractor(
 # Forward pass
 with torch.no_grad():
     outputs = model(
-        input_features=features.input_features,
-        attention_mask=features.attention_mask,
-        input_lengths=features.input_lengths
+        input_features=inputs.input_features,
+        attention_mask=inputs.attention_mask,
+        input_lengths=inputs.input_lengths
     )
 
 # Generate transcription
 decoded_sequences = model.generate(
-    input_features=features.input_features,
-    attention_mask=features.attention_mask,
-    input_lengths=features.input_lengths,
+    input_features=inputs.input_features,
+    attention_mask=inputs.attention_mask,
+    input_lengths=inputs.input_lengths,
 )
 
-text = tokenizer.decode(decoded_sequences[0], ctc_decode=True)
+text = tokenizer.decode(decoded_sequences[0])
 print("Transcription:", text)
 ```
 
@@ -152,7 +152,7 @@ batch_audio = torch.stack([padded_audio1, padded_audio2])
 audio_lengths = torch.tensor([len(audio1), len(audio2)])
 
 # Extract features with proper length handling
-features = feature_extractor(
+inputs = feature_extractor(
     batch_audio,
     audio_lengths=audio_lengths,
     sampling_rate=16000,
@@ -162,20 +162,20 @@ features = feature_extractor(
 # Process through model
 with torch.no_grad():
     outputs = model(
-        input_features=features.input_features,
-        attention_mask=features.attention_mask,
-        input_lengths=features.input_lengths
+        input_features=inputs.input_features,
+        attention_mask=inputs.attention_mask,
+        input_lengths=inputs.input_lengths
     )
 
 # Batch CTC decoding
 decoded_sequences = model.generate(
-    input_features=features.input_features,
-    attention_mask=features.attention_mask,
-    input_lengths=features.input_lengths,
+    input_features=inputs.input_features,
+    attention_mask=inputs.attention_mask,
+    input_lengths=inputs.input_lengths,
 )
 
 # Decode batch to text
-texts = tokenizer.batch_decode(decoded_sequences, ctc_decode=True)
+texts = tokenizer.batch_decode(decoded_sequences)
 print("Batch transcriptions:", texts)
 ```
 
