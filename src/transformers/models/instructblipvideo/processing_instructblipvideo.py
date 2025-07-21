@@ -51,7 +51,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
         qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
-        num_query_tokens (`int`, *optional*, defaults to None):
+        num_query_tokens (`int`, *optional*):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
