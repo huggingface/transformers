@@ -1736,7 +1736,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         message: dict[str, str],
         conversation_history: Optional[list[dict[str, str]]] = None,
-        add_generation_prompt: bool = False,
         **kwargs,
     ) -> list[int]:
         """
@@ -1748,30 +1747,33 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         is added to the entire chat, it will be impossible to distinguish a chat-start-token from a message-start-token.
         In these cases, this method will do its best to find the correct tokenization, but it may not be perfect.
 
+        **Note:** This method does not support `add_generation_prompt`. If you want to add a generation prompt,
+        you should do it separately after tokenizing the conversation.
+
         Args:
             message (`dict`):
                 A dictionary with "role" and "content" keys, representing the message to tokenize.
             conversation_history (`list[dict]`, *optional*):
                 A list of dicts with "role" and "content" keys, representing the chat history so far. If you are
                 tokenizing messages one by one, you should pass the previous messages in the conversation here.
-            add_generation_prompt (bool, *optional*):
-                If this is set, a prompt with the token(s) that indicate the start of an assistant message will be
-                appended to the formatted output. This is useful when you want to generate a response from the model.
-                Note that this argument will be passed to the chat template, and so it must be supported in the
-                template for this argument to have any effect.
             **kwargs:
                 Additional kwargs to pass to the `apply_chat_template` method.
 
         Returns:
             `list[int]`: A list of token ids representing the tokenized message.
         """
+        if "add_generation_prompt" in kwargs:
+            raise ValueError(
+                "`encode_message` does not support `add_generation_prompt`. Please add the generation prompt "
+                "separately."
+            )
         if conversation_history is None:
             conversation_history = []
-
+        
         return self._encode_message(
             message=message,
             conversation_history=conversation_history,
-            add_generation_prompt=add_generation_prompt,
+            add_generation_prompt=False,
             **kwargs,
         )
 
@@ -3333,7 +3335,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
             padding_side (`str`, *optional*):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
