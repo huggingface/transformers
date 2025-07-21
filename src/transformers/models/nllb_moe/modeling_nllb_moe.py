@@ -1605,12 +1605,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     @auto_docstring
     def forward(
         self,

@@ -1553,12 +1553,6 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -1702,6 +1696,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
+    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
@@ -2109,12 +2104,6 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @auto_docstring
     def forward(
