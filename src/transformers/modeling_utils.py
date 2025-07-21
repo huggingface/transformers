@@ -2977,6 +2977,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         else:
             output_embeddings.weight = input_embeddings.weight
 
+        # Passing hooks over to the embeddings if needed
+        # (currently limited to tensor parallel hooks and flags only)
+        if hasattr(input_embeddings, "_is_hooked") and getattr(input_embeddings, "_hf_tp_plan", None):
+            output_embeddings._is_hooked = input_embeddings._is_hooked
+            output_embeddings._hf_tp_plan = input_embeddings._hf_tp_plan
+            output_embeddings._forward_hooks = input_embeddings._forward_hooks
+            output_embeddings._forward_pre_hooks = input_embeddings._forward_pre_hooks
+            output_embeddings.__repr__ = input_embeddings.__repr__
+
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
