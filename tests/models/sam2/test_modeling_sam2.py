@@ -1046,7 +1046,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             max_frame_num_to_track=2,
         ):
@@ -1081,7 +1081,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1135,7 +1135,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1167,7 +1167,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
-            input_boxes=[[[[300, 0, 500, 400]]]],
+            input_boxes=[[[300, 0, 500, 400]]],
         )
         outputs = self.video_model(
             inference_session=inference_session,
@@ -1189,7 +1189,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1221,7 +1221,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
-            input_boxes=[[[[300, 0, 500, 400]]]],
+            input_boxes=[[[300, 0, 500, 400]]],
             input_points=[[[[460, 60]]]],
             input_labels=[[[1]]],
         )
@@ -1245,7 +1245,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1300,7 +1300,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
@@ -1368,7 +1368,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         # test propagate in video frames
         frames = []
-        for sam2_video_output in self.video_model.propagate_in_video_async(
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
             inference_session=inference_session,
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,

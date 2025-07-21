@@ -2343,7 +2343,7 @@ class Sam2VideoInferenceSession:
         max_vision_features_cache_size: int = 1,
     ):
         # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.images = list(video.to(video_storage_device, dtype=torch_dtype)) if video is not None else None
+        self.processed_frames = list(video.to(video_storage_device, dtype=torch_dtype)) if video is not None else None
         self.video_height = video_height
         self.video_width = video_width
 
@@ -2361,8 +2361,8 @@ class Sam2VideoInferenceSession:
         )
 
         # Persistent object tracking state
-        self.obj_id_to_idx = OrderedDict()
-        self.obj_idx_to_id = OrderedDict()
+        self._obj_id_to_idx = OrderedDict()
+        self._obj_idx_to_id = OrderedDict()
         self.obj_ids = []
 
         # Persistent user inputs
@@ -2379,19 +2379,19 @@ class Sam2VideoInferenceSession:
 
     @property
     def num_frames(self) -> Optional[int]:
-        return len(self.images) if self.images is not None else None
+        return len(self.processed_frames) if self.processed_frames is not None else None
 
     # Object management
-    def _obj_id_to_idx(self, obj_id: int) -> int:
+    def obj_id_to_idx(self, obj_id: int) -> int:
         """Map object ID to index, creating new entry if needed."""
-        obj_idx = self.obj_id_to_idx.get(obj_id, None)
+        obj_idx = self._obj_id_to_idx.get(obj_id, None)
         if obj_idx is not None:
             return obj_idx
 
-        obj_idx = len(self.obj_id_to_idx)
-        self.obj_id_to_idx[obj_id] = obj_idx
-        self.obj_idx_to_id[obj_idx] = obj_id
-        self.obj_ids = list(self.obj_id_to_idx)
+        obj_idx = len(self._obj_id_to_idx)
+        self._obj_id_to_idx[obj_id] = obj_idx
+        self._obj_idx_to_id[obj_idx] = obj_id
+        self.obj_ids = list(self._obj_id_to_idx)
 
         self.point_inputs_per_obj[obj_idx] = {}
         self.mask_inputs_per_obj[obj_idx] = {}
@@ -2406,6 +2406,15 @@ class Sam2VideoInferenceSession:
         self.frames_tracked_per_obj[obj_idx] = {}
 
         return obj_idx
+
+    # Video Inference specific functions
+    def obj_idx_to_id(self, obj_idx: int) -> int:
+        """Map model-side object index to client-side object id."""
+        return self._obj_idx_to_id[obj_idx]
+
+    def get_obj_num(self) -> int:
+        """Get the total number of unique object ids received so far in this session."""
+        return len(self._obj_idx_to_id)
 
     # Input management with device handling
     def add_point_inputs(self, obj_idx: int, frame_idx: int, inputs: dict):
@@ -2439,17 +2448,17 @@ class Sam2VideoInferenceSession:
         frame_idx: int,
         output_key: Optional[str] = None,
         output_value: Optional[Union[torch.Tensor, dict]] = None,
-        is_temp: bool = False,
-        is_cond: bool = True,
+        is_temporary_output: bool = False,
+        is_conditioning_frame: bool = True,
     ):
         """Store output with smart device management."""
-        target_dict = self.temp_output_dict_per_obj if is_temp else self.output_dict_per_obj
-        storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
+        target_dict = self.temp_output_dict_per_obj if is_temporary_output else self.output_dict_per_obj
+        storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
 
         if output_key is None and isinstance(output_value, dict):
             target_dict[obj_idx][storage_key][frame_idx] = {}
             for key, value in output_value.items():
-                self.store_output(obj_idx, frame_idx, key, value, is_temp, is_cond)
+                self.store_output(obj_idx, frame_idx, key, value, is_temporary_output, is_conditioning_frame)
             return
 
         # Device placement: small tensors stay on inference device, large ones go to inference state device
@@ -2462,10 +2471,17 @@ class Sam2VideoInferenceSession:
         else:
             target_dict[obj_idx][storage_key][frame_idx][output_key] = output_value
 
-    def get_output(self, obj_idx: int, frame_idx: int, output_key: str, is_temp: bool = False, is_cond: bool = True):
+    def get_output(
+        self,
+        obj_idx: int,
+        frame_idx: int,
+        output_key: str,
+        is_temporary_output: bool = False,
+        is_conditioning_frame: bool = True,
+    ):
         """Get output with smart device management."""
-        target_dict = self.temp_output_dict_per_obj if is_temp else self.output_dict_per_obj
-        storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
+        target_dict = self.temp_output_dict_per_obj if is_temporary_output else self.output_dict_per_obj
+        storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
         out = target_dict[obj_idx][storage_key].get(frame_idx, None)
         # move to inference device if needed
         if out is None:
@@ -2482,21 +2498,21 @@ class Sam2VideoInferenceSession:
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.squeeze(0)
 
-        if self.images is None:
-            self.images = [pixel_values]
+        if self.processed_frames is None:
+            self.processed_frames = [pixel_values]
         else:
-            self.images.append(pixel_values)
+            self.processed_frames.append(pixel_values)
 
         return self.num_frames - 1
 
     def get_frame(self, frame_idx: int) -> torch.Tensor:
         """Get frame from video."""
-        return self.images[frame_idx].to(self.inference_device, non_blocking=True)
+        return self.processed_frames[frame_idx].to(self.inference_device, non_blocking=True)
 
     def reset_tracking_data(self):
         """Reset tracking data but keep cache."""
-        self.obj_id_to_idx.clear()
-        self.obj_idx_to_id.clear()
+        self._obj_id_to_idx.clear()
+        self._obj_idx_to_id.clear()
         self.obj_ids.clear()
         self.point_inputs_per_obj.clear()
         self.mask_inputs_per_obj.clear()
@@ -2508,8 +2524,8 @@ class Sam2VideoInferenceSession:
 
     def reset_inference_session(self):
         """Reset tracking data and cache."""
-        self.obj_id_to_idx.clear()
-        self.obj_idx_to_id.clear()
+        self._obj_id_to_idx.clear()
+        self._obj_idx_to_id.clear()
         self.obj_ids.clear()
         self.point_inputs_per_obj.clear()
         self.mask_inputs_per_obj.clear()
@@ -2638,13 +2654,11 @@ class Sam2VideoModel(Sam2Model):
         self.multimask_max_pt_num = config.multimask_max_pt_num
         self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
         self.max_object_pointers_in_encoder = config.max_object_pointers_in_encoder
-        self.enable_temporal_pos_encoding_for_object_pointers = (
-            config.enable_temporal_pos_encoding_for_object_pointers
-        )  # Compatibility with SAM2
+        # Compatibility with SAM2
+        self.enable_temporal_pos_encoding_for_object_pointers = config.enable_temporal_pos_encoding_for_object_pointers
         self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
-        self.preserve_temporal_direction_in_object_pointers = (
-            config.preserve_temporal_direction_in_object_pointers
-        )  # Compatibility with SAM2
+        # Compatibility with SAM2
+        self.preserve_temporal_direction_in_object_pointers = config.preserve_temporal_direction_in_object_pointers
         self.multimask_output_for_tracking = config.multimask_output_for_tracking
 
         self.post_init()
@@ -2936,15 +2950,6 @@ class Sam2VideoModel(Sam2Model):
             vision_attentions=vision_attentions,
         )
 
-    # Video Inference specific functions
-    def _obj_idx_to_id(self, inference_session: Sam2VideoInferenceSession, obj_idx: int) -> int:
-        """Map model-side object index to client-side object id."""
-        return inference_session.obj_idx_to_id[obj_idx]
-
-    def _get_obj_num(self, inference_session: Sam2VideoInferenceSession) -> int:
-        """Get the total number of unique object ids received so far in this session."""
-        return len(inference_session.obj_idx_to_id)
-
     def _get_orig_video_res_output(
         self, inference_session: Sam2VideoInferenceSession, any_res_masks: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -2971,7 +2976,7 @@ class Sam2VideoModel(Sam2Model):
         self,
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
-        is_cond: bool,
+        is_conditioning_frame: bool,
         consolidate_at_video_res: bool = False,
     ) -> dict[str, torch.Tensor]:
         """
@@ -2987,7 +2992,7 @@ class Sam2VideoModel(Sam2Model):
                 The inference session object containing per-object outputs, video metadata, and a feature cache.
             frame_idx (`int`):
                 The frame index for which to consolidate outputs.
-            is_cond (`bool`):
+            is_conditioning_frame (`bool`):
                 Whether this is a conditioning frame (True) or non-conditioning frame (False).
             consolidate_at_video_res (`bool`, *optional*, defaults to `False`):
                 Whether to consolidate outputs at original video resolution rather than model resolution.
@@ -2997,7 +3002,7 @@ class Sam2VideoModel(Sam2Model):
                 - pred_masks or pred_masks_video_res: Unified mask tensor with shape `(num_objects, 1, height, width)`.
                 Missing objects are filled with `NO_OBJ_SCORE` placeholder values.
         """
-        batch_size = self._get_obj_num(inference_session)
+        batch_size = inference_session.get_obj_num()
         # Optionally, we allow consolidating the temporary outputs at the original
         # video resolution (to provide a better editing experience for mask prompts).
         if consolidate_at_video_res:
@@ -3021,15 +3026,21 @@ class Sam2VideoModel(Sam2Model):
             ),
         }
         for obj_idx in range(batch_size):
-            obj_mask = inference_session.get_output(obj_idx, frame_idx, "pred_masks", is_temp=True, is_cond=is_cond)
+            obj_mask = inference_session.get_output(
+                obj_idx, frame_idx, "pred_masks", is_temporary_output=True, is_conditioning_frame=is_conditioning_frame
+            )
             # If the object doesn't appear in "temp_output_dict_per_obj" on this frame,
             # we fall back and look up its previous output in "output_dict_per_obj".
             # We look up both "cond_frame_outputs" and "non_cond_frame_outputs" in
             # "output_dict_per_obj" to find a previous output for this object.
             if obj_mask is None:
-                obj_mask = inference_session.get_output(obj_idx, frame_idx, "pred_masks", is_temp=False, is_cond=True)
+                obj_mask = inference_session.get_output(
+                    obj_idx, frame_idx, "pred_masks", is_temporary_output=False, is_conditioning_frame=True
+                )
             if obj_mask is None:
-                obj_mask = inference_session.get_output(obj_idx, frame_idx, "pred_masks", is_temp=False, is_cond=False)
+                obj_mask = inference_session.get_output(
+                    obj_idx, frame_idx, "pred_masks", is_temporary_output=False, is_conditioning_frame=False
+                )
             # If the object doesn't appear in "output_dict_per_obj" either, we skip it
             # and leave its mask scores to the default scores (i.e. the NO_OBJ_SCORE
             # placeholder above) and set its object pointer to be a dummy pointer.
@@ -3080,7 +3091,7 @@ class Sam2VideoModel(Sam2Model):
             frame_idx = inference_session.add_new_frame(frame)
 
         obj_ids = inference_session.obj_with_new_inputs
-        obj_idxs = [inference_session._obj_id_to_idx(obj_id) for obj_id in obj_ids]
+        obj_idxs = [inference_session.obj_id_to_idx(obj_id) for obj_id in obj_ids]
 
         for obj_idx in obj_idxs:
             is_init_cond_frame = frame_idx not in inference_session.frames_tracked_per_obj[obj_idx]
@@ -3108,14 +3119,18 @@ class Sam2VideoModel(Sam2Model):
 
             # Update the temporary output state
             inference_session.store_output(
-                obj_idx, frame_idx, output_value=current_out, is_temp=True, is_cond=is_init_cond_frame
+                obj_idx,
+                frame_idx,
+                output_value=current_out,
+                is_temporary_output=True,
+                is_conditioning_frame=is_init_cond_frame,
             )
 
             # Resize the output mask to the original video resolution
             consolidated_out = self._consolidate_temp_output_across_obj(
                 inference_session,
                 frame_idx,
-                is_cond=is_init_cond_frame,
+                is_conditioning_frame=is_init_cond_frame,
                 consolidate_at_video_res=consolidate_at_video_res,
             )
             consolidated_mask_key = "pred_masks_video_res" if consolidate_at_video_res else "pred_masks"
@@ -3144,16 +3159,16 @@ class Sam2VideoModel(Sam2Model):
                 The video inference session object.
         """
         # Check and make sure that every object has received input points or masks.
-        batch_size = self._get_obj_num(inference_session)
+        batch_size = inference_session.get_obj_num()
         if batch_size == 0:
             raise RuntimeError("No input points or masks are provided for any object; please add inputs first.")
 
         # Consolidate per-object temporary outputs in "temp_output_dict_per_obj" and
         # add them into "output_dict".
         for obj_idx in range(batch_size):
-            for is_cond in [False, True]:
+            for is_conditioning_frame in [False, True]:
                 # Separately consolidate conditioning and non-conditioning temp outputs
-                storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
+                storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
                 # Find all the frames that contain temporary outputs for any objects
                 # (these should be the frames that have just received clicks for mask inputs
                 # via `_infer_on_video_frame_with_new_inputs`)
@@ -3165,7 +3180,11 @@ class Sam2VideoModel(Sam2Model):
                     ):
                         high_res_masks = torch.nn.functional.interpolate(
                             inference_session.get_output(
-                                obj_idx, frame_idx, "pred_masks", is_temp=True, is_cond=is_cond
+                                obj_idx,
+                                frame_idx,
+                                "pred_masks",
+                                is_temporary_output=True,
+                                is_conditioning_frame=is_conditioning_frame,
                             ),
                             size=(self.image_size, self.image_size),
                             mode="bilinear",
@@ -3177,16 +3196,30 @@ class Sam2VideoModel(Sam2Model):
                             batch_size=1,  # run on the slice of a single object
                             high_res_masks=high_res_masks,
                             object_score_logits=inference_session.get_output(
-                                obj_idx, frame_idx, "object_score_logits", is_temp=True, is_cond=is_cond
+                                obj_idx,
+                                frame_idx,
+                                "object_score_logits",
+                                is_temporary_output=True,
+                                is_conditioning_frame=is_conditioning_frame,
                             ),
                             # these frames are what the user interacted with
                             is_mask_from_pts=True,
                         )
                         inference_session.store_output(
-                            obj_idx, frame_idx, "maskmem_features", maskmem_features, is_temp=True, is_cond=is_cond
+                            obj_idx,
+                            frame_idx,
+                            "maskmem_features",
+                            maskmem_features,
+                            is_temporary_output=True,
+                            is_conditioning_frame=is_conditioning_frame,
                         )
                         inference_session.store_output(
-                            obj_idx, frame_idx, "maskmem_pos_enc", maskmem_pos_enc, is_temp=True, is_cond=is_cond
+                            obj_idx,
+                            frame_idx,
+                            "maskmem_pos_enc",
+                            maskmem_pos_enc,
+                            is_temporary_output=True,
+                            is_conditioning_frame=is_conditioning_frame,
                         )
                         inference_session.output_dict_per_obj[obj_idx][storage_key][frame_idx] = (
                             inference_session.temp_output_dict_per_obj[obj_idx][storage_key][frame_idx]
@@ -3197,7 +3230,7 @@ class Sam2VideoModel(Sam2Model):
             # check and make sure that every object has received input points or masks
             obj_output_dict = inference_session.output_dict_per_obj[obj_idx]
             if len(obj_output_dict["cond_frame_outputs"]) == 0:
-                obj_id = self._obj_idx_to_id(inference_session, obj_idx)
+                obj_id = inference_session.obj_idx_to_id(obj_idx)
                 raise RuntimeError(
                     f"No input points or masks are provided for object id {obj_id}; please add inputs first."
                 )
@@ -3235,13 +3268,13 @@ class Sam2VideoModel(Sam2Model):
             return self._infer_on_video_frame_with_new_inputs(
                 inference_session, frame_idx=frame_idx, frame=frame, consolidate_at_video_res=consolidate_at_video_res
             )
-        elif frame is not None and self._get_obj_num(inference_session) == 0:
+        elif frame is not None and inference_session.get_obj_num() == 0:
             raise ValueError("No objects are provided for tracking; please add inputs first.")
 
         if frame is not None:
             frame_idx = inference_session.add_new_frame(frame)
 
-        batch_size = self._get_obj_num(inference_session)
+        batch_size = inference_session.get_obj_num()
         pred_masks_per_obj = [None] * batch_size
         for obj_idx in range(batch_size):
             # We skip those frames already in consolidated outputs (these are frames
@@ -3250,7 +3283,7 @@ class Sam2VideoModel(Sam2Model):
             # number of clicks on each object might be different.
             if frame_idx in inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]:
                 pred_masks = inference_session.get_output(
-                    obj_idx, frame_idx, "pred_masks", is_temp=False, is_cond=True
+                    obj_idx, frame_idx, "pred_masks", is_temporary_output=False, is_conditioning_frame=True
                 )
             else:
                 current_out, pred_masks = self._run_single_frame_inference(
@@ -3266,7 +3299,11 @@ class Sam2VideoModel(Sam2Model):
                     streaming=frame is not None,
                 )
                 inference_session.store_output(
-                    obj_idx, frame_idx, output_value=current_out, is_temp=False, is_cond=False
+                    obj_idx,
+                    frame_idx,
+                    output_value=current_out,
+                    is_temporary_output=False,
+                    is_conditioning_frame=False,
                 )
 
             inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
@@ -3287,11 +3324,11 @@ class Sam2VideoModel(Sam2Model):
     @torch.inference_mode()
     @auto_docstring(
         custom_intro="""
-        Propagate the objects through the video frames. Used for async inference.
-        Yields (frame_idx, Sam2VideoSegmentationOutput) for each frame.
+        Propagate the objects through the video frames. Used when initializing an inference session with a whole video.
+        Yields Sam2VideoSegmentationOutput for each frame.
         """
     )
-    def propagate_in_video_async(
+    def propagate_in_video_iterator(
         self,
         inference_session: Sam2VideoInferenceSession,
         start_frame_idx: Optional[int] = None,
@@ -3339,7 +3376,7 @@ class Sam2VideoModel(Sam2Model):
             processing_order = range(start_frame_idx, end_frame_idx + 1)
 
         for frame_idx in tqdm(processing_order, desc="propagate in video"):
-            sam2_video_output = self.forward(inference_session, frame_idx=frame_idx)
+            sam2_video_output = self(inference_session, frame_idx=frame_idx)
             yield sam2_video_output
 
     def _prepare_vision_features(

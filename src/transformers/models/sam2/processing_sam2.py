@@ -697,7 +697,7 @@ class Sam2Processor(ProcessorMixin):
             input_labels = torch.cat([box_labels, input_labels], dim=2)
 
         for obj_id, idx in zip(obj_ids, range(len(obj_ids))):
-            obj_idx = inference_session._obj_id_to_idx(obj_id)
+            obj_idx = inference_session.obj_id_to_idx(obj_id)
             input_points_for_obj = input_points[:, idx, :, :].unsqueeze(1)
             input_labels_for_obj = input_labels[:, idx, :].unsqueeze(1)
             # Handle existing points
@@ -746,7 +746,7 @@ class Sam2Processor(ProcessorMixin):
             )
 
         for obj_id, mask in zip(obj_ids, input_masks):
-            obj_idx = inference_session._obj_id_to_idx(obj_id)
+            obj_idx = inference_session.obj_id_to_idx(obj_id)
 
             device = inference_session.inference_device
 
