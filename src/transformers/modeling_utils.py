@@ -2984,7 +2984,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             output_embeddings._hf_tp_plan = input_embeddings._hf_tp_plan
             output_embeddings._forward_hooks = input_embeddings._forward_hooks
             output_embeddings._forward_pre_hooks = input_embeddings._forward_pre_hooks
-            output_embeddings.__repr__ = input_embeddings.__repr__
+            output_embeddings.__repr__ = (
+                lambda: f"{output_embeddings.__repr__()}\nTP Plan: {output_embeddings._hf_tp_plan}"
+            )
 
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = nn.functional.pad(

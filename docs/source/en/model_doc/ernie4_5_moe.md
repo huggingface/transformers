@@ -46,17 +46,57 @@ Other models from the family can be found at [Ernie 4.5](./ernie4_5.md).
 
 ```python
 import torch
-from transformers import Ernie4_5_MoEForCausalLM, Ernie4_5Tokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 
 # load the tokenizer and the model
-tokenizer = Ernie4_5Tokenizer.from_pretrained(model_name)
-model = Ernie4_5_MoEForCausalLM.from_pretrained(
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    use_cache=True,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    torch_dtype=torch.bfloat16,
+)
+
+# prepare the model input
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+prompt = "Hey, are you conscious? Can you talk to me?"
+messages = [
+    {"role": "user", "content": prompt}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True
+)
+model_inputs = tokenizer([text], add_special_tokens=False, return_tensors="pt").to(model.device)
+
+# conduct text completion
+generated_ids = model.generate(
+    **model_inputs,
+    max_new_tokens=32,
+)
+output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
+
+# decode the generated ids
+generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+```
+
+### Distributed Generation with Tensor Parallelism
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
+
+# load the tokenizer and the model
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+    tp_plan="auto",
 )
 
 # prepare the model input
@@ -87,17 +127,16 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 
 ```python
 import torch
-from transformers import BitsAndBytesConfig, Ernie4_5_MoEForCausalLM, Ernie4_5Tokenizer
+from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 
 # load the tokenizer and the model
-tokenizer = Ernie4_5Tokenizer.from_pretrained(model_name)
-model = Ernie4_5_MoEForCausalLM.from_pretrained(
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    use_cache=True,
     device_map="auto",
-    quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
 )
 
 # prepare the model input

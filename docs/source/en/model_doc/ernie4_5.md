@@ -44,17 +44,16 @@ Other models from the family can be found at [Ernie 4.5 MoE](./ernie4_5_moe.md).
 
 ```python
 import torch
-from transformers import Ernie4_5ForCausalLM, Ernie4_5Tokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "baidu/ERNIE-4.5-0.3B-PT"
 
 # load the tokenizer and the model
-tokenizer = Ernie4_5Tokenizer.from_pretrained(model_name)
-model = Ernie4_5ForCausalLM.from_pretrained(
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    use_cache=True,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    torch_dtype=torch.bfloat16,
 )
 
 # prepare the model input
