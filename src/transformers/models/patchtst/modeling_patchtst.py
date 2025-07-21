@@ -106,7 +106,6 @@ class PatchTSTAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -554,7 +553,7 @@ class PatchTSTEncoderLayer(nn.Module):
 
 @auto_docstring
 class PatchTSTPreTrainedModel(PreTrainedModel):
-    config_class = PatchTSTConfig
+    config: PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False

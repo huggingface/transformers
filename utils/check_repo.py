@@ -790,7 +790,7 @@ def check_all_auto_object_names_being_defined():
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name, mapping in mappings_to_check.items():
-        for _, class_names in mapping.items():
+        for class_names in mapping.values():
             if not isinstance(class_names, tuple):
                 class_names = (class_names,)
                 for class_name in class_names:
