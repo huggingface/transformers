@@ -291,9 +291,6 @@ def convert_paligemma_checkpoint(
     processor.save_pretrained(pytorch_dump_folder_path)
 
 
-#
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
