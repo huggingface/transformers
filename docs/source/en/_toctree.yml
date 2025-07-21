@@ -441,6 +441,10 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie4_5
+        title: Ernie4_5
+      - local: model_doc/ernie4_5_moe
+        title: Ernie4_5_MoE
       - local: model_doc/ernie_m
         title: ErnieM
       - local: model_doc/esm
