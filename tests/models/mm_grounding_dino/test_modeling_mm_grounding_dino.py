@@ -575,6 +575,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
             self.assertTrue(outputs)
 
+    # Ignore copy
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -593,6 +594,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                         or "reference_points" in name
                         or "vision_proj" in name
                         or "text_proj" in name
+                        or ("class_embed" in name and "bias" in name)
                     ):
                         continue
                     self.assertIn(
