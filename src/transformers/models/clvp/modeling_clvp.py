@@ -1256,6 +1256,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         self.post_init()
 
     def get_output_embeddings(self):
+        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
+        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
         return None
 
     def get_input_embeddings(self):
