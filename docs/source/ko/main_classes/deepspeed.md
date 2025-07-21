@@ -26,7 +26,7 @@ Zero Redundancy Optimizer (ZeRO)로 구동되는 [DeepSpeed](https://github.com/
 
 </Tip>
 
-## HfDeepSpeedConfig[[hfdeepspeedconfig]]
+## HfDeepSpeedConfig[[transformers.integrations.HfDeepSpeedConfig]]
 
 [[autodoc]] integrations.HfDeepSpeedConfig
     - all
