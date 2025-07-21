@@ -349,7 +349,13 @@ class ServeArguments:
     `transformers serve --help`
     """
 
-    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    device: str = field(
+        default="auto",
+        metadata={
+            "help": "Device to use for inference; will default to `auto` and"
+            "place the model on an accelerator if available."
+        },
+    )
     torch_dtype: Optional[str] = field(
         default="auto",
         metadata={
@@ -687,6 +693,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "HuggingFaceTB/SmolVLM-Instruct",
             "ibm-granite/granite-vision-3.2-2b",
             "Qwen/Qwen2.5-VL-7B-Instruct",
+            "OpenGVLab/InternVL3-1B",
         ]
 
         if HF_HUB_OFFLINE:
