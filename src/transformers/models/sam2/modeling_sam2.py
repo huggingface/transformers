@@ -560,7 +560,6 @@ class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
-    # _no_split_modules = ["SamVisionAttention"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -1450,15 +1449,17 @@ class Sam2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
+
+        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
+
+        self.internal_dim = self.hidden_size // downsample_rate
         self.num_attention_heads = (
             num_attention_heads if num_attention_heads is not None else config.num_attention_heads
         )
-
-        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
-        self.internal_dim = self.hidden_size // downsample_rate
-
         if self.internal_dim % self.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
+
         self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
@@ -2028,6 +2029,8 @@ class Sam2Model(Sam2PreTrainedModel):
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = Sam2MaskDecoder(config.mask_decoder_config)
 
         self.num_feature_levels = config.vision_config.num_feature_levels

@@ -273,7 +273,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
         hf_model.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
-        repo_id = f"yonigozlan/{pytorch_dump_folder.split('/')[-1]}"
+        repo_id = f"danelcsb/{pytorch_dump_folder.split('/')[-1]}"
         processor.push_to_hub(repo_id)
         hf_model.push_to_hub(repo_id)
 
