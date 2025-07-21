@@ -30,7 +30,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
     Args:
         stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):
             The number of blocks in each stages
-        stage_out_channels (`List`, *optional*, defaults to [64, 64, 128, 256]):
+        out_features (`List`, *optional*, defaults to [64, 64, 128, 256]):
             The number of channels in each stage
         stage_stride (`List`, *optional*, defaults to [2, 1, 2, 2]):
             The stride used in each stage
@@ -111,7 +111,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
     def __init__(
         self,
         stage_num_blocks: Optional[list[int]] = None,
-        stage_out_channels: Optional[list[int]] = None,
+        out_features: Optional[list[int]] = None,
         stage_stride: Optional[list[int]] = None,
         hidden_size: int = 256,
         activation_function: str = "relu",
@@ -139,19 +139,32 @@ class EfficientLoFTRConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
-        self.stage_out_channels = stage_out_channels if stage_out_channels is not None else [64, 64, 128, 256]
-        self.stage_in_channels = [1] + self.stage_out_channels[:-1]
+        # Stage level of RepVGG
         self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
+        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
+        self.out_features = out_features if out_features is not None else [64, 64, 128, 256]
+        self.stage_in_channels = [1] + self.out_features[:-1]
+
+        # Block level of RepVGG
         self.stage_block_stride = [
             [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(self.stage_stride, self.stage_num_blocks)
         ]
+        self.stage_block_out_channels = [
+            [self.out_features[stage_idx]] * num_blocks
+            for stage_idx, num_blocks in enumerate(self.stage_num_blocks)
+        ]
+        self.stage_block_in_channels = [
+            [self.stage_in_channels[stage_idx]] + self.stage_block_out_channels[stage_idx][:-1]
+            for stage_idx in range(len(self.stage_num_blocks))
+        ]
 
-        self.fine_fusion_dims = list(reversed(self.stage_out_channels))[:-1]
+        # Fine matching level of EfficientLoFTR
+        self.fine_fusion_dims = list(reversed(self.out_features))[:-1]
+
         self.hidden_size = hidden_size
-        if self.hidden_size != self.stage_out_channels[-1]:
+        if self.hidden_size != self.out_features[-1]:
             raise ValueError(
-                f"hidden_size should be equal to the last value in stage_out_channels. hidden_size = {self.hidden_size}, stage_out_channels = {self.stage_out_channels}"
+                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.stage_out_channels}"
             )
 
         self.activation_function = activation_function

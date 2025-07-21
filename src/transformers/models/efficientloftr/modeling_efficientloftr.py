@@ -136,11 +136,10 @@ class EfficientLoFTRRepVGGBlock(GradientCheckpointingLayer):
 
     def __init__(self, config: EfficientLoFTRConfig, stage_idx: int, block_idx: int):
         super().__init__()
-        activation = config.activation_function
-        in_channels = config.stage_in_channels[stage_idx]
-        out_channels = config.stage_out_channels[stage_idx]
+        in_channels = config.stage_block_in_channels[stage_idx][block_idx]
+        out_channels = config.stage_block_out_channels[stage_idx][block_idx]
         stride = config.stage_block_stride[stage_idx][block_idx]
-
+        activation = config.activation_function
         self.conv1 = EfficientLoFTRConvNormLayer(
             config, in_channels, out_channels, kernel_size=3, stride=stride, padding=1
         )
@@ -163,16 +162,15 @@ class EfficientLoFTRRepVGGBlock(GradientCheckpointingLayer):
 class EfficientLoFTRRepVGGStage(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig, stage_idx: int):
         super().__init__()
-
-        blocks = [
-            EfficientLoFTRRepVGGBlock(
-                config,
-                stage_idx,
-                block_idx,
+        self.blocks = nn.ModuleList([])
+        for block_idx in range(config.stage_num_blocks[stage_idx]):
+            self.blocks.append(
+                EfficientLoFTRRepVGGBlock(
+                    config,
+                    stage_idx,
+                    block_idx,
+                )
             )
-            for block_idx in range(config.stage_num_blocks[stage_idx])
-        ]
-        self.blocks = nn.ModuleList(blocks)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for block in self.blocks:
@@ -184,8 +182,11 @@ class EfficientLoFTRepVGG(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
 
-        stages = [EfficientLoFTRRepVGGStage(config, stage_idx) for stage_idx in range(len(config.stage_stride))]
-        self.stages = nn.ModuleList(stages)
+        self.stages = nn.ModuleList([])
+
+        for stage_idx in range(len(config.stage_stride)):
+            stage = EfficientLoFTRRepVGGStage(config, stage_idx)
+            self.stages.append(stage)
 
     def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:
         outputs = []
@@ -536,16 +537,15 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         super().__init__()
 
         self.fine_kernel_size = config.fine_kernel_size
-        fine_fusion_dims = config.fine_fusion_dims
 
+        fine_fusion_dims = config.fine_fusion_dims
         self.out_conv = nn.Conv2d(
             fine_fusion_dims[0], fine_fusion_dims[0], kernel_size=1, stride=1, padding=0, bias=False
         )
-        out_conv_layers = [
-            EfficientLoFTROutConvBlock(config, fine_fusion_dims[i], fine_fusion_dims[i - 1])
-            for i in range(1, len(fine_fusion_dims))
-        ]
-        self.out_conv_layers = nn.ModuleList(out_conv_layers)
+        self.out_conv_layers = nn.ModuleList()
+        for i in range(1, len(fine_fusion_dims)):
+            out_conv = EfficientLoFTROutConvBlock(config, fine_fusion_dims[i], fine_fusion_dims[i - 1])
+            self.out_conv_layers.append(out_conv)
 
     def forward_pyramid(
         self,

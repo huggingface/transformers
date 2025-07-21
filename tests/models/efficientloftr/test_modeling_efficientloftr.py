@@ -49,9 +49,8 @@ class EfficientLoFTRModelTester:
         batch_size=2,
         image_width=80,
         image_height=60,
-        stage_block_dims: list[int] = [32, 32, 64],
         stage_num_blocks: list[int] = [1, 1, 1],
-        stage_out_channels: list[int] = [32, 32, 64],
+        out_features: list[int] = [32, 32, 64],
         stage_stride: list[int] = [2, 1, 2],
         q_aggregation_kernel_size: int = 1,
         kv_aggregation_kernel_size: int = 1,
@@ -69,9 +68,8 @@ class EfficientLoFTRModelTester:
         self.image_width = image_width
         self.image_height = image_height
 
-        self.stage_block_dims = stage_block_dims
         self.stage_num_blocks = stage_num_blocks
-        self.stage_out_channels = stage_out_channels
+        self.out_features = out_features
         self.stage_stride = stage_stride
         self.q_aggregation_kernel_size = q_aggregation_kernel_size
         self.kv_aggregation_kernel_size = kv_aggregation_kernel_size
@@ -92,9 +90,8 @@ class EfficientLoFTRModelTester:
 
     def get_config(self):
         return EfficientLoFTRConfig(
-            stage_block_dims=self.stage_block_dims,
             stage_num_blocks=self.stage_num_blocks,
-            stage_out_channels=self.stage_out_channels,
+            out_features=self.out_features,
             stage_stride=self.stage_stride,
             q_aggregation_kernel_size=self.q_aggregation_kernel_size,
             kv_aggregation_kernel_size=self.kv_aggregation_kernel_size,
