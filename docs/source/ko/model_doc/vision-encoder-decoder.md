@@ -25,26 +25,22 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+## 개요[[overview]]
 
-The [`VisionEncoderDecoderModel`] can be used to initialize an image-to-text model with any
-pretrained Transformer-based vision model as the encoder (*e.g.* [ViT](vit), [BEiT](beit), [DeiT](deit), [Swin](swin))
-and any pretrained language model as the decoder (*e.g.* [RoBERTa](roberta), [GPT2](gpt2), [BERT](bert), [DistilBERT](distilbert)).
+[`VisionEncoderDecoderModel`]은 사전 훈련된 Transformer 기반 비전 모델을 인코더로 (*예:* [ViT](vit), [BEiT](beit), [DeiT](deit), [Swin](swin)),
+사전 훈련된 언어 모델을 디코더로 (*예:* [RoBERTa](roberta), [GPT2](gpt2), [BERT](bert), [DistilBERT](distilbert)) 사용하여 이미지-텍스트 모델을 초기화하는 데 사용할 수 있습니다.
 
-The effectiveness of initializing image-to-text-sequence models with pretrained checkpoints has been shown in (for
-example) [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://huggingface.co/papers/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
-Zhoujun Li, Furu Wei.
+사전 훈련된 체크포인트로 이미지-텍스트 시퀀스 모델을 초기화하는 효과는 (예를 들어) Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
+Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://huggingface.co/papers/2109.10282)에서 입증되었습니다.
 
-After such a [`VisionEncoderDecoderModel`] has been trained/fine-tuned, it can be saved/loaded just like any other models (see the examples below
-for more information).
+이러한 [`VisionEncoderDecoderModel`]이 훈련/파인튜닝된 후에는 다른 모델들과 마찬가지로 저장/로드할 수 있습니다 (자세한 내용은 아래 예제를 참조하세요).
 
-An example application is image captioning, in which the encoder is used to encode the image, after which an autoregressive language model generates
-the caption. Another example is optical character recognition. Refer to [TrOCR](trocr), which is an instance of [`VisionEncoderDecoderModel`].
+응용 예시로는 이미지 캡셔닝이 있습니다. 여기서는 인코더가 이미지를 인코딩하고, 이후 자기회귀 언어 모델이 캡션을 생성합니다. 다른 예시로는 광학 문자 인식이 있습니다. [`VisionEncoderDecoderModel`]의 인스턴스인 [TrOCR](trocr)을 참조하세요.
 
-## Randomly initializing `VisionEncoderDecoderModel` from model configurations.
+## 모델 설정에서 `VisionEncoderDecoderModel` 랜덤 초기화[[randomly-initializing-visionencoderdecodermodel-from-model-configurations]]
 
-[`VisionEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`ViTModel`] configuration for the encoder
-and the default [`BertForCausalLM`] configuration for the decoder.
+[`VisionEncoderDecoderModel`]은 인코더와 디코더 설정에서 랜덤하게 초기화할 수 있습니다. 다음 예제에서는 인코더에 기본 [`ViTModel`] 설정을,
+디코더에 기본 [`BertForCausalLM`] 설정을 사용하여 이를 수행하는 방법을 보여줍니다.
 
 ```python
 >>> from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
@@ -56,12 +52,12 @@ and the default [`BertForCausalLM`] configuration for the decoder.
 >>> model = VisionEncoderDecoderModel(config=config)
 ```
 
-## Initialising `VisionEncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
+## 사전 훈련된 인코더와 디코더에서 `VisionEncoderDecoderModel` 초기화[[initialising-visionencoderdecodermodel-from-a-pretrained-encoder-and-a-pretrained-decoder]]
 
-[`VisionEncoderDecoderModel`] can be initialized from a pretrained encoder checkpoint and a pretrained decoder checkpoint. Note that any pretrained Transformer-based vision model, *e.g.* [Swin](swin), can serve as the encoder and both pretrained auto-encoding models, *e.g.* BERT, pretrained causal language models, *e.g.* GPT2, as well as the pretrained decoder part of sequence-to-sequence models, *e.g.* decoder of BART, can be used as the decoder.
-Depending on which architecture you choose as the decoder, the cross-attention layers might be randomly initialized.
-Initializing [`VisionEncoderDecoderModel`] from a pretrained encoder and decoder checkpoint requires the model to be fine-tuned on a downstream task, as has been shown in [the *Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder).
-To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] method.
+[`VisionEncoderDecoderModel`]은 사전 훈련된 인코더 체크포인트와 사전 훈련된 디코더 체크포인트에서 초기화할 수 있습니다. 사전 훈련된 Transformer 기반 비전 모델(*예:* [Swin](swin))은 인코더 역할을 할 수 있으며, 사전 훈련된 자동 인코딩 모델(*예:* BERT), 사전 훈련된 인과적 언어 모델(*예:* GPT2), 그리고 시퀀스-투-시퀀스 모델의 사전 훈련된 디코더 부분(*예:* BART의 디코더)은 모두 디코더로 사용할 수 있습니다.
+디코더로 선택하는 아키텍처에 따라 교차 주의(cross-attention) 레이어가 랜덤하게 초기화될 수 있습니다.
+사전 훈련된 인코더와 디코더 체크포인트에서 [`VisionEncoderDecoderModel`]을 초기화하려면 [*Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에서 보여준 바와 같이 다운스트림 작업에서 모델을 파인튜닝해야 합니다.
+이를 위해 `VisionEncoderDecoderModel` 클래스는 [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] 메서드를 제공합니다.
 
 ```python
 >>> from transformers import VisionEncoderDecoderModel
@@ -71,11 +67,11 @@ To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecode
 ... )
 ```
 
-## Loading an existing `VisionEncoderDecoderModel` checkpoint and perform inference.
+## 기존 `VisionEncoderDecoderModel` 체크포인트 로드 및 추론 수행[[loading-an-existing-visionencoderdecodermodel-checkpoint-and-perform-inference]]
 
-To load fine-tuned checkpoints of the `VisionEncoderDecoderModel` class, [`VisionEncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
+`VisionEncoderDecoderModel` 클래스의 파인튜닝된 체크포인트를 로드하기 위해, [`VisionEncoderDecoderModel`]은 Transformers의 다른 모델 아키텍처와 마찬가지로 `from_pretrained(...)` 메서드를 제공합니다.
 
-To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
+추론을 수행하려면 [`generate`] 메서드를 사용합니다. 이 메서드는 자기회귀적으로 텍스트를 생성할 수 있습니다. 이 메서드는 그리디(greedy), 빔 서치(beam search), 다항 샘플링(multinomial sampling) 등 다양한 형태의 디코딩을 지원합니다.
 
 ```python
 >>> import requests
@@ -83,28 +79,26 @@ To perform inference, one uses the [`generate`] method, which allows to autoregr
 
 >>> from transformers import GPT2TokenizerFast, ViTImageProcessor, VisionEncoderDecoderModel
 
->>> # load a fine-tuned image captioning model and corresponding tokenizer and image processor
+>>> # 파인튜닝된 이미지 캡셔닝 모델과 해당 토크나이저 및 이미지 프로세서를 로드합니다
 >>> model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 >>> tokenizer = GPT2TokenizerFast.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 >>> image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 
->>> # let's perform inference on an image
+>>> # 이미지에 대해 추론을 수행해보겠습니다
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 >>> pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
->>> # autoregressively generate caption (uses greedy decoding by default)
+>>> # 자기회귀적으로 캡션 생성 (기본적으로 그리디 디코딩 사용)
 >>> generated_ids = model.generate(pixel_values)
 >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 >>> print(generated_text)
 a cat laying on a blanket next to a cat laying on a bed
 ```
 
-## Loading a PyTorch checkpoint into `TFVisionEncoderDecoderModel`.
+## PyTorch 체크포인트를 `TFVisionEncoderDecoderModel`로 로드[[loading-a-pytorch-checkpoint-into-tfvisionencoderdecodermodel]]
 
-[`TFVisionEncoderDecoderModel.from_pretrained`] currently doesn't support initializing the model from a
-PyTorch checkpoint. Passing `from_pt=True` to this method will throw an exception. If there are only PyTorch
-checkpoints for a particular vision encoder-decoder model, a workaround is:
+[`TFVisionEncoderDecoderModel.from_pretrained`]는 현재 PyTorch 체크포인트에서 모델을 초기화하는 것을 지원하지 않습니다. 이 메서드에 `from_pt=True`를 전달하면 예외가 발생합니다. 특정 비전 인코더-디코더 모델에 PyTorch 체크포인트만 있는 경우, 해결 방법은 다음과 같습니다:
 
 ```python
 >>> from transformers import VisionEncoderDecoderModel, TFVisionEncoderDecoderModel
@@ -117,15 +111,14 @@ checkpoints for a particular vision encoder-decoder model, a workaround is:
 >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
 ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
 ... )
->>> # This is only for copying some specific attributes of this particular model.
+>>> # 이것은 이 특정 모델의 몇 가지 특정 속성을 복사하기 위한 것입니다.
 >>> model.config = _model.config
 ```
 
-## Training
+## 훈련[[training]]
 
-Once the model is created, it can be fine-tuned similar to BART, T5 or any other encoder-decoder model on a dataset of (image, text) pairs.
-As you can see, only 2 inputs are required for the model in order to compute a loss: `pixel_values` (which are the
-images) and `labels` (which are the `input_ids` of the encoded target sequence).
+모델이 생성된 후에는 (이미지, 텍스트) 쌍의 데이터셋에서 BART, T5 또는 다른 인코더-디코더 모델과 유사하게 파인튜닝할 수 있습니다.
+보시다시피, 손실을 계산하기 위해 모델에 필요한 입력은 단 2개입니다: `pixel_values` (이미지)와 `labels` (인코딩된 대상 시퀀스의 `input_ids`)입니다.
 
 ```python
 >>> from transformers import ViTImageProcessor, BertTokenizer, VisionEncoderDecoderModel
@@ -149,12 +142,12 @@ images) and `labels` (which are the `input_ids` of the encoded target sequence).
 ...     return_tensors="pt",
 ... ).input_ids
 
->>> # the forward function automatically creates the correct decoder_input_ids
+>>> # forward 함수가 자동으로 올바른 decoder_input_ids를 생성합니다
 >>> loss = model(pixel_values=pixel_values, labels=labels).loss
 ```
 
-This model was contributed by [nielsr](https://github.com/nielsrogge). This model's TensorFlow and Flax versions
-were contributed by [ydshieh](https://github.com/ydshieh).
+이 모델은 [nielsr](https://github.com/nielsrogge)이 기여했습니다. 이 모델의 TensorFlow와 Flax 버전은
+[ydshieh](https://github.com/ydshieh)가 기여했습니다.
 
 ## VisionEncoderDecoderConfig
 
