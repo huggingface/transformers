@@ -33,7 +33,7 @@ You can find all the original OLMoE checkpoints under the [OLMoE](https://huggin
 >
 > Click on the OLMoE models in the right sidebar for more examples of how to apply OLMoE to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`OlmoeForCausalLM`] class.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
