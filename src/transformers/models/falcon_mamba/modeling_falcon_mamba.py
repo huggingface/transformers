@@ -54,10 +54,10 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-    if is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-    else:
-        causal_conv1d_update, causal_conv1d_fn = None, None
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 logger = logging.get_logger(__name__)
@@ -272,17 +272,6 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mamba_ssm_available():
-            from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-        else:
-            selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-        if is_causal_conv1d_available():
-            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-        else:
-            causal_conv1d_update, causal_conv1d_fn = None, None
-
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -398,10 +387,6 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        if is_mambapy_available():
-            from mambapy.pscan import pscan
-        else:
-            pscan = None
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -687,14 +672,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         self.gradient_checkpointing = False
         self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
-        self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
-
-    def load_hook(self, state_dict, prefix, *args):
-        for k in state_dict:
-            if "embedding." in k:
-                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
-                break
 
     def get_input_embeddings(self):
         return self.embeddings
