@@ -18,12 +18,12 @@ Feature extractor class for FastConformer
 
 import warnings
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils_base import AudioInput
-from ...utils import TensorType, is_librosa_available, is_torch_available, logging, requires_backends
+from ...utils import is_librosa_available, is_torch_available, logging, requires_backends
 
 
 if is_torch_available():
@@ -339,7 +339,9 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
             audios = torch.nn.utils.rnn.pad_sequence(squeezed_audios, batch_first=True, padding_value=0.0)
             return audios, lengths
 
-        raise TypeError(f"Invalid audio provided. Audio should be torch tensors, numpy arrays, or sequences thereof. Got {type(audios)}")
+        raise TypeError(
+            f"Invalid audio provided. Audio should be torch tensors, numpy arrays, or sequences thereof. Got {type(audios)}"
+        )
 
     def __call__(
         self,
