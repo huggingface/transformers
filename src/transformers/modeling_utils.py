@@ -1925,7 +1925,7 @@ class EmbeddingAccessMixin:
 
         name = getattr(self, "_input_embed_layer", "embed_tokens")
 
-        if default_embedding := getattr(self, name, None) is not None:
+        if (default_embedding := getattr(self, name, None)) is not None:
             return default_embedding
         # 2) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
 
