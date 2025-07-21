@@ -414,7 +414,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         self.register_buffer("pe", pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
-        self.alpha = torch.nn.Parameter(torch.tensor(1.0))
+        self.alpha = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, emb):
         emb = emb + self.alpha * self.pe[:, : emb.size(1)]
@@ -1208,8 +1208,9 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, SpeechT5PositionalConvEmbedding):
             nn.init.normal_(
                 module.conv.weight,
@@ -1217,15 +1218,17 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, SpeechT5ScaledPositionalEncoding):
+            module.alpha.data.fill_(1.0)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -1234,9 +1237,12 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+        if hasattr(module, "masked_spec_embed"):
+            nn.init.uniform_(module.masked_spec_embed)
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
@@ -3164,9 +3170,9 @@ class SpeechT5HifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
