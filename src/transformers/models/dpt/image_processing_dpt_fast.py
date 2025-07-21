@@ -200,15 +200,11 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             )
 
             segmentation_maps_kwargs = kwargs.copy()
-            segmentation_maps_kwargs["do_normalize"] = False
-            segmentation_maps_kwargs["do_rescale"] = False
-            segmentation_maps_kwargs["input_data_format"] = ChannelDimension.FIRST
+            segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            )
-            processed_segmentation_maps = processed_segmentation_maps.pixel_values.squeeze(1)
-            processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-            batch_feature["labels"] = processed_segmentation_maps
+            ).pixel_values
+            batch_feature["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
         return batch_feature
 

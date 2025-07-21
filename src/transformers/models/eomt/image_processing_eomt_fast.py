@@ -205,17 +205,19 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
             )
 
             segmentation_maps_kwargs = kwargs.copy()
-            segmentation_maps_kwargs["do_normalize"] = False
-            segmentation_maps_kwargs["do_rescale"] = False
-            segmentation_maps_kwargs["input_data_format"] = ChannelDimension.FIRST
-            # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-            segmentation_maps_kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
+                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                }
+            )
 
             processed_segmentation_maps, _ = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
-            processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
-            processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
+            processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
             # Convert to list of binary masks and labels
             mask_labels, class_labels = [], []
             for idx, segmentation_map in enumerate(processed_segmentation_maps):
