@@ -14,7 +14,7 @@
 # limitations under the License.
 """Flax VisionTextDualEncoder model."""
 
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -40,7 +40,7 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     via the [`~FlaxAutoModel.from_pretrained`] method. The projection layers are automatically added to the model and
     should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
+    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://huggingface.co/papers/2111.07991) it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement
     on new zero-shot vision tasks such as image classification or retrieval.
 
@@ -223,7 +223,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: VisionTextDualEncoderConfig,
-        input_shape: Optional[Tuple] = None,
+        input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -240,7 +240,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape[0], dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0])

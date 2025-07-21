@@ -118,7 +118,7 @@ def generate_attention_matrix_from_mask(
         colored_word = f"{YELLOW}{word_repr}{RESET}" if img_token in word else word_repr
         row_display = " ".join(
             f"{YELLOW}{BLACK_SQUARE}{RESET}"
-            if img_token in words[j] and mask[i, j] and img_token in words[i]
+            if img_token in words[j] and mask[i, j] and img_token in word
             else f"{GREEN}{BLACK_SQUARE}{RESET}"
             if i == j
             else BLACK_SQUARE
@@ -130,9 +130,7 @@ def generate_attention_matrix_from_mask(
         if sliding_window is not None:
             sliding_window_row = " ".join(
                 f"{YELLOW}{BLACK_SQUARE}{RESET}"
-                if img_token in words[j]
-                and img_token in words[i]
-                and token_type_buckets[0, i] == token_type_buckets[0, j]
+                if img_token in words[j] and img_token in word and token_type_buckets[0, i] == token_type_buckets[0, j]
                 else f"{GREEN}{BLACK_SQUARE}{RESET}"
                 if i == j
                 else BLACK_SQUARE
@@ -151,7 +149,7 @@ class AttentionMaskVisualizer:
         config = AutoConfig.from_pretrained(model_name)
         self.image_token = "<img>"
         if hasattr(config.get_text_config(), "sliding_window"):
-            config.sliding_window = 5
+            self.sliding_window = getattr(config.get_text_config(), "sliding_window", None)
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
         except Exception:
@@ -178,6 +176,7 @@ class AttentionMaskVisualizer:
     def visualize_attention_mask(self, input_sentence: str, suffix=""):
         model = self.model
         kwargs = {}
+        image_seq_length = None
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             img = Image.open(requests.get(img, stream=True).raw)

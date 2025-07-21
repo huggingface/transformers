@@ -488,7 +488,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model.save_pretrained(tmp_dir)
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
+                    tmp_dir, attn_implementation="flash_attention_2", torch_dtype=torch.float16
                 ).to("cuda")
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
@@ -514,7 +514,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model_sdpa = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -522,7 +521,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model_eager = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
             attn_implementation="eager",
         ).to(torch_device)
 

@@ -137,6 +137,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
     def test_initialization(self):
         pass
 
@@ -154,18 +158,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")

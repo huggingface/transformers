@@ -31,19 +31,19 @@ import sys
 import tempfile
 import time
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
-# isort: off
+# ruff: isort: off
 from .integrations import (
     get_reporting_integration_callbacks,
 )
 
-# isort: on
+# ruff: isort: on
 
 import huggingface_hub.utils as hf_hub_utils
 import numpy as np
@@ -73,7 +73,6 @@ from .models.auto.modeling_auto import (
 from .optimization import Adafactor, get_scheduler
 from .processing_utils import ProcessorMixin
 from .pytorch_utils import (
-    ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_2_3,
 )
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -151,14 +150,12 @@ from .utils import (
     check_torch_load_is_safe,
     find_labels,
     is_accelerate_available,
-    is_apex_available,
     is_apollo_torch_available,
     is_bitsandbytes_available,
     is_datasets_available,
     is_galore_torch_available,
     is_grokadamw_available,
     is_in_notebook,
-    is_ipex_available,
     is_liger_kernel_available,
     is_lomo_available,
     is_peft_available,
@@ -172,6 +169,7 @@ from .utils import (
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -190,9 +188,6 @@ if is_in_notebook():
     from .utils.notebook import NotebookProgressCallback
 
     DEFAULT_PROGRESS_CALLBACK = NotebookProgressCallback
-
-if is_apex_available():
-    from apex import amp
 
 if is_datasets_available():
     import datasets
@@ -353,7 +348,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -383,10 +378,10 @@ class Trainer:
             detailed in [here](callback).
 
             If you want to remove one of the default callbacks used, use the [`Trainer.remove_callback`] method.
-        optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
+        optimizers (`tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
             model and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
-        optimizer_cls_and_kwargs (`Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]`, *optional*):
+        optimizer_cls_and_kwargs (`tuple[Type[torch.optim.Optimizer], dict[str, Any]]`, *optional*):
             A tuple containing the optimizer class and keyword arguments to use.
             Overrides `optim` and `optim_args` in `args`. Incompatible with the `optimizers` argument.
 
@@ -530,12 +525,15 @@ class Trainer:
             if is_liger_kernel_available():
                 from liger_kernel.transformers import _apply_liger_kernel_to_instance
 
+                # Prepare kernel config - use provided config or default (empty dict for default behavior)
+                kernel_config = self.args.liger_kernel_config if self.args.liger_kernel_config is not None else {}
+
                 if isinstance(model, PreTrainedModel):
-                    # Patch the model with liger kernels. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model)
+                    # Patch the model with liger kernels. Use the the specified or default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model, **kernel_config)
                 elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
-                    # Patch the base model with liger kernels where model is a PeftModel. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model.get_base_model())
+                    # Patch the base model with liger kernels where model is a PeftModel. Use the specified or default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model.get_base_model(), **kernel_config)
                 else:
                     logger.warning(
                         "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
@@ -631,18 +629,21 @@ class Trainer:
 
         # Just in case the model was wrapped outside of the `Trainer`
         unwrapped_model = self.accelerator.unwrap_model(model)
-        model_forward = (
-            unwrapped_model.forward
-            if not _is_peft_model(unwrapped_model)
-            else unwrapped_model.get_base_model().forward
-        )
-        forward_params = inspect.signature(model_forward).parameters
+        # We also unwrap peft model
+        if _is_peft_model(unwrapped_model):
+            if hasattr(unwrapped_model, "get_base_model"):
+                unwrapped_model = unwrapped_model.get_base_model()
+            elif hasattr(unwrapped_model, "base_model") and hasattr(unwrapped_model.base_model, "model"):
+                unwrapped_model = unwrapped_model.base_model.model
+            else:
+                raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
-        if hasattr(model, "accepts_loss_kwargs"):
-            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        if hasattr(unwrapped_model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = unwrapped_model.accepts_loss_kwargs
         else:
+            forward_params = inspect.signature(unwrapped_model.forward).parameters
             self.model_accepts_loss_kwargs = any(
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
@@ -700,7 +701,7 @@ class Trainer:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
-            raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
+            raise TypeError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
         if args.max_steps > 0 and args.num_train_epochs > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
@@ -761,11 +762,6 @@ class Trainer:
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
             elif args.half_precision_backend == "apex":
-                if not is_apex_available():
-                    raise ImportError(
-                        "Using FP16 with APEX but APEX is not installed, please refer to"
-                        " https://www.github.com/nvidia/apex."
-                    )
                 self.use_apex = True
 
         # Label smoothing
@@ -830,7 +826,7 @@ class Trainer:
     def _activate_neftune(self, model):
         r"""
         Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
-        https://arxiv.org/abs/2310.05914
+        https://huggingface.co/papers/2310.05914
         """
         unwrapped_model = self.accelerator.unwrap_model(model)
 
@@ -941,7 +937,7 @@ class Trainer:
         columns = [k for k in signature_columns if k in dataset.column_names]
         if len(columns) == 0:
             raise ValueError(
-                "No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
+                f"No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
                 f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
                 "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
             )
@@ -1192,9 +1188,10 @@ class Trainer:
 
         This function filters out parameters in two ways:
         1. By layer type (instances of layers specified in ALL_LAYERNORM_LAYERS)
-        2. By parameter name patterns (containing 'bias', 'layernorm', or 'rmsnorm')
+        2. By parameter name patterns (containing 'bias', or variation of 'norm')
         """
-        decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS, ["bias", "layernorm", "rmsnorm"])
+        forbidden_name_patterns = [r"bias", r"layernorm", r"rmsnorm", r"(?:^|\.)norm(?:$|\.)", r"_norm(?:$|\.)"]
+        decay_parameters = get_parameter_names(model, [nn.LayerNorm], forbidden_name_patterns)
         return decay_parameters
 
     def create_optimizer(self):
@@ -1337,7 +1334,7 @@ class Trainer:
                 is_layerwise_supported (bool): Whether layerwise optimization is supported.
 
             Returns:
-                Tuple[Any, Any]: Optimizer class and updated optimizer kwargs.
+                tuple[Any, Any]: Optimizer class and updated optimizer kwargs.
             """
             is_layerwise = optimizer_name.lower().endswith("layerwise")
             if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED and is_layerwise_supported:
@@ -1349,7 +1346,7 @@ class Trainer:
                 raise ValueError(f"You need to define `optim_target_modules` to use {optimizer_name} optimizers")
 
             if not isinstance(args.optim_target_modules, (list, str)):
-                raise ValueError(
+                raise TypeError(
                     f"`optim_target_modules` must be a list of strings, a regex string, or 'all-linear'. Got: {args.optim_target_modules}"
                 )
 
@@ -1732,6 +1729,31 @@ class Trainer:
                 }
             )
             optimizer_kwargs.update(additional_optim_kwargs)
+        elif args.optim == OptimizerNames.STABLE_ADAMW:
+            if not is_torch_optimi_available():
+                raise ImportError(
+                    "You need to install `torch-optimi` in order to use stable_adamw optimizers. "
+                    "Install it with `pip install torch-optimi`."
+                )
+            from optimi import StableAdamW
+
+            max_lr = optim_args.pop("max_lr", None)
+            if max_lr is not None:
+                max_lr = float(max_lr)
+
+            kahan_sum = optim_args.pop("kahan_sum", None)
+            if kahan_sum is not None:
+                kahan_sum = bool(kahan_sum)
+
+            stable_adamw_kwargs = {
+                "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
+                "max_lr": max_lr,
+                "kahan_sum": kahan_sum,
+            }
+
+            optimizer_cls = StableAdamW
+            optimizer_kwargs.update(adam_kwargs)
+            optimizer_kwargs.update(stable_adamw_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1924,29 +1946,6 @@ class Trainer:
 
         return model
 
-    def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
-        if not is_ipex_available():
-            raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-
-        import intel_extension_for_pytorch as ipex
-
-        if not training:
-            model.eval()
-            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
-            # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
-        else:
-            if not model.training:
-                model.train()
-            model, self.optimizer = ipex.optimize(
-                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
-            )
-
-        return model
-
     def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
         attributes_map = {
             "logging_steps": "logging_steps",
@@ -1976,10 +1975,6 @@ class Trainer:
             logger.warning_once(warning_str)
 
     def _wrap_model(self, model, training=True, dataloader=None):
-        if self.args.use_ipex:
-            dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
-            model = self.ipex_optimize_model(model, training, dtype=dtype)
-
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -1992,6 +1987,8 @@ class Trainer:
 
         # Mixed precision training with apex
         if self.use_apex and training:
+            from apex import amp
+
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
@@ -2146,12 +2143,12 @@ class Trainer:
                 If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. If a
                 `bool` and equals `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance
                 of [`Trainer`]. If present, training will resume from the model/optimizer/scheduler states loaded here.
-            trial (`optuna.Trial` or `Dict[str, Any]`, *optional*):
+            trial (`optuna.Trial` or `dict[str, Any]`, *optional*):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
-            ignore_keys_for_eval (`List[str]`, *optional*)
+            ignore_keys_for_eval (`list[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments used to hide deprecated arguments
         """
         if resume_from_checkpoint is False:
@@ -2244,6 +2241,27 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def get_tp_size(self) -> int:
+        """Get the tensor parallel size from either the model or DeepSpeed config."""
+
+        # 1. Check model.tp_size first
+        if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
+            return model_tp
+
+        # 2. Fall back to DeepSpeed config if enabled
+        if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
+            return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+
+        # 3. Default fallback
+        return 1
+
+    def get_total_train_batch_size(self, args) -> int:
+        """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
+
+        Note: Only considers DP and TP (dp_world_size = world_size // tp_size)."""
+        dp_world_size = args.world_size // self.get_tp_size()
+        return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
+
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
@@ -2274,7 +2292,8 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = self.get_total_train_batch_size(args)
+
         (
             num_train_epochs,
             num_update_steps_per_epoch,
@@ -2366,7 +2385,11 @@ class Trainer:
                 if self.use_apex:
                     model = self.accelerator.prepare(self.model)
                 else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+                    # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
+                    if self.is_tp_enabled:
+                        self.optimizer = self.accelerator.prepare(self.optimizer)
+                    else:
+                        model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
@@ -2579,16 +2602,24 @@ class Trainer:
                             if is_sagemaker_mp_enabled() and args.fp16:
                                 _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
                             elif self.use_apex:
+                                from apex import amp
+
                                 # Revert to normal clipping otherwise, handling Apex or full precision
                                 _grad_norm = nn.utils.clip_grad_norm_(
                                     amp.master_params(self.optimizer),
                                     args.max_grad_norm,
                                 )
                             else:
-                                _grad_norm = self.accelerator.clip_grad_norm_(
-                                    model.parameters(),
-                                    args.max_grad_norm,
-                                )
+                                grad_norm_context = contextlib.nullcontext
+                                if self.is_tp_enabled:
+                                    from torch.distributed._tensor.experimental import implicit_replication
+
+                                    grad_norm_context = implicit_replication
+                                with grad_norm_context():
+                                    _grad_norm = self.accelerator.clip_grad_norm_(
+                                        model.parameters(),
+                                        args.max_grad_norm,
+                                    )
 
                             if (
                                 is_accelerate_available()
@@ -3575,19 +3606,19 @@ class Trainer:
         </Tip>
 
         Args:
-            hp_space (`Callable[["optuna.Trial"], Dict[str, float]]`, *optional*):
+            hp_space (`Callable[["optuna.Trial"], dict[str, float]]`, *optional*):
                 A function that defines the hyperparameter search space. Will default to
                 [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`] or
                 [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
-            compute_objective (`Callable[[Dict[str, float]], float]`, *optional*):
+            compute_objective (`Callable[[dict[str, float]], float]`, *optional*):
                 A function computing the objective to minimize or maximize from the metrics returned by the `evaluate`
                 method. Will default to [`~trainer_utils.default_compute_objective`].
             n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction (`str` or `List[str]`, *optional*, defaults to `"minimize"`):
+            direction (`str` or `list[str]`, *optional*, defaults to `"minimize"`):
                 If it's single objective optimization, direction is `str`, can be `"minimize"` or `"maximize"`, you
                 should pick `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or
-                several metrics. If it's multi objectives optimization, direction is `List[str]`, can be List of
+                several metrics. If it's multi objectives optimization, direction is `list[str]`, can be List of
                 `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
                 `"maximize"` when optimizing one or several metrics.
             backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
@@ -3595,7 +3626,7 @@ class Trainer:
                 on which one is installed. If all are installed, will default to optuna.
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments for each backend:
 
                 - `optuna`: parameters from
@@ -3610,7 +3641,7 @@ class Trainer:
                   [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
 
         Returns:
-            [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
+            [`trainer_utils.BestRun` or `list[trainer_utils.BestRun]`]: All the information about the best run or best
             runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
             backend.
         """
@@ -3641,7 +3672,7 @@ class Trainer:
         Subclass and override this method to inject custom behavior.
 
         Args:
-            logs (`Dict[str, float]`):
+            logs (`dict[str, float]`):
                 The values to log.
             start_time (`Optional[float]`):
                 The start of training.
@@ -3695,7 +3726,13 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return self.autocast_smart_context_manager()
+        ctx_stack = contextlib.ExitStack()
+
+        autocast_ctx = self.autocast_smart_context_manager()
+        if not isinstance(autocast_ctx, contextlib.nullcontext):
+            ctx_stack.enter_context(autocast_ctx)
+
+        return ctx_stack
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
@@ -3713,7 +3750,10 @@ class Trainer:
         return ctx_manager
 
     def training_step(
-        self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], num_items_in_batch=None
+        self,
+        model: nn.Module,
+        inputs: dict[str, Union[torch.Tensor, Any]],
+        num_items_in_batch: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -3723,7 +3763,7 @@ class Trainer:
         Args:
             model (`nn.Module`):
                 The model to train.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
@@ -3776,11 +3816,13 @@ class Trainer:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
         if self.use_apex:
+            from apex import amp
+
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
+            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
                 loss = loss / self.args.gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
@@ -3792,21 +3834,41 @@ class Trainer:
 
             return loss.detach()
 
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    def compute_loss(
+        self,
+        model: nn.Module,
+        inputs: dict[str, Union[torch.Tensor, Any]],
+        return_outputs: bool = False,
+        num_items_in_batch: Optional[torch.Tensor] = None,
+    ):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
-        Subclass and override for custom behavior.
+        Args:
+            model (`nn.Module`):
+                The model to compute the loss for.
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
+                The input data for the model.
+            return_outputs (`bool`, *optional*, defaults to `False`):
+                Whether to return the model outputs along with the loss.
+            num_items_in_batch (Optional[torch.Tensor], *optional*):
+                The number of items in the batch. If num_items_in_batch is not passed,
+
+        Returns:
+            The loss of the model along with its output if return_outputs was set to True
+
+        Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation.
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
             labels = None
         if self.model_accepts_loss_kwargs:
-            loss_kwargs = {}
+            kwargs = {}
             if num_items_in_batch is not None:
-                loss_kwargs["num_items_in_batch"] = num_items_in_batch
-            inputs = {**inputs, **loss_kwargs}
+                kwargs["num_items_in_batch"] = num_items_in_batch
+            inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -3912,7 +3974,7 @@ class Trainer:
 
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
-            self.push_to_hub(commit_message="Model save")
+            self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -4117,7 +4179,7 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (Union[`Dataset`, Dict[str, `Dataset`]), *optional*):
+            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]), *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
@@ -4135,7 +4197,7 @@ class Trainer:
 
                 </Tip>
 
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
@@ -4219,7 +4281,7 @@ class Trainer:
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"test"`):
@@ -4238,7 +4300,7 @@ class Trainer:
 
             - predictions (`np.ndarray`): The predictions on `test_dataset`.
             - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
-            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
+            - metrics (`dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
               labels).
         """
         # memory metrics - must set up as early as possible
@@ -4519,19 +4581,19 @@ class Trainer:
         Args:
             model (`nn.Module`):
                 The model to evaluate.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
                 argument `labels`. Check your model's documentation for all accepted arguments.
             prediction_loss_only (`bool`):
                 Whether or not to return the loss only.
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
 
         Return:
-            Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss,
+            tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss,
             logits and labels (each being optional).
         """
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
@@ -4616,7 +4678,7 @@ class Trainer:
         model or subclass and override this method.
 
         Args:
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
         Returns:
@@ -4666,20 +4728,20 @@ class Trainer:
             license (`str`, *optional*):
                 The license of the model. Will default to the license of the pretrained model used, if the original
                 model given to the `Trainer` comes from a repo on the Hub.
-            tags (`str` or `List[str]`, *optional*):
+            tags (`str` or `list[str]`, *optional*):
                 Some tags to be included in the metadata of the model card.
             model_name (`str`, *optional*):
                 The name of the model.
             finetuned_from (`str`, *optional*):
                 The name of the model used to fine-tune this one (if applicable). Will default to the name of the repo
                 of the original model given to the `Trainer` (if it comes from the Hub).
-            tasks (`str` or `List[str]`, *optional*):
+            tasks (`str` or `list[str]`, *optional*):
                 One or several task identifiers, to be included in the metadata of the model card.
-            dataset_tags (`str` or `List[str]`, *optional*):
+            dataset_tags (`str` or `list[str]`, *optional*):
                 One or several dataset tags, to be included in the metadata of the model card.
-            dataset (`str` or `List[str]`, *optional*):
+            dataset (`str` or `list[str]`, *optional*):
                 One or several dataset identifiers, to be included in the metadata of the model card.
-            dataset_args (`str` or `List[str]`, *optional*):
+            dataset_args (`str` or `list[str]`, *optional*):
                One or several dataset arguments, to be included in the metadata of the model card.
         """
         if not self.is_world_process_zero():
@@ -4762,6 +4824,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            revision=self.args.hub_revision,
         )
 
         push_jobs = [model_push_job]
@@ -4777,6 +4840,7 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
+                revision=self.args.hub_revision,
             )
             push_jobs.append(checkpoint_push)
 
@@ -4812,7 +4876,7 @@ class Trainer:
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
                 The git revision to commit from. Defaults to the head of the "main" branch.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
         Returns:
@@ -4856,8 +4920,12 @@ class Trainer:
 
         self.create_model_card(model_name=model_name, **kwargs)
 
+        if revision is None:
+            revision = self.args.hub_revision
+
         # Wait for the current upload to be finished.
         self._finish_current_push()
+
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
@@ -5254,7 +5322,12 @@ class Trainer:
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def get_batch_samples(self, epoch_iterator, num_batches, device):
+    def get_batch_samples(
+        self, epoch_iterator: Iterator, num_batches: int, device: torch.device
+    ) -> tuple[list, Optional[torch.Tensor]]:
+        """
+        Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
+        """
         batch_samples = []
         num_items_in_batch = None
 

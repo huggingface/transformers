@@ -16,7 +16,7 @@
 
 import math
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.utils.cpp_extension import load
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -35,7 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, is_ninja_available, is_torch_cuda_available, logging
+from ...utils import auto_docstring, is_cuda_platform, is_ninja_available, is_torch_cuda_available, logging
 from .configuration_mra import MraConfig
 
 
@@ -528,7 +529,7 @@ class MraSelfAttention(nn.Module):
             )
 
         kernel_loaded = mra_cuda_kernel is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+        if is_torch_cuda_available() and is_cuda_platform() and is_ninja_available() and not kernel_loaded:
             try:
                 load_cuda_kernels()
             except Exception as e:
@@ -554,32 +555,39 @@ class MraSelfAttention(nn.Module):
         self.initial_prior_first_n_blocks = config.initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
 
-    def transpose_for_scores(self, layer):
-        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        layer = layer.view(*new_layer_shape)
-        return layer.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states, attention_mask=None):
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        batch_size, num_heads, seq_len, head_dim = query_layer.size()
+        batch_size, seq_len, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
-            attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len).int()
+            attention_mask.squeeze()
+            .repeat(1, self.num_attention_heads, 1)
+            .reshape(batch_size * self.num_attention_heads, seq_len)
+            .int()
         )
 
         # The CUDA kernels are most efficient with inputs whose size is a multiple of a GPU's warp size (32). Inputs
         # smaller than this are padded with zeros.
         gpu_warp_size = 32
 
-        if head_dim < gpu_warp_size:
-            pad_size = batch_size, num_heads, seq_len, gpu_warp_size - head_dim
+        if self.attention_head_size < gpu_warp_size:
+            pad_size = batch_size, self.num_attention_heads, seq_len, gpu_warp_size - self.attention_head_size
 
             query_layer = torch.cat([query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1)
             key_layer = torch.cat([key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1)
@@ -596,10 +604,10 @@ class MraSelfAttention(nn.Module):
             initial_prior_diagonal_n_blocks=self.initial_prior_diagonal_n_blocks,
         )
 
-        if head_dim < gpu_warp_size:
-            context_layer = context_layer[:, :, :, :head_dim]
+        if self.attention_head_size < gpu_warp_size:
+            context_layer = context_layer[:, :, :, : self.attention_head_size]
 
-        context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
+        context_layer = context_layer.reshape(batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -688,7 +696,7 @@ class MraOutput(nn.Module):
         return hidden_states
 
 
-class MraLayer(nn.Module):
+class MraLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -738,14 +746,7 @@ class MraEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask)
+            layer_outputs = layer_module(hidden_states, attention_mask)
 
             hidden_states = layer_outputs[0]
 
@@ -816,25 +817,28 @@ class MraOnlyMLMHead(nn.Module):
 @auto_docstring
 # Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 class MraPreTrainedModel(PreTrainedModel):
-    config_class = MraConfig
+    config: MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MraLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -874,7 +878,7 @@ class MraModel(MraPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -973,7 +977,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1063,7 +1067,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1144,7 +1148,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+    ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1249,7 +1253,7 @@ class MraForTokenClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1325,7 +1329,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mra(

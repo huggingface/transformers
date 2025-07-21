@@ -40,7 +40,7 @@ and you also will find examples of these below.
 
 Here is an example on a summarization task:
 ```bash
-python examples/pytorch/summarization/run_summarization.py \
+python run_summarization.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
@@ -64,7 +64,7 @@ And here is how you would use it on your own files, after adjusting the values f
 `--train_file`, `--validation_file`, `--text_column` and `--summary_column` to match your setup:
 
 ```bash
-python examples/pytorch/summarization/run_summarization.py \
+python run_summarization.py \
     --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \

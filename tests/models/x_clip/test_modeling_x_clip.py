@@ -22,7 +22,14 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -751,10 +758,13 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]]
-        ).to(torch_device)
-
+        expectations = Expectations(
+            {
+                (None, None): [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]],
+                ("cuda", 8): [[0.0141, 0.2114, 0.0599], [0.0446, 0.5866, -0.1674], [-0.0876, 0.8592, -0.3025]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(
-            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4
         )

@@ -157,6 +157,8 @@
     title: (번역중) VPTQ
   - local: quantization/quanto
     title: Quanto
+  - local: quantization/quark
+    title: Quark
   - local: quantization/eetq
     title: EETQ
   - local: in_translation
@@ -200,6 +202,8 @@
       title: CPU로 추론하기
     - local: perf_infer_gpu_one
       title: 하나의 GPU를 활용한 추론
+    - local: perf_infer_gpu_multi
+      title: 다중 GPU를 활용한 추론
     title: 추론 최적화하기
   - local: big_models
     title: 대형 모델을 인스턴스화
@@ -225,7 +229,7 @@
 - sections:
   - local: philosophy
     title: 이념과 목표
-  - local: in_translation
+  - local: glossary
     title: (번역중) Glossary
   - local: task_summary
     title: 🤗 Transformers로 할 수 있는 작업

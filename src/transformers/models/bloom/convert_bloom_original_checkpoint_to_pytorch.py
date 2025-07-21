@@ -98,7 +98,7 @@ def convert_bloom_checkpoint_to_pytorch(
         config = BloomConfig()
 
         for j, file in enumerate(file_names):
-            print("Processing file: {}".format(file))
+            print(f"Processing file: {file}")
             tensors = None
 
             for i in range(pretraining_tp):
@@ -132,7 +132,7 @@ def convert_bloom_checkpoint_to_pytorch(
                 tensors,
                 os.path.join(
                     pytorch_dump_folder_path,
-                    "pytorch_model_{}-of-{}.bin".format(str(j + 1).zfill(5), str(len(file_names)).zfill(5)),
+                    f"pytorch_model_{str(j + 1).zfill(5)}-of-{str(len(file_names)).zfill(5)}.bin",
                 ),
             )
 
@@ -140,8 +140,8 @@ def convert_bloom_checkpoint_to_pytorch(
                 value = tensors[key]
                 total_size += value.numel() * get_dtype_size(value.dtype)
                 if key not in index_dict["weight_map"]:
-                    index_dict["weight_map"][key] = "pytorch_model_{}-of-{}.bin".format(
-                        str(j + 1).zfill(5), str(len(file_names)).zfill(5)
+                    index_dict["weight_map"][key] = (
+                        f"pytorch_model_{str(j + 1).zfill(5)}-of-{str(len(file_names)).zfill(5)}.bin"
                     )
 
         config = BloomConfig()
