@@ -131,34 +131,32 @@ class MyModel(PreTrainedModel):
 </details>
 
 3. Optionally, if you want the model to support tensor parallel and/or pipeline parallel features, you can add the following keys in the config file: 
-
-    <details>
-    <summary>configuration_my_model.py</summary>
-
-    ```python
-
-    from transformers import PretrainedConfig
-
-    class MyConfig(PretrainedConfig):
-        base_model_tp_plan = {
-            "layers.*.self_attn.k_proj": "colwise",
-            "layers.*.self_attn.v_proj": "colwise",
-            "layers.*.self_attn.o_proj": "rowwise",
-            "layers.*.mlp.gate_proj": "colwise",
-            "layers.*.mlp.up_proj": "colwise",
-            "layers.*.mlp.down_proj": "rowwise",
-        }
-        base_model_pp_plan = {
-            "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-            "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-            "norm": (["hidden_states"], ["hidden_states"]),
-        }
-    ```
-    </details>
-
     * `base_model_tp_plan` for [tensor parallelism](https://huggingface.co/docs/transformers/perf_infer_gpu_multi) - a dict that maps fully qualified layer name patterns to tensor parallel styles (currently only "colwise" and "rowwise" are supported).
     * `base_model_pp_plan` for pipeline parallelism - a dict that maps direct child layer names to tuples of lists of strs.The list in the first element of the tuple contains the names of the input arguments. The list in the last element of the tuple contains the names of the variables the layer outputs to in your modeling code
 
+<details>
+<summary>configuration_my_model.py</summary>
+
+```python
+
+from transformers import PretrainedConfig
+
+class MyConfig(PretrainedConfig):
+    base_model_tp_plan = {
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+```
+</details>
 
 ### Multimodal Requirements
 
