@@ -105,6 +105,8 @@
     title: Agents
   - local: tools
     title: Tools
+  - local: transformers_as_backend
+    title: Transformers as a Unified Inference Backend
   title: Inference
 - isExpanded: false
   sections:
