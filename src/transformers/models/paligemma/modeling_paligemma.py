@@ -108,13 +108,12 @@ class PaliGemmaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PaliGemmaPreTrainedModel(PreTrainedModel):
-    config_class = PaliGemmaConfig
+    config: PaliGemmaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_flash_attn = True
     _supports_sdpa = True

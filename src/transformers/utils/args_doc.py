@@ -45,6 +45,7 @@ AUTODOC_FILES = [
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
+    "video_processor_class": ("video_processing_auto", "VIDEO_PROCESSOR_MAPPING_NAMES"),
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
@@ -352,17 +353,13 @@ class ModelArgs:
     blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-    Two formats are allowed:
-        - a [`~cache_utils.Cache`] instance, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-        - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-        shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-        cache format.
+    Only [`~cache_utils.Cache`] instance is allowed as input, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+    If no `past_key_values` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
 
-    The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-    legacy cache format will be returned.
+    The model will output the same cache format that is fed as input.
 
-    If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-    have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+    If `past_key_values` are used, the user is expected to input only unprocessed `input_ids` (those that don't
+    have their past key value states given to this model) of shape `(batch_size, unprocessed_length)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
     """,
         "shape": None,
@@ -533,6 +530,15 @@ class ModelArgs:
         "shape": "of shape `(batch_size, num_channels, image_size, image_size)`",
     }
 
+    pixel_values_videos = {
+        "description": """
+    The tensors corresponding to the input video. Pixel values for videos can be obtained using
+    [`{video_processor_class}`]. See [`{video_processor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{video_processor_class}`] for processing videos).
+    """,
+        "shape": "of shape `(batch_size, num_frames, num_channels, frame_size, frame_size)`",
+    }
+
     vision_feature_layer = {
         "description": """
     The index of the layer to select the vision feature. If multiple indices are provided,
@@ -567,6 +573,15 @@ class ModelArgs:
     [What are attention masks?](../glossary#attention-mask)
     """,
         "shape": "of shape `(batch_size, height, width)`",
+    }
+
+    input_features = {
+        "description": """
+    The tensors corresponding to the input audio features. Audio features can be obtained using
+    [`{feature_extractor_class}`]. See [`{feature_extractor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{feature_extractor_class}`] for processing audios).
+    """,
+        "shape": "of shape `(batch_size, sequence_length, feature_dim)`",
     }
 
 
@@ -822,6 +837,20 @@ class ModelOutputArgs:
         "shape": "of shape `(batch_size,config.project_dim)`",
     }
 
+    image_hidden_states = {
+        "description": """
+    Image hidden states of the model produced by the vision encoder and after projecting the last hidden state.
+    """,
+        "shape": "of shape `(batch_size, num_images, sequence_length, hidden_size)`",
+    }
+
+    video_hidden_states = {
+        "description": """
+    Video hidden states of the model produced by the vision encoder and after projecting the last hidden state.
+    """,
+        "shape": "of shape `(batch_size * num_frames, num_images, sequence_length, hidden_size)`",
+    }
+
 
 class ClassDocstring:
     PreTrainedModel = r"""
@@ -935,12 +964,6 @@ class ClassAttrs:
     """
     _supports_flex_attn = r"""
     Whether the model's attention implementation supports FlexAttention.
-    """
-    _supports_cache_class = r"""
-    Whether the model supports a `Cache` instance as `past_key_values`.
-    """
-    _supports_quantized_cache = r"""
-    Whether the model supports a `QuantoQuantizedCache` instance as `past_key_values`.
     """
     _supports_static_cache = r"""
     Whether the model supports a `StaticCache` instance as `past_key_values`.
