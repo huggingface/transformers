@@ -2860,10 +2860,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        if getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", True):
-            output_embeddings = self.get_output_embeddings()
-            if output_embeddings is not None:
-                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
