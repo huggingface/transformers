@@ -143,11 +143,15 @@ class EfficientLoFTRConfig(PretrainedConfig):
         **kwargs,
     ):
         self.stage_block_dims = stage_block_dims if stage_block_dims is not None else [64, 64, 128, 256]
-        self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
-        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
         self.stage_out_channels = stage_out_channels if stage_out_channels is not None else [64, 64, 128, 256]
         self.stage_in_channels = [1] + self.stage_out_channels[:-1]
+        self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
+        self.stage_stride = stage_stride if stage_stride is not None else [2, 1, 2, 2]
+        self.stage_block_stride = [
+            [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(self.stage_stride, self.stage_num_blocks)
+        ]
 
+        self.fine_fusion_dims = list(reversed(self.stage_block_dims))[:-1]
         self.hidden_size = hidden_size
         if self.hidden_size != self.stage_block_dims[-1]:
             raise ValueError(
