@@ -745,9 +745,9 @@ def prepare_video():
 class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam2Model.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf").to(torch.float32)
-        self.video_model = Sam2VideoModel.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf").to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("../sam2_hf_implem/sam2.1_tiny_hf")
+        self.model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf").to(torch.float32)
+        self.video_model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf").to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()
         self.video_model.to(torch_device)
