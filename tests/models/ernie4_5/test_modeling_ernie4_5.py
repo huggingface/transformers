@@ -99,9 +99,12 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
 
-        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-0.3B-PT")
+        tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-0.3B-PT", revision="refs/pr/3")
         model = Ernie4_5ForCausalLM.from_pretrained(
-            "baidu/ERNIE-4.5-0.3B-PT", device_map="auto", torch_dtype=torch.bfloat16
+            "baidu/ERNIE-4.5-0.3B-PT",
+            revision="refs/pr/3",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
         )
 
         prompt = "Hey, are you conscious? Can you talk to me?"
