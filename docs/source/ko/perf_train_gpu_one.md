@@ -35,13 +35,13 @@ GPU는 높은 메모리 대역폭과 병렬 처리 능력 덕분에 딥러닝 �
 
 ## Trainer[[trainer]]
 
-Trainer는 [TrainingArguments]로 설정할 수 있는 다양한 학습 기능을 제공합니다. 이번 섹션에서는 학습 최적화에 특히 유용한 주요 기능 몇 가지를 살펴봅니다.
+Trainer는 [`TrainingArguments`]로 설정할 수 있는 다양한 학습 기능을 제공합니다. 이번 섹션에서는 학습 최적화에 특히 유용한 주요 기능 몇 가지를 살펴봅니다.
 
 ### 배치 크기[[batch-size]]
 
 배치 크기는 GPU 학습 효율을 좌우하는 가장 중요한 하이퍼파라미터 중 하나로, 메모리 사용량과 학습 속도에 직접적인 영향을 줍니다. 배치 크기를 크게 하면 GPU의 병렬 처리 능력을 극대화하여 학습 속도를 높일 수 있습니다. 일반적으로 8, 64, 128, 256, 512처럼 2의 거듭제곱 값을 사용하는 것이 좋습니다. 적절한 배치 크기는 GPU 사양과 모델의 데이터 타입에 따라 달라집니다.
 
-배치 크기는 [TrainingArguments]의 [~TrainingArguments.per_device_train_batch_size] 옵션으로 설정합니다.
+배치 크기는 [`TrainingArguments`]의 [`~TrainingArguments.per_device_train_batch_size`] 옵션으로 설정합니다.
 
 ```py
 from transformers import TrainingArguments
