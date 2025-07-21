@@ -5,7 +5,7 @@
 #                          modular_blt.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 the Facebook Research and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -419,8 +419,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     sin_freqs = sin[..., : head_dim // 2]  # [B, S, D/2]
 
     # Expand cos/sin to match query/key tensor format [B, H, S, D/2]
-    cos_freqs = cos_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-    sin_freqs = sin_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
+    cos_freqs = cos_freqs.unsqueeze(1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
+    sin_freqs = sin_freqs.unsqueeze(1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
 
     # Split q and k into pairs for rotation: (d0, d1), (d2, d3), ...
     q_pairs = q.view(*q.shape[:-1], head_dim // 2, 2)  # [B, H, S, D/2, 2]
@@ -549,7 +549,7 @@ class BLTLocalEncoder(nn.Module):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
-        self.cross_attn_layers = torch.nn.ModuleList()
+        self.cross_attn_layers = nn.ModuleList()
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
@@ -604,7 +604,7 @@ class BLTLocalEncoder(nn.Module):
                     layer.__call__,
                     hidden_states,
                     position_embeddings,
-                    None,  # attention_mask
+                    attention_mask,
                     None,  # past_key_value
                     False,  # output_attentions
                     False,  # use_cache
@@ -614,7 +614,7 @@ class BLTLocalEncoder(nn.Module):
                 layer_outputs = layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=None,
+                    attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
             hidden_states = layer_outputs[0]
@@ -697,7 +697,7 @@ class BLTLocalDecoder(nn.Module):
 
         self.norm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.cross_attn_layers = torch.nn.ModuleList()
+        self.cross_attn_layers = nn.ModuleList()
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
@@ -766,7 +766,7 @@ class BLTLocalDecoder(nn.Module):
                     layer.__call__,
                     hidden_states,
                     position_embeddings,
-                    None,  # attention_mask
+                    attention_mask,
                     None,  # past_key_value
                     False,  # output_attentions
                     False,  # use_cache
@@ -776,7 +776,7 @@ class BLTLocalDecoder(nn.Module):
                 layer_outputs = layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=None,
+                    attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
             hidden_states = layer_outputs[0]
@@ -939,7 +939,7 @@ class BLTGlobalTransformer(nn.Module):
                     layer.__call__,
                     hidden_states,
                     position_embeddings,
-                    None,  # attention_mask
+                    attention_mask,
                     None,  # past_key_value
                     False,  # output_attentions
                     False,  # use_cache
@@ -949,7 +949,7 @@ class BLTGlobalTransformer(nn.Module):
                 layer_outputs = layer(
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=None,
+                    attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
             hidden_states = layer_outputs[0]
@@ -996,13 +996,6 @@ def byte_group_hash_function(
         hash_values = hashes % max_hash
 
     return hash_values
-
-
-def init_hash_embeddings(config, local_encoder_dim: int, encoder_hash_byte_group_size: list):
-    """Initialize hash-based token embeddings for the BLT encoder."""
-    num_embeddings = config.encoder_hash_byte_group_nb_functions * len(encoder_hash_byte_group_size)
-    embeddings = [nn.Embedding(config.encoder_hash_byte_group_vocab, local_encoder_dim) for _ in range(num_embeddings)]
-    return nn.ModuleList(embeddings)
 
 
 def compute_hash_embeddings(
@@ -1166,11 +1159,13 @@ class BLTModel(BLTPreTrainedModel):
         self.local_encoder = BLTLocalEncoder(config.encoder_config)
         self.global_transformer = BLTGlobalTransformer(config.global_config)
         self.local_decoder = BLTLocalDecoder(config.decoder_config)
-        self.encoder_hash_tok_embedding = init_hash_embeddings(
-            config,
-            local_encoder_dim=config.encoder_config.hidden_size,
-            encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
-        )
+
+        num_embeddings = config.encoder_hash_byte_group_nb_functions * len(config.encoder_hash_byte_group_size)
+        embeddings = [
+            nn.Embedding(config.encoder_hash_byte_group_vocab, config.encoder_config.hidden_size)
+            for _ in range(num_embeddings)
+        ]
+        self.encoder_hash_tok_embedding = nn.ModuleList(embeddings)
         if self.config.patch_in_forward:
             self.patcher = BLTPatcher(config.patcher_config)
             self.patcher.eval()
@@ -1179,7 +1174,6 @@ class BLTModel(BLTPreTrainedModel):
         else:
             self.patcher = None
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -1264,7 +1258,9 @@ class BLTModel(BLTPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = attention_mask
+        causal_mask = self._update_causal_mask(
+            attention_mask, encoder_embeds, cache_position, past_key_values, output_attentions
+        )
 
         cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
@@ -1274,6 +1270,7 @@ class BLTModel(BLTPreTrainedModel):
                 input_ids=input_ids,
                 input_embeds=encoder_embeds,
                 patch_embeds=None,
+                attention_mask=causal_mask,
                 cross_mask=cross_attn_mask_enc,
                 full_text_row_masked_out_mask=full_text_row_masked_out_mask_enc,
                 num_patches=patch_lengths.shape[1],
@@ -1284,10 +1281,21 @@ class BLTModel(BLTPreTrainedModel):
         )
 
         global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
-        global_hidden_states, global_hidden_states_all, global_attentions_all = self.global_transformer(
+        global_cache_position = torch.arange(
+            0, global_hidden_states.shape[1], device=global_hidden_states.device
+        )
+        global_causal_mask = self._update_causal_mask(
+            None,  # attention_mask
+            global_hidden_states,
+            global_cache_position,
+            None,  # past_key_values
+            False  # output_attentions
+        )
+        global_hidden_states, _, _ = self.global_transformer(
             input_embeds=global_hidden_states,
-            output_attentions=False,  # Don't collect global transformer attentions
-            output_hidden_states=False,  # Don't collect global transformer hidden states
+            attention_mask=global_causal_mask,
+            output_attentions=False,
+            output_hidden_states=False,
         )
 
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
@@ -1409,8 +1417,17 @@ class BLTPatcher(BLTPreTrainedModel):
 
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
+            cache_position = torch.arange(sequence_length, device=input_embeds.device)
+            causal_mask = self._update_causal_mask(
+                None,  # attention_mask
+                input_embeds,
+                cache_position,
+                None,  # past_key_values
+                False  # output_attentions
+            )
+
             for i, layer in enumerate(self.layers):
-                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
+                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=causal_mask)
                 hidden_states = layer_outputs[0]
 
             logits = self.lm_head(self.norm(hidden_states))
@@ -1656,14 +1673,5 @@ __all__ = [
     "BLTPreTrainedModel",
     "BLTModel",
     "BLTPatcher",
-    "BLTLocalEncoder",
-    "BLTLocalDecoder",
-    "BLTGlobalTransformer",
-    "BLTTransformerLayer",
     "BLTForCausalLM",
-    "BLTMLP",
-    "BLTRMSNorm",
-    "BLTRotaryEmbedding",
-    "BLTSelfAttention",
-    "BLTCrossAttention",
 ]

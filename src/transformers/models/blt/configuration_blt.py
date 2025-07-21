@@ -182,8 +182,6 @@ class BLTPatcherConfig(PretrainedConfig):
             Make feedforward dimension multiple of this for the entropy model.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             RoPE theta parameter for the entropy model.
-        _attn_implementation (`str`, *optional*, defaults to "sdpa"):
-            Attention implementation for the entropy model.
         attn_bias_type (`str`, *optional*, defaults to "causal"):
             Attention bias type for the entropy model.
     """
@@ -237,10 +235,6 @@ class BLTConfig(PretrainedConfig):
             Vocabulary size of the BLT model. Defines the number of different tokens (bytes) that can be represented.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can handle.
-        _attn_implementation (`str`, *optional*, defaults to "sdpa"):
-            The attention implementation to use. Can be "eager", "sdpa", etc. This setting is propagated to all
-            sub-components (encoder, decoder, global transformer, patcher).
-
         # Patching configuration
         patch_in_forward (`bool`, *optional*, defaults to False):
             Whether to perform patching during forward pass.

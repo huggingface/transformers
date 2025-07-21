@@ -324,7 +324,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
-    def test_blt(self):
+    def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200
         EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
 
@@ -333,6 +333,7 @@ class BLTIntegrationTest(unittest.TestCase):
         model = BLTForCausalLM.from_pretrained(
             "itazap/blt-1b-testing",
             device_map="auto",
+            attn_implementation="sdpa"
         )
 
         tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
@@ -418,7 +419,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto")
+        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", attn_implementation="sdpa", device_map="auto")
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
@@ -435,7 +436,11 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", torch_dtype=torch.bfloat16)
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b-testing", 
+            device_map="auto",
+            attn_implementation="sdpa",
+            torch_dtype=torch.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
 
@@ -523,7 +528,11 @@ class BLTIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", torch_dtype=torch.bfloat16)
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b-testing", 
+            device_map="auto",
+            attn_implementation="sdpa",
+            torch_dtype=torch.bfloat16)
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
@@ -541,7 +550,10 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", attn_implementation="eager")
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b-testing", 
+            device_map="auto",
+            attn_implementation="eager")
 
         tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
 
@@ -562,7 +574,11 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", torch_dtype=torch.bfloat16)
+        model = BLTForCausalLM.from_pretrained(
+            "itazap/blt-1b-testing",
+             device_map="auto",
+            attn_implementation="sdpa",
+            torch_dtype=torch.bfloat16)
 
         model.generation_config.cache_implementation = "static"
 

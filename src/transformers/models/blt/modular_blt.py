@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 the Facebook Research and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,8 +61,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     sin_freqs = sin[..., : head_dim // 2]  # [B, S, D/2]
 
     # Expand cos/sin to match query/key tensor format [B, H, S, D/2]
-    cos_freqs = cos_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-    sin_freqs = sin_freqs.unsqueeze(1).expand(-1, q.shape[1], -1, -1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
+    cos_freqs = cos_freqs.unsqueeze(1) # [B, 1, S, D/2] -> [B, H, S, D/2]
+    sin_freqs = sin_freqs.unsqueeze(1) # [B, 1, S, D/2] -> [B, H, S, D/2]
 
     # Split q and k into pairs for rotation: (d0, d1), (d2, d3), ...
     q_pairs = q.view(*q.shape[:-1], head_dim // 2, 2)  # [B, H, S, D/2, 2]
@@ -121,13 +121,6 @@ def byte_group_hash_function(
         hash_values = hashes % max_hash
 
     return hash_values
-
-
-def init_hash_embeddings(config, local_encoder_dim: int, encoder_hash_byte_group_size: list):
-    """Initialize hash-based token embeddings for the BLT encoder."""
-    num_embeddings = config.encoder_hash_byte_group_nb_functions * len(encoder_hash_byte_group_size)
-    embeddings = [nn.Embedding(config.encoder_hash_byte_group_vocab, local_encoder_dim) for _ in range(num_embeddings)]
-    return nn.ModuleList(embeddings)
 
 
 def compute_hash_embeddings(
@@ -377,7 +370,7 @@ class BLTLocalEncoder(nn.Module):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
-        self.cross_attn_layers = torch.nn.ModuleList()
+        self.cross_attn_layers = nn.ModuleList()
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
@@ -525,7 +518,7 @@ class BLTLocalDecoder(nn.Module):
 
         self.norm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.cross_attn_layers = torch.nn.ModuleList()
+        self.cross_attn_layers = nn.ModuleList()
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
@@ -630,6 +623,78 @@ class BLTCrossAttention(MllamaTextCrossAttention):
         self.q_norm = BLTRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = BLTRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_norm(hidden_states)  # BLT normalizes first
+        query_states = self.q_proj(query_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+
+        if cross_attention_states is not None:
+            cross_attention_states = self.k_norm(cross_attention_states)  # BLT normalizes first
+            key_states = self.k_proj(cross_attention_states)
+            value_states = self.v_proj(cross_attention_states)
+            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            if past_key_value is not None:
+                # if we have a new image + new tokens, we only computed key_states on that new image
+                # we still update the cross key states, past_image, new_image. And use it!
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+        elif cache_position[0] != 0:
+            key_states, value_states = (
+                past_key_value.key_cache[self.layer_idx],
+                past_key_value.value_cache[self.layer_idx],
+            )
+        else:
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
+
+        attention_interface: Callable = eager_attention_forward
+
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        attn_output = attn_output + hidden_states
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
 
 class BLTGlobalTransformer(nn.Module):
     def __init__(self, config: BLTGlobalTransformerConfig):
@@ -708,11 +773,13 @@ class BLTModel(BLTPreTrainedModel):
         self.local_encoder = BLTLocalEncoder(config.encoder_config)
         self.global_transformer = BLTGlobalTransformer(config.global_config)
         self.local_decoder = BLTLocalDecoder(config.decoder_config)
-        self.encoder_hash_tok_embedding = init_hash_embeddings(
-            config,
-            local_encoder_dim=config.encoder_config.hidden_size,
-            encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
-        )
+
+        num_embeddings = config.encoder_hash_byte_group_nb_functions * len(config.encoder_hash_byte_group_size)
+        embeddings = [
+            nn.Embedding(config.encoder_hash_byte_group_vocab, config.encoder_config.hidden_size)
+            for _ in range(num_embeddings)
+        ]
+        self.encoder_hash_tok_embedding = nn.ModuleList(embeddings)
         if self.config.patch_in_forward:
             self.patcher = BLTPatcher(config.patcher_config)
             self.patcher.eval()
@@ -721,7 +788,6 @@ class BLTModel(BLTPreTrainedModel):
         else:
             self.patcher = None
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -1070,14 +1136,5 @@ __all__ = [
     "BLTPreTrainedModel",
     "BLTModel",
     "BLTPatcher",
-    "BLTLocalEncoder",
-    "BLTLocalDecoder",
-    "BLTGlobalTransformer",
-    "BLTTransformerLayer",
     "BLTForCausalLM",
-    "BLTMLP",
-    "BLTRMSNorm",
-    "BLTRotaryEmbedding",
-    "BLTSelfAttention",
-    "BLTCrossAttention",
 ]
