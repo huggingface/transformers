@@ -1303,10 +1303,11 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
                     eos_token_id = [eos_token_id]
                 eos_token_id = torch.tensor(eos_token_id)
 
-            bad_words_ids = list(
-                filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id), bad_words_ids)
-            )
-
+            eos_set = set(eos_token_id)
+            bad_words_ids = [
+                bad_token_seq for bad_token_seq in bad_words_ids
+                if len(bad_token_seq) != 1 or bad_token_seq[0] not in eos_set
+            ]
         # Forbidding a sequence is equivalent to setting its bias to -inf
         sequence_bias = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
         super().__init__(sequence_bias=sequence_bias)
