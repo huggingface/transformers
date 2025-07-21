@@ -619,7 +619,6 @@ class GenerationMixin(ContinuousMixin):
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
 
-        q_lengths = attention_mask.sum(dim=-1)
         # 6. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
         # pass)
         if (

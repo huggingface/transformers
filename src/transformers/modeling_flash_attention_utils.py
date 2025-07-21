@@ -16,7 +16,6 @@ import os
 import warnings
 from typing import Optional, TypedDict
 
-from kernels import get_kernel
 import torch
 import torch.nn.functional as F
 
