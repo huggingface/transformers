@@ -1026,7 +1026,9 @@ class TrainingArguments:
     )
     preserve_best_model: bool = field(
         default=True,
-        metadata={"help": "Whether to preserve the best model checkpoint when rotating checkpoints due to save_total_limit."}
+        metadata={
+            "help": "Whether to preserve the best model checkpoint when rotating checkpoints due to save_total_limit."
+        },
     )
     restore_callback_states_from_checkpoint: bool = field(
         default=False,
@@ -1670,7 +1672,9 @@ class TrainingArguments:
                 )
             if self.eval_strategy == IntervalStrategy.STEPS:
                 if self.save_steps > 0 and self.eval_steps > 0:
-                    steps_aligned = (self.save_steps % self.eval_steps == 0) or (self.eval_steps % self.save_steps == 0)
+                    steps_aligned = (self.save_steps % self.eval_steps == 0) or (
+                        self.eval_steps % self.save_steps == 0
+                    )
                     if not steps_aligned:
                         warnings.warn(
                             "Warning: save_steps and eval_steps are misaligned. Best model will be saved at evaluation, not at a scheduled save step."

@@ -4119,7 +4119,7 @@ class Trainer:
         # we don't do to allow resuming.
         save_total_limit = self.args.save_total_limit
         best_model_checkpoint = self.state.best_model_checkpoint
-        
+
         preserve_best = getattr(self.args, "preserve_best_model", True)
         if preserve_best and best_model_checkpoint is not None:
             checkpoints_sorted = [ckpt for ckpt in checkpoints_sorted if ckpt != best_model_checkpoint]
