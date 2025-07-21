@@ -54,11 +54,11 @@ class EncodecOutput(ModelOutput):
 @auto_docstring
 class EncodecEncoderOutput(ModelOutput):
     r"""
-    audio_codes (`torch.LongTensor`  of shape `(nb_chunks, batch_size, num_quantizers, chunk_length)`, *optional*):
+    audio_codes (`torch.LongTensor`  of shape `(nb_chunks, batch_size, nb_quantizers, chunk_length)`, *optional*):
         Discrete code embeddings computed using `model.encode`.
     audio_scales (list of length `nb_chunks` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
-    last_frame_pad_length (list of single `int`, *optional*):
+    last_frame_pad_length (`int`, *optional*):
         The length of the padding in the last frame, if any. This is used to ensure that the encoded frames
         can be outputted as a tensor.
     """
@@ -548,9 +548,9 @@ class EncodecModel(EncodecPreTrainedModel):
 
         Returns:
             EncodecEncoderOutput dict or a tuple containing:
-            - audio_codes (`torch.Tensor` of shape `(nb_chunks, batch_size, num_channels, chunk_length)`),
+            - audio_codes (`torch.Tensor` of shape `(nb_chunks, batch_size, nb_quantizers, chunk_length)`),
             - audio_scales (list of length `nb_chunks` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*),
-            - last_frame_pad_length (list of single `int`, *optional*).
+            - last_frame_pad_length (`int`, *optional*).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -587,19 +587,16 @@ class EncodecModel(EncodecPreTrainedModel):
             encoded_frames.append(encoded_frame)
             scales.append(scale)
 
-        # pad last frame if necessary
-        last_frame_pad_length = None
-        if encoded_frames and encoded_frames[-1].shape[-1] < encoded_frames[0].shape[-1]:
-            last_frame = encoded_frames[-1]
-            last_frame_pad_length = encoded_frames[0].shape[-1] - last_frame.shape[-1]
-            if last_frame_pad_length > 0:
-                last_frame = nn.functional.pad(last_frame, (0, last_frame_pad_length), value=0)
-                encoded_frames[-1] = last_frame
+        # pad last frame (if necessary) to be able to apply `torch.stack`
+        last_frame_pad_length = encoded_frames[0].shape[-1] - encoded_frames[-1].shape[-1]
+        if last_frame_pad_length > 0:
+            last_frame = nn.functional.pad(encoded_frames[-1], (0, last_frame_pad_length), value=0)
+            encoded_frames[-1] = last_frame
         encoded_frames = torch.stack(encoded_frames)
 
         if not return_dict:
-            return (encoded_frames, scales, [last_frame_pad_length])
-        return EncodecEncoderOutput(encoded_frames, scales, [last_frame_pad_length])
+            return (encoded_frames, scales, last_frame_pad_length)
+        return EncodecEncoderOutput(encoded_frames, scales, last_frame_pad_length)
 
     @staticmethod
     def _linear_overlap_add(frames: list[torch.Tensor], stride: int):
@@ -662,7 +659,7 @@ class EncodecModel(EncodecPreTrainedModel):
         audio_scales: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-        last_frame_pad_length: Optional[int] = None,
+        last_frame_pad_length: Optional[int] = 0,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
         """
         Decodes the given frames into an output audio waveform.
@@ -679,28 +676,24 @@ class EncodecModel(EncodecPreTrainedModel):
                 Padding mask used to pad the `input_values`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            last_frame_pad_length (list of single `int`, *optional*):
-                List of one integer representing the length of the padding in the last frame, which is removed
-                during decoding.
+            last_frame_pad_length (`int`, *optional*):
+                Integer representing the length of the padding in the last frame, which is removed during decoding.
 
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         chunk_length = self.config.chunk_length
-        last_frame_pad_length = last_frame_pad_length[0] if last_frame_pad_length is not None else None
         if chunk_length is None:
             if len(audio_codes) != 1:
                 raise ValueError(f"Expected one frame, got {len(audio_codes)}")
             frame = audio_codes[0]
-            if last_frame_pad_length is not None:
-                frame = audio_codes[0][..., :-last_frame_pad_length]
+            if last_frame_pad_length > 0:
+                frame = frame[..., :-last_frame_pad_length]
             audio_values = self._decode_frame(frame, audio_scales[0])
         else:
             decoded_frames = []
-
             for i, (frame, scale) in enumerate(zip(audio_codes, audio_scales)):
-                if i == len(audio_codes) - 1 and last_frame_pad_length is not None:
-                    # remove padding
+                if i == len(audio_codes) - 1 and last_frame_pad_length > 0:
                     frame = frame[..., :-last_frame_pad_length]
                 frames = self._decode_frame(frame, scale)
                 decoded_frames.append(frames)
@@ -724,7 +717,7 @@ class EncodecModel(EncodecPreTrainedModel):
         audio_codes: Optional[torch.LongTensor] = None,
         audio_scales: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-        last_frame_pad_length: Optional[int] = None,
+        last_frame_pad_length: Optional[int] = 0,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
@@ -754,10 +747,10 @@ class EncodecModel(EncodecPreTrainedModel):
             Scaling factor for each `audio_codes` input.
         return_dict (`bool`, *optional*):
             Whether to return outputs as a dict.
-        last_frame_pad_length (list of single `int`, *optional*):
-            The length of the padding in the last frame, if any. This is used to ensure that the encoded frames
-            can be outputted as a tensor. This values should be passed during decoding to ensure these padding
-            values are removed from the encoded frames.
+        last_frame_pad_length (`int`, *optional*):
+            The length of the padding in the last frame, if any. This is used to ensure that the encoded frames can be
+            outputted as a tensor. This value should be passed during decoding to ensure padding is removed from the
+            encoded frames.
 
         Examples:
 
