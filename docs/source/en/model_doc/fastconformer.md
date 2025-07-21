@@ -103,60 +103,7 @@ custom_decoder = nn.Linear(config.hidden_size, vocab_size)
 logits = custom_decoder(hidden_states)
 ```
 
-### Processing Batches with Different Lengths
-
-```python
-import torch
-from transformers import FastConformerModel, FastConformerFeatureExtractor
-
-encoder = FastConformerModel.from_pretrained("nvidia/parakeet-ctc-1.1b")
-feature_extractor = FastConformerFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-
-# Example with two audio samples of different lengths
-audio1 = torch.randn(8000)   # 0.5 seconds at 16kHz
-audio2 = torch.randn(12000)  # 0.75 seconds at 16kHz
-
-# Pad to same length for batching
-max_length = max(len(audio1), len(audio2))
-padded_audio1 = torch.cat([audio1, torch.zeros(max_length - len(audio1))])
-padded_audio2 = torch.cat([audio2, torch.zeros(max_length - len(audio2))])
-
-batch_audio = torch.stack([padded_audio1, padded_audio2])
-audio_lengths = torch.tensor([len(audio1), len(audio2)])
-
-# Extract features with proper length handling
-features = feature_extractor(
-    batch_audio,
-    audio_lengths=audio_lengths,
-    sampling_rate=16000,
-    return_tensors="pt"
-)
-
-# Process through encoder
-with torch.no_grad():
-    outputs = encoder(
-        input_features=features.input_features,
-        attention_mask=features.attention_mask,
-        input_lengths=features.input_lengths
-    )
-
-# Each sample will have different effective lengths due to subsampling
-encoded_features = outputs.last_hidden_state  # Shape: (2, max_subsampled_length, hidden_size)
-```
-
-### Complete Speech Recognition
-
 For end-to-end speech recognition, use the ParakeetCTC model which combines FastConformer encoder with a CTC decoder. See the [`ParakeetCTC`] documentation for detailed usage examples.
-
-```python
-# For complete speech recognition, use ParakeetCTC instead
-from transformers import ParakeetCTC, AutoFeatureExtractor, AutoTokenizer
-
-model = ParakeetCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
-feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
-# ... see ParakeetCTC documentation for full examples
-```
 
 ## Model Architecture Details
 
@@ -177,14 +124,13 @@ FastConformer follows the Conformer architecture but with optimizations for effi
 - **Linear Scalability**: Attention complexity reduced from O(n²) to O(n)
 - **NeMo Compatibility**: Weights can be converted from NVIDIA NeMo models  
 - **Flexible Configuration**: Supports various model sizes and architectures
-- **Batch Processing**: Efficient handling of variable-length sequences
 - **Modular Design**: Can be used standalone or as encoder for various decoder types
 
 ### Model Variants
 
 - **FastConformerEncoder**: Core encoder implementation
 - **FastConformerModel**: Complete encoder model with additional utilities
-- **Integration**: Used as encoder in ParakeetCTC, and future ParakeetTDT/ParakeetRNNT models
+- **Integration**: Used as encoder in ParakeetCTC, ParakeetTDT and ParakeetRNNT models
 
 ## Conversion from NeMo
 
@@ -196,11 +142,6 @@ python src/transformers/models/parakeet_ctc/convert_nemo_to_parakeet_ctc.py \
     --output_dir ./fastconformer-hf
 ```
 
-The conversion process:
-1. Extracts the FastConformer encoder from the NeMo model
-2. Maps weight names to HuggingFace conventions
-3. Creates compatible FastConformerConfig and feature extractor
-4. Verifies numerical equivalence between implementations
 
 ## FastConformerConfig
 
