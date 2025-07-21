@@ -150,8 +150,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
             [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(self.stage_stride, self.stage_num_blocks)
         ]
         self.stage_block_out_channels = [
-            [self.out_features[stage_idx]] * num_blocks
-            for stage_idx, num_blocks in enumerate(self.stage_num_blocks)
+            [self.out_features[stage_idx]] * num_blocks for stage_idx, num_blocks in enumerate(self.stage_num_blocks)
         ]
         self.stage_block_in_channels = [
             [self.stage_in_channels[stage_idx]] + self.stage_block_out_channels[stage_idx][:-1]
