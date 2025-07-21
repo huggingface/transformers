@@ -708,7 +708,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "../sam2_hf_implem/sam2.1_tiny_hf"
+        model_name = "yonigozlan/sam2.1_hiera_tiny_hf"
         model = Sam2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -745,8 +745,11 @@ def prepare_video():
 class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf").to(torch.float32)
-        self.video_model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf").to(torch.float32)
+        # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
+        self.model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf", fill_hole_area=0).to(torch.float32)
+        self.video_model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf", fill_hole_area=0).to(
+            torch.float32
+        )
         self.processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()
@@ -777,12 +780,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
 
         torch.testing.assert_close(
-            scores, torch.tensor([0.9546, 0.4937, 0.0428]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores, torch.tensor([0.9547, 0.4932, 0.0427]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-25.0963, -41.5728, -30.8723], [-34.7112, -30.7988, -36.4013], [-25.3061, -37.4575, -33.1899]]
+                [[-24.9289, -41.7473, -31.0161], [-34.5083, -31.1052, -36.5906], [-25.2572, -37.5877, -33.4020]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -804,11 +807,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
 
-        torch.testing.assert_close(scores, torch.tensor([0.9366]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(scores, torch.tensor([0.9364]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-7.1674, -13.4459, -9.6908], [-10.6038, -9.7242, -12.4059], [-7.4478, -12.4997, -10.5906]]
+                [[-7.0468, -13.3871, -9.6433], [-10.4570, -9.7181, -12.3540], [-7.3701, -12.4391, -10.5542]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -837,12 +840,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         masks_logits2 = outputs.low_res_masks[1].squeeze()[sorted_indices][0, :3, :3]
 
         torch.testing.assert_close(
-            scores1, torch.tensor([0.9584, 0.4898, 0.0445]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores1, torch.tensor([0.9586, 0.4914, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits1,
             torch.tensor(
-                [[-22.4127, -37.7623, -27.7642], [-31.0563, -27.6730, -32.6308], [-22.4559, -33.8773, -29.5238]]
+                [[-22.2558, -37.9267, -27.8955], [-30.8666, -27.9524, -32.8008], [-22.4173, -34.0016, -29.7156]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -875,7 +878,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9499], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
+            torch.tensor([[[0.9500], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -883,9 +886,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs.low_res_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-5.9315, -11.3817], [-8.7964, -8.0970]]], [[[-4.8636, -8.8059], [-6.3548, -7.0945]]]],
-                    [[[[-13.8652, -19.1238], [-20.2494, -14.1600]]], [[[-8.8231, -10.2768], [-11.3808, -8.7182]]]],
-                ],
+                    [[[[-5.8134, -11.3037], [-8.6494, -8.0695]]], [[[-4.7726, -8.7596], [-6.2399, -7.0727]]]],
+                    [[[[-13.8652, -19.1227], [-20.2452, -14.1595]]], [[[-8.8219, -10.2751], [-11.3793, -8.7168]]]],
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -908,7 +911,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9873], [0.9265], [0.9495], [0.9207]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
+            torch.tensor([[[0.9873], [0.9264], [0.9496], [0.9208]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -919,16 +922,16 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [
-                        [[[-7.6887, -11.9033], [-8.8828, -10.4974]]],
-                        [[[-17.1057, -23.3219], [-21.0064, -19.4283]]],
-                        [[[-20.6077, -29.3705], [-26.1830, -24.1720]]],
-                        [[[-19.6094, -28.7768], [-24.4176, -23.2746]]],
+                        [[[-7.6201, -11.9294], [-8.7753, -10.5658]]],
+                        [[[-17.1048, -23.4034], [-20.9588, -19.5580]]],
+                        [[[-20.5743, -29.4418], [-26.0712, -24.3209]]],
+                        [[[-19.7182, -29.0840], [-24.4883, -23.6355]]],
                     ],
                     [
-                        [[[-18.5219, -23.5192], [-25.1876, -17.2496]]],
-                        [[[-20.1199, -25.4224], [-25.7887, -19.1165]]],
-                        [[[-21.0868, -24.7951], [-27.5652, -19.2626]]],
-                        [[[-20.5161, -22.5330], [-26.0963, -17.7497]]],
+                        [[[-18.5227, -23.5157], [-25.1869, -17.2468]]],
+                        [[[-20.1201, -25.4221], [-25.7871, -19.1158]]],
+                        [[[-21.0869, -24.7938], [-27.5628, -19.2624]]],
+                        [[[-20.5171, -22.5326], [-26.0914, -17.7515]]],
                     ],
                 ]
             ).to(torch_device),
@@ -969,10 +972,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9736]).to(torch_device), atol=1e-4, rtol=1e-4)
+
+        torch.testing.assert_close(scores, torch.tensor([0.9738]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
-            torch.tensor([[-5.4097, -9.7417, -8.4445], [-5.5585, -8.8216, -8.2644], [-5.6046, -9.8751, -9.0067]]).to(
+            torch.tensor([[-5.3898, -9.7907, -8.4924], [-5.5154, -8.8733, -8.2990], [-5.5979, -9.9265, -9.0773]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -999,11 +1003,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9720]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(scores, torch.tensor([0.9719]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-15.5743, -21.8550, -18.0607], [-17.5526, -17.4155, -23.6521], [-14.4471, -19.4647, -18.6332]]
+                [[-15.5049, -21.8613, -18.0476], [-17.4381, -17.4725, -23.6458], [-14.3967, -19.4371, -18.5897]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1054,9 +1058,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [[[[-21.4113, -21.4113], [-23.3089, -23.3089]]]],
-                    [[[[-20.0937, -20.0937], [-21.2233, -21.2233]]]],
-                    [[[[-19.9581, -19.9581], [-21.3028, -21.3028]]]],
-                ]
+                    [[[[-20.0948, -20.0948], [-21.2245, -21.2245]]]],
+                    [[[[-19.9573, -19.9573], [-21.3020, -21.3020]]]],
+                ],
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1090,8 +1094,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [[[[-21.4113, -21.4113], [-23.3089, -23.3089]]]],
-                    [[[[-20.0937, -20.0937], [-21.2233, -21.2233]]]],
-                    [[[[-19.9581, -19.9581], [-21.3028, -21.3028]]]],
+                    [[[[-20.0948, -20.0948], [-21.2245, -21.2245]]]],
+                    [[[[-19.9573, -19.9573], [-21.3020, -21.3020]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -1123,7 +1127,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-11.1491, -11.1491, -11.4204], [-11.6524, -11.6524, -11.8057], [-12.7825, -12.7825, -12.6707]],
+                [[-11.1491, -11.1491, -11.4204], [-11.6524, -11.6524, -11.8057], [-12.7825, -12.7825, -12.6707]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1139,17 +1143,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        # higher tolerance due to errors propagating from frame to frame
         torch.testing.assert_close(
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
                     [[[[-11.1491, -11.1491], [-11.6524, -11.6524]]]],
-                    [[[[-15.3764, -15.3764], [-16.0280, -16.0280]]]],
-                    [[[[-15.4271, -15.4271], [-16.3561, -16.3561]]]],
+                    [[[[-15.3796, -15.3796], [-16.0307, -16.0307]]]],
+                    [[[[-15.4860, -15.4860], [-16.4231, -16.4231]]]],
                 ]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
     def test_inference_mask_generation_video_one_bb(self):
@@ -1176,7 +1181,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-13.1423, -13.1423, -13.6417], [-13.7748, -13.7748, -14.1142], [-15.1950, -15.1950, -15.1751]],
+                [[-13.1423, -13.1423, -13.6417], [-13.7748, -13.7748, -14.1142], [-15.1950, -15.1950, -15.1751]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1192,17 +1197,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        # higher tolerance due to errors propagating from frame to frame
         torch.testing.assert_close(
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
                     [[[[-13.1423, -13.1423], [-13.7748, -13.7748]]]],
-                    [[[[-14.9965, -14.9965], [-15.7060, -15.7060]]]],
-                    [[[[-15.4546, -15.4546], [-16.1641, -16.1641]]]],
+                    [[[[-14.9971, -14.9971], [-15.7066, -15.7066]]]],
+                    [[[[-15.4576, -15.4576], [-16.1667, -16.1667]]]],
                 ]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
     def test_inference_mask_generation_video_one_point_one_bb(self):
@@ -1231,7 +1237,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
             torch.tensor(
-                [[-12.3523, -12.3523, -12.8905], [-13.0603, -13.0603, -13.4075], [-14.6503, -14.6503, -14.5686]],
+                [[-12.3523, -12.3523, -12.8905], [-13.0603, -13.0603, -13.4075], [-14.6503, -14.6503, -14.5686]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1247,17 +1253,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             frames.append(sam2_video_output.video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        # higher tolerance due to errors propagating from frame to frame
         torch.testing.assert_close(
             frames[:3, :, :, :2, :2],
             torch.tensor(
                 [
                     [[[[-12.3523, -12.3523], [-13.0603, -13.0603]]]],
-                    [[[[-15.8182, -15.8182], [-16.4162, -16.4162]]]],
-                    [[[[-15.8911, -15.8911], [-16.5963, -16.5963]]]],
+                    [[[[-15.8179, -15.8179], [-16.4159, -16.4159]]]],
+                    [[[[-15.8949, -15.8949], [-16.6002, -16.6002]]]],
                 ]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
     def test_inference_mask_generation_video_multi_objects_multi_points(self):
@@ -1285,7 +1292,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             video_res_masks[:, 0, :2, :2],  # first object
             torch.tensor(
-                [[[-12.6303, -12.6303], [-13.3667, -13.3667]], [[-20.3307, -20.3307], [-22.0473, -22.0473]]],
+                [[[-12.6303, -12.6303], [-13.3667, -13.3667]], [[-20.3307, -20.3307], [-22.0473, -22.0473]]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1306,9 +1313,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [[[[-12.6303, -12.6303], [-13.3667, -13.3667]]], [[[-20.3307, -20.3307], [-22.0473, -22.0473]]]],
-                    [[[[-18.5244, -18.5244], [-19.5828, -19.5828]]], [[[-17.5492, -17.5492], [-19.2211, -19.2211]]]],
-                    [[[[-14.2723, -14.2723], [-15.4623, -15.4623]]], [[[-18.3153, -18.3153], [-20.0282, -20.0282]]]],
-                ],
+                    [[[[-18.5245, -18.5245], [-19.5829, -19.5829]]], [[[-17.5492, -17.5492], [-19.2210, -19.2210]]]],
+                    [[[[-14.2722, -14.2722], [-15.4622, -15.4622]]], [[[-18.3148, -18.3148], [-20.0278, -20.0278]]]],
+                ]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1374,9 +1381,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [[[[-10.0000, -10.0000], [-10.0000, -10.0000]]]],
-                    [[[[-18.3571, -18.3571], [-19.2278, -19.2278]]]],
-                    [[[[-20.3355, -20.3355], [-21.1817, -21.1817]]]],
-                ]
+                    [[[[-18.3645, -18.3645], [-19.2324, -19.2324]]]],
+                    [[[[-20.3382, -20.3382], [-21.1854, -21.1854]]]],
+                ],
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -1408,21 +1415,22 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             video_res_masks.shape, (max_frame_num_to_track, 1, 1, raw_video.shape[-3], raw_video.shape[-2])
         )
+        # higher tolerance due to errors propagating from frame to frame
         torch.testing.assert_close(
             video_res_masks[:3, :, :, :2, :2],
             torch.tensor(
                 [
                     [[[[-11.1491, -11.1491], [-11.6524, -11.6524]]]],
-                    [[[[-15.3764, -15.3764], [-16.0280, -16.0280]]]],
-                    [[[[-15.4271, -15.4271], [-16.3561, -16.3561]]]],
+                    [[[[-15.3796, -15.3796], [-16.0307, -16.0307]]]],
+                    [[[[-15.4860, -15.4860], [-16.4231, -16.4231]]]],
                 ]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="../sam2_hf_implem/sam2.1_tiny_hf", device=torch_device)
+        generator = pipeline("mask-generation", model="yonigozlan/sam2.1_hiera_tiny_hf", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

@@ -49,6 +49,7 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+    logging,
 )
 
 
@@ -59,6 +60,9 @@ if is_torchvision_available() and is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
 elif is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
+
+
+logger = logging.get_logger(__name__)
 
 
 class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -468,7 +472,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             try:
                 load_cuda_kernels()
             except Exception as e:
-                raise Exception(f"Could not load custom CUDA kernels for postprocessing: {e}")
+                logger.warning_once(f"Could not load custom CUDA kernels for postprocessing: {e}")
 
     def _preprocess(
         self,

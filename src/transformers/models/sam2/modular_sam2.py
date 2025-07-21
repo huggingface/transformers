@@ -127,7 +127,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             try:
                 load_cuda_kernels()
             except Exception as e:
-                raise Exception(f"Could not load custom CUDA kernels for postprocessing: {e}")
+                logger.warning_once(f"Could not load custom CUDA kernels for postprocessing: {e}")
 
     def pad_image():
         raise NotImplementedError("No pad_image for SAM 2.")
@@ -2559,7 +2559,6 @@ def fill_holes_in_mask_scores(mask, max_area):
     # Holes are those connected components in background with area <= self.max_area
     # (background regions are those with mask scores <= 0)
     assert max_area > 0, "max_area must be positive"
-
     input_mask = mask
     try:
         labels, areas = get_connected_components(mask <= 0)
