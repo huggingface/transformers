@@ -548,7 +548,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         max_new_tokens = 30
         support_flag = {
             "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_2": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:

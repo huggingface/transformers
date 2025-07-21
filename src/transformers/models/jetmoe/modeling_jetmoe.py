@@ -821,7 +821,7 @@ class JetMoeBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
-    config_class = JetMoeConfig
+    config: JetMoeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeBlock"]

@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch BART model."""
 
-import copy
 import math
 import warnings
 from typing import Callable, Optional, Union
@@ -484,7 +483,7 @@ class BartClassificationHead(nn.Module):
 
 @auto_docstring
 class BartPreTrainedModel(PreTrainedModel):
-    config_class = BartConfig
+    config: BartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
@@ -1842,7 +1841,6 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

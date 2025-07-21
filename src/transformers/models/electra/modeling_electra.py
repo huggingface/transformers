@@ -646,7 +646,7 @@ class ElectraGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ElectraPreTrainedModel(PreTrainedModel):
-    config_class = ElectraConfig
+    config: ElectraConfig
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
     supports_gradient_checkpointing = True
@@ -1284,7 +1284,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
 @auto_docstring
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
-    config_class = ElectraConfig
+    config: ElectraConfig
     base_model_prefix = "electra"
 
     def __init__(self, config):

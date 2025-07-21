@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MVP model."""
 
-import copy
 import math
 from typing import Optional, Union
 
@@ -486,7 +485,7 @@ class MvpPrompt(nn.Module):
 
 @auto_docstring
 class MvpPreTrainedModel(PreTrainedModel):
-    config_class = MvpConfig
+    config: MvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
@@ -1680,7 +1679,6 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

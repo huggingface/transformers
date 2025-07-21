@@ -560,7 +560,7 @@ class LiltPooler(nn.Module):
 
 @auto_docstring
 class LiltPreTrainedModel(PreTrainedModel):
-    config_class = LiltConfig
+    config: LiltConfig
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True
     _no_split_modules = []

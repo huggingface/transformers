@@ -759,7 +759,7 @@ class LxmertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class LxmertPreTrainedModel(PreTrainedModel):
-    config_class = LxmertConfig
+    config: LxmertConfig
     load_tf_weights = load_tf_weights_in_lxmert
     base_model_prefix = "lxmert"
     _supports_param_buffer_assignment = False

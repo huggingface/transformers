@@ -805,7 +805,7 @@ class BertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class BertPreTrainedModel(PreTrainedModel):
-    config_class = BertConfig
+    config: BertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True

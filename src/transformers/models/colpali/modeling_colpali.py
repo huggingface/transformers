@@ -30,9 +30,12 @@ from .configuration_colpali import ColPaliConfig
 
 @auto_docstring
 class ColPaliPreTrainedModel(PreTrainedModel):
-    config_class = ColPaliConfig
+    config: ColPaliConfig
     base_model_prefix = "model"
     _no_split_modules = []
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = (

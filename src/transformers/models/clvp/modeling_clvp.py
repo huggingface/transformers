@@ -783,12 +783,12 @@ class ClvpConditioningEncoder(nn.Module):
 
 @auto_docstring
 class ClvpPreTrainedModel(PreTrainedModel):
-    config_class = ClvpConfig
+    config: ClvpConfig
     base_model_prefix = "clvp"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
@@ -797,8 +797,9 @@ class ClvpPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=factor * 0.02)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, ClvpRMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, ClvpEncoderMLP):
-            factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
@@ -816,7 +817,10 @@ class ClvpPreTrainedModel(PreTrainedModel):
                     p.data.normal_(
                         mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers))
                     )
-        if isinstance(module, nn.LayerNorm):
+        elif isinstance(module, ClvpModelForConditionalGeneration):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+
+        if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -1434,7 +1438,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     """
 )
 class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
-    config_class = ClvpConfig
+    config: ClvpConfig
 
     def __init__(self, config: ClvpConfig):
         super().__init__(config)

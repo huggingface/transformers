@@ -460,7 +460,7 @@ class MarianDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MarianPreTrainedModel(PreTrainedModel):
-    config_class = MarianConfig
+    config: MarianConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -1601,7 +1601,6 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

@@ -113,7 +113,7 @@ class LlavaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class LlavaPreTrainedModel(PreTrainedModel):
-    config_class = LlavaConfig
+    config: LlavaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"

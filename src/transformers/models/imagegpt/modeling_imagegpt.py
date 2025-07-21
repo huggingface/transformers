@@ -367,11 +367,11 @@ class ImageGPTAttention(nn.Module):
 
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions, and compute only q
-                query = query = self.q_attn(hidden_states)
+                query = self.q_attn(hidden_states)
                 key = curr_past_key_value.key_cache[self.layer_idx]
                 value = curr_past_key_value.value_cache[self.layer_idx]
             else:
-                query = query = self.q_attn(hidden_states)
+                query = self.q_attn(hidden_states)
                 key, value = self.c_attn(current_states).split(self.split_size, dim=2)
                 key = key.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
                 value = value.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
@@ -498,7 +498,7 @@ class ImageGPTBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class ImageGPTPreTrainedModel(PreTrainedModel):
-    config_class = ImageGPTConfig
+    config: ImageGPTConfig
     load_tf_weights = load_tf_weights_in_imagegpt
     base_model_prefix = "transformer"
     main_input_name = "input_ids"

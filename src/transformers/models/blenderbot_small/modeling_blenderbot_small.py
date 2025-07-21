@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch BlenderbotSmall model."""
 
-import copy
 import math
 from typing import Callable, Optional, Union
 
@@ -445,7 +444,7 @@ class BlenderbotSmallDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class BlenderbotSmallPreTrainedModel(PreTrainedModel):
-    config_class = BlenderbotSmallConfig
+    config: BlenderbotSmallConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -1447,7 +1446,6 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel, GenerationMixin
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

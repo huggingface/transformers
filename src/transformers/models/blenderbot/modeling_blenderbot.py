@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Blenderbot model."""
 
-import copy
 import math
 import os
 import warnings
@@ -452,7 +451,7 @@ class BlenderbotDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class BlenderbotPreTrainedModel(PreTrainedModel):
-    config_class = BlenderbotConfig
+    config: BlenderbotConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -1488,7 +1487,6 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

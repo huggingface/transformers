@@ -523,7 +523,7 @@ class YolosEncoder(nn.Module):
 
 @auto_docstring
 class YolosPreTrainedModel(PreTrainedModel):
-    config_class = YolosConfig
+    config: YolosConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

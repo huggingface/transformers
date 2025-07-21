@@ -624,7 +624,7 @@ class AriaTextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class AriaTextPreTrainedModel(PreTrainedModel):
-    config_class = AriaTextConfig
+    config: AriaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
@@ -656,7 +656,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class AriaPreTrainedModel(PreTrainedModel):
-    config_class = AriaConfig
+    config: AriaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["AriaDecoderLayer"]
