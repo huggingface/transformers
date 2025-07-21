@@ -214,7 +214,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         old_value = getattr(module, tensor_name)
 
         if not isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
-            raise ValueError(f"Parameter `{tensor_name}` should only be a `bnb.nn.Int8Params` instance.")
+            raise TypeError(f"Parameter `{tensor_name}` should only be a `bnb.nn.Int8Params` instance.")
         if (
             old_value.device == torch.device("meta")
             and target_device not in ["meta", torch.device("meta")]
