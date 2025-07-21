@@ -51,7 +51,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
         qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
-        num_query_tokens (`int`, *optional*):
+        num_query_tokens (`int`, *optional*, defaults to None):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
@@ -60,7 +60,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=32, **kwargs):
+    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "video_token"):
             self.video_token = AddedToken("<video>", normalized=False, special=True)
             tokenizer.add_tokens([self.video_token], special_tokens=True)

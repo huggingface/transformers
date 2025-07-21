@@ -1570,7 +1570,7 @@ class Blip2Model(Blip2PreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
-        language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
             special_image_mask, language_model_inputs
         )
@@ -2067,7 +2067,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             special_image_mask = input_ids == self.config.image_token_id
 
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
-        language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
             special_image_mask, language_model_inputs
         )
@@ -2200,7 +2200,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             special_image_mask = input_ids == self.config.image_token_id
 
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}

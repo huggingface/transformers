@@ -807,7 +807,7 @@ class InstructBlipQFormerLayer(GradientCheckpointingLayer):
                     self.chunk_size_feed_forward,
                     self.seq_len_dim,
                     attention_output[:, query_length:, :],
-                )
+                ).to(layer_output.device)
                 layer_output = torch.cat([layer_output, layer_output_text], dim=1)
         else:
             layer_output = apply_chunking_to_forward(
