@@ -35,41 +35,12 @@ You can find all the original MM Grounding DINO checkpoints under the [MM Ground
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```py
-import torch
-
-from transformers import pipeline
-
-
-# Prepare pipeline
-model_id = "rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det"
-pipe = pipeline("zero-shot-object-detection", model=model_id)
-
-# Run inference
-outputs = pipe(
-    "http://images.cocodataset.org/val2017/000000039769.jpg",
-    "a cat. a remote control.",
-    device="cuda" if torch.cuda.is_available() else "cpu",
-)
-
-# Retrieve the first image result
-result = results[0]
-for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
-    box = [round(x, 2) for x in box.tolist()]
-    print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```py
-import requests
 import torch
-from PIL import Image
-
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+from transformers.image_utils import load_image
 
 
 # Prepare processor and model
@@ -80,7 +51,7 @@ model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
 # Prepare inputs
 image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(image_url, stream=True).raw)
+image = load_image(image_url)
 text_labels = [["a cat", "a remote control"]]
 inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
 
@@ -91,10 +62,8 @@ with torch.no_grad():
 # Postprocess outputs
 results = processor.post_process_grounded_object_detection(
     outputs,
-    inputs.input_ids,
-    box_threshold=0.4,
-    text_threshold=0.3,
-    target_sizes=[image.size[::-1]]
+    threshold=0.4,
+    target_sizes=[(image.height, image.width)]
 )
 
 # Retrieve the first image result
