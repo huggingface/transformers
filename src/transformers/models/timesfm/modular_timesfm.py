@@ -255,7 +255,7 @@ class TimesFmDecoderLayer(nn.Module):
 
 @auto_docstring
 class TimesFmPreTrainedModel(PreTrainedModel):
-    config_class = TimesFmConfig
+    config: TimesFmConfig
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
