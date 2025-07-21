@@ -114,8 +114,6 @@ class MMGroundingDinoConfig(GroundingDinoConfig):
             The dimension of the query vector.
         decoder_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox regression head for all decoder layers.
-        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the class head for all decoder layers.
         two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
             generation.
@@ -125,6 +123,8 @@ class MMGroundingDinoConfig(GroundingDinoConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
+            Whether to share the class head for all decoder layers.
 
     Examples:
 
@@ -145,99 +145,13 @@ class MMGroundingDinoConfig(GroundingDinoConfig):
 
     def __init__(
         self,
-        backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
-        text_config=None,
-        num_queries=900,
-        encoder_layers=6,
-        encoder_ffn_dim=2048,
-        encoder_attention_heads=8,
-        decoder_layers=6,
-        decoder_ffn_dim=2048,
-        decoder_attention_heads=8,
-        is_encoder_decoder=True,
-        activation_function="relu",
-        d_model=256,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        auxiliary_loss=False,
-        position_embedding_type="sine",
-        num_feature_levels=4,
-        encoder_n_points=4,
-        decoder_n_points=4,
-        two_stage=True,
-        class_cost=1.0,
-        bbox_cost=5.0,
-        giou_cost=2.0,
-        bbox_loss_coefficient=5.0,
-        giou_loss_coefficient=2.0,
-        focal_alpha=0.25,
-        disable_custom_kernels=False,
-        # other parameters
-        max_text_len=256,
-        text_enhancer_dropout=0.0,
-        fusion_droppath=0.1,
-        fusion_dropout=0.0,
-        embedding_init_target=True,
-        query_dim=4,
-        decoder_bbox_embed_share=False,  # set this to false by default
-        decoder_cls_embed_share=False,  # add this argument
-        two_stage_bbox_embed_share=False,
-        positional_embedding_temperature=20,
-        init_std=0.02,
-        layer_norm_eps=1e-5,
-        **kwargs,
+        decoder_bbox_embed_share=False,
+        decoder_cls_embed_share=False,
+        **super_kwargs,
     ):
         super().__init__(
-            backbone_config=backbone_config,
-            backbone=backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            use_timm_backbone=use_timm_backbone,
-            backbone_kwargs=backbone_kwargs,
-            text_config=text_config,
-            num_queries=num_queries,
-            encoder_layers=encoder_layers,
-            encoder_ffn_dim=encoder_ffn_dim,
-            encoder_attention_heads=encoder_attention_heads,
-            decoder_layers=decoder_layers,
-            decoder_ffn_dim=decoder_ffn_dim,
-            decoder_attention_heads=decoder_attention_heads,
-            is_encoder_decoder=is_encoder_decoder,
-            activation_function=activation_function,
-            d_model=d_model,
-            dropout=dropout,
-            attention_dropout=attention_dropout,
-            activation_dropout=activation_dropout,
-            auxiliary_loss=auxiliary_loss,
-            position_embedding_type=position_embedding_type,
-            num_feature_levels=num_feature_levels,
-            encoder_n_points=encoder_n_points,
-            decoder_n_points=decoder_n_points,
-            two_stage=two_stage,
-            class_cost=class_cost,
-            bbox_cost=bbox_cost,
-            giou_cost=giou_cost,
-            bbox_loss_coefficient=bbox_loss_coefficient,
-            giou_loss_coefficient=giou_loss_coefficient,
-            focal_alpha=focal_alpha,
-            disable_custom_kernels=disable_custom_kernels,
-            # other parameters
-            max_text_len=max_text_len,
-            text_enhancer_dropout=text_enhancer_dropout,
-            fusion_droppath=fusion_droppath,
-            fusion_dropout=fusion_dropout,
-            embedding_init_target=embedding_init_target,
-            query_dim=query_dim,
             decoder_bbox_embed_share=decoder_bbox_embed_share,
-            two_stage_bbox_embed_share=two_stage_bbox_embed_share,
-            positional_embedding_temperature=positional_embedding_temperature,
-            init_std=init_std,
-            layer_norm_eps=layer_norm_eps,
-            **kwargs,
+            **super_kwargs,
         )
         self.decoder_cls_embed_share = decoder_cls_embed_share
 

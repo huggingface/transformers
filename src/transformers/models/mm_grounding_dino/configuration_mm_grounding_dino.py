@@ -111,8 +111,6 @@ class MMGroundingDinoConfig(PretrainedConfig):
             The dimension of the query vector.
         decoder_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox regression head for all decoder layers.
-        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the class head for all decoder layers.
         two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
             generation.
@@ -122,6 +120,8 @@ class MMGroundingDinoConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
+            Whether to share the class head for all decoder layers.
 
     Examples:
 
@@ -185,12 +185,12 @@ class MMGroundingDinoConfig(PretrainedConfig):
         fusion_dropout=0.0,
         embedding_init_target=True,
         query_dim=4,
-        decoder_bbox_embed_share=False,  # set this to false by default
-        decoder_cls_embed_share=False,  # add this argument
+        decoder_bbox_embed_share=False,
         two_stage_bbox_embed_share=False,
         positional_embedding_temperature=20,
         init_std=0.02,
         layer_norm_eps=1e-5,
+        decoder_cls_embed_share=False,
         **kwargs,
     ):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
