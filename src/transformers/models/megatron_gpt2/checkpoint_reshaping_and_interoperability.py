@@ -842,7 +842,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                 # handle attention and mlp weights
                 elif weight_or_bias == "weight":
-                    out_name = transformers_to_megatron.get(op_name, None)
+                    out_name = transformers_to_megatron.get(op_name)
                     if out_name is None:
                         continue
                     params = params.transpose(0, 1)
@@ -850,7 +850,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                 # handle attention and mlp bias
                 elif weight_or_bias == "bias":
-                    out_name = transformers_to_megatron.get(op_name, None)
+                    out_name = transformers_to_megatron.get(op_name)
                     if out_name is None:
                         continue
                     layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"

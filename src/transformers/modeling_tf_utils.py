@@ -991,13 +991,13 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
                     # If not, make the value to None
-                    saved_weight_value = saved_weights.get(symbolic_weight_name, None)
+                    saved_weight_value = saved_weights.get(symbolic_weight_name)
 
                     # Retrocompatibility patch: some embeddings are stored with the weights name (e.g. Bart's
                     # `model.shared/embeddings:0` are stored as `model.shared/weights:0`)
                     if saved_weight_value is None and symbolic_weight_name.endswith("embeddings:0"):
                         symbolic_weight_name = symbolic_weight_name[:-12] + "weight:0"
-                        saved_weight_value = saved_weights.get(symbolic_weight_name, None)
+                        saved_weight_value = saved_weights.get(symbolic_weight_name)
 
                     # Add the updated name to the final list for computing missing/unexpected values
                     symbolic_weights_names.add(symbolic_weight_name)
@@ -1637,7 +1637,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 for key, val in y.items():
                     if key in arg_names and key not in x:
                         x[key] = val
-                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                    elif output_to_label.get(key) in arg_names and key not in x:
                         x[output_to_label[key]] = val
         if y is None:
             y = {key: val for key, val in x.items() if key in label_kwargs}
@@ -1745,7 +1745,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 for key, val in y.items():
                     if key in arg_names and key not in x:
                         x[key] = val
-                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                    elif output_to_label.get(key) in arg_names and key not in x:
                         x[output_to_label[key]] = val
         if y is None:
             y = {key: val for key, val in x.items() if key in label_kwargs}

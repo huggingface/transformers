@@ -993,7 +993,7 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache", None)
+        use_cache = kwargs.get("use_cache")
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
 

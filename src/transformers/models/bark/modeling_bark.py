@@ -405,10 +405,10 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, cache_position=None, **kwargs):
         # Overwritten -- bark has a model-specific hack
-        input_embeds = kwargs.get("input_embeds", None)
+        input_embeds = kwargs.get("input_embeds")
 
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
+        attention_mask = kwargs.get("attention_mask")
+        position_ids = kwargs.get("position_ids")
 
         if cache_position[0] != 0:
             # Omit tokens covered by past_key_values

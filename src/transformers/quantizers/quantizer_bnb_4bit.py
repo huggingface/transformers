@@ -102,7 +102,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if (
             device_map is not None
             and isinstance(device_map, dict)

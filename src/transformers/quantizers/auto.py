@@ -112,7 +112,7 @@ class AutoQuantizationConfig:
 
     @classmethod
     def from_dict(cls, quantization_config_dict: dict):
-        quant_method = quantization_config_dict.get("quant_method", None)
+        quant_method = quantization_config_dict.get("quant_method")
         # We need a special care for bnb models to make sure everything is BC ..
         if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
             suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"

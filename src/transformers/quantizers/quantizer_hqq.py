@@ -78,7 +78,7 @@ class HqqHfQuantizer(HfQuantizer):
                 self.torch_dtype = torch.float32
                 logger.info("Setting torch_dtype to torch.float32 as the default value since it was not specified.")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if isinstance(device_map, dict):
             if "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(

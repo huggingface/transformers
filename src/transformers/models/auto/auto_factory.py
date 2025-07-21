@@ -468,7 +468,7 @@ class _BaseAutoModelClass:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
         config = kwargs.pop("config", None)
-        trust_remote_code = kwargs.get("trust_remote_code", None)
+        trust_remote_code = kwargs.get("trust_remote_code")
         kwargs["_from_auto"] = True
         hub_kwargs_names = [
             "cache_dir",
@@ -538,10 +538,10 @@ class _BaseAutoModelClass:
             kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
             # meaningless in the context of the config object - torch.dtype values are acceptable
-            if kwargs.get("torch_dtype", None) == "auto":
+            if kwargs.get("torch_dtype") == "auto":
                 _ = kwargs.pop("torch_dtype")
             # to not overwrite the quantization_config if config has a quantization_config
-            if kwargs.get("quantization_config", None) is not None:
+            if kwargs.get("quantization_config") is not None:
                 _ = kwargs.pop("quantization_config")
 
             config, kwargs = AutoConfig.from_pretrained(
@@ -636,7 +636,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
         config = kwargs.pop("config", TimmBackboneConfig())
 
-        if kwargs.get("out_features", None) is not None:
+        if kwargs.get("out_features") is not None:
             raise ValueError("Cannot specify `out_features` for timm backbones")
 
         if kwargs.get("output_loading_info", False):

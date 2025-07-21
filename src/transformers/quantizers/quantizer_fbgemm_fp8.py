@@ -71,7 +71,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "

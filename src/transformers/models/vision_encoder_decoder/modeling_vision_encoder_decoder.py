@@ -257,7 +257,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 del tf_model
                 gc.collect()
 
-                attn_implementation = kwargs.get("attn_implementation", None)
+                attn_implementation = kwargs.get("attn_implementation")
                 kwargs_encoder_decoder = {}
                 if attn_implementation:
                     kwargs_encoder_decoder = {

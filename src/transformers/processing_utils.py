@@ -678,7 +678,7 @@ class ProcessorMixin(PushToHubMixin):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -1350,7 +1350,7 @@ class ProcessorMixin(PushToHubMixin):
                 classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
                 if attribute_name == "image_processor":
                     # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                    use_fast = kwargs.get("use_fast", None)
+                    use_fast = kwargs.get("use_fast")
                     if use_fast is None:
                         logger.warning_once(
                             "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
@@ -1641,7 +1641,7 @@ class ProcessorMixin(PushToHubMixin):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
-                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors", None))
+                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors"))
                 return out
             else:
                 return out["input_ids"]

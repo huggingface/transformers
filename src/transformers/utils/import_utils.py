@@ -931,9 +931,9 @@ def is_torch_hpu_available():
     original_compile = torch.compile
 
     def hpu_backend_compile(*args, **kwargs):
-        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+        if kwargs.get("backend") not in ["hpu_backend", "eager"]:
             logger.warning(
-                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                f"Calling torch.compile with backend={kwargs.get('backend')} on a Gaudi device is not supported. "
                 "We will override the backend with 'hpu_backend' to avoid errors."
             )
             kwargs["backend"] = "hpu_backend"

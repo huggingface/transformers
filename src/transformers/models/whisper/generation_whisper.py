@@ -1212,7 +1212,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 else:
                     outputs[key] = None
 
-        token_timestamps = outputs.get("token_timestamps", None)
+        token_timestamps = outputs.get("token_timestamps")
         if token_timestamps is not None:
             model_output_type = dict
 
