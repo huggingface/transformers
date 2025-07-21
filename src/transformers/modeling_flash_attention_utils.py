@@ -16,8 +16,11 @@ import os
 import warnings
 from typing import Optional, TypedDict
 
+from kernels import get_kernel
 import torch
 import torch.nn.functional as F
+
+from transformers.utils.import_utils import is_kernels_available
 
 from .utils import (
     is_flash_attn_2_available,
@@ -265,10 +268,35 @@ def _lazy_imports(impl: Optional[str]):
     is_fa2 = is_flash_attn_2_available() or is_torch_npu_available()
     is_fa3 = is_flash_attn_3_available()
     if impl == "flash_attention_2" or (impl is None and is_fa2 and not is_fa3):
-        from flash_attn import flash_attn_func, flash_attn_varlen_func
-        from flash_attn.bert_padding import pad_input, unpad_input
+        try:
+            from flash_attn import flash_attn_func, flash_attn_varlen_func
+            from flash_attn.bert_padding import pad_input, unpad_input
 
-        return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, False
+            return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, False
+
+        except ImportError as e:
+            print(
+                "Official flash attention import did not work, do you want to try to use `kernels-community/flash-attn` (trust remote code)?"
+            )
+            if input("Yes / No") == "Yes":
+                if not is_kernels_available():
+                    raise ImportError("You need to install kernels: `pip install kernels`")
+                from kernels import get_kernel
+
+                impl = get_kernel("kernels-community/flash-attn")
+                pad_input, unpad_input = _fa3_pad_input, _fa3_unpad_input
+                return (
+                    getattr(impl, "flash_attn_func", None),
+                    getattr(impl, "flash_attn_varlen_func"),
+                    pad_input,
+                    unpad_input,
+                    True,
+                )
+
+            else:
+                raise ImportError(
+                    "Failed to import flash attention 2, please install it or use another implementation."
+                ) from e
     if impl == "flash_attention_3" or (impl is None and is_fa3):
         from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
 
