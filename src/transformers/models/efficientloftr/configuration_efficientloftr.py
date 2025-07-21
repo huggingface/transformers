@@ -144,7 +144,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.stage_in_channels = [1] + self.stage_out_channels[:-1]
         self.stage_num_blocks = stage_num_blocks if stage_num_blocks is not None else [1, 2, 4, 14]
         self.stage_block_stride = [
-            [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(stage_stride, self.stage_num_blocks)
+            [stride] + [1] * (num_blocks - 1) for stride, num_blocks in zip(self.stage_stride, self.stage_num_blocks)
         ]
 
         self.fine_fusion_dims = list(reversed(self.stage_out_channels))[:-1]
