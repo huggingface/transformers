@@ -27,13 +27,13 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-[`VisionEncoderDecoderModel`]은 사전 훈련된 Transformer 기반 비전 모델을 인코더로 (*예:* [ViT](vit), [BEiT](beit), [DeiT](deit), [Swin](swin)),
-사전 훈련된 언어 모델을 디코더로 (*예:* [RoBERTa](roberta), [GPT2](gpt2), [BERT](bert), [DistilBERT](distilbert)) 사용하여 이미지-텍스트 모델을 초기화하는 데 사용할 수 있습니다.
+[`VisionEncoderDecoderModel`]은 사전훈련된 Transformer 기반 비전 모델을 인코더로 (*예:* [ViT](vit), [BEiT](beit), [DeiT](deit), [Swin](swin)),
+사전훈련된 언어 모델을 디코더로 (*예:* [RoBERTa](roberta), [GPT2](gpt2), [BERT](bert), [DistilBERT](distilbert)) 사용하여 이미지-텍스트 모델을 초기화하는 데 사용할 수 있습니다.
 
-사전 훈련된 체크포인트로 이미지-텍스트 시퀀스 모델을 초기화하는 효과는 (예를 들어) Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
+사전훈련된 체크포인트로 이미지-텍스트 시퀀스 모델을 초기화하는 효과는 (예를 들어) Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
 Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://huggingface.co/papers/2109.10282)에서 입증되었습니다.
 
-이러한 [`VisionEncoderDecoderModel`]이 훈련/파인튜닝된 후에는 다른 모델들과 마찬가지로 저장/로드할 수 있습니다 (자세한 내용은 아래 예제를 참조하세요).
+이러한 [`VisionEncoderDecoderModel`]이 훈련/미세 조정된 후에는 다른 모델들과 마찬가지로 저장/가져올 수 있습니다 (자세한 내용은 아래 예제를 참조하세요).
 
 응용 예시로는 이미지 캡셔닝이 있습니다. 여기서는 인코더가 이미지를 인코딩하고, 이후 자기회귀 언어 모델이 캡션을 생성합니다. 다른 예시로는 광학 문자 인식이 있습니다. [`VisionEncoderDecoderModel`]의 인스턴스인 [TrOCR](trocr)을 참조하세요.
 
@@ -52,12 +52,12 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 >>> model = VisionEncoderDecoderModel(config=config)
 ```
 
-## 사전 훈련된 인코더와 디코더에서 `VisionEncoderDecoderModel` 초기화[[initialising-visionencoderdecodermodel-from-a-pretrained-encoder-and-a-pretrained-decoder]]
+## 사전훈련된 인코더와 디코더에서 `VisionEncoderDecoderModel` 초기화[[initialising-visionencoderdecodermodel-from-a-pretrained-encoder-and-a-pretrained-decoder]]
 
-[`VisionEncoderDecoderModel`]은 사전 훈련된 인코더 체크포인트와 사전 훈련된 디코더 체크포인트에서 초기화할 수 있습니다. 사전 훈련된 Transformer 기반 비전 모델(*예:* [Swin](swin))은 인코더 역할을 할 수 있으며, 사전 훈련된 자동 인코딩 모델(*예:* BERT), 사전 훈련된 인과적 언어 모델(*예:* GPT2), 그리고 시퀀스-투-시퀀스 모델의 사전 훈련된 디코더 부분(*예:* BART의 디코더)은 모두 디코더로 사용할 수 있습니다.
-디코더로 선택하는 아키텍처에 따라 교차 주의(cross-attention) 레이어가 랜덤하게 초기화될 수 있습니다.
-사전 훈련된 인코더와 디코더 체크포인트에서 [`VisionEncoderDecoderModel`]을 초기화하려면 [*Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에서 보여준 바와 같이 다운스트림 작업에서 모델을 파인튜닝해야 합니다.
-이를 위해 `VisionEncoderDecoderModel` 클래스는 [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] 메서드를 제공합니다.
+[`VisionEncoderDecoderModel`]은 사전훈련된 인코더 체크포인트와 사전훈련된 디코더 체크포인트에서 초기화할 수 있습니다. 사전훈련된 Transformer 기반 비전 모델(*예:* [Swin](swin))은 인코더 역할을 할 수 있으며, 사전훈련된 오토인코딩 모델(*예:* BERT), 사전훈련된 인과적 언어 모델링(causal language modeling)(*예:* GPT2), 그리고 시퀀스-투-시퀀스 모델의 사전훈련된 디코더 부분(*예:* BART의 디코더)은 모두 디코더로 사용할 수 있습니다.
+디코더로 선택하는 아키텍처에 따라 교차 어텐션(cross-attention) 레이어가 랜덤하게 초기화될 수 있습니다.
+사전훈련된 인코더와 디코더 체크포인트에서 [`VisionEncoderDecoderModel`]을 초기화하려면 [*Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에서 보여준 바와 같이 다운스트림 작업에서 모델을 미세 조정해야 합니다.
+이를 위해 `VisionEncoderDecoderModel` 클래스는 [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] 메소드를 제공합니다.
 
 ```python
 >>> from transformers import VisionEncoderDecoderModel
@@ -67,11 +67,11 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 ... )
 ```
 
-## 기존 `VisionEncoderDecoderModel` 체크포인트 로드 및 추론 수행[[loading-an-existing-visionencoderdecodermodel-checkpoint-and-perform-inference]]
+## 기존 `VisionEncoderDecoderModel` 체크포인트 가져오기 및 추론 수행[[loading-an-existing-visionencoderdecodermodel-checkpoint-and-perform-inference]]
 
-`VisionEncoderDecoderModel` 클래스의 파인튜닝된 체크포인트를 로드하기 위해, [`VisionEncoderDecoderModel`]은 Transformers의 다른 모델 아키텍처와 마찬가지로 `from_pretrained(...)` 메서드를 제공합니다.
+`VisionEncoderDecoderModel` 클래스의 미세 조정된 체크포인트를 가져오기 위해, [`VisionEncoderDecoderModel`]은 Transformers의 다른 모델 아키텍처와 마찬가지로 `from_pretrained(...)` 메소드를 제공합니다.
 
-추론을 수행하려면 [`generate`] 메서드를 사용합니다. 이 메서드는 자기회귀적으로 텍스트를 생성할 수 있습니다. 이 메서드는 그리디(greedy), 빔 서치(beam search), 다항 샘플링(multinomial sampling) 등 다양한 형태의 디코딩을 지원합니다.
+추론을 수행하려면 [`generate`] 메소드를 사용합니다. 이 메소드는 자기회귀적으로 텍스트를 생성할 수 있습니다. 이 메소드는 그리디(greedy), 빔 서치(beam search), 다항 샘플링(multinomial sampling) 등 다양한 형태의 디코딩을 지원합니다.
 
 ```python
 >>> import requests
@@ -79,7 +79,7 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 
 >>> from transformers import GPT2TokenizerFast, ViTImageProcessor, VisionEncoderDecoderModel
 
->>> # 파인튜닝된 이미지 캡셔닝 모델과 해당 토크나이저 및 이미지 프로세서를 로드합니다
+>>> # 미세 조정된 이미지 캡셔닝 모델과 해당 토크나이저 및 이미지 프로세서를 가져옵니다
 >>> model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 >>> tokenizer = GPT2TokenizerFast.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 >>> image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
@@ -96,9 +96,9 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 a cat laying on a blanket next to a cat laying on a bed
 ```
 
-## PyTorch 체크포인트를 `TFVisionEncoderDecoderModel`로 로드[[loading-a-pytorch-checkpoint-into-tfvisionencoderdecodermodel]]
+## PyTorch 체크포인트를 `TFVisionEncoderDecoderModel`로 가져오기[[loading-a-pytorch-checkpoint-into-tfvisionencoderdecodermodel-]]
 
-[`TFVisionEncoderDecoderModel.from_pretrained`]는 현재 PyTorch 체크포인트에서 모델을 초기화하는 것을 지원하지 않습니다. 이 메서드에 `from_pt=True`를 전달하면 예외가 발생합니다. 특정 비전 인코더-디코더 모델에 PyTorch 체크포인트만 있는 경우, 해결 방법은 다음과 같습니다:
+[`TFVisionEncoderDecoderModel.from_pretrained`]는 현재 PyTorch 체크포인트에서 모델을 초기화하는 것을 지원하지 않습니다. 이 메소드에 `from_pt=True`를 전달하면 예외가 발생합니다. 특정 비전 인코더-디코더 모델에 PyTorch 체크포인트만 있는 경우, 해결 방법은 다음과 같습니다:
 
 ```python
 >>> from transformers import VisionEncoderDecoderModel, TFVisionEncoderDecoderModel
@@ -117,7 +117,7 @@ a cat laying on a blanket next to a cat laying on a bed
 
 ## 훈련[[training]]
 
-모델이 생성된 후에는 (이미지, 텍스트) 쌍의 데이터셋에서 BART, T5 또는 다른 인코더-디코더 모델과 유사하게 파인튜닝할 수 있습니다.
+모델이 생성된 후에는 (이미지, 텍스트) 쌍의 데이터셋에서 BART, T5 또는 다른 인코더-디코더 모델과 유사하게 미세 조정할 수 있습니다.
 보시다시피, 손실을 계산하기 위해 모델에 필요한 입력은 단 2개입니다: `pixel_values` (이미지)와 `labels` (인코딩된 대상 시퀀스의 `input_ids`)입니다.
 
 ```python
