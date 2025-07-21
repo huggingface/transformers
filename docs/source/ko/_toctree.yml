@@ -288,7 +288,7 @@
       title: (번역중) Tokenizer
     - local: main_classes/trainer
       title: Trainer
-    - local: deepspeed
+    - local: main_classes/deepspeed
       title: DeepSpeed
     - local: main_classes/executorch
       title: ExecuTorch
