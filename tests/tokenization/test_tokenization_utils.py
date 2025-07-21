@@ -398,3 +398,12 @@ class ChatTemplateTest(unittest.TestCase):
             tokens += tokenizer.encode_message(message, conversation_history=conversation[:i])
 
         self.assertEqual(whole_conversation_tokens, tokens)
+
+    def test_encode_message_raises_on_add_generation_prompt(self):
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hey there, how are you?"},
+        ]
+        with self.assertRaises(ValueError):
+            tokenizer.encode_message(conversation[0], add_generation_prompt=True)
