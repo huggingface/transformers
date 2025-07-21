@@ -217,7 +217,7 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
         not_used_keys = list(from_state_dict.keys())
         regex = r"\.block.-part."
         # this is "interesting", so the original checkpoints have `block[0,1]-part` in each key name, we remove it
-        for key in from_state_dict.keys():
+        for key in from_state_dict:
             # remove the weird "block[0,1]-part" from the key
             src_key = re.sub(regex, "", key)
             # now src_key from the model checkpoints is the one we got from the original model after tracing, so use it to get the correct destination key
