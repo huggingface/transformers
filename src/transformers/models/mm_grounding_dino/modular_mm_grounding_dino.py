@@ -163,7 +163,6 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
     def __init__(self, config):
         super().__init__(config)
         self.bias = nn.Parameter(torch.tensor(0.0))
-        nn.init.constant_(self.bias, -math.log((1 - 0.01) / 0.01))
 
     def forward(
         self,
@@ -184,7 +183,11 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
 
 class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
-    pass
+    
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, MMGroundingDinoContrastiveEmbedding):
+            nn.init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
 
 
 # TODO: this one is useless, but without it class order in modeling gets messed up

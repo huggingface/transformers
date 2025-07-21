@@ -41,7 +41,6 @@ class MMGroundingDinoContrastiveEmbedding(nn.Module):
         super().__init__()
         self.max_text_len = config.max_text_len
         self.bias = nn.Parameter(torch.tensor(0.0))
-        nn.init.constant_(self.bias, -math.log((1 - 0.01) / 0.01))
 
     def forward(
         self,
@@ -1069,6 +1068,8 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.reference_points.bias.data, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
+        if isinstance(module, MMGroundingDinoContrastiveEmbedding):
+            nn.init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, MMGroundingDinoDecoder):
