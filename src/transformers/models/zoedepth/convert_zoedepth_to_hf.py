@@ -266,7 +266,7 @@ def convert_state_dict(orig_state_dict):
 
 
 def remove_ignore_keys(state_dict):
-    for key, _ in state_dict.copy().items():
+    for key in state_dict.copy().keys():
         if (
             "fc_norm" in key
             or "relative_position_index" in key

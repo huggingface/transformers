@@ -1199,7 +1199,7 @@ class VptqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        for layer_name, layer_param in self.config_for_layers.items():
+        for layer_param in self.config_for_layers.values():
             VptqLayerConfig(**layer_param)
         if self.enable_proxy_error is True:
             raise ValueError("enable_proxy_error should always be False until we support training")
@@ -1649,7 +1649,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             from torchao.quantization.quant_api import AOBaseConfig
 
             if not isinstance(self.quant_type, AOBaseConfig):
-                raise ValueError(
+                raise TypeError(
                     f"quant_type must be either a string or an AOBaseConfig instance, got {type(self.quant_type)}"
                 )
         else:

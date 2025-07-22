@@ -140,7 +140,7 @@ class BridgeTowerResidualAttention(nn.Module):
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
         hidden_state = self.ln_2(residual_state)
-        for _, layer in self.mlp.items():
+        for layer in self.mlp.values():
             hidden_state = layer(hidden_state)
         hidden_state = residual_state + hidden_state
         return hidden_state
@@ -949,30 +949,30 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
 
-    def _init_weights(self, module):
-        if isinstance(module, BridgeTowerVisionModel):
-            proj_std = (module.visual.transformer.hidden_size**-0.5) * (
-                (2 * module.visual.transformer.num_hidden_layers) ** -0.5
-            )
-            attn_std = module.visual.transformer.hidden_size**-0.5
-            fc_std = (2 * module.visual.transformer.hidden_size) ** -0.5
-            for block in module.visual.transformer.resblocks:
-                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * self.config.initializer_factor)
-                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * self.config.initializer_factor)
-                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * self.config.initializer_factor)
-                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * self.config.initializer_factor)
+    def _init_weights(self, module: nn.Module):
+        std = self.config.initializer_factor
+        if isinstance(module, BridgeTowerVisionTransformer):
+            proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
+            attn_std = self.config.hidden_size**-0.5
+            fc_std = (2 * self.config.hidden_size) ** -0.5
+            for block in module.transformer.resblocks:
+                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
+                block.attn.in_proj_bias.data.zero_()
+                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * std)
+                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
+                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
 
-            nn.init.normal_(module.visual.embeddings.class_embedding, std=attn_std * self.config.initializer_factor)
-            nn.init.normal_(
-                module.visual.embeddings.position_embedding.weight, std=attn_std * self.config.initializer_factor
-            )
+            nn.init.normal_(module.embeddings.class_embedding, std=attn_std * std)
+            nn.init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.05 * self.config.initializer_factor)
+            module.weight.data.normal_(mean=0.0, std=0.05 * std)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BridgeTowerForContrastiveLearning):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
 
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
             module.bias.data.zero_()
 
 

@@ -202,6 +202,8 @@
       title: CPU로 추론하기
     - local: perf_infer_gpu_one
       title: 하나의 GPU를 활용한 추론
+    - local: perf_infer_gpu_multi
+      title: 다중 GPU를 활용한 추론
     title: 추론 최적화하기
   - local: big_models
     title: 대형 모델을 인스턴스화
