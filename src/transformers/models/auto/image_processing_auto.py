@@ -49,6 +49,9 @@ from .configuration_auto import (
 logger = logging.get_logger(__name__)
 
 
+FORCE_FAST_MODELS = ["qwen2_vl", "qwen2_5_vl"]
+
+
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
