@@ -728,7 +728,29 @@ class EvollaSaProtPooler(nn.Module):
         return pooled_output
 
 
-class EvollaSaProtProteinEncoder(nn.Module):
+@auto_docstring
+class EvollaSaProtPreTrainedModel(PreTrainedModel):
+    config: SaProtConfig
+    _no_split_modules = ["EvollaSaProtLayer"]
+    _supports_flash_attn = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+
+class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__()
         self.config = config
@@ -828,22 +850,62 @@ class EvollaSaProtProteinEncoder(nn.Module):
         return extended_attention_mask
 
 
-class EvollaProteinEncoder(nn.Module):
-    def __init__(self, config: EvollaConfig):
+class EvollaSequenceCompressorAttention(nn.Module):
+    def __init__(self, dim, dim_head=64, heads=8):
         super().__init__()
-        self.model = EvollaSaProtProteinEncoder(config=config.protein_encoder_config)
-        self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
+        self.scale = dim_head**-0.5
+        self.heads = heads
+        inner_dim = dim_head * heads
 
-    @can_return_tuple
-    def forward(self, input_ids: torch.LongTensor, attention_mask: torch.FloatTensor, **kwargs):
-        protein_output = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        protein_embeds = protein_output.last_hidden_state
-        sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
+        self.norm_media = nn.LayerNorm(dim)
+        self.norm_latents = nn.LayerNorm(dim)
 
-        return EvollaProteinEncoderModelOutput(
-            sequence_compressor_output=sequence_repr,
-            last_hidden_state=protein_output.last_hidden_state,
-        )
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+
+    def forward(self, x, latents, mask):
+        """
+        Args:
+            x (torch.Tensor): image features
+                shape (b, n1, D)
+            latent (torch.Tensor): latent features
+                shape (b, n2, D);  n2: num of latent tokens
+        """
+        x = self.norm_media(x)
+        latents = self.norm_latents(latents)
+
+        h = self.heads
+
+        q = self.to_q(latents)
+        kv_input = torch.cat((x, latents), dim=-2)
+        k, v = self.to_kv(kv_input).chunk(
+            2, dim=-1
+        )  # each: batch_size, max_protein_length+num_latents, dim_head*num_heads
+
+        q = q.view(q.size(0), q.size(1), h, -1).permute(0, 2, 1, 3)
+        k = k.view(k.size(0), k.size(1), h, -1).permute(0, 2, 1, 3)
+        v = v.view(v.size(0), v.size(1), h, -1).permute(0, 2, 1, 3)
+        q = q * self.scale  # batch_size, num_heads, num_latents, dim_head
+
+        # attention
+        sim = torch.matmul(q, k.transpose(-1, -2))
+        sim = sim - sim.amax(dim=-1, keepdim=True).detach()
+        bs, nh, skd, okd = sim.shape
+        ones = torch.ones(nh, skd).to(mask.device)  # Create a tensor of ones with shape (nh, skd)
+        mask_exp = mask[:, None, None, :]
+        ones_exp = ones[None, :, :, None]
+        mask = mask_exp * ones_exp
+
+        sim = sim.masked_fill((1 - mask).bool(), -1e4)
+        attn = sim.softmax(dim=-1)
+        out = torch.matmul(attn, v)
+        out = out.permute(0, 2, 1, 3)
+
+        # [batch, seq, head, features] -> [batch, seq, head*features]
+        out = out.reshape(out.size(0), out.size(1), -1)
+
+        return self.to_out(out)
 
 
 class EvollaFeedForward(nn.Module):
@@ -862,6 +924,72 @@ class EvollaFeedForward(nn.Module):
         x = self.activation(x)
         x = self.fc2(x)
         return x
+
+
+class EvollaSequenceCompressorResampler(nn.Module):
+    def __init__(self, config: EvollaConfig):
+        super().__init__()
+        protein_repr_dim = config.protein_encoder_config.hidden_size
+        output_repr_dim = config.hidden_size
+        depth = config.resampler_depth
+        dim_head = config.resampler_dim_head
+        heads = config.resampler_heads
+        ff_mult = config.resampler_ff_mult
+        self.num_latents = config.resampler_num_latents
+
+        self.latents = nn.Parameter(torch.randn(self.num_latents, protein_repr_dim), requires_grad=True)
+
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(
+                nn.ModuleList(
+                    [
+                        EvollaSequenceCompressorAttention(dim=protein_repr_dim, dim_head=dim_head, heads=heads),
+                        EvollaFeedForward(dim=protein_repr_dim, mult=ff_mult),
+                    ]
+                )
+            )
+
+        self.norm = nn.LayerNorm(output_repr_dim)
+
+        self.protein_projector = nn.Linear(protein_repr_dim, output_repr_dim)
+
+    def forward(self, embeds, mask):
+        b = embeds.shape[0]
+
+        bs, _ = mask.shape  # bs, max_protein_length
+        latent_mask = torch.ones(bs, self.num_latents).to(mask.device)
+        mask = torch.cat((mask, latent_mask), dim=1)  # bs, max_protein_length + num_latents
+
+        # blocks
+        ones = torch.ones(b).to(self.latents.device)
+        latents = self.latents[None] * ones.view(-1, 1, 1)  # [b,n,d]
+        latents = latents.to(embeds.dtype)
+        for attn, ff in self.layers:
+            latents = attn(embeds, latents, mask) + latents
+            latents = ff(latents) + latents
+
+        transformed_feature = self.protein_projector(latents)
+
+        return self.norm(transformed_feature)
+
+
+class EvollaProteinEncoder(nn.Module):
+    def __init__(self, config: EvollaConfig):
+        super().__init__()
+        self.model = EvollaSaProtProteinEncoder(config=config.protein_encoder_config)
+        self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
+
+    @can_return_tuple
+    def forward(self, input_ids: torch.LongTensor, attention_mask: torch.FloatTensor, **kwargs):
+        protein_output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        protein_embeds = protein_output.last_hidden_state
+        sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
+
+        return EvollaProteinEncoderModelOutput(
+            sequence_compressor_output=sequence_repr,
+            last_hidden_state=protein_output.last_hidden_state,
+        )
 
 
 class EvollaSequenceAlignerCrossAttention(nn.Module):
@@ -1110,115 +1238,6 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
             hidden_states = residual + hidden_states
 
         return hidden_states
-
-
-class EvollaSequenceCompressorAttention(nn.Module):
-    def __init__(self, dim, dim_head=64, heads=8):
-        super().__init__()
-        self.scale = dim_head**-0.5
-        self.heads = heads
-        inner_dim = dim_head * heads
-
-        self.norm_media = nn.LayerNorm(dim)
-        self.norm_latents = nn.LayerNorm(dim)
-
-        self.to_q = nn.Linear(dim, inner_dim, bias=False)
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
-        self.to_out = nn.Linear(inner_dim, dim, bias=False)
-
-    def forward(self, x, latents, mask):
-        """
-        Args:
-            x (torch.Tensor): image features
-                shape (b, n1, D)
-            latent (torch.Tensor): latent features
-                shape (b, n2, D);  n2: num of latent tokens
-        """
-        x = self.norm_media(x)
-        latents = self.norm_latents(latents)
-
-        h = self.heads
-
-        q = self.to_q(latents)
-        kv_input = torch.cat((x, latents), dim=-2)
-        k, v = self.to_kv(kv_input).chunk(
-            2, dim=-1
-        )  # each: batch_size, max_protein_length+num_latents, dim_head*num_heads
-
-        q = q.view(q.size(0), q.size(1), h, -1).permute(0, 2, 1, 3)
-        k = k.view(k.size(0), k.size(1), h, -1).permute(0, 2, 1, 3)
-        v = v.view(v.size(0), v.size(1), h, -1).permute(0, 2, 1, 3)
-        q = q * self.scale  # batch_size, num_heads, num_latents, dim_head
-
-        # attention
-        sim = torch.matmul(q, k.transpose(-1, -2))
-        sim = sim - sim.amax(dim=-1, keepdim=True).detach()
-        bs, nh, skd, okd = sim.shape
-        ones = torch.ones(nh, skd).to(mask.device)  # Create a tensor of ones with shape (nh, skd)
-        mask_exp = mask[:, None, None, :]
-        ones_exp = ones[None, :, :, None]
-        mask = mask_exp * ones_exp
-
-        sim = sim.masked_fill((1 - mask).bool(), -1e4)
-        attn = sim.softmax(dim=-1)
-        out = torch.matmul(attn, v)
-        out = out.permute(0, 2, 1, 3)
-
-        # [batch, seq, head, features] -> [batch, seq, head*features]
-        out = out.reshape(out.size(0), out.size(1), -1)
-
-        return self.to_out(out)
-
-
-class EvollaSequenceCompressorResampler(nn.Module):
-    def __init__(
-        self,
-        config: EvollaConfig,
-    ):
-        super().__init__()
-        protein_repr_dim = config.protein_encoder_config.hidden_size
-        output_repr_dim = config.hidden_size
-        depth = config.resampler_depth
-        dim_head = config.resampler_dim_head
-        heads = config.resampler_heads
-        ff_mult = config.resampler_ff_mult
-        self.num_latents = config.resampler_num_latents
-
-        self.latents = nn.Parameter(torch.randn(self.num_latents, protein_repr_dim), requires_grad=True)
-
-        self.layers = nn.ModuleList([])
-        for _ in range(depth):
-            self.layers.append(
-                nn.ModuleList(
-                    [
-                        EvollaSequenceCompressorAttention(dim=protein_repr_dim, dim_head=dim_head, heads=heads),
-                        EvollaFeedForward(dim=protein_repr_dim, mult=ff_mult),
-                    ]
-                )
-            )
-
-        self.norm = nn.LayerNorm(output_repr_dim)
-
-        self.protein_projector = nn.Linear(protein_repr_dim, output_repr_dim)
-
-    def forward(self, embeds, mask):
-        b = embeds.shape[0]
-
-        bs, _ = mask.shape  # bs, max_protein_length
-        latent_mask = torch.ones(bs, self.num_latents).to(mask.device)
-        mask = torch.cat((mask, latent_mask), dim=1)  # bs, max_protein_length + num_latents
-
-        # blocks
-        ones = torch.ones(b).to(self.latents.device)
-        latents = self.latents[None] * ones.view(-1, 1, 1)  # [b,n,d]
-        latents = latents.to(embeds.dtype)
-        for attn, ff in self.layers:
-            latents = attn(embeds, latents, mask) + latents
-            latents = ff(latents) + latents
-
-        transformed_feature = self.protein_projector(latents)
-
-        return self.norm(transformed_feature)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -1600,6 +1619,20 @@ class EvollaModel(EvollaPreTrainedModel):
         msa_batch_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
+        r"""
+        protein_input_ids (<fill_type>):
+            <fill_docstring>
+        protein_attention_mask (<fill_type>):
+            <fill_docstring>
+        structure_feats (<fill_type>):
+            <fill_docstring>
+        msa_feats (<fill_type>):
+            <fill_docstring>
+        structure_batch_mask (<fill_type>):
+            <fill_docstring>
+        msa_batch_mask (<fill_type>):
+            <fill_docstring>
+        """
         # If not provided `protein_feats`, use the `protein_encoder` to get the protein features
         if protein_input_ids is not None and protein_attention_mask is not None:
             protein_outputs = self.protein_encoder(
@@ -1697,6 +1730,11 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         r"""
+        protein_input_ids (<fill_type>):
+            <fill_docstring>
+        protein_attention_mask (<fill_type>):
+            <fill_docstring>
+
         Example:
 
         ```python
