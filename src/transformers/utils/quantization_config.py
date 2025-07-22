@@ -1601,13 +1601,13 @@ class FPQuantConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if self.forward_dtype not in ["mxfp4"]:
-            raise ValueError("forward_dtype must be mxfp4 for now")
+            raise ValueError("Only 'mxfp4' is supported for forward_dtype for now.")
         if self.forward_method not in ["abs_max", "quest"]:
-            raise ValueError("forward_method must be abs_max or quest for now")
+            raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for now.")
         if self.backward_dtype not in ["bf16"]:
-            raise ValueError("backward_dtype must be bf16 for now")
+            raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
         if self.hadamard_group_size not in [32]:
-            raise ValueError("hadamard_group_size must be 32 for now")
+            raise ValueError("Only a hadamard_group_size of 32 is supported for now.")
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 
