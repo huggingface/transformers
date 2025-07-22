@@ -35,7 +35,6 @@ from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, Processin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-
 logger = logging.get_logger(__name__)
 
 
