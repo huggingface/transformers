@@ -229,7 +229,14 @@ def write_model(
     else:
         print("Saving the checkpoint in packed format")
         from safetensors.torch import save_file
-        config.quantization_config = {"quant_method": "mxfp4"}
+        config.quantization_config = {
+                                        "quant_method": "mxfp4",
+                                        "modules_to_not_convert":[
+                                            "model.layers.*.self_attn",
+                                            "model.layers.*.mlp.router",
+                                            "model.embed_tokens",
+                                            "lm_head"
+                                    ]}
         config.save_pretrained(model_path)
         save_file(state_dict, os.path.join(model_path, "model.safetensors"))
 
