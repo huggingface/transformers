@@ -29,7 +29,6 @@ rendered properly in your Markdown viewer.
 
 [YOLOS](https://huggingface.co/papers/2106.00666) uses a [Vision Transformer (ViT)](./vit) for object detection with minimal modifications and region priors. It can achieve performance comparable to specialized object detection models and frameworks with knowledge about 2D spatial structures.
 
-The model uses 100 learnable object queries and forces the ground-truth boxes to also be exactly 100, filling any extra slots with a special "no object" entry. During training, the Hungarian matching algorithm was used to create optimal one-to-one mappings between each of the queries and each of the annotations. Once each query is matched, the model is updated by applying a standard cross-entropy loss on the predicted classes and a box loss that mixes L1 distance with a generalized IoU term.
 
 You can find all the original YOLOS checkpoints under the [HUST Vision Lab](https://huggingface.co/hustvl/models?search=yolos) organization.
 
