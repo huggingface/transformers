@@ -127,7 +127,7 @@ class Llama4TextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-@use_kernel_forward_from_hub("Llama4TextMoe")
+@use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
