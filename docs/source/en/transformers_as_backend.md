@@ -47,7 +47,7 @@ Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/transformers_back
 
 [SGLang](https://github.com/InternLM/sglang) is a high-performance, OpenAI-compatible server and runtime designed for chat-based LLMs. It offers fast inference, role-based conversation handling, and support for custom pipelines, making it great for building real-world LLM apps.
 
-SGLang will automatically fall back to the Transformers backend if a model isn’t natively supported. You can also set it explicitly:
+SGLang automatically falls back to the Transformers backend if a model isn’t natively supported. To explicitly use a Transformers' model, set `impl="transformers"`.
 
 ```python
 import sglang as sgl
@@ -93,14 +93,9 @@ Add `--trust-remote_code` to the command to serve a custom Transformers model.
 docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:latest --model-id <CUSTOM_MODEL_ID> --trust-remote-code
 ```
 
-## Making Your Model Compatible Once and For All Backends
+## Building a compatible model backend
 
-To make your custom model work out of the box with backends like vLLM and SGLang, it needs to follow some conventions, mainly to ensure smooth integration and optimized inference.
-
-
-### General Requirements
-
-For a model to be supported via the Transformers backend:
+To ensure a model is compatible as a backend to any inference server, make sure it is compatible with Transformers and supports the [AttentionInterface](./attention_interface) class.
 
 1. A model must be Transformers-compatible following the model [contribution guidelines](./add_new_model) or the [custom model contribution guidelines](./custom_models). Make sure the model has a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
 
@@ -205,9 +200,11 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
 2. A multimodal model config must be nested with the following fields.
     * text_config: decoder language model config
     * vision_config: vision encoder config
-    * image_token_id: ID of the image placeholder token used in input to indicate image position
+    * image_token_id: ID of the image placeholder token used in the input to indicate image position
 
-3. The model's processing class must have `self.image_token` and `self.image_token_ids` attributes. These are the placeholder tokens used to indicate image positions in the input. Note that it is the same token used by users when constructing a input prompt and the token that is used to masked scatter image features. Additionally, the class needs a `self._get_num_multimodal_tokens()` helper method that computes the number of placeholder tokens needed for multimodal inputs with given sizes and returns a `MultiModalData` object. Note that placeholder for row and column tokens are not counted as image placholders, only tokens that will actually be replaced by image features are computed.
+3. A multimodal model's processing class must have the `self.image_token` and `self.image_token_ids` attributes. These are placeholder tokens used to indicate image positions in the input. The placeholder token is the same token used in the input prompt and to mask scatter image features.
+
+   The processing class also needs ` self._get_num_multimodal_tokens` method to compute the number of placeholder tokens needed for multimodal inputs with given sizes and to return a [`MultiModalData`] object. The placeholder for row and column tokens don't count as image placeholders. Only the tokens that are actually replaced by image features are computed.
 
 Finally, when `return_mm_token_type_ids=True`, the class has to return `mm_token_type_ids` to indicate whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
 
