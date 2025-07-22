@@ -329,6 +329,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
                 ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
+                ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -508,6 +509,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     '\nUSER: Describe the image.\nASSISTANT: The image features a beautiful blonde dog sitting on a sidewalk. The dog is holding a small',
                     '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the',
                 ],
+                ("rocm", (9, 5)): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them is a black and white photo, while the",
+                    '\nUSER: Describe the image.\nASSISTANT: The image features a brown dog sitting on a sidewalk, holding a green rose in its mouth.',
+                    '\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama',
+                ],
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -619,6 +625,7 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
             {
                 ("cuda", 7): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
                 ("xpu", 3): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
+                ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
@@ -647,8 +654,18 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-        EXPECTED_GENERATION = [
-            'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-            'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
-        ]  # fmt: skip
+        EXPECTED_GENERATIONS = Expectations(
+            {
+                (None, None): [
+                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+                                'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
+                            ],
+                ("rocm", (9, 5)): [
+                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+                                'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
+                            ],
+            }
+        )  # fmt: skip
+
+        EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         self.assertEqual(output, EXPECTED_GENERATION)
