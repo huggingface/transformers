@@ -177,7 +177,7 @@ class MyMultimodalModel(MyMultimodalPreTrainedModel):
     def get_image_features(self, pixel_values):
         return self.vision_tower(pixel_values).last_hidden_states
     
-    def forward(self, inpit_ids, pixel_values, **kwargs):
+    def forward(self, input_ids, pixel_values, **kwargs):
         # process your inputs
         return MyModelOutputWithPast(
             last_hidden_state=last_hidden_state,
