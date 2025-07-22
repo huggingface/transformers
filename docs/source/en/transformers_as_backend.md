@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Using Transformers as a Backend for Inference Servers
+# Inference server backends
 
 An inference backend is the part of your system that actually runs the model and returns outputs. Think of it as the engine behind APIs, chatbots, and anything else using generative Language Model in production.
 
