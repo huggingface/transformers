@@ -1984,6 +1984,8 @@ class GenerationMixin(ContinuousMixin):
         Prepares the cache for generation (if applicable), given `generate`'s parameterization. If a cache is
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
+        # TODO: temporarily ignoring cache prep as we use custom tuple caches
+        return
 
         is_hybrid_cache = any(class_name in self.__class__.__name__.lower() for class_name in ["mamba", "falconh1"])
         cache_name = "past_key_values" if not is_hybrid_cache else "cache_params"
