@@ -143,14 +143,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from fp_quant import FPQuantLinear
-
-        fp_quant_modules = {
-            name: module for name, module in model.named_modules() if isinstance(module, FPQuantLinear)
-        }
-        for name, module in fp_quant_modules.items():
-            if not self.quantization_config.store_master_weights and module.weight is not None:
-                module.weight = None
+        return model
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from fp_quant import FPQuantLinear
