@@ -922,7 +922,7 @@ class Emu3VQVAEDecoder(nn.Module):
     """
 )
 class Emu3VQVAE(PreTrainedModel):
-    config_class = Emu3VQVAEConfig
+    config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
     _supports_sdpa = True
@@ -1088,7 +1088,7 @@ class Emu3ImageVocabularyMapping:
 
 @auto_docstring
 class Emu3PreTrainedModel(PreTrainedModel):
-    config_class = Emu3Config
+    config: Emu3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -1097,8 +1097,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True
@@ -1175,12 +1174,6 @@ class Emu3TextModel(Emu3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -1247,7 +1240,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = Emu3TextConfig
+    config: Emu3TextConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1257,18 +1250,6 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1499,9 +1480,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)

@@ -355,7 +355,7 @@ class GPTNeoXDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GPTNeoXPreTrainedModel(PreTrainedModel):
-    config_class = GPTNeoXConfig
+    config: GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXLayer"]
@@ -363,8 +363,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -403,12 +402,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_in
-
-    def set_input_embeddings(self, value):
-        self.embed_in = value
 
     @check_model_inputs
     @auto_docstring
@@ -521,6 +514,12 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+
+    def get_input_embeddings(self):
+        return self.embed_in
+
+    def set_input_embeddings(self, value):
+        self.embed_in = value
 
 
 @auto_docstring(

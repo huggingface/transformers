@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class SmolVLMPreTrainedModel(PreTrainedModel):
-    config_class = SmolVLMConfig
+    config: SmolVLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
@@ -57,7 +57,7 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -370,7 +370,7 @@ class SmolVLMEncoder(nn.Module):
     """
 )
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
-    config_class = SmolVLMVisionConfig
+    config: SmolVLMVisionConfig
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -842,12 +842,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)

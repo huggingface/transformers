@@ -332,8 +332,11 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        is_batched = False
         if isinstance(conversations[0], dict):
             conversations = [conversations]
+            is_batched = True
+
         for conversation in conversations:
             if (
                 conversation[0]["role"] != "system"
@@ -344,6 +347,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                     "System prompt modified, audio output may not work as expected. "
                     + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
                 )
+        if is_batched:
+            conversations = conversations[0]
+
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
     @property

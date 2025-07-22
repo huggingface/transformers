@@ -51,8 +51,8 @@ class VideoClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=video-classification).
     """
 
-    _load_processor = True
-    _load_image_processor = False
+    _load_processor = False
+    _load_image_processor = True
     _load_feature_extractor = False
     _load_tokenizer = False
 

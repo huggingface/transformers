@@ -468,7 +468,7 @@ class Idefics3Connector(nn.Module):
 
 @auto_docstring
 class Idefics3PreTrainedModel(PreTrainedModel):
-    config_class = Idefics3Config
+    config: Idefics3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
@@ -476,7 +476,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -503,7 +503,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
-    config_class = Idefics3VisionConfig
+    config: Idefics3VisionConfig
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -868,14 +868,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)

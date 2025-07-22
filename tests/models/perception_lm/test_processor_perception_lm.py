@@ -21,7 +21,7 @@ from transformers import (
     AutoTokenizer,
     PerceptionLMProcessor,
 )
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_read_token, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -34,11 +34,12 @@ if is_torch_available():
     import torch
 
 
-# TEST_MODEL_PATH = "facebook/Perception-LM-1B"
-TEST_MODEL_PATH = "shumingh/plm_1b_hf"  # should be replaced by the above once checkpoints are merged
+TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 
 @require_vision
+@require_read_token
+@unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
 
