@@ -1694,44 +1694,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             return rendered_chat
 
-    def _encode_message(
-        self,
-        message: dict[str, str],
-        conversation_history: list[dict[str, str]],
-        add_generation_prompt: bool,
-        **kwargs,
-    ) -> list[int]:
-        """
-        Helper function to encode a single message.
-        """
-        conversation = conversation_history + [message]
-        tokens = self.apply_chat_template(
-            conversation, add_generation_prompt=add_generation_prompt, tokenize=True, **kwargs
-        )
-
-        # Now we need to find the beginning of the last message in the token stream.
-        # We do this by tokenizing the conversation *without* the last message and seeing where the token streams differ.
-        if len(conversation_history) > 0:
-            prefix_tokens = self.apply_chat_template(
-                conversation_history, add_generation_prompt=add_generation_prompt, tokenize=True, **kwargs
-            )
-            # It's possible that the prefix tokens are not a prefix of the full list of tokens.
-            # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
-            # In this case, we can't simply find the prefix, so we have to do something a bit more subtle.
-            # We look for the first place where the tokens differ, and that's our split point.
-            # This is not perfect, but it's the best we can do without a token-level API.
-            # To make this more robust, we could do a diff and find the longest common subsequence, but this is
-            # a good first approximation.
-            # This is particularly important for models like Llama3 that have changed their chat template to include
-            # EOS tokens after user messages.
-            min_len = min(len(prefix_tokens), len(tokens))
-            for i in range(min_len):
-                if prefix_tokens[i] != tokens[i]:
-                    return tokens[i:]
-            return tokens[min_len:]
-        else:
-            return tokens
-
     def encode_message(
         self,
         message: dict[str, str],
