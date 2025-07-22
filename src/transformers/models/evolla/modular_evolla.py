@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...modeling_utils import ModuleUtilsMixin, get_parameter_dtype
+from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel, get_parameter_dtype
 from ...utils import (
     auto_docstring,
     can_return_tuple,
@@ -192,6 +192,8 @@ class EvollaSaProtEncoder(EsmEncoder):
 
 class EvollaSaProtPooler(EsmPooler):
     pass
+
+
 @auto_docstring
 class EvollaSaProtPreTrainedModel(PreTrainedModel):
     config: SaProtConfig
@@ -388,7 +390,7 @@ class EvollaFeedForward(nn.Module):
         x = self.activation(x)
         x = self.fc2(x)
         return x
-    
+
 
 class EvollaSequenceCompressorResampler(nn.Module):
     def __init__(self, config: EvollaConfig):
