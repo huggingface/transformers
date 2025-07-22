@@ -242,7 +242,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
 
 class EvollaSaProtSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
         self.config = config
 
@@ -272,6 +272,7 @@ class EvollaSaProtSelfAttention(nn.Module):
             self.rotary_embeddings = EvollaSaProtRotaryEmbedding(dim=self.attention_head_size)
 
         self.is_decoder = config.is_decoder
+        self.layer_idx = layer_idx
 
     @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(

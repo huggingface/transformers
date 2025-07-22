@@ -134,7 +134,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
 
 class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None):
         nn.Module.__init__()
         self.config = config
 
@@ -164,6 +164,7 @@ class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
             self.rotary_embeddings = EvollaSaProtRotaryEmbedding(dim=self.attention_head_size)
 
         self.is_decoder = config.is_decoder
+        self.layer_idx = layer_idx
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
