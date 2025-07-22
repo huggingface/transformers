@@ -18,7 +18,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from .models.auto import AutoModel
 from .cache_utils import Cache
 from .modeling_outputs import (
     BaseModelOutputWithPast,
@@ -26,6 +25,7 @@ from .modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from .models.auto import AutoModel
 from .processing_utils import Unpack
 from .utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 
@@ -99,7 +99,7 @@ class GenericForSequenceClassification(ABC):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = AutoModel._from_config(config)
+        self.model = AutoModel.from_config(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -172,7 +172,7 @@ class GenericForQuestionAnswering(ABC):
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = AutoModel._from_config(config)
+        self.transformer = AutoModel.from_config(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
@@ -231,7 +231,7 @@ class GenericForTokenClassification(ABC):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = AutoModel._from_config(config)
+        self.model = AutoModel.from_config(config)
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
