@@ -489,7 +489,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
 class LlamaForSequenceClassification(GenericForSequenceClassification, LlamaPreTrainedModel): ...
 
 
-class LlamaForQuestionAnswering(GenericForQuestionAnswering, LlamaPreTrainedModel): ...
+class LlamaForQuestionAnswering(GenericForQuestionAnswering, LlamaPreTrainedModel):
+    base_model_prefix = "transformer"  # For BC, where `transformer` was used instead of `model`
 
 
 class LlamaForTokenClassification(GenericForTokenClassification, LlamaPreTrainedModel): ...

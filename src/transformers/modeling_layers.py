@@ -96,10 +96,13 @@ class GradientCheckpointingLayer(nn.Module):
 
 @auto_docstring
 class GenericForSequenceClassification(ABC):
+    base_model_prefix = "model"
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = AutoModel.from_config(config)
+        # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
+        setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -168,11 +171,12 @@ class GenericForSequenceClassification(ABC):
 
 @auto_docstring
 class GenericForQuestionAnswering(ABC):
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = AutoModel.from_config(config)
+        # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
+        setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
@@ -228,10 +232,13 @@ class GenericForQuestionAnswering(ABC):
 
 @auto_docstring
 class GenericForTokenClassification(ABC):
+    base_model_prefix = "model"
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = AutoModel.from_config(config)
+        # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
+        setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
