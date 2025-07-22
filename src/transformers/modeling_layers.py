@@ -183,10 +183,10 @@ class GenericForQuestionAnswering(ABC):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.embed_tokens
+        return getattr(self, self.base_model_prefix).embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
+        getattr(self, self.base_model_prefix).embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
