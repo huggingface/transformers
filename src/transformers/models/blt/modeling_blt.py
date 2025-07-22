@@ -166,6 +166,8 @@ class BLTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.RMSNorm):
             module.weight.data.fill_(1.0)
 
+
+
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1183,6 +1185,12 @@ class BLTModel(BLTPreTrainedModel):
                 param.requires_grad = False
         else:
             self.patcher = None
+
+        # Sync attention implementation from main config to sub-configs
+        for subconfig_name in ["encoder_config", "decoder_config", "global_config", "patcher_config"]:
+            subconfig = getattr(self.config, subconfig_name)
+            if subconfig is not None:
+                subconfig._attn_implementation = self.config._attn_implementation
 
         self.post_init()
 
