@@ -3476,18 +3476,12 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.head_dim = 64
+            print(config)
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
-
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
@@ -3506,11 +3500,14 @@ class ModelTesterMixin:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
                     outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
                 else:
                     outputs = model(dummy_input, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, output_hidden_states=True)
 
+                model.set_attn_implementation("sdpa")
                 logits = (
                     outputs.hidden_states[-1]
                     if not model.config.is_encoder_decoder
@@ -3534,7 +3531,8 @@ class ModelTesterMixin:
                         other_inputs["attention_mask"] = dummy_attention_mask
 
                     outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, **other_inputs)
                 else:
                     other_inputs = {
                         "output_hidden_states": True,
@@ -3543,8 +3541,10 @@ class ModelTesterMixin:
                         other_inputs["attention_mask"] = dummy_attention_mask
 
                     outputs = model(dummy_input, **other_inputs)
-                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, **other_inputs)
 
+                model.set_attn_implementation("sdpa")
                 logits = (
                     outputs.hidden_states[-1]
                     if not model.config.is_encoder_decoder
@@ -3561,7 +3561,8 @@ class ModelTesterMixin:
 
                     # check with inference + dropout
                     model.train()
-                    _ = model_fa(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    _ = model(dummy_input, **other_inputs)
                 else:
                     assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
