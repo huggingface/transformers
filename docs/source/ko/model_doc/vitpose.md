@@ -16,16 +16,16 @@ specific language governing permissions and limitations under the License.
   </div>
 </div>
 
-# ViTPose
+# ViTPose[[vitpose]]
 
 [ViTPose](https://huggingface.co/papers/2204.12484)는 키포인트(포즈) 추정을 위한 비전 트랜스포머 기반 모델입니다. 간단하고 비계층적인 [ViT](./vit) 백본과 경량 디코더 헤드를 사용합니다. 이 아키텍처는 모델 설계를 단순화하고, 트랜스포머의 확장성을 활용하며, 다양한 훈련 전략에 적응할 수 있습니다.
 
-[ViTPose++](https://huggingface.co/papers/2212.04246)는 백본에 혼합 전문가(MoE) 모듈을 통합하고 더 다양한 사전 훈련 데이터를 사용하여 ViTPose를 개선합니다.
+[ViTPose++](https://huggingface.co/papers/2212.04246)는 백본에 전문가 혼합(MoE) 모듈을 통합하고 더 다양한 사전 훈련 데이터를 사용하여 ViTPose를 개선합니다.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-architecture.png"
 alt="drawing" width="600"/>
 
-모든 ViTPose와 ViTPose++ 체크포인트는 [ViTPose 컬렉션](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335)에서 찾을 수 있습니다.
+모든 ViTPose와 ViTPose++ 체크포인트는 [ViTPose collection](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335)에서 찾을 수 있습니다.
 
 아래 예시는 [`VitPoseForPoseEstimation`] 클래스를 사용한 포즈 추정을 보여줍니다.
 
@@ -106,7 +106,7 @@ annotated_frame
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose.png"/>
 </div>
 
-양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 더 많은 양자화 백엔드에 대해서는 [양자화](../quantization/overview) 개요를 참조하세요.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 더 많은 양자화 백엔드에 대해서는 [Quantization](../quantization/overview) 개요를 참조하세요.
 
 아래 예시는 [torchao](../quantization/torchao)를 사용하여 가중치만 int4로 양자화합니다.
 
