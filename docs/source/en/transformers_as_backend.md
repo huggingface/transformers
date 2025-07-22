@@ -209,7 +209,9 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
 
 3. The model's processing class must have `self.image_token` and `self.image_token_ids` attributes. These are the placeholder tokens used to indicate image positions in the input. Note that it is the same token used by users when constructing a input prompt and the token that is used to masked scatter image features. Additionally, the class needs a `self._get_num_multimodal_tokens()` helper method that computes the number of placeholder tokens needed for multimodal inputs with given sizes and returns a `MultiModalData` object. Note that placeholder for row and column tokens are not counted as image placholders, only tokens that will actually be replaced by image features are computed.
 
-Finally, when `return_mm_token_type_ids=True`, the class has to return `mm_token_type_ids` indicating whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
+Finally, when `return_mm_token_type_ids=True`, the class has to return `mm_token_type_ids` to indicate whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
+
+Expand the code below for an example.
 
 <details>
 <summary>processing_my_multimodal_model.py</summary>
