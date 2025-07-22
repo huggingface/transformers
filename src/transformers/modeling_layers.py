@@ -18,7 +18,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from .auto import AutoModel
+from .models.auto import AutoModel
 from .cache_utils import Cache
 from .modeling_outputs import (
     BaseModelOutputWithPast,
