@@ -228,7 +228,6 @@ def write_model(
 
     else:
         print("Saving the checkpoint in packed format")
-        from safetensors.torch import save_file
         config.quantization_config = {
                                         "quant_method": "mxfp4",
                                         "modules_to_not_convert":[
@@ -238,13 +237,16 @@ def write_model(
                                             "lm_head"
                                     ]}
         config.save_pretrained(model_path)
-        save_file(state_dict, os.path.join(model_path, "model.safetensors"))
+        save_sharded_model(state_dict, model_path)
+        del state_dict
 
     # Safety check: reload the converted model
     gc.collect()
-    print("Reloading the model to check if it's saved correctly.")
-    OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
-    print("Model reloaded successfully.")
+    # TODO: remove when mxfp4 pr is merged
+    if unpack:
+        print("Reloading the model to check if it's saved correctly.")
+        OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+        print("Model reloaded successfully.")
 
     # generation config
     if instruct:
@@ -259,6 +261,33 @@ def write_model(
         )
         generation_config.save_pretrained(model_path)
 
+
+def save_sharded_model(state_dict, model_path):
+    import math
+    from safetensors.torch import save_file
+
+    max_shard_size = 4800000000 # 4.8 GB
+    os.makedirs(model_path, exist_ok=True)
+    shard_size_counter = 0
+    shard_id = 0
+    shard_state_dict = {}
+    total_sharded_dict = {}
+    for key in state_dict.keys():
+        size = state_dict[key].numel()*state_dict[key].element_size()
+        if shard_size_counter + size > max_shard_size:
+            total_sharded_dict[shard_id] = shard_state_dict
+            shard_id += 1
+            shard_size_counter = 0
+            shard_state_dict = {}
+        shard_state_dict[key] = state_dict[key]
+        shard_size_counter += size
+    total_sharded_dict[shard_id] = shard_state_dict
+    num_shards = len(total_sharded_dict) - 1
+    for shard_id, shard_state_dict in total_sharded_dict.items():
+        save_file(
+            shard_state_dict,
+            os.path.join(model_path, f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors")
+        )
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
@@ -358,7 +387,6 @@ class OpenAIMoeConverter(TikTokenConverter):
             model_max_length=model_max_length,
             **kwargs,
         )
-
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     # Updated Harmony chat template
