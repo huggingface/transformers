@@ -1027,15 +1027,15 @@ class Cache:
     ```
 
     Parameters:
+        layer_classes (`type[CacheLayerMixin]` or `list[type[CacheLayerMixin]]`):
+            A list of `CacheLayerMixin` classes to instantiate for the cache. If only a `CacheLayerMixin` class is
+            provided, then it is used for all layers.
         config (`PretrainedConfig`, *optional*):
             Model configuration used to infer number of layers, head sizes, default
             device/dtype, etc.
         cache_processor (`CacheProcessor` or `str`, *optional*):
             Cache processor to apply (e.g., "offloaded", "quanto_quantized", "hqq_quantized")
             or a CacheProcessor class.
-        layer_classes (`list[type[CacheLayerMixin]]`, *optional*):
-            List of `CacheLayerMixin` classes to instantiate for the cache. When shorter than the
-            required number of layers the list is cycled. Default is [DynamicLayer].
         max_batch_size (`int`, *optional*): Maximum batch size for static caches.
         max_cache_len (`int`, *optional*): Maximum sequence length. For hybrid caches, SlidingWindowLayers are
             clamped to `min(sliding_window, max_cache_len)`, StaticLayers use full `max_cache_len`.
