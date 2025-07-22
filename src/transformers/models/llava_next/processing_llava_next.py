@@ -28,7 +28,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -136,8 +135,6 @@ class LlavaNextProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             LlavaNextProcessorKwargs,
@@ -152,7 +149,7 @@ class LlavaNextProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         prompt_strings = text
         if image_inputs:

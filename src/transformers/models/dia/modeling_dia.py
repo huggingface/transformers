@@ -61,13 +61,12 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class DiaPreTrainedModel(PreTrainedModel):
-    config_class = DiaConfig
+    config: DiaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
     _supports_static_cache = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]

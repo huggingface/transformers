@@ -208,6 +208,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    # NOTE: Similar to the `.item()` in prepare_fa2_from_position_ids, with torch compile,
+    # this might cause a graph break
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
@@ -342,7 +344,15 @@ def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
         )
     )
 
-    max_length = position_ids.max() + 1
+    # NOTE: With torch compile, this will cause a graph break if you don't set
+    # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
+    # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
+    # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
+    # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+    # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
+    # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
+    # for some models (e.g. qwen2-vl).
+    max_length = cu_seq_lens.diff().max().item()
 
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 

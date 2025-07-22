@@ -576,16 +576,15 @@ class T5GemmaAttention(nn.Module):
 
 @auto_docstring
 class T5GemmaPreTrainedModel(PreTrainedModel):
-    config_class = T5GemmaConfig
+    config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -707,12 +706,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     def forward(

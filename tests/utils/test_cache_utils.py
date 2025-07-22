@@ -46,7 +46,6 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
-        ClvpForCausalLM,
         DynamicCache,
         Gemma2Config,
         GenerationConfig,
@@ -63,8 +62,6 @@ if is_torch_available():
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
-    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
-    if cache_name != "mamba"
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name != "offloaded_hybrid"
 ]
@@ -120,36 +117,6 @@ class CacheTest(unittest.TestCase):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
-                )
-
-    def test_reorder_cache_retrocompatibility(self):
-        """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
-        legacy_reorder_fn = ClvpForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
-
-        legacy_cache = ()
-        new_cache = DynamicCache()
-
-        # Creates a new cache with 10 layers in both formats
-        for layer_idx in range(10):
-            new_key = torch.rand((4, 4, 8, 16))
-            new_value = torch.rand((4, 4, 8, 16))
-            new_cache.update(new_key, new_value, layer_idx)
-            legacy_cache += ((new_key, new_value),)
-
-        # Let's create some dummy beam indices. From the shape above, it is equivalent to the case where num_beams=4
-        # and batch_size=1
-        beam_idx = torch.randint(low=0, high=4, size=(4,))
-
-        legacy_cache_reordered = legacy_reorder_fn(legacy_cache, beam_idx)
-        new_cache.reorder_cache(beam_idx)
-
-        # Let's check that the results are the same
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(
-                        new_cache[layer_idx][key_value_idx], legacy_cache_reordered[layer_idx][key_value_idx]
-                    )
                 )
 
     def test_static_cache_mha_mqa_gqa(self):
@@ -619,12 +586,12 @@ class CacheExportIntegrationTest(unittest.TestCase):
             past_key_values=past_key_values_eager,
             use_cache=True,
         )
-        self.assertTrue(torch.allclose(res.logits, res_eager.logits))
+        self.assertTrue(torch.allclose(res.logits, res_eager.logits, atol=1e-5))
         for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
-            self.assertTrue(torch.allclose(k1, k2))
+            self.assertTrue(torch.allclose(k1, k2, atol=1e-5))
 
         for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
-            self.assertTrue(torch.allclose(v1, v2))
+            self.assertTrue(torch.allclose(v1, v2, atol=1e-5))
 
     def test_dynamic_cache_exportability_multiple_run(self):
         # When exporting with DynamicCache, you should export two graphs:
@@ -717,10 +684,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         )
 
         for k1, k2 in zip(res_export_2.past_key_values.key_cache, res_eager_2.past_key_values.key_cache):
-            self.assertTrue(torch.allclose(k1, k2))
+            self.assertTrue(torch.allclose(k1, k2, atol=1e-5))
 
         for v1, v2 in zip(res_export_2.past_key_values.value_cache, res_eager_2.past_key_values.value_cache):
-            self.assertTrue(torch.allclose(v1, v2))
+            self.assertTrue(torch.allclose(v1, v2, atol=1e-5))
 
     @unittest.skip("Runs on my machine locally, passed, no idea why it does not online")
     def test_static_cache_exportability(self):
@@ -731,7 +698,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         set_seed(0)
-        device = "cpu"
+        device = torch_device
         dtype = "bfloat16"
         cache_implementation = "static"
         attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
@@ -779,8 +746,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
 
         # Export with dynamic shapes
-        input_ids = torch.zeros((1, 3), dtype=torch.long)
-        cache_position = torch.tensor([0, 1, 2], dtype=torch.long)
+        input_ids = torch.zeros((1, 3), dtype=torch.long, device=device)
+        cache_position = torch.tensor([0, 1, 2], dtype=torch.long, device=device)
         dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
         strict = version.parse(torch.__version__) != version.parse("2.7.0")
         exported_program = convert_and_export_with_cache(

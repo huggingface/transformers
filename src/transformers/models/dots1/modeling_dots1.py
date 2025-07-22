@@ -409,16 +409,15 @@ class Dots1DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Dots1PreTrainedModel(PreTrainedModel):
-    config_class = Dots1Config
+    config: Dots1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots1DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -460,12 +459,6 @@ class Dots1Model(Dots1PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     @auto_docstring
@@ -555,18 +548,6 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder

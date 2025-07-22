@@ -324,13 +324,12 @@ def main():
         args.model_name_or_path, id2label=id2label, label2id=label2id, trust_remote_code=args.trust_remote_code
     )
     image_processor = AutoImageProcessor.from_pretrained(
-        args.model_name_or_path, trust_remote_code=args.trust_remote_code
+        args.model_name_or_path, trust_remote_code=args.trust_remote_code, do_reduce_labels=args.do_reduce_labels
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
         args.model_name_or_path,
         config=config,
         trust_remote_code=args.trust_remote_code,
-        do_reduce_labels=args.do_reduce_labels,
     )
 
     # Define transforms to be applied to each image and target.

@@ -355,16 +355,15 @@ class GPTNeoXDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GPTNeoXPreTrainedModel(PreTrainedModel):
-    config_class = GPTNeoXConfig
+    config: GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -404,12 +403,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_in
-
-    def set_input_embeddings(self, value):
-        self.embed_in = value
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -444,6 +437,10 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -517,6 +514,12 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+
+    def get_input_embeddings(self):
+        return self.embed_in
+
+    def set_input_embeddings(self, value):
+        self.embed_in = value
 
 
 @auto_docstring(

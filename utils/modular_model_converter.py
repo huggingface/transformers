@@ -141,7 +141,12 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node
 
     def leave_ImportFrom(self, original_node, updated_node):
-        """The imports from other file types (configuration, processing etc) should use original model name."""
+        """
+        The imports from other file types (configuration, processing etc) should use original model name.
+        Also, no replaces on absolute imports (e.g. `from mamba_ssm import ...`)
+        """
+        if len(original_node.relative) == 0:  # no replaces on absolute imports
+            return original_node
         if self.original_new_model_name != self.new_name and m.matches(updated_node.module, m.Name()):
             patterns = "|".join(ALL_FILE_TYPES)
             regex = rf"({patterns})_{self.new_name}"
@@ -945,39 +950,54 @@ def replace_class_node(
     new_class_docstring = modular_docstring if len(modular_docstring) > 0 else original_modeling_docstring
 
     # Compute new class attributes
-    original_modeling_class_attributes = {
-        node.body[0].targets[0].target.value: node
-        for node in original_modeling_node.body.body
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
-    }
-    original_modeling_class_attributes.update(
-        {
-            node.body[0].target.value: node
-            for node in original_modeling_node.body.body
-            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
-        }
-    )
-    modular_class_attributes = {
-        node.body[0].targets[0].target.value: node
-        for node in modular_class_node.body.body
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
-    }
-    modular_class_attributes.update(
-        {
-            node.body[0].target.value: node
-            for node in modular_class_node.body.body
-            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
-        }
-    )
+    original_modeling_class_attributes = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            original_modeling_class_attributes[node.body[0].targets[0].target.value] = node
+        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            original_modeling_class_attributes[node.body[0].target.value] = node
+
+    modular_class_attributes = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            modular_class_attributes[node.body[0].targets[0].target.value] = node
+        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            modular_class_attributes[node.body[0].target.value] = node
+
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 
-    original_modeling_methods = {
-        node.name.value: node for node in original_modeling_node.body.body if m.matches(node, m.FunctionDef())
-    }
-    modular_methods = {
-        node.name.value: node for node in modular_class_node.body.body if m.matches(node, m.FunctionDef())
-    }
+    # Check class methods defined in the modular and associated modeling
+    original_modeling_methods = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in original_modeling_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    original_modeling_methods[f"{node.name.value}_setter"] = original_modeling_methods[node.name.value]
+                    original_modeling_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    original_modeling_methods[f"{node.name.value}_setter"] = node
+            else:
+                original_modeling_methods[node.name.value] = node
+    modular_methods = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.FunctionDef()):
+            # Due to the @property and @name.setter decorators, methods can sometimes have the same name, so we need a way
+            # to separate them
+            if node.name.value in modular_methods:
+                # If it's already present, and the decorator is @property, it means the node already added was the setter
+                if node.decorators[0].decorator.value == "property":
+                    modular_methods[f"{node.name.value}_setter"] = modular_methods[node.name.value]
+                    modular_methods[node.name.value] = node
+                # In this case current node is the setter
+                else:
+                    modular_methods[f"{node.name.value}_setter"] = node
+            else:
+                modular_methods[node.name.value] = node
 
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
@@ -1750,6 +1770,7 @@ if __name__ == "__main__":
                 files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(files_to_parse)
+    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
     assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:

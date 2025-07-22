@@ -21,6 +21,7 @@ from typing import Callable, Optional, Union
 import torch
 from torch import nn
 
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
@@ -49,7 +50,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
     doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
         Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
         `question_encoder_last_hidden_state`.
-    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
         num_heads, sequence_length, embed_size_per_head)`).
 
@@ -114,7 +115,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
@@ -140,7 +141,7 @@ class RetrievAugLMOutput(ModelOutput):
     doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
         Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
         `question_encoder_last_hidden_state`.
-    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
         num_heads, sequence_length, embed_size_per_head)`).
 
@@ -204,7 +205,7 @@ class RetrievAugLMOutput(ModelOutput):
 
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
@@ -231,9 +232,9 @@ class RetrievAugLMOutput(ModelOutput):
 )
 @auto_docstring
 class RagPreTrainedModel(PreTrainedModel):
-    config_class = RagConfig
+    config: RagConfig
     base_model_prefix = "rag"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     @classmethod
@@ -438,7 +439,7 @@ class RagModel(RagPreTrainedModel):
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
@@ -712,7 +713,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1200,7 +1201,11 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             reordered_past += (
                 tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
+        if isinstance(past_key_values, EncoderDecoderCache):
+            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
+        if isinstance(past_key_values, EncoderDecoderCache):
+            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
         return reordered_past
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
@@ -1222,7 +1227,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1560,6 +1565,15 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
 
+        self._prepare_cache_for_generation(
+            generation_config,
+            model_kwargs,
+            assistant_model=None,
+            batch_size=input_ids.shape[0],
+            max_cache_length=generation_config.max_length - 1,
+            device=input_ids.device,
+        )
+
         if generation_config.num_beams == 1:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
@@ -1578,6 +1592,14 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         elif generation_config.num_beams > 1:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+
+            # 11. interleave input_ids with `num_beams` additional sequences per batch
+            input_ids, model_kwargs = self._expand_inputs_for_generation(
+                input_ids=input_ids,
+                expand_size=generation_config.num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
+            )
             return self._beam_search(
                 input_ids,
                 logits_processor=pre_processor,
@@ -1590,6 +1612,14 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             raise ValueError(
                 f"`num_beams` has to be an integer strictly superior to 0 (≥ 1), but is {generation_config.num_beams}"
             )
+
+    # Auxiliary functions for beam search
+    def _temporary_reorder_cache(self, past_key_values, beam_idx):
+        # RAG should always use the legacy path even though the LM backbone (T5) uses new cache format
+        # because RAG expands input for doc-size internally. TODO: raushan, remove me when all models support
+        # new cache format
+        past_key_values = self._reorder_cache(past_key_values, beam_idx)
+        return past_key_values
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()

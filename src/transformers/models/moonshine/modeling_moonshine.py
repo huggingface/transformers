@@ -414,7 +414,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         encoder_position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -454,14 +454,14 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MoonshinePreTrainedModel(PreTrainedModel):
-    config_class = MoonshineConfig
+    config: MoonshineConfig
     base_model_prefix = "model"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoonshineEncoderLayer", "MoonshineDecoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     # TODO arthur, how do we separate when it cross / self coming from different layer?
 
@@ -613,12 +613,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     def forward(
@@ -928,6 +922,10 @@ class MoonshineModel(MoonshinePreTrainedModel):
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
+
         Example:
 
         ```python
@@ -1046,6 +1044,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
 
         Example:
 

@@ -365,12 +365,12 @@ def default_flax_embed_init(tensor):
 
 @auto_docstring
 class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -524,7 +524,7 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(nn.Module):
 
 
 class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
@@ -992,10 +992,10 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalAudioConfig
+    config: Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -1584,16 +1584,15 @@ class Phi4MultimodalRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalConfig
+    config: Phi4MultimodalConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -1642,19 +1641,13 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
@@ -1758,18 +1751,6 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1783,7 +1764,7 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
