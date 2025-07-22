@@ -45,7 +45,7 @@ Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/transformers_back
 
 ## SGLang
 
-[SGLang](https://github.com/InternLM/sglang) is a high-performance, OpenAI-compatible server and runtime designed for chat-based LLMs. It offers fast inference, role-based conversation handling, and support for custom pipelines, making it great for building real-world LLM apps. With Transformers as a backend you can run any compatible model without waiting for native support, including custom and Hub-hosted models.
+[SGLang](https://github.com/InternLM/sglang) is a high-performance, OpenAI-compatible server and runtime designed for chat-based LLMs. It offers fast inference, role-based conversation handling, and support for custom pipelines, making it great for building real-world LLM apps.
 
 SGLang will automatically fall back to the Transformers backend if a model isn’t natively supported. You can also set it explicitly:
 
