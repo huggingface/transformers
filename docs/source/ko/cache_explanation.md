@@ -119,10 +119,10 @@ max_new_tokens = 10
 
 for _ in range(max_new_tokens):
     outputs = model(**inputs, cache_position=cache_position, past_key_values=past_key_values, use_cache=True)
-    # 탐욕적으로 다음 토큰 하나를 샘플링
+    # 탐욕적 기법으로 다음 토큰 하나를 샘플링
     next_token_ids = outputs.logits[:, -1:].argmax(-1)
     generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)
-    # 처리되지 않은 토큰을 남겨두어 다음 생성 단계를 위한 입력을 준비합니다. 우리의 경우 새로운 토큰 하나만 있고
+    # 처리되지 않은 토큰을 남겨두어 다음 생성 단계를 위한 입력을 준비합니다. 우리의 경우 새로운 토큰 하나만 존재합니다.
     # 위에서 설명한 대로 새로운 토큰을 위해 어텐션 마스크를 확장합니다
     attention_mask = inputs["attention_mask"]
     attention_mask = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
