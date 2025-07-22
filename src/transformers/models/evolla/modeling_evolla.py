@@ -64,15 +64,6 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-@auto_docstring
-class EvollaProteinEncoderModelOutput(ModelOutput):
-    sequence_compressor_output: torch.FloatTensor = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-
-
 def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -918,40 +909,30 @@ class EvollaFeedForward(nn.Module):
         self.fc2 = nn.Linear(inner_dim, dim, bias=False)
 
     def forward(self, x):
-        x = self.norm(x)
-        x = self.fc1(x)
-        x = self.activation(x)
-        x = self.fc2(x)
-        return x
+        return self.fc2(self.activation(self.fc1(self.norm(x))))
 
 
 class EvollaSequenceCompressorResampler(nn.Module):
     def __init__(self, config: EvollaConfig):
         super().__init__()
         protein_repr_dim = config.protein_encoder_config.hidden_size
-        output_repr_dim = config.hidden_size
-        depth = config.resampler_depth
-        dim_head = config.resampler_dim_head
-        heads = config.resampler_heads
-        ff_mult = config.resampler_ff_mult
         self.num_latents = config.resampler_num_latents
-
         self.latents = nn.Parameter(torch.randn(self.num_latents, protein_repr_dim), requires_grad=True)
-
         self.layers = nn.ModuleList([])
-        for _ in range(depth):
+        for _ in range(config.resampler_depth):
             self.layers.append(
                 nn.ModuleList(
                     [
-                        EvollaSequenceCompressorAttention(dim=protein_repr_dim, dim_head=dim_head, heads=heads),
-                        EvollaFeedForward(dim=protein_repr_dim, mult=ff_mult),
+                        EvollaSequenceCompressorAttention(
+                            dim=protein_repr_dim, dim_head=config.resampler_dim_head, heads=config.resampler_heads
+                        ),
+                        EvollaFeedForward(dim=protein_repr_dim, mult=config.resampler_ff_mult),
                     ]
                 )
             )
 
-        self.norm = nn.LayerNorm(output_repr_dim)
-
-        self.protein_projector = nn.Linear(protein_repr_dim, output_repr_dim)
+        self.norm = nn.LayerNorm(config.hidden_size)
+        self.protein_projector = nn.Linear(protein_repr_dim, config.hidden_size)
 
     def forward(self, embeds, mask):
         b = embeds.shape[0]
@@ -971,6 +952,15 @@ class EvollaSequenceCompressorResampler(nn.Module):
         transformed_feature = self.protein_projector(latents)
 
         return self.norm(transformed_feature)
+
+
+@dataclass
+@auto_docstring
+class EvollaProteinEncoderModelOutput(ModelOutput):
+    sequence_compressor_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class EvollaProteinEncoder(nn.Module):
@@ -1170,16 +1160,6 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         msa_batch_mask=None,
         past_key_value=None,
     ):
-        """
-        kv_states: protein
-        query_states: text
-
-        query_states: [bs, query_seq_len, dim]
-        kv_states: [bs, kv_seq_len, dim]
-        query_attn_mask: [bs, query_seq_len]
-        kv_attn_mask: [bs, kv_seq_len], default None
-        past_key_value: [bs, past_kv_seq_len, dim], default None
-        """
         if protein_kv_states is not None:
             bs, protein_kv_seq_len, dim = protein_kv_states.shape
             if protein_kv_attn_mask is None:
@@ -1571,11 +1551,8 @@ class EvollaModel(EvollaPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
-
         self.protein_encoder = EvollaProteinEncoder(config=config)
-
         self.layers = nn.ModuleList(
             [
                 EvollaDecoderLayer(
@@ -1589,8 +1566,6 @@ class EvollaModel(EvollaPreTrainedModel):
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
-        self.config = config
-
         self.post_init()
 
     def get_input_embeddings(self):
