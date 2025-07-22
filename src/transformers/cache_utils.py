@@ -1688,7 +1688,7 @@ class HybridChunkedCache(Cache):
         hybrid_map["sliding_attention"] = ChunkedSlidingLayer
         hybrid_map["chunked_attention"] = ChunkedSlidingLayer
         if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None:
-            layer_classes = [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
+            layer_classes = [hybrid_map[layer_type] for layer_type in config.layer_types]
         else:
             layer_classes = [StaticLayer]
         super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
