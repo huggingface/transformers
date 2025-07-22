@@ -68,7 +68,7 @@ python3 -m sglang.launch_server \
 
 For more, refer to [SGLang's official docs](https://github.com/InternLM/sglang).
 
-### TGI
+## TGI
 
 [TGI](https://huggingface.co/docs/text-generation-inference/index) can serve models that aren't [natively implemented](https://huggingface.co/docs/text-generation-inference/supported_models) by falling back on the Transformers implementation of the model. Some of TGIs high-performance features aren't available in the Transformers implementation, but other features like continuous batching and streaming are still supported.
 
