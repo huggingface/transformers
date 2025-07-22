@@ -31,11 +31,11 @@ from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
-import torch
-import torch.distributed as dist
 
 import numpy as np
 import packaging.version
+import torch
+import torch.distributed as dist
 
 
 if os.getenv("WANDB_MODE") == "offline":
@@ -1058,7 +1058,19 @@ class TrackioCallback(TrainerCallback):
 
     def setup(self, args, state, model, **kwargs):
         """
-        Setup the optional Weights & Biases (*trackio*) integration.
+        Setup the optional Trackio integration.
+
+        To customize the setup you can also override the following environment variables:
+
+        Environment:
+        - **TRACKIO_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
+            The name of the project (can be an existing project to continue tracking or a new project to start tracking
+            from scratch).
+        - **TRACKIO_SPACE_ID** (`str`, *optional*, defaults to `None`):
+            If set, the project will be logged to a Hugging Face Space instead of a local directory. Should be a
+            complete Space name like `"username/reponame"` or `"orgname/reponame"`, or just `"reponame" in which case
+            the Space will be created in the currently-logged-in Hugging Face user's namespace. If the Space does not
+            exist, it will be created. If the Space already exists, the project will be logged to it.
         """
         if state.is_world_process_zero:
             combined_dict = {**args.to_dict()}
@@ -1069,36 +1081,22 @@ class TrackioCallback(TrainerCallback):
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
-            init_args = {}
-            if args.run_name is not None:
-                init_args["name"] = args.run_name
 
             self._trackio.init(
-                project=os.getenv("WANDB_PROJECT", "huggingface"),
-                space_id="trl-lib/trackio",
-                **init_args,
+                project=os.getenv("TRACKIO_PROJECT", "huggingface"),
+                name=args.run_name,
+                space_id=os.getenv("TRACKIO_SPACE_ID", None),
+                resume="allow",
             )
 
-            # add config parameters (run may have been created manually)
+            # Add config parameters (run may have been created manually)
             self._trackio.config.update(combined_dict, allow_val_change=True)
 
-            # define default x-axis (for latest trackio versions)
-            if getattr(self._trackio, "define_metric", None):
-                self._trackio.define_metric("train/global_step")
-                self._trackio.define_metric("*", step_metric="train/global_step", step_sync=True)
-
-            # keep track of model topology and gradients, unsupported on TPU
-            _watch_model = os.getenv("WANDB_WATCH", "false")
-            if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
-                self._trackio.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
-
-            # add number of model parameters to wandb config
+            # Add number of model parameters to trackio config
             try:
                 self._trackio.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
-                logger.info(
-                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
-                )
+                logger.info("Could not log the number of model parameters in Trackio due to an AttributeError.")
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
@@ -1124,7 +1122,7 @@ class TrackioCallback(TrainerCallback):
 
         gpu_memory_logs = {
             f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
-            f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,   # ratio
+            f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
         }
 
         if dist.is_initialized():
@@ -1151,8 +1149,8 @@ class TrackioCallback(TrainerCallback):
             device = torch.device(f"cuda:{device_idx}")
             total_memory = torch.cuda.get_device_properties(device).total_memory
             memory_allocated = torch.cuda.memory_allocated(device)
-            gpu_memory_logs[f"gpu/{device_idx}/allocated_memory"] = memory_allocated / (1024**3),  # in GB
-            gpu_memory_logs[f"gpu/{device_idx}/memory_usage"] = memory_allocated / total_memory,  # in percentage
+            gpu_memory_logs[f"gpu/{device_idx}/allocated_memory"] = (memory_allocated / (1024**3),)  # in GB
+            gpu_memory_logs[f"gpu/{device_idx}/memory_usage"] = (memory_allocated / total_memory,)  # in percentage
 
         if not self._initialized:
             self.setup(args, state, **kwargs)
@@ -2458,8 +2456,8 @@ INTEGRATION_TO_CALLBACK = {
     "mlflow": MLflowCallback,
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
-    "wandb": WandbCallback,
     "trackio": TrackioCallback,
+    "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,
     "dagshub": DagsHubCallback,

@@ -31,6 +31,7 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
 - [`PrinterCallback`] or [`ProgressCallback`] to display progress and print the
   logs (the first one is used if you deactivate tqdm through the [`TrainingArguments`], otherwise
   it's the second one).
+- [`~integrations.TrackioCallback`] if [trackio](https://github.com/gradio-app/trackio) is installed.
 - [`~integrations.TensorBoardCallback`] if tensorboard is accessible (either through PyTorch >= 1.4
   or tensorboardX).
 - [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
@@ -69,6 +70,9 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] ProgressCallback
 
 [[autodoc]] EarlyStoppingCallback
+
+[[autodoc]] integrations.TrackioCallback
+    - setup
 
 [[autodoc]] integrations.TensorBoardCallback
 

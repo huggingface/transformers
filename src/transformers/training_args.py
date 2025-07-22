@@ -438,9 +438,9 @@ class TrainingArguments:
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
-            A descriptor for the run. Typically used for trackio, [wandb](https://www.wandb.com/),
-            [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and [swanlab](https://swanlab.cn)
-            logging. If not specified, will be the same as `output_dir`.
+            A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
+            [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
+            [swanlab](https://swanlab.cn) logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
