@@ -1294,6 +1294,7 @@ class DynamicCache(Cache):
 
     # Specialized constructor for DDP cache data, needed for BC
     def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
         # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
@@ -1303,7 +1304,6 @@ class DynamicCache(Cache):
         if ddp_cache_data is not None:
             for key_states, value_states in ddp_cache_data:
                 self.layers.append(DynamicLayer.from_tensors(key_states, value_states))
-        super().__init__(*args, **kwargs)
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
         """
