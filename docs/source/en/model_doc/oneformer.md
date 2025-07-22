@@ -69,7 +69,6 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] OneFormerImageProcessor
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
@@ -78,7 +77,6 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] OneFormerImageProcessorFast
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation

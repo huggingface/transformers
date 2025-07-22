@@ -934,13 +934,13 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
                 set, but not the one for person.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
               to `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized
               to the corresponding `target_sizes` entry.
