@@ -97,17 +97,6 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png" \
-  | transformers run \
-      --task object-detection \
-      --model hustvl/yolos-base \
-      --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 
