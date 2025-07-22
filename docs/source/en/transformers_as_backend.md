@@ -40,7 +40,7 @@ vllm serve meta-llama/Llama-3.2-1B \
     --model-impl transformers
 ```
 
-Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/transformers_backend.html) for more usage examples and tips on using a Transformers as the backend.
+Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers) for more usage examples and tips on using a Transformers as the backend.
 
 
 ## SGLang
