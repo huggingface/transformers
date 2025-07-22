@@ -168,8 +168,8 @@ class DiaCrossAttention(nn.Module):
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
         if past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_values.cross_attention_cache.key_cache[self.layer_idx]
-            value_states = past_key_values.cross_attention_cache.value_cache[self.layer_idx]
+            key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
