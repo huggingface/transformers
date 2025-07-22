@@ -2082,7 +2082,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._can_compile_fullgraph:
-                self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
+                self.skipTest("This model doesn't support compilation without graph breaks")
 
             # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
@@ -2196,7 +2196,7 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             if not model_class._can_compile_fullgraph:
-                self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
+                self.skipTest("This model doesn't support compilation without graph breaks")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if self.has_attentions:

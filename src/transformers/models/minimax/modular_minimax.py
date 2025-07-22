@@ -470,7 +470,6 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
 
 
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
-    # Note: only supports MiniMaxCache
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),

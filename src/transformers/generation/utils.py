@@ -2199,6 +2199,7 @@ class GenerationMixin(ContinuousMixin):
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
+        # TODO @raushan `self._can_compile_fullgraph` can be removed and inferred from model arch (e.g. MoE doesn't support compile)
         can_compile = valid_hardware and using_compilable_cache and self._can_compile_fullgraph
 
         # Exception 1: Some quantization methods do not support compilation
