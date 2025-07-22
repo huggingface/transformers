@@ -1177,7 +1177,7 @@ def format_args_docstring(docstring, model_name):
         if placeholder is not None:
             try:
                 docstring = docstring.replace(f"{{{placeholder}}}", value)
-            except Exception as e:
+            except Exception:
                 pass
     return docstring
 

@@ -85,15 +85,15 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_flash_attn,
-    require_kernels,
-    require_torch_mps,
     require_flash_attn_3,
+    require_kernels,
     require_non_hpu,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_greater_or_equal,
+    require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
@@ -3479,91 +3479,86 @@ class ModelTesterMixin:
             config.head_dim = 64  # fa2 does not always support arbitrary headim
             model = model_class(config)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.to(torch_device)
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
+            model.to(torch_device)
+            dummy_input = inputs_dict[model.main_input_name][:1]
+            if dummy_input.dtype in [torch.float32, torch.float16]:
+                dummy_input = dummy_input.to(torch.bfloat16)
 
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+            dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    if padding_side == "left":
-                        dummy_attention_mask[:, 1:] = 1
-                        dummy_attention_mask[:, :1] = 0
-                    else:
-                        dummy_attention_mask[:, :-1] = 1
-                        dummy_attention_mask[:, -1:] = 0
-                if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
-
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                else:
-                    outputs = model(dummy_input, output_hidden_states=True)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, output_hidden_states=True)
-
-                model.set_attn_implementation("sdpa")
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                if model.config.is_encoder_decoder:
-                    other_inputs = {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, **other_inputs)
-                else:
-                    other_inputs = {
-                        "output_hidden_states": True,
-                    }
-                    if dummy_attention_mask is not None:
-                        other_inputs["attention_mask"] = dummy_attention_mask
-
-                    outputs = model(dummy_input, **other_inputs)
-                    model.set_attn_implementation(attn_implementation)
-                    outputs_fa = model(dummy_input, **other_inputs)
-
-                model.set_attn_implementation("sdpa")
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
+            if dummy_attention_mask is not None:
+                dummy_attention_mask = dummy_attention_mask[:1]
                 if padding_side == "left":
-                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
-
-                    # check with inference + dropout
-                    model.train()
-                    model.set_attn_implementation(attn_implementation)
-                    _ = model(dummy_input, **other_inputs)
+                    dummy_attention_mask[:, 1:] = 1
+                    dummy_attention_mask[:, :1] = 0
                 else:
-                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+                    dummy_attention_mask[:, :-1] = 1
+                    dummy_attention_mask[:, -1:] = 0
+            if model.config.is_encoder_decoder:
+                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                model.set_attn_implementation(attn_implementation)
+                outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+            else:
+                outputs = model(dummy_input, output_hidden_states=True)
+                model.set_attn_implementation(attn_implementation)
+                outputs_fa = model(dummy_input, output_hidden_states=True)
+
+            model.set_attn_implementation("sdpa")
+            logits = (
+                outputs.hidden_states[-1] if not model.config.is_encoder_decoder else outputs.decoder_hidden_states[-1]
+            )
+            logits_fa = (
+                outputs_fa.hidden_states[-1]
+                if not model.config.is_encoder_decoder
+                else outputs_fa.decoder_hidden_states[-1]
+            )
+
+            assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+            if model.config.is_encoder_decoder:
+                other_inputs = {
+                    "decoder_input_ids": decoder_input_ids,
+                    "decoder_attention_mask": dummy_attention_mask,
+                    "output_hidden_states": True,
+                }
+                if dummy_attention_mask is not None:
+                    other_inputs["attention_mask"] = dummy_attention_mask
+
+                outputs = model(dummy_input, **other_inputs)
+                model.set_attn_implementation(attn_implementation)
+                outputs_fa = model(dummy_input, **other_inputs)
+            else:
+                other_inputs = {
+                    "output_hidden_states": True,
+                }
+                if dummy_attention_mask is not None:
+                    other_inputs["attention_mask"] = dummy_attention_mask
+
+                outputs = model(dummy_input, **other_inputs)
+                model.set_attn_implementation(attn_implementation)
+                outputs_fa = model(dummy_input, **other_inputs)
+
+            model.set_attn_implementation("sdpa")
+            logits = (
+                outputs.hidden_states[-1] if not model.config.is_encoder_decoder else outputs.decoder_hidden_states[-1]
+            )
+            logits_fa = (
+                outputs_fa.hidden_states[-1]
+                if not model.config.is_encoder_decoder
+                else outputs_fa.decoder_hidden_states[-1]
+            )
+
+            if padding_side == "left":
+                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                model.set_attn_implementation(attn_implementation)
+                _ = model(dummy_input, **other_inputs)
+            else:
+                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
     @require_kernels
     @require_torch_gpu

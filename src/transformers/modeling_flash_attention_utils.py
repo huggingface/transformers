@@ -370,7 +370,7 @@ def _flash_attention_forward(
         globals()["_pad_fn"] = pad_fn
         globals()["_unpad_fn"] = unpad_fn
         globals()["_is_fa3"] = is_fa3
-        flash_supports_window =   "window_size" in inspect.signature(flash_varlen_fn).parameters)
+        flash_supports_window = "window_size" in inspect.signature(flash_varlen_fn).parameters
         globals()["_flash_supports_window"] = flash_supports_window
     else:
         flash_fn = globals()["_flash_fn"]
@@ -382,9 +382,7 @@ def _flash_attention_forward(
 
     causal = is_causal and not (use_top_left_mask and query_length == 1)
     use_sw = (
-        (_flash_supports_window or flash_supports_window)
-        and sliding_window
-        and key_states.shape[1] > sliding_window
+        (_flash_supports_window or flash_supports_window) and sliding_window and key_states.shape[1] > sliding_window
     )
     flash_kwargs = {"window_size": (sliding_window, sliding_window)} if use_sw else {}
     if not is_fa3:
