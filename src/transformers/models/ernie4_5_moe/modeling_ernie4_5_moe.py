@@ -343,8 +343,8 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
             # https://github.com/PaddlePaddle/Paddle/blob/9b40438ce0f6d76b4f08a7837dd1e28b26cf8ee6/python/paddle/incubate/nn/functional/moe_gate_dispatch.py#L109-L116
             # this might differ from the remote version regarding the bias (see `Ernie4_5_MoEStatics`)
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            routing_weights = self.moe_statics(routing_weights)
-            routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
