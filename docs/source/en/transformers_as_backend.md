@@ -66,7 +66,7 @@ python3 -m sglang.launch_server \
   --port 30000
 ```
 
-For more, refer to [SGLang's official docs](https://github.com/InternLM/sglang).
+Refer to the [SGLang docs](https://docs.sglang.ai/supported_models/transformers_fallback.html) for more usage examples and tips on using a Transformers as the backend.
 
 ## TGI
 
