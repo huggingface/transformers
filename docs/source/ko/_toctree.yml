@@ -654,6 +654,8 @@
         title: (번역중) WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xclip
+        title: xclip
       - local: in_translation
         title: (번역중) XLS-R
       - local: in_translation
