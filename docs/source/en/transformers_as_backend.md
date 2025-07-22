@@ -16,13 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Inference server backends
 
-An inference backend is the part of your system that actually runs the model and returns outputs. Think of it as the engine behind APIs, chatbots, and anything else using generative Language Model in production.
+Transformers' models are compatible with different inference servers like vLLM and SGLang. Instead of implementing a model for each inference server, you only need one model, which can be plugged into any inference server. It simplifies maintenance and makes it easy for users to use different inference servers for different use cases.
 
-Instead of each server implementing its own model logic, many of them now rely on Transformers to do the heavy lifting. That means if your model works in 🤗 Transformers, it can also work **out of the box** in any inference server that uses Transformers as a backend.
+With Transformers as a backend, you can also serve any model - including custom and Hub-hosted models - without waiting for native support.
 
-No need to duplicate code. You write your model once, and it works across multiple inference engines with consistent behavior and makes general maintaining much easier. No extra effort to get server support, as long as your model follows Transformers recommended standards as outlined in below sections.
-
-You can find the list of currently supported backends below. This list is still growing, and if there's a backend you'd like to see supported, feel free to open an issue.
+This guide shows how to use Transformers' models as a backend to some popular inference servers and how to build a model that supports all inference servers.
 
 ### vLLM
 
