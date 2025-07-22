@@ -764,6 +764,11 @@ class EsmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, EsmLMHead):
             module.bias.data.zero_()
 
+    def get_output_embeddings(self):
+        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
+        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
+        return None
+
 
 @auto_docstring
 class EsmModel(EsmPreTrainedModel):

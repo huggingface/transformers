@@ -1,10 +1,10 @@
-FROM rocm/pytorch:rocm6.4_ubuntu22.04_py3.10_pytorch_release_2.6.0
+FROM rocm/pytorch:rocm6.4.1_ubuntu24.04_py3.12_pytorch_release_2.7.1
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG TORCH_VISION='0.21.0'
-ARG TORCH_AUDIO='2.6.0'
+ARG TORCH_VISION='0.22.0'
+ARG TORCH_AUDIO='2.7.0'
 
 RUN apt update && \
     apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip python3-dev ffmpeg git-lfs && \
