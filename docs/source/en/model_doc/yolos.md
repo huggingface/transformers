@@ -64,7 +64,7 @@ import requests
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base").to("cuda")
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", torch_dtype=torch.float16, attn_implementation="sdpa").to("cuda")
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
