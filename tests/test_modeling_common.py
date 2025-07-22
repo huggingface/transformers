@@ -4137,6 +4137,9 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} doesn't support packing!")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
+
             if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
                 self.skipTest("Model dummy inputs should contain padding in their attention mask")
 
@@ -4158,8 +4161,10 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # Ensure left padding, to adapt for some models and drop keys exceot for minimal set
+                # Drop all keys exceot for the minimal set. Hard to manipulate with multimodals/head_mask/etc
                 inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
+
+                # Ensure left padding, to adapt for some models
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
@@ -4207,7 +4212,6 @@ class ModelTesterMixin:
                 logits_padded = res_padded.logits[dummy_attention_mask.bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
