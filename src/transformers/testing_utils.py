@@ -1116,7 +1116,7 @@ def require_torch_gpu(test_case):
 
 def require_torch_mps(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
-    return unittest.skipUnless(torch_device == "mps", "test requires CUDA")(test_case)
+    return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
 def require_large_cpu_ram(test_case, memory: float = 80):

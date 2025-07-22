@@ -1142,10 +1142,14 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     for placeholder in placeholders:
         # Infer placeholders from the model name and the auto modules
         if placeholder in PLACEHOLDER_TO_AUTO_MODULE:
-            place_holder_value = getattr(
-                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
-                PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
-            ).get(model_name, None)
+            try:
+                place_holder_value = getattr(
+                    getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
+                    PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
+                ).get(model_name, None)
+            except ImportError:
+                # In case a library is not installed, we don't want to fail the docstring generation
+                place_holder_value = None
             if place_holder_value is not None:
                 if isinstance(place_holder_value, (list, tuple)):
                     place_holder_value = place_holder_value[0]
@@ -1171,8 +1175,10 @@ def format_args_docstring(docstring, model_name):
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
         if placeholder is not None:
-            docstring = docstring.replace(f"{{{placeholder}}}", value)
-
+            try:
+                docstring = docstring.replace(f"{{{placeholder}}}", value)
+            except Exception as e:
+                pass
     return docstring
 
 

@@ -3570,15 +3570,15 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     @slow
     @is_flaky()
-    def test_flash_attn_kernel_inference_equivalence(self):
+    def test_flash_attn_kernels_inference_equivalence(self):
         self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
 
-    @require_flash_attn
     @require_torch_mps
+    @require_kernels
     @mark.flash_attn_test
     @slow
     @is_flaky()
-    def test_flash_attn_kernel_mps_inference_equivalence(self):
+    def test_flash_attn_kernels_mps_inference_equivalence(self):
         self.flash_attn_inference_equivalence(
             attn_implementation="kernels-community/metal-flash-sdpa", padding_side="left"
         )
