@@ -301,11 +301,38 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     <|start|>{% if m['role'] == 'tool' %}{{ m['name'] }}{% else %}{{ m['role'] }}{% if m.get('name') %}:{{ m['name'] }}{% endif %}{% endif %}{% if m.get('recipient') and m['recipient'] != 'all' %} to={{ m['recipient'] }}{% endif %}{% if m.get('channel') %}<|channel|>{{ m['channel'] }}{% endif %}{% if m.get('content_type') %} {{ m['content_type'] }}{% endif %}<|message|>
 {%- endmacro -%}
 
+{# Add CoT dropping logic -------------------------------------------- #}
+{%- set last_final_idx = None -%}
+{%- for idx in range(messages|length) -%}
+    {%- set m = messages[idx] -%}
+    {%- if m['role'] == 'assistant' and m.get('channel') == 'final' -%}
+        {%- set last_final_idx = idx -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- set last_user_idx = None -%}
+{%- if last_final_idx is not none -%}
+    {%- for idx in range(last_final_idx - 1, -1, -1) -%}
+        {%- if messages[idx]['role'] == 'user' -%}
+            {%- set last_user_idx = idx -%}
+            {%- break -%}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endif -%}
+
 {# ---------------------------------------------------------------------
-   Render complete history
+   Render complete history (with CoT dropping)
 #}
-{%- for message in messages -%}
-    {{- harmony_header(message) -}}{{ message['content'] }}{%- if message['role'] == 'assistant' -%}<|return|>{%- else -%}<|end|>{%- endif -%}
+{%- for idx in range(messages|length) -%}
+    {%- set message = messages[idx] -%}
+    {%- set skip = false -%}
+    {%- if last_final_idx is not none and idx < last_final_idx and (last_user_idx is none or idx > last_user_idx) -%}
+        {%- if message['role'] == 'assistant' and message.get('channel') != 'final' -%}
+            {%- set skip = true -%}
+        {%- endif -%}
+    {%- endif -%}
+    {%- if not skip -%}
+        {{- harmony_header(message) -}}{{ message['content'] }}{%- if message['role'] == 'assistant' and message.get('channel') == 'final' -%}<|return|>{%- else -%}<|end|>{%- endif -%}
+    {%- endif -%}
 {%- endfor -%}
 
 {# ---------------------------------------------------------------------
