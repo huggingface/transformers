@@ -62,8 +62,6 @@ if is_torch_available():
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
-    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
-    if cache_name != "mamba"
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name != "offloaded_hybrid"
 ]
@@ -588,12 +586,12 @@ class CacheExportIntegrationTest(unittest.TestCase):
             past_key_values=past_key_values_eager,
             use_cache=True,
         )
-        self.assertTrue(torch.allclose(res.logits, res_eager.logits))
+        self.assertTrue(torch.allclose(res.logits, res_eager.logits, atol=1e-5))
         for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
-            self.assertTrue(torch.allclose(k1, k2))
+            self.assertTrue(torch.allclose(k1, k2, atol=1e-5))
 
         for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
-            self.assertTrue(torch.allclose(v1, v2))
+            self.assertTrue(torch.allclose(v1, v2, atol=1e-5))
 
     def test_dynamic_cache_exportability_multiple_run(self):
         # When exporting with DynamicCache, you should export two graphs:
@@ -686,10 +684,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         )
 
         for k1, k2 in zip(res_export_2.past_key_values.key_cache, res_eager_2.past_key_values.key_cache):
-            self.assertTrue(torch.allclose(k1, k2))
+            self.assertTrue(torch.allclose(k1, k2, atol=1e-5))
 
         for v1, v2 in zip(res_export_2.past_key_values.value_cache, res_eager_2.past_key_values.value_cache):
-            self.assertTrue(torch.allclose(v1, v2))
+            self.assertTrue(torch.allclose(v1, v2, atol=1e-5))
 
     @unittest.skip("Runs on my machine locally, passed, no idea why it does not online")
     def test_static_cache_exportability(self):

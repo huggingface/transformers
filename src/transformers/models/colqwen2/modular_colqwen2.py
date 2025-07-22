@@ -226,8 +226,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
 
 class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
-    _supports_flash_attn = True
-    _supports_sdpa = True
+    pass
 
 
 @dataclass
