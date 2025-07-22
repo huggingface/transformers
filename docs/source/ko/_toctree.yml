@@ -280,8 +280,8 @@
       title: (번역중) Optimization
     - local: in_translation
       title: 모델 출력
-    - local: main_classes/output
-      title: (번역중) Pipelines
+    - local: main_classes/pipelines
+      title: 파이프라인
     - local: in_translation
       title: (번역중) Processors
     - local: main_classes/quantization
