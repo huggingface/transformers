@@ -21,16 +21,17 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
-from .args_doc import (
+from .auto_docstring import (
     ClassAttrs,
     ClassDocstring,
     ImageProcessorArgs,
     ModelArgs,
+    ModelOutputArgs,
     auto_class_docstring,
     auto_docstring,
+    get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
-    source_args_doc,
 )
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
@@ -46,10 +47,10 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
-    LossKwargs,
     ModelOutput,
     PaddingStrategy,
     TensorType,
+    TransformersKwargs,
     cached_property,
     can_return_loss,
     can_return_tuple,
@@ -141,6 +142,7 @@ from .import_utils import (
     is_ccl_available,
     is_coloredlogs_available,
     is_compressed_tensors_available,
+    is_cuda_platform,
     is_cv2_available,
     is_cython_available,
     is_datasets_available,
@@ -151,6 +153,7 @@ from .import_utils import (
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
@@ -178,6 +181,8 @@ from .import_utils import (
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_matplotlib_available,
+    is_mistral_common_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
@@ -201,6 +206,7 @@ from .import_utils import (
     is_quark_available,
     is_rich_available,
     is_rjieba_available,
+    is_rocm_platform,
     is_sacremoses_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -243,6 +249,7 @@ from .import_utils import (
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -250,6 +257,7 @@ from .import_utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,
@@ -286,6 +294,7 @@ CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = "preprocessor_config.json"
 VIDEO_PROCESSOR_NAME = "video_preprocessor_config.json"
+AUDIO_TOKENIZER_NAME = "audio_tokenizer_config.json"
 PROCESSOR_NAME = "processor_config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"

@@ -422,7 +422,7 @@ class MobileNetV2Stem(nn.Module):
 
 @auto_docstring
 class MobileNetV2PreTrainedModel(PreTrainedModel):
-    config_class = MobileNetV2Config
+    config: MobileNetV2Config
     load_tf_weights = load_tf_weights_in_mobilenet_v2
     base_model_prefix = "mobilenet_v2"
     main_input_name = "pixel_values"
@@ -632,7 +632,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
 class MobileNetV2DeepLabV3Plus(nn.Module):
     """
     The neural network from the paper "Encoder-Decoder with Atrous Separable Convolution for Semantic Image
-    Segmentation" https://arxiv.org/abs/1802.02611
+    Segmentation" https://huggingface.co/papers/1802.02611
     """
 
     def __init__(self, config: MobileNetV2Config) -> None:

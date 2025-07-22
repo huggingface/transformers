@@ -16,7 +16,7 @@
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """PyTorch MobileViTV2 model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -126,7 +127,7 @@ class MobileViTV2ConvLayer(nn.Module):
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTInvertedResidual with MobileViT->MobileViTV2
 class MobileViTV2InvertedResidual(nn.Module):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -199,7 +200,7 @@ class MobileViTV2MobileNetLayer(nn.Module):
 class MobileViTV2LinearSelfAttention(nn.Module):
     """
     This layer applies a self-attention with linear complexity, as described in MobileViTV2 paper:
-    https://arxiv.org/abs/2206.02680
+    https://huggingface.co/papers/2206.02680
 
     Args:
         config (`MobileVitv2Config`):
@@ -351,9 +352,9 @@ class MobileViTV2Transformer(nn.Module):
         return hidden_states
 
 
-class MobileViTV2Layer(nn.Module):
+class MobileViTV2Layer(GradientCheckpointingLayer):
     """
-    MobileViTV2 layer: https://arxiv.org/abs/2206.02680
+    MobileViTV2 layer: https://huggingface.co/papers/2206.02680
     """
 
     def __init__(
@@ -417,7 +418,7 @@ class MobileViTV2Layer(nn.Module):
             use_activation=False,
         )
 
-    def unfolding(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def unfolding(self, feature_map: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
         batch_size, in_channels, img_height, img_width = feature_map.shape
         patches = nn.functional.unfold(
             feature_map,
@@ -428,7 +429,7 @@ class MobileViTV2Layer(nn.Module):
 
         return patches, (img_height, img_width)
 
-    def folding(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, output_size: tuple[int, int]) -> torch.Tensor:
         batch_size, in_dim, patch_size, n_patches = patches.shape
         patches = patches.reshape(batch_size, in_dim * patch_size, n_patches)
 
@@ -556,13 +557,7 @@ class MobileViTV2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -574,23 +569,22 @@ class MobileViTV2Encoder(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
 class MobileViTV2PreTrainedModel(PreTrainedModel):
-    config_class = MobileViTV2Config
+    config: MobileViTV2Config
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTV2Layer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.GroupNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -785,7 +779,7 @@ class MobileViTV2ASPPPooling(nn.Module):
 
 class MobileViTV2ASPP(nn.Module):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTV2Config) -> None:
@@ -846,7 +840,7 @@ class MobileViTV2ASPP(nn.Module):
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTDeepLabV3 with MobileViT->MobileViTV2
 class MobileViTV2DeepLabV3(nn.Module):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTV2Config) -> None:

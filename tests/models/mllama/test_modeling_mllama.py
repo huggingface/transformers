@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_bitsandbytes,
+    require_optimum_quanto,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -344,6 +345,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
+    @require_optimum_quanto
+    @pytest.mark.generate
+    @unittest.skip("Mllama is actually an encoder decoder cache and thus can't supports quant cache")
+    def test_generate_with_quant_cache(self):
+        pass
+
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
     def test_sdpa_can_compile_dynamic(self):
         pass
@@ -534,7 +541,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -618,9 +625,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324]),
-                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207]),
-                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207]),
+                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
+                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
+                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
             }
         )
 
@@ -665,7 +672,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
                  }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

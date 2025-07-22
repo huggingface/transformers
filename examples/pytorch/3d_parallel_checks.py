@@ -33,7 +33,7 @@ import logging
 import os
 from collections.abc import Iterable
 from contextlib import nullcontext
-from typing import Dict, Optional
+from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -589,7 +589,7 @@ class ContextParallelCollator:
     def __init__(self, cp_mesh: Optional[DeviceMesh] = None):
         self.cp_mesh = cp_mesh
 
-    def __call__(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         batch = default_collate(batch)
         if self.cp_mesh is not None and self.cp_mesh.size() > 1:
             # Get sequence length from the input batch
@@ -754,9 +754,9 @@ def get_parameters(model: nn.Module) -> Iterable[torch.Tensor]:
     Returns:
         Iterable[torch.Tensor]: An iterator over all parameters in the model
     """
-    for name, module in model._modules.items():
+    for module in model._modules.values():
         # Look for parameters in module attributes
-        for attr_name, attr in module.__dict__.items():
+        for attr in module.__dict__.values():
             if isinstance(attr, torch.Tensor) and attr.requires_grad:
                 yield attr
         # Recursively get parameters from submodules

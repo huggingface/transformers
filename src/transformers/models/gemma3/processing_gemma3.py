@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -41,6 +41,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
+            "do_convert_rgb": True,
             "do_pan_and_scan": False,
             "pan_and_scan_min_crop_size": 256,
             "pan_and_scan_max_num_crops": 4,
@@ -79,7 +80,7 @@ class Gemma3Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos=None,
         audio=None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
@@ -96,7 +97,7 @@ class Gemma3Processor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         image_inputs = {}
         if images is not None:
@@ -155,7 +156,7 @@ class Gemma3Processor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:
