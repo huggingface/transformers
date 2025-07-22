@@ -1143,18 +1143,8 @@ class TrackioCallback(TrainerCallback):
     def on_predict(self, args, state, control, metrics, **kwargs):
         if self._trackio is None:
             return
-
-        gpu_memory_logs = {}
-        for device_idx in range(torch.cuda.device_count()):
-            device = torch.device(f"cuda:{device_idx}")
-            total_memory = torch.cuda.get_device_properties(device).total_memory
-            memory_allocated = torch.cuda.memory_allocated(device)
-            gpu_memory_logs[f"gpu/{device_idx}/allocated_memory"] = (memory_allocated / (1024**3),)  # in GB
-            gpu_memory_logs[f"gpu/{device_idx}/memory_usage"] = (memory_allocated / total_memory,)  # in percentage
-
         if not self._initialized:
             self.setup(args, state, **kwargs)
-
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._trackio.log(metrics)
