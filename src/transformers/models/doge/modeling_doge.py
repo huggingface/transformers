@@ -504,18 +504,7 @@ class DogePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, DogeRMSNorm):
-            module.weight.data.fill_(1.0)
-
+        super()._init_weights(module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
                 module.A.data.zero_()
