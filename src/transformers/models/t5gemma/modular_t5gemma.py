@@ -291,8 +291,8 @@ class T5GemmaCrossAttention(Gemma2Attention):
                 key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
                 past_key_value.is_updated[self.layer_idx] = True
         else:
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
