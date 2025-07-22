@@ -137,21 +137,25 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        if size is not None:
-            # backward compatibility: convert max_pixels/min_pixels to longest_edge/shortest_edge if they're in size
-            if "min_pixels" in size:
-                size["shortest_edge"] = size.pop("min_pixels")
-            if "max_pixels" in size:
-                size["longest_edge"] = size.pop("max_pixels")
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        else:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+        size = kwargs.pop("size", {})
+        min_pixels = kwargs.pop("min_pixels", None)
+        max_pixels = kwargs.pop("max_pixels", None)
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         if min_pixels is not None:
             size["shortest_edge"] = min_pixels
         if max_pixels is not None:
             size["longest_edge"] = max_pixels
+        # backward compatibility: remove unused min_pixels/max_pixels keys from size
+        if "min_pixels" in size:
+            size.pop("min_pixels")
+        if "max_pixels" in size:
+            size.pop("max_pixels")
+
+        if size and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        elif not size:
+            size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size

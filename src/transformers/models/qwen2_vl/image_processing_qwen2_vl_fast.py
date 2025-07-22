@@ -107,24 +107,21 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs]):
-        size = kwargs.pop("size", None)
+        size = kwargs.pop("size", self.size)
         min_pixels = kwargs.pop("min_pixels", None)
         max_pixels = kwargs.pop("max_pixels", None)
-        if size is not None:
-            # backward compatibility: convert max_pixels/min_pixels to longest_edge/shortest_edge if they're in size
-            if "min_pixels" in size:
-                size["shortest_edge"] = size.pop("min_pixels")
-            if "max_pixels" in size:
-                size["longest_edge"] = size.pop("max_pixels")
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        else:
-            size = self.size
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         if min_pixels is not None:
             size["shortest_edge"] = min_pixels
         if max_pixels is not None:
             size["longest_edge"] = max_pixels
+        # backward compatibility: remove unused min_pixels/max_pixels keys from size
+        if "min_pixels" in size:
+            size.pop("min_pixels")
+        if "max_pixels" in size:
+            size.pop("max_pixels")
+        if size and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
         super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
 
