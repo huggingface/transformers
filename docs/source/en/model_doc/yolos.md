@@ -32,6 +32,11 @@ rendered properly in your Markdown viewer.
 
 You can find all the original YOLOS checkpoints under the [HUST Vision Lab](https://huggingface.co/hustvl/models?search=yolos) organization.
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png" alt="drawing" width="600"/>
+
+<small> YOLOS architecture. Taken from the <a href="https://huggingface.co/papers/2106.00666">original paper</a>.</small>
+
+
 > [!TIP]
 > This model wasa contributed by [nielsr](https://huggingface.co/nielsr).
 > Click on the YOLOS models in the right sidebar for more examples of how to apply YOLOS to different object detection tasks.
@@ -105,47 +110,6 @@ echo "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png" \
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [`Pytorch dynamic quantization`](https://pytorch.org/docs/stable/quantization.html#dynamic-quantization) to only quantize the weights to int8.
-
-```py
-import torch
-from torch.quantization import quantize_dynamic
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-
-processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model_fp32 = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base")
-
-model_int8 = quantize_dynamic(
-    model_fp32,
-    {torch.nn.Linear},
-    dtype=torch.qint8
-)
-
-image = processor(
-    images=your_pil_image, 
-    return_tensors="pt"
-)
-with torch.no_grad():
-    outputs = model_int8(**image)
-```
-
-Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
-
-
-```py
-from transformers.utils.attention_visualizer import AttentionMaskVisualizer
-from PIL import Image
-import requests
-
-visualizer = AttentionMaskVisualizer("hustvl/yolos-base")
-
-url   = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
-image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-
-visualizer(image)
-```
 
 ## Notes
 - Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](./detr), YOLOS doesn't require a `pixel_mask`.
