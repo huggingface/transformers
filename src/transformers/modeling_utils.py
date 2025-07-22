@@ -72,6 +72,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -2785,30 +2786,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:[^/:]+$", applicable_attn_implementation):
+        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
 
             # Extract repo_id and kernel_name from the string
-            repo_id, kernel_name = applicable_attn_implementation.split(":")
-            kernel_name = kernel_name.strip()
+            if ":" in applicable_attn_implementation:
+                repo_id, kernel_name = attn_implementation.split(":")
+                kernel_name = kernel_name.strip()
+            else:
+                repo_id = attn_implementation
+                kernel_name = None
             repo_id = repo_id.strip()
-
             try:
                 kernel = get_kernel(repo_id)
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
-                applicable_attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                if hasattr(kernel, "flash_attn_varlen_func"):
+                    ALL_ATTENTION_FUNCTIONS._global_mapping[repo_id] = partial(
+                        flash_attention_forward, implementation=kernel
+                    )
+                elif kernel_name is not None:
+                    ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
+                ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
+                    "flash_attention_2"
+                ]
+                applicable_attn_implementation = repo_id
             except FileNotFoundError as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            except AttributeError:
-                raise ValueError(
-                    "the kernel function name or class specified in the attn_implementation argument is not valid. Please check "
-                    "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
-                )
+            finally:
+                return applicable_attn_implementation
         if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
