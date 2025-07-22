@@ -2,7 +2,7 @@ from typing import Optional
 
 import torch
 
-from ..utils import logging
+from ..utils import is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
@@ -10,6 +10,7 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
+_is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -29,6 +30,9 @@ def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -
     # 1. torch version >= 2.5
     # 2. attention_mask is None (otherwise it will fall back to the math kernel)
     # 3. key is not a torch.fx.Proxy (otherwise it will fail with a tracing error)
+    if is_torch_xpu_available():
+        # torch xpu support gpa since 2.8, and does not attention_mask limitation
+        return _is_torch_greater_or_equal_than_2_8 and not isinstance(key, torch.fx.Proxy)
     return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and not isinstance(key, torch.fx.Proxy)
 
 
