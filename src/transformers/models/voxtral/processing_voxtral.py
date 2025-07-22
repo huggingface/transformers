@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import io
+import warnings
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
@@ -33,7 +34,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
-import warnings
 
 
 logger = logging.get_logger(__name__)
