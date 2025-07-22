@@ -2989,7 +2989,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             or "RMSNorm" in module.__class__.__name__
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
-            if module.weight is not None:
+            if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(1.0)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
