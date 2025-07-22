@@ -536,7 +536,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
+                    if "logit_scale" in name:
                         self.assertAlmostEqual(
                             param.data.item(),
                             np.log(1 / 0.07),

@@ -701,8 +701,9 @@ class GPTJModel(GPTJPreTrainedModel):
 
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if past_key_values is not None:
-                    past_key_values.key_cache = past_key_values.key_cache.to(hidden_states.device)
-                    past_key_values.value_cache = past_key_values.value_cache.to(hidden_states.device)
+                    for layer in past_key_values.layers:
+                        layer.keys = layer.keys.to(hidden_states.device)
+                        layer.values = layer.values.to(hidden_states.device)
 
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if causal_mask is not None:
@@ -926,12 +927,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         self.lm_head = self.lm_head.to("cpu")
         self.model_parallel = False
         torch.cuda.empty_cache()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

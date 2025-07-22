@@ -352,10 +352,6 @@ class PhimoeFlashAttention2(PhimoeAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -932,12 +928,6 @@ class PhimoeModel(PhimoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1213,22 +1203,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1398,12 +1372,6 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

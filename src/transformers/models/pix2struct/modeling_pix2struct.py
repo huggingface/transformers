@@ -773,8 +773,8 @@ class Pix2StructTextAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.key(current_states)
             value_states = self.value(current_states)
@@ -1037,17 +1037,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         self.post_init()
         self.gradient_checkpointing = False
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

@@ -221,7 +221,7 @@ class GraniteMoeHybridAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HybridMambaAttentionDynamicCache(DynamicCache):
+class HybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -234,6 +234,10 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
+
+    key_cache = None
+    value_cache = None
+    is_compileable = False
 
     def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
         super().__init__()
@@ -1212,24 +1216,10 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _is_stateful = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeHybridParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GraniteMoeHybridRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GraniteMoeHybridParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        # Initialize Mamba modules
-        if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, GraniteMoeHybridMambaLayer):
+        if isinstance(module, GraniteMoeHybridMambaLayer):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
             module.D.data.fill_(1.0)
@@ -1297,12 +1287,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1653,18 +1637,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder

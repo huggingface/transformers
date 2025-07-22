@@ -99,20 +99,6 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        # important: this ported version of PerceptionLM isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/PerceptionLM/tree/main/perception_lm should serve for that purpose
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
 
 @dataclass
 @auto_docstring(
@@ -325,9 +311,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)

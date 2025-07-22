@@ -288,8 +288,8 @@ class UMT5Attention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
@@ -629,9 +629,6 @@ class UMT5Stack(UMT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.gradient_checkpointing = False
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -1205,14 +1202,6 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
     def get_encoder(self):
