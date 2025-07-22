@@ -76,7 +76,7 @@ class FPQuantTest(unittest.TestCase):
         quantization_config = FPQuantConfig(pseudoquantization=False)
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config, low_cpu_mem_usage=True
+            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
         )
 
     def tearDown(self):
@@ -100,9 +100,7 @@ class FPQuantTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, device_map=self.device_map, low_cpu_mem_usage=True
-            )
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
@@ -118,7 +116,7 @@ class FPQuantTest(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = FPQuantConfig()
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", quantization_config=quantization_config, low_cpu_mem_usage=True
+            self.model_name, device_map="auto", quantization_config=quantization_config
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
@@ -133,7 +131,7 @@ class FPQuantTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto", low_cpu_mem_usage=True)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
@@ -189,9 +187,7 @@ class FPQuantPseudoquantTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, device_map=self.device_map, low_cpu_mem_usage=True
-            )
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
@@ -205,9 +201,9 @@ class FPQuantPseudoquantTest(unittest.TestCase):
         set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-        quantization_config = FPQuantConfig()
+        quantization_config = FPQuantConfig(pseudoquantization=True)
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", quantization_config=quantization_config, low_cpu_mem_usage=True
+            self.model_name, device_map="auto", quantization_config=quantization_config
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
@@ -222,7 +218,7 @@ class FPQuantPseudoquantTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto", low_cpu_mem_usage=True)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)

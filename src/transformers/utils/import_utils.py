@@ -1312,7 +1312,7 @@ def is_quark_available():
 
 
 def is_fp_quant_available():
-    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.5")
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
 
 
 def is_qutlass_available():
