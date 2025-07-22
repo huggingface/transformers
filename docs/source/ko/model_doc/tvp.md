@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# TVP
+# TVP[[tvp]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -18,34 +18,37 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
+텍스트-시각 프롬프팅(Text-Visual Prompting, TVP) 프레임워크는 Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding이 발표한 논문 [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995)에서 제안되었습니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다:
 
-*In this paper, we study the problem of temporal video grounding (TVG), which aims to predict the starting/ending time points of moments described by a text sentence within a long untrimmed video. Benefiting from fine-grained 3D visual features, the TVG techniques have achieved remarkable progress in recent years. However, the high complexity of 3D convolutional neural networks (CNNs) makes extracting dense 3D visual features time-consuming, which calls for intensive memory and computing resources. Towards efficient TVG, we propose a novel text-visual prompting (TVP) framework, which incorporates optimized perturbation patterns (that we call ‘prompts’) into both visual inputs and textual features of a TVG model. In sharp contrast to 3D CNNs, we show that TVP allows us to effectively co-train vision encoder and language encoder in a 2D TVG model and improves the performance of cross-modal feature fusion using only low-complexity sparse 2D visual features. Further, we propose a Temporal-Distance IoU (TDIoU) loss for efficient learning of TVG. Experiments on two benchmark datasets, Charades-STA and ActivityNet Captions datasets, empirically show that the proposed TVP significantly boosts the performance of 2D TVG (e.g., 9.79% improvement on Charades-STA and 30.77% improvement on ActivityNet Captions) and achieves 5× inference acceleration over TVG using 3D visual features.*
+*본 논문에서는 긴 길이의 편집되지 않은 비디오 내에서 텍스트 문장으로 설명된 순간의 시작/종료 시점을 예측하는 것을 목표로 하는 시간적 비디오 그라운딩(Temporal Video Grounding, TVG) 문제를 연구합니다. 세분화된 3D 시각적 특징 덕분에 TVG 기술은 최근 몇 년 동안 놀라운 발전을 이루었습니다. 그러나 3D 컨볼루션 신경망(CNN)의 높은 복잡성으로 인해 밀도 높은 3D 시각적 특징을 추출하는 데 시간이 많이 걸리며, 이는 많은 메모리와 컴퓨팅 자원을 필요로 합니다. 효율적인 TVG를 위해, 우리는 TVG 모델의 시각적 입력과 텍스트 특징 모두에 최적화된 섭동 패턴('프롬프트'라고 부름)을 통합하는 새로운 텍스트-시각 프롬프팅(TVP) 프레임워크를 제안합니다. 3D CNN과 극명한 대조를 이루며, 우리는 TVP가 2D TVG 모델에서 비전 인코더와 언어 인코더를 효과적으로 공동 학습할 수 있게 하고, 복잡도가 낮은 희소 2D 시각적 특징만을 사용하여 교차 모달 특징 융합의 성능을 향상시킨다는 것을 보여줍니다. 더 나아가, 우리는 TVG의 효율적인 학습을 위해 시간적 거리 IoU(Temporal-Distance IoU, TDIoU) 손실 함수를 제안합니다. 두 개의 벤치마크 데이터셋인 Charades-STA와 ActivityNet Captions 데이터셋에 대한 실험을 통해, 제안된 TVP가 2D TVG의 성능을 크게 향상시키고(예: Charades-STA에서 9.79% 향상, ActivityNet Captions에서 30.77% 향상) 3D 시각적 특징을 사용하는 TVG에 비해 5배의 추론 가속을 달성함을 경험적으로 보여줍니다.*
 
-This research addresses temporal video grounding (TVG), which is the process of pinpointing the start and end times of specific events in a long video, as described by a text sentence. Text-visual prompting (TVP), is proposed to enhance TVG. TVP involves integrating specially designed patterns, known as 'prompts', into both the visual (image-based) and textual (word-based) input components of a TVG model. These prompts provide additional spatial-temporal context, improving the model's ability to accurately determine event timings in the video. The approach employs 2D visual inputs in place of 3D ones. Although 3D inputs offer more spatial-temporal detail, they are also more time-consuming to process. The use of 2D inputs with the prompting method aims to provide similar levels of context and accuracy more efficiently.
+이 연구는 시간적 비디오 그라운딩(TVG)을 다룹니다. TVG는 텍스트 문장으로 설명된 특정 이벤트의 시작 및 종료 시간을 긴 비디오에서 정확히 찾아내는 과정입니다. TVG를 향상시키기 위해 텍스트-시각 프롬프팅(TVP)이 제안되었습니다. TVP는 '프롬프트'라고 알려진 특별히 설계된 패턴을 TVG 모델의 시각적(이미지 기반) 및 텍스트(단어 기반) 입력 구성 요소 모두에 통합하는 것을 포함합니다. 이러한 프롬프트는 추가적인 시공간적 맥락을 제공하여 모델이 비디오에서 이벤트 타이밍을 정확하게 결정하는 능력을 향상시킵니다. 이 접근 방식은 3D 입력 대신 2D 시각적 입력을 사용합니다. 3D 입력은 더 많은 시공간적 세부 정보를 제공하지만 처리하는 데 시간이 더 많이 걸립니다. 프롬프팅 방법과 함께 2D 입력을 사용하면 비슷한 수준의 맥락과 정확도를 더 효율적으로 제공하는 것을 목표로 합니다.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tvp_architecture.png"
 alt="drawing" width="600"/>
 
 <small> TVP architecture. Taken from the <a href="https://huggingface.co/papers/2303.04995">original paper.</a> </small>
 
-This model was contributed by [Jiqing Feng](https://huggingface.co/Jiqing). The original code can be found [here](https://github.com/intel/TVP).
+이 모델은 [Jiqing Feng](https://huggingface.co/Jiqing)님이 기여했습니다. 원본 코드는 [여기](https://github.com/intel/TVP)에서 찾을 수 있습니다.
 
-## Usage tips and examples
+## 사용 팁 및 예시[[usage-tips-and-examples]]
 
-Prompts are optimized perturbation patterns, which would be added to input video frames or text features. Universal set refers to using the same exact set of prompts for any input, this means that these prompts are added consistently to all video frames and text features, regardless of the input's content.
+프롬프트는 최적화된 섭동 패턴으로, 입력 비디오 프레임이나 텍스트 특징에 추가됩니다. 범용 세트(Universal set)는 모든 입력에 대해 동일한 프롬프트 세트를 사용하는 것을 의미합니다. 즉, 입력 내용과 관계없이 모든 비디오 프레임과 텍스트 특징에 이 프롬프트들이 일관되게 추가됩니다.
 
-TVP consists of a visual encoder and cross-modal encoder. A universal set of visual prompts and text prompts to be integrated into sampled video frames and textual features, respectively. Specially, a set of different visual prompts are applied to uniformly-sampled frames of one untrimmed video in order.
+TVP는 시각 인코더와 교차 모달 인코더로 구성됩니다. 범용 시각 프롬프트 세트와 텍스트 프롬프트 세트가 각각 샘플링된 비디오 프레임과 텍스트 특징에 통합됩니다. 특히, 서로 다른 시각 프롬프트 세트가 편집되지 않은 한 비디오에서 균일하게 샘플링된 프레임에 순서대로 적용됩니다.
 
-The goal of this model is to incorporate trainable prompts into both visual inputs and textual features to temporal video grounding(TVG) problems.
-In principle, one can apply any visual, cross-modal encoder in the proposed architecture.
+이 모델의 목표는 학습 가능한 프롬프트를 시각적 입력과 텍스트 특징 모두에 통합하여 시간적 비디오 그라운딩(TVG) 문제를 해결하는 것입니다.
 
-The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a single instance to both
-encode the text and prepare the images respectively.
+원칙적으로, 제안된 아키텍처에는 어떤 시각 인코더나 교차 모달 인코더라도 적용할 수 있습니다.
 
-The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
+[TvpProcessor]는 [BertTokenizer]와 [TvpImageProcessor]를 단일 인스턴스로 래핑하여
+
+텍스트를 인코딩하고 이미지를 각각 준비합니다.
+
+다음 예시는 [TvpProcessor]와 [TvpForVideoGrounding]을 사용하여 시간적 비디오 그라운딩을 실행하는 방법을 보여줍니다.
+
 ```python
 import av
 import cv2
@@ -158,12 +161,10 @@ start, end = processor.post_process_video_grounding(output.logits, duration)
 print(f"The time slot of the video corresponding to the text \"{text}\" is from {start}s to {end}s")
 ```
 
-Tips:
-
-- This implementation of TVP uses [`BertTokenizer`] to generate text embeddings and Resnet-50 model to compute visual embeddings.
-- Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
-- Please refer to [Table 2](https://huggingface.co/papers/2303.04995) for TVP's performance on Temporal Video Grounding task.
-
+팁:
+- 이 TVP 구현은 텍스트 임베딩을 생성하기 위해 [BertTokenizer]를 사용하고, 시각적 임베딩을 계산하기 위해 Resnet-50 모델을 사용합니다.
+- 사전 학습된 [tvp-base](https://huggingface.co/Intel/tvp-base)의 체크포인트가 공개되어 있습니다.
+- 시간적 비디오 그라운딩 작업에 대한 TVP의 성능은 [표 2](https://huggingface.co/papers/2303.04995)를 참조하세요.
 
 ## TvpConfig
 
