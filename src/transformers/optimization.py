@@ -1142,13 +1142,13 @@ class SingleDeviceMuon(torch.optim.Optimizer):
     """
     Muon variant for usage in non-distributed settings.
     """
+
     def __init__(self, params, lr=0.02, weight_decay=0, momentum=0.95):
-        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum)
+        defaults = {"lr": lr, "weight_decay": weight_decay, "momentum": momentum}
         super().__init__(params, defaults)
 
     @torch.no_grad()
     def step(self, closure=None):
-
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -1172,8 +1172,8 @@ class SingleDeviceMuon(torch.optim.Optimizer):
 def adam_update(grad, buf1, buf2, step, betas, eps):
     buf1.lerp_(grad, 1 - betas[0])
     buf2.lerp_(grad.square(), 1 - betas[1])
-    buf1c = buf1 / (1 - betas[0]**step)
-    buf2c = buf2 / (1 - betas[1]**step)
+    buf1c = buf1 / (1 - betas[0] ** step)
+    buf2c = buf2 / (1 - betas[1] ** step)
     return buf1c / (buf2c.sqrt() + eps)
 
 
@@ -1204,6 +1204,7 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
     optimizer = MuonWithAuxAdam(param_groups)
     ```
     """
+
     def __init__(self, param_groups):
         for group in param_groups:
             assert "use_muon" in group
@@ -1213,19 +1214,18 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
                 group["lr"] = group.get("lr", 0.02)
                 group["momentum"] = group.get("momentum", 0.95)
                 group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == set(["params", "lr", "momentum", "weight_decay", "use_muon"])
+                assert set(group.keys()) == {"params", "lr", "momentum", "weight_decay", "use_muon"}
             else:
                 # defaults
                 group["lr"] = group.get("lr", 3e-4)
                 group["betas"] = group.get("betas", (0.9, 0.95))
                 group["eps"] = group.get("eps", 1e-10)
                 group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == set(["params", "lr", "betas", "eps", "weight_decay", "use_muon"])
-        super().__init__(param_groups, dict())
+                assert set(group.keys()) == {"params", "lr", "betas", "eps", "weight_decay", "use_muon"}
+        super().__init__(param_groups, {})
 
     @torch.no_grad()
     def step(self, closure=None):
-
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -1234,8 +1234,10 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
         for group in self.param_groups:
             if group["use_muon"]:
                 params = group["params"]
-                params_pad = params + [torch.empty_like(params[-1])] * (dist.get_world_size() - len(params) % dist.get_world_size())
-                for base_i in range(len(params))[::dist.get_world_size()]:
+                params_pad = params + [torch.empty_like(params[-1])] * (
+                    dist.get_world_size() - len(params) % dist.get_world_size()
+                )
+                for base_i in range(len(params))[:: dist.get_world_size()]:
                     if base_i + dist.get_rank() < len(params):
                         p = params[base_i + dist.get_rank()]
                         if p.grad is None:
@@ -1247,7 +1249,9 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
                         update = muon_update(p.grad, state["momentum_buffer"], beta=group["momentum"])
                         p.mul_(1 - group["lr"] * group["weight_decay"])
                         p.add_(update.reshape(p.shape), alpha=-group["lr"])
-                    dist.all_gather(params_pad[base_i:base_i + dist.get_world_size()], params_pad[base_i + dist.get_rank()])
+                    dist.all_gather(
+                        params_pad[base_i : base_i + dist.get_world_size()], params_pad[base_i + dist.get_rank()]
+                    )
             else:
                 for p in group["params"]:
                     if p.grad is None:
@@ -1259,8 +1263,9 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
                         state["exp_avg_sq"] = torch.zeros_like(p)
                         state["step"] = 0
                     state["step"] += 1
-                    update = adam_update(p.grad, state["exp_avg"], state["exp_avg_sq"],
-                                         state["step"], group["betas"], group["eps"])
+                    update = adam_update(
+                        p.grad, state["exp_avg"], state["exp_avg_sq"], state["step"], group["betas"], group["eps"]
+                    )
                     p.mul_(1 - group["lr"] * group["weight_decay"])
                     p.add_(update, alpha=-group["lr"])
 
@@ -1271,6 +1276,7 @@ class SingleDeviceMuonWithAuxAdam(torch.optim.Optimizer):
     """
     Non-distributed variant of MuonWithAuxAdam.
     """
+
     def __init__(self, param_groups):
         for group in param_groups:
             assert "use_muon" in group
@@ -1279,19 +1285,18 @@ class SingleDeviceMuonWithAuxAdam(torch.optim.Optimizer):
                 group["lr"] = group.get("lr", 0.02)
                 group["momentum"] = group.get("momentum", 0.95)
                 group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == set(["params", "lr", "momentum", "weight_decay", "use_muon"])
+                assert set(group.keys()) == {"params", "lr", "momentum", "weight_decay", "use_muon"}
             else:
                 # defaults
                 group["lr"] = group.get("lr", 3e-4)
                 group["betas"] = group.get("betas", (0.9, 0.95))
                 group["eps"] = group.get("eps", 1e-10)
                 group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == set(["params", "lr", "betas", "eps", "weight_decay", "use_muon"])
-        super().__init__(param_groups, dict())
+                assert set(group.keys()) == {"params", "lr", "betas", "eps", "weight_decay", "use_muon"}
+        super().__init__(param_groups, {})
 
     @torch.no_grad()
     def step(self, closure=None):
-
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -1320,8 +1325,9 @@ class SingleDeviceMuonWithAuxAdam(torch.optim.Optimizer):
                         state["exp_avg_sq"] = torch.zeros_like(p)
                         state["step"] = 0
                     state["step"] += 1
-                    update = adam_update(p.grad, state["exp_avg"], state["exp_avg_sq"],
-                                         state["step"], group["betas"], group["eps"])
+                    update = adam_update(
+                        p.grad, state["exp_avg"], state["exp_avg_sq"], state["step"], group["betas"], group["eps"]
+                    )
                     p.mul_(1 - group["lr"] * group["weight_decay"])
                     p.add_(update, alpha=-group["lr"])
 
