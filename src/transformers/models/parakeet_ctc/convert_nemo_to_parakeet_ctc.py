@@ -122,7 +122,7 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
     """
     logger.info(f"Extracting NeMo archive: {nemo_file_path}")
 
-    with tarfile.open(nemo_file_path, "r") as tar:
+    with tarfile.open(nemo_file_path, "r", encoding="utf-8") as tar:
         tar.extractall(extract_dir)
 
     # Log all extracted files for debugging
@@ -267,7 +267,7 @@ def convert_sentencepiece_vocab_to_json(vocab_file_path: str) -> dict[str, int]:
 
 def load_nemo_config(config_path: str) -> dict[str, Any]:
     """Load NeMo model configuration from yaml file."""
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     return config
 
@@ -703,7 +703,7 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
     # Create and save feature extractor
     feature_extractor_config = create_feature_extractor_config(model_info.get("preprocessor_cfg"))
 
-    with open(output_dir / "preprocessor_config.json", "w") as f:
+    with open(output_dir / "preprocessor_config.json", "w", encoding="utf-8") as f:
         json.dump(feature_extractor_config, f, indent=2)
 
     feature_extractor = FastConformerFeatureExtractor(
@@ -775,7 +775,7 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
 
     # Can be used for debugging
     print(conversion_info)
-    # with open(output_dir / "conversion_info.json", "w") as f:
+    # with open(output_dir / "conversion_info.json", "w", encoding="utf-8") as f:
     #     json.dump(conversion_info, f, indent=2)
 
     # logger.info("Conversion completed successfully!")
