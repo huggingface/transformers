@@ -296,12 +296,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         self.codebooks_head = CsmCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)
         self.model = CsmDepthDecoderModel(config)
 
-    def get_output_embeddings(self):
-        raise AttributeError("Not needed for Csm")
-
-    def set_output_embeddings(self, new_embeddings):
-        raise AttributeError("Not needed for Csm")
-
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
@@ -457,12 +451,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:
