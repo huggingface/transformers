@@ -42,7 +42,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
-from ...cache_utils import Cache, DynamicLayer
+from ...cache_utils import DynamicLayer
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
