@@ -32,7 +32,7 @@ vLLM automatically selects the best backend, and if a model isn’t natively sup
 from vllm import LLM
 llm = LLM(model="meta-llama/Llama-3.2-1B", model_impl="transformers")
 ```
-or launch a server with
+Add `--model-impl transformers` to `vllm serve` to launch a server with a Transformers' model.
 
 ```
 vllm serve meta-llama/Llama-3.2-1B \
