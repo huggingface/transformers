@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
             ("internvl", "InternVLVideoProcessor"),
@@ -83,7 +84,7 @@ def video_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in VIDEO_PROCESSOR_MAPPING._extra_content.items():
+    for extractor in VIDEO_PROCESSOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 

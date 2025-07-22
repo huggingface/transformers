@@ -10,6 +10,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
 from .configuration_from_uppercase_model import FromUppercaseModelTextConfig, FromUppercaseModelVisionConfig
@@ -138,7 +139,7 @@ class FromUppercaseModelMLP(nn.Module):
         return hidden_states
 
 
-class FromUppercaseModelEncoderLayer(nn.Module):
+class FromUppercaseModelEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Union[FromUppercaseModelVisionConfig, FromUppercaseModelTextConfig]):
         super().__init__()
         self.embed_dim = config.hidden_size

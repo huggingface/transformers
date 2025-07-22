@@ -25,6 +25,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -467,7 +468,7 @@ class RecurrentGemmaMlp(nn.Module):
         return self.down_proj(gate * self.up_proj(hidden_states))
 
 
-class RecurrentGemmaDecoderLayer(nn.Module):
+class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
     """Griffin and Hawk's residual block."""
 
     def __init__(self, config, layer_idx):
@@ -503,15 +504,13 @@ class RecurrentGemmaDecoderLayer(nn.Module):
 
 @auto_docstring
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
-    config_class = RecurrentGemmaConfig
+    config: RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False  # we can't compare with eager for now
-    _supports_cache_class = True
-    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
@@ -588,14 +587,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -644,12 +635,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         for i, residual_block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    residual_block.__call__, hidden_states, position_ids, causal_mask, cache_position, use_cache
-                )
-            else:
-                hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
+            hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -710,18 +696,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -810,16 +784,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
-
-    # Ignore copy
-    def _reorder_cache(self, past_key_values, beam_idx):
-        for layer in self.layers:
-            if hasattr(layer.temporal_block, "key_states"):
-                k_state = layer.temporal_block.key_states
-                v_state = layer.temporal_block.value_states
-                k_state = k_state.index_select(0, beam_idx.to(k_state.device))
-                v_state = v_state.index_select(0, beam_idx.to(v_state.device))
-        return None
 
 
 __all__ = ["RecurrentGemmaForCausalLM", "RecurrentGemmaModel", "RecurrentGemmaPreTrainedModel"]

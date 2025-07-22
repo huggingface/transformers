@@ -177,7 +177,7 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 
     # get the resolutions multiplied by the patch_size
     possible_resolutions = []
-    for key, value in asp_dict.items():
+    for value in asp_dict.values():
         for height, depth in value:
             possible_resolutions.append((height * patch_size, depth * patch_size))
 
@@ -393,13 +393,14 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
         possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
         # process images by batch, grouped by shape
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_processed_images = {}
         grouped_aspect_ratios = {}
         for shape, stacked_images in grouped_images.items():

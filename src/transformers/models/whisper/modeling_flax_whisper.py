@@ -101,10 +101,12 @@ WHISPER_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the features, padding and conversion into a
-            tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`]
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a
+            `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
+            (`pip install soundfile`).
+            To prepare the array into `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting
+            the features, padding and conversion into a tensor of type `numpy.ndarray`.
+            See [`~WhisperFeatureExtractor.__call__`]
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Whisper does not support masking of the `input_features`, this argument is preserved for compatibility, but
             is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -138,10 +140,11 @@ WHISPER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`].
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
+            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting
+            the mel features, padding and conversion into a tensor of type `numpy.ndarray`.
+            See [`~WhisperFeatureExtractor.__call__`].
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Whisper does not support masking of the `input_features`, this argument is preserved for compatibility, but
             is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -1670,7 +1673,7 @@ FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
     >>> model = FlaxWhisperForAudioClassification.from_pretrained(
     ...     "sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True
     ... )
-    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True, trust_remote_code=True)
+    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
 
     >>> sample = next(iter(ds))
 

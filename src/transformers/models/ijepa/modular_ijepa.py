@@ -88,13 +88,13 @@ class IJepaEmbeddings(ViTEmbeddings):
 
 @auto_docstring
 class IJepaPreTrainedModel(PreTrainedModel):
-    config_class = IJepaConfig
+    config: IJepaConfig
     base_model_prefix = "ijepa"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 

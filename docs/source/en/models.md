@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Transformers provides many pretrained models that are ready to use with a single line of code. It requires a model class and the [`~PreTrainedModel.from_pretrained`] method.
 
-Call [`~PreTrainedModel.from_pretrained`] to download and load a models weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
+Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
 
 > [!TIP]
 > The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.

@@ -33,19 +33,15 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BaseModelOutputWithCLSToken(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
-            Classification token at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
+    """
+)
+class BaseModelOutputWithCLSToken(ModelOutput):
+    r"""
+    cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
+        Classification token at the output of the last layer of the model.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -513,7 +509,7 @@ class CvtEncoder(nn.Module):
 
 @auto_docstring
 class CvtPreTrainedModel(PreTrainedModel):
-    config_class = CvtConfig
+    config: CvtConfig
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
     _no_split_modules = ["CvtLayer"]

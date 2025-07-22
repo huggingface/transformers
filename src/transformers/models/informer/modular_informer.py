@@ -27,6 +27,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
 )
@@ -91,12 +92,12 @@ class InformerValueEmbedding(TimeSeriesValueEmbedding):
 
 @auto_docstring
 class InformerPreTrainedModel(PreTrainedModel):
-    config_class = InformerConfig
+    config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         std = self.config.init_std
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -108,6 +109,9 @@ class InformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
@@ -429,11 +433,11 @@ class InformerProbSparseAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class InformerConvLayer(nn.Module):
+class InformerConvLayer(GradientCheckpointingLayer):
     def __init__(self, c_in):
         super().__init__()
         self.downConv = nn.Conv1d(
@@ -610,27 +614,15 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = self._gradient_checkpointing_func(conv_layer, layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = conv_layer(layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
+                if conv_layer is not None:
+                    output = conv_layer(layer_outputs[0])
+                    layer_outputs = (output,) + layer_outputs[1:]
 
                 hidden_states = layer_outputs[0]
 

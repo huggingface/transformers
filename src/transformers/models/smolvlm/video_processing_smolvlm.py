@@ -249,7 +249,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         video: "torch.Tensor",
         metadata: Union[VideoMetadata, dict],
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         skip_secs: Optional[int] = 1,
     ):
         """
@@ -266,7 +266,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
             skip_secs (`float`, *optional*, defaults to `1`):
                 Number of seconds to skip from the start and end if the video is long enough.
@@ -328,10 +328,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         do_sample_frames: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         skip_secs: Optional[int] = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
@@ -355,6 +356,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 [(int((idx / 24) // 60), int((idx / 24) % 60)) for idx in range(len(video))] for video in videos
             ]
             durations_list = [len(video) // 24 for video in videos]
+
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}

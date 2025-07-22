@@ -278,7 +278,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
 
         if self._dataset is None:
             self._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        speech_samples = self._dataset.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = self._dataset.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
     def test_spectrogram_impulse(self):

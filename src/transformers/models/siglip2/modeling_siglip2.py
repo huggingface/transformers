@@ -35,34 +35,20 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @dataclass
-class Siglip2VisionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
-
-    Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class Siglip2VisionOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
@@ -72,26 +58,15 @@ class Siglip2VisionOutput(ModelOutput):
 
 
 @dataclass
-class Siglip2TextOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class Siglip2TextOutput(ModelOutput):
+    r"""
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
@@ -101,25 +76,25 @@ class Siglip2TextOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class Siglip2Output(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`Siglip2TextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`Siglip2VisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Siglip2TextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Siglip2VisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`Siglip2TextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`Siglip2VisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Siglip2TextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Siglip2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -288,7 +263,7 @@ class Siglip2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -304,13 +279,7 @@ class Siglip2Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -325,9 +294,6 @@ class Siglip2Attention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights
 
@@ -722,7 +688,7 @@ class Siglip2TextTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # Assuming "sticky" EOS tokenization, last token is always EOS.
+        # The model uses the last token's hidden state, which may be padding.
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
 
@@ -736,18 +702,17 @@ class Siglip2TextTransformer(nn.Module):
 
 @auto_docstring
 class Siglip2PreTrainedModel(PreTrainedModel):
-    config_class = Siglip2Config
+    config: Siglip2Config
     base_model_prefix = "siglip2"
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
         "Siglip2TextEmbeddings",
-        "Siglip2EncoderLayer",
         "Siglip2VisionEmbeddings",
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -805,7 +770,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
     """
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
-    config_class = Siglip2TextConfig
+    config: Siglip2TextConfig
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -892,7 +857,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
     """
 )
 class Siglip2VisionModel(Siglip2PreTrainedModel):
-    config_class = Siglip2VisionConfig
+    config: Siglip2VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Siglip2VisionConfig):
@@ -952,7 +917,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
 
 @auto_docstring
 class Siglip2Model(Siglip2PreTrainedModel):
-    config_class = Siglip2Config
+    config: Siglip2Config
 
     def __init__(self, config: Siglip2Config):
         super().__init__(config)

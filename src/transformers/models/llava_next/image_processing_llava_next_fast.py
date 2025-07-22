@@ -32,7 +32,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    make_flat_list_of_images,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -95,22 +94,6 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
-        """
-        Prepare the images structure for processing.
-
-        Args:
-            images (`ImageInput`):
-                The input images to process.
-
-        Returns:
-            `ImageInput`: The images with a valid nesting.
-        """
-        return make_flat_list_of_images(images)
-
     def _resize_for_patching(
         self,
         image: "torch.Tensor",
@@ -137,7 +120,11 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
-        resized_image = F.resize(image, (new_height, new_width), interpolation=interpolation)
+        resized_image = self.resize(
+            image=image,
+            size=SizeDict(height=new_height, width=new_width),
+            interpolation=interpolation,
+        )
 
         return resized_image
 
@@ -242,7 +229,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         processed_images = []
         image_sizes = []
@@ -271,7 +260,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                image_patches, disable_grouping=disable_grouping
+            )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(

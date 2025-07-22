@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import os
+import warnings
 from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ from .utils import (
     is_numpy_array,
     is_torch_available,
     is_torch_tensor,
+    is_torchcodec_available,
     is_torchvision_available,
     is_vision_available,
     is_yt_dlp_available,
@@ -225,7 +227,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
             `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly.
-        fps (`int`, *optional*):
+        fps (`int` or `float`, *optional*):
             Desired frames per second. Takes priority over num_frames if both are provided.
 
     Returns:
@@ -425,6 +427,10 @@ def read_video_torchvision(
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    warnings.warn(
+        "Using `torchvision` for video decoding is deprecated and will be removed in future versions. "
+        "Please use `torchcodec` instead."
+    )
     video, _, info = torchvision_io.read_video(
         video_path,
         start_pts=0.0,
@@ -449,18 +455,66 @@ def read_video_torchvision(
     return video, metadata
 
 
+def read_video_torchcodec(
+    video_path: str,
+    sample_indices_fn: Callable,
+    **kwargs,
+):
+    """
+    Decode the video with torchcodec decoder.
+
+    Args:
+        video_path (`str`):
+            Path to the video file.
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniform sampling with fps is performed.
+            Example:
+            def sample_indices_fn(metadata, **kwargs):
+                return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
+
+    Returns:
+        Tuple[`torch.Tensor`, `VideoMetadata`]: A tuple containing:
+            - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
+            - `VideoMetadata` object.
+    """
+    # Lazy import torchcodec
+    requires_backends(read_video_torchcodec, ["torchcodec"])
+    from torchcodec.decoders import VideoDecoder
+
+    decoder = VideoDecoder(
+        video_path,
+        dimension_order="NHWC",  # to be consistent with other decoders
+        # Interestingly `exact` mode takes less than approximate when we load the whole video
+        seek_mode="exact",
+    )
+    metadata = VideoMetadata(
+        total_num_frames=decoder.metadata.num_frames,
+        fps=decoder.metadata.average_fps,
+        duration=decoder.metadata.duration_seconds,
+        video_backend="torchcodec",
+    )
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
+
+    video = decoder.get_frames_at(indices=indices).data.contiguous()
+    metadata.frames_indices = indices
+    return video, metadata
+
+
 VIDEO_DECODERS = {
     "decord": read_video_decord,
     "opencv": read_video_opencv,
     "pyav": read_video_pyav,
     "torchvision": read_video_torchvision,
+    "torchcodec": read_video_torchcodec,
 }
 
 
 def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
-    fps: Optional[int] = None,
+    fps: Optional[Union[int, float]] = None,
     backend: str = "pyav",
     sample_indices_fn: Optional[Callable] = None,
     **kwargs,
@@ -473,11 +527,11 @@ def load_video(
             The video to convert to the numpy array format. Can be a link to video or local path.
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly. If not passed, the whole video is loaded.
-        fps (`int`, *optional*):
+        fps (`int` or `float`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
         backend (`str`, *optional*, defaults to `"pyav"`):
-            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
+            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision", "torchcodec"]. Defaults to "pyav".
         sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
@@ -535,7 +589,7 @@ def load_video(
     video_is_url = video.startswith("http://") or video.startswith("https://")
     if video_is_url and backend in ["opencv", "torchvision"]:
         raise ValueError(
-            "If you are trying to load a video from URL, you can decode the video only with `pyav` or `decord` as backend"
+            "If you are trying to load a video from URL, you can decode the video only with `pyav`, `decord` or `torchcodec` as backend"
         )
 
     if file_obj is None:
@@ -546,6 +600,7 @@ def load_video(
         or (not is_av_available() and backend == "pyav")
         or (not is_cv2_available() and backend == "opencv")
         or (not is_torchvision_available() and backend == "torchvision")
+        or (not is_torchcodec_available() and backend == "torchcodec")
     ):
         raise ImportError(
             f"You chose backend={backend} for loading the video but the required library is not found in your environment "
@@ -574,7 +629,7 @@ def convert_to_rgb(
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
     if not isinstance(video, np.ndarray):
-        raise ValueError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
+        raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
     # np.array usually comes with ChannelDimension.LAST so leet's convert it
     if input_data_format is None:

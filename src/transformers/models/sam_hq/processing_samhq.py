@@ -65,13 +65,6 @@ class SamHQProcessor(ProcessorMixin):
     attributes = ["image_processor"]
     image_processor_class = "SamImageProcessor"
 
-    optional_call_args = [
-        "segmentation_maps",
-        "input_points",
-        "input_labels",
-        "input_boxes",
-    ]
-
     def __init__(self, image_processor):
         super().__init__(image_processor)
         # Ensure image_processor is properly initialized
@@ -84,13 +77,6 @@ class SamHQProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        # The following is to capture `segmentation_maps`, `input_points`, `input_labels` and `input_boxes`
-        # arguments that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context:
-        # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        *args,  # to be deprecated
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio: Optional[AudioInput] = None,
         video: Optional[VideoInput] = None,
@@ -104,7 +90,6 @@ class SamHQProcessor(ProcessorMixin):
             SamHQProcessorKwargs,
             tokenizer_init_kwargs={},
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
 
         input_points = output_kwargs["images_kwargs"].pop("input_points", None)

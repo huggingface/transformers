@@ -14,6 +14,7 @@ class MyNewModelConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MyNewModelModel`]. It is used to instantiate an MyNewModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the MyNewModel-7B.
+    e.g. [meta-my_new_model/MyNewModel-2-7b-hf](https://huggingface.co/meta-my_new_model/MyNewModel-2-7b-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -124,8 +125,6 @@ class MyNewModelConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-        new_param (`int`, *optional*, defaults to `False`):
-            A fun new parameter
     """
 
     model_type = "my_new_model"

@@ -44,7 +44,13 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
-    config_class = ShieldGemma2Config
+    config: ShieldGemma2Config
+    _checkpoint_conversion_mapping = {
+        "model.language_model.model": "model.model.language_model",
+        "model.vision_tower": "model.model.vision_tower",
+        "model.multi_modal_projector": "model.model.multi_modal_projector",
+        "model.language_model.lm_head": "model.lm_head",
+    }
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)

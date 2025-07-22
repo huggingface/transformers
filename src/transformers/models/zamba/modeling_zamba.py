@@ -781,14 +781,14 @@ class ZambaHybridLayer(nn.Module):
 
 @auto_docstring
 class ZambaPreTrainedModel(PreTrainedModel):
-    config_class = ZambaConfig
+    config: ZambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ZambaAttentionDecoderLayer", "ZambaMambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
-    _supports_cache_class = True  # Note: only supports ZambaHybridDynamicCache
+    # Note: only supports ZambaHybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
@@ -822,30 +822,6 @@ class ZambaPreTrainedModel(PreTrainedModel):
             A = A.expand(module.intermediate_size, -1).contiguous()
             module.A_log.data.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
             module.D.data.fill_(1.0)
-
-    @classmethod
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
-        """
-        Overloads `PreTrainedModel._check_and_enable_flash_attn_2` so as to DISABLE Flash Attention 2 by default on Zamba models.
-        Flash attention 2 is currently not supported in the HuggingFace implementation of Zamba v1.
-        """
-        config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
-
-        # if using the default path -> swap sdpa by eager
-        if not hard_check_only and config._attn_implementation == "flash_attention_2":
-            config._attn_implementation = "eager"
-
-        return config
 
 
 @auto_docstring
@@ -903,12 +879,6 @@ class ZambaModel(ZambaPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @auto_docstring
     def forward(
@@ -1069,18 +1039,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1102,7 +1060,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1155,7 +1113,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1253,12 +1211,6 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @auto_docstring
     def forward(
