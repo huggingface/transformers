@@ -195,14 +195,11 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
     return_row_col_info = False
     valid_kwargs = SmolVLMFastImageProcessorKwargs
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
         Prepare a nested images structure for processing.
         """
-        return make_nested_list_of_images(images)
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def resize(
         self,
@@ -431,7 +428,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
                     size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
                     interpolation=interpolation,
                 )
-            split_images_grouped[shape] = stacked_images
+                split_images_grouped[shape] = stacked_images
             processed_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
             rows = [[0] * len(images) for images in processed_images]
             cols = [[0] * len(images) for images in processed_images]

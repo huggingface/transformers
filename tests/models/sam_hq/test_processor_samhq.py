@@ -163,5 +163,5 @@ class SamHQProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))

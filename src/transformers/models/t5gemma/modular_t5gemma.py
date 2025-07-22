@@ -478,7 +478,7 @@ class T5GemmaLMHead(nn.Module):
 
 @auto_docstring
 class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
-    config_class = T5GemmaConfig
+    config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]
@@ -573,12 +573,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     def forward(
