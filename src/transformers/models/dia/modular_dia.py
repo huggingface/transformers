@@ -66,19 +66,6 @@ class DiaPreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, DiaRMSNorm):
-            module.weight.data.fill_(1.0)
-
 
 class DiaMultiChannelEmbedding(nn.Module):
     """In order to efficiently compute the audio embedding from the 9 different channels,
