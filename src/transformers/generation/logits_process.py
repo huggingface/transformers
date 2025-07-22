@@ -1181,6 +1181,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"The model vocabulary size is {vocabulary_size}, but the following tokens were being biased: "
                 f"{invalid_biases}"
             )
+
+        # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
+        # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float, device=scores.device)
         # Extract single-token sequences and their biases
         single_token_ids = []
