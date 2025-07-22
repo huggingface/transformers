@@ -106,7 +106,7 @@
   - local: serving
     title: Serving
   - local: transformers_as_backend
-    title: Transformers as a Unified Modeling Backend
+    title: Inference server backends
   title: Inference
 - isExpanded: false
   sections:
