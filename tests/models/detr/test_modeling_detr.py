@@ -597,7 +597,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
                     [
                         [ 0.0616, -0.5146, -0.4032],
                         [-0.7629, -0.4934, -1.7153],
-                        [-0.4768, -0.6403, -0.7826]
+                        [-0.4768, -0.6403, -0.7826],
                     ],
             }
         )  # fmt: skip
@@ -631,7 +631,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
                     [
                         [-19.1194,  -0.0893, -11.0154],
                         [-17.3640,  -1.8035, -14.0219],
-                        [-20.0461,  -0.5837, -11.1060]
+                        [-20.0461,  -0.5837, -11.1060],
                     ],
             }
         )  # fmt: skip
@@ -689,7 +689,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
                     [
                         [-18.1565,  -1.7568, -13.5029],
                         [-16.8888,  -1.4138, -14.1028],
-                        [-17.5709,  -2.5080, -11.8654]
+                        [-17.5709,  -2.5080, -11.8654],
                     ],
             }
         )  # fmt: skip
@@ -700,8 +700,18 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slices = Expectations(
             {
-                (None, None): [[0.5344, 0.1790, 0.9284], [0.4421, 0.0571, 0.0875], [0.6632, 0.6886, 0.1015]],
-                ("rocm", (9, 5)): [[0.5344, 0.1789, 0.9285], [0.4420, 0.0572, 0.0875], [0.6630, 0.6887, 0.1017]],
+                (None, None):
+                    [
+                        [0.5344, 0.1790, 0.9284],
+                        [0.4421, 0.0571, 0.0875],
+                        [0.6632, 0.6886, 0.1015]
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [0.5344, 0.1789, 0.9285],
+                        [0.4420, 0.0572, 0.0875],
+                        [0.6630, 0.6887, 0.1017],
+                    ],
             }
         )  # fmt: skip
         expected_slice_boxes = torch.tensor(expected_slices.get_expectation(), device=torch_device)
@@ -711,8 +721,18 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, expected_shape_masks)
         expected_slices = Expectations(
             {
-                (None, None): [[-7.8408, -11.0104, -12.1279], [-12.0299, -16.6498, -17.9806], [-14.8995, -19.9940, -20.5646]],
-                ("rocm", (9, 5)): [[ -7.7558, -10.8789, -11.9798], [-11.8882, -16.4330, -17.7452], [-14.7317, -19.7384, -20.3005]],
+                (None, None):
+                    [
+                        [-7.8408, -11.0104, -12.1279],
+                        [-12.0299, -16.6498, -17.9806],
+                        [-14.8995, -19.9940, -20.5646],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [ -7.7558, -10.8789, -11.9798],
+                        [-11.8882, -16.4330, -17.7452],
+                        [-14.7317, -19.7384, -20.3005],
+                    ],
             }
         )  # fmt: skip
         expected_slice_masks = torch.tensor(expected_slices.get_expectation(), device=torch_device)
@@ -771,7 +791,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         assert outputs.last_hidden_state.shape == expected_shape
         expected_slices = Expectations(
             {
-                (None, None): 
+                (None, None):
                     [
                         [0.0622, -0.5142, -0.4034],
                         [-0.7628, -0.4935, -1.7153],
