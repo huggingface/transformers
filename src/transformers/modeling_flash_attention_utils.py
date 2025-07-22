@@ -401,6 +401,9 @@ def _flash_attention_forward(
         q, k, v, idx, (cu_q, cu_k), (mq, mk) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
+        # TODO for now this is required to work with https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.p
+        if "mps" in str(q.device):
+            cu_k = cu_k.clone()
         out_unpad = flash_varlen_fn(
             q,
             k,
@@ -431,6 +434,8 @@ def _flash_attention_forward(
             v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
             mq, mk = max_length_q, max_length_k
             cu_q, cu_k = cu_seq_lens_q, cu_seq_lens_k
+        if "mps" in str(q.device):
+            cu_k = cu_k.clone()
         out = flash_varlen_fn(
             q,
             k,
