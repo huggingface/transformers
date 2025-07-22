@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 ## 개요[[overview]]
 
 X-CLIP 모델은 Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling이 [Expanding Language-Image Pretrained Models for General Video Recognition](https://huggingface.co/papers/2208.02816)에서 제안했습니다.
-X-CLIP은 비디오를 위해 [CLIP](clip)을 최소한으로 확장한 모델입니다. 이 모델은 텍스트 인코더, 교차 프레임 비전 인코더, 다중 프레임 통합 Transformer, 비디오별 프롬프트 생성기로 구성됩니다.
+X-CLIP은 비디오를 위해 [CLIP](clip)을 최소한으로 확장한 모델입니다. 이 모델은 텍스트 인코더, 교차 프레임 비전 인코더, 다중 프레임 통합 Transformer, 그리고 비디오별 프롬프트 생성기로 구성됩니다.
 
 논문의 초록은 다음과 같습니다:
 
@@ -49,36 +49,36 @@ X-CLIP을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티
 
 여기에 포함할 리소스를 제출하는 데 관심이 있다면, 언제든지 Pull Request를 열어주세요. 검토 후 반영하겠습니다! 리소스는 기존 리소스를 복제하는 대신 새로운 것을 보여주는 것이 이상적입니다.
 
-## XCLIPProcessor
+## XCLIPProcessor[[xclipprocessor]]
 
 [[autodoc]] XCLIPProcessor
 
-## XCLIPConfig
+## XCLIPConfig[[xclipconfig]]
 
 [[autodoc]] XCLIPConfig
     - from_text_vision_configs
 
-## XCLIPTextConfig
+## XCLIPTextConfig[[xcliptextconfig]]
 
 [[autodoc]] XCLIPTextConfig
 
-## XCLIPVisionConfig
+## XCLIPVisionConfig[[xclipvisionconfig]]
 
 [[autodoc]] XCLIPVisionConfig
 
-## XCLIPModel
+## XCLIPModel[[xclipmodel]]
 
 [[autodoc]] XCLIPModel
     - forward
     - get_text_features
     - get_video_features
 
-## XCLIPTextModel
+## XCLIPTextModel[[xcliptextmodel]]
 
 [[autodoc]] XCLIPTextModel
     - forward
 
-## XCLIPVisionModel
+## XCLIPVisionModel[[xclipvisionmodel]]
 
 [[autodoc]] XCLIPVisionModel
     - forward
