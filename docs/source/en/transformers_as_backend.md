@@ -134,7 +134,7 @@ class MyModel(PreTrainedModel):
 
 </details>
 
-3. Optionally, if you want the model to support tensor parallel and/or pipeline parallel features, you can add the following keys in the config file: 
+3. This step is optional, but if you want to support tensor parallel and/or pipeline parallel features, add the following keys to the config.
     * `base_model_tp_plan` for [tensor parallelism](https://huggingface.co/docs/transformers/perf_infer_gpu_multi) - a dict that maps fully qualified layer name patterns to tensor parallel styles (currently only "colwise" and "rowwise" are supported).
     * `base_model_pp_plan` for pipeline parallelism - a dict that maps direct child layer names to tuples of lists of strs.The list in the first element of the tuple contains the names of the input arguments. The list in the last element of the tuple contains the names of the variables the layer outputs to in your modeling code
 
