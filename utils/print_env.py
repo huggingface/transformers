@@ -80,6 +80,6 @@ try:
     versions = torchcodec._core.get_ffmpeg_library_versions()
     print("FFmpeg version:", versions["ffmpeg_version"])
 except (ImportError, RuntimeError):
-    print("TorchCodec could not be loaded:")
+    print("FFmpeg version:", None)
 except (AttributeError, KeyError):
     print("Failed to get FFmpeg version")
