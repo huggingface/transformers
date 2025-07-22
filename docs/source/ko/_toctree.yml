@@ -176,8 +176,8 @@
   - local: llm_optims
     title: LLM 추론 최적화
   - sections:
-    - local: in_translation
-      title: (번역중) Methods and tools for efficient training on a single GPU
+    - local: perf_train_gpu_one
+      title: GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
     - local: deepspeed
