@@ -133,18 +133,17 @@ print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
 ```
 
-### Cache Position Usage
+## Cache position
 
-The cache position tracks where the new tokens should be inserted in the attention cache. It represents the *absolute* position of each token in the context, independent of padding or batch structure. Suppose that you have already cached `N` tokens and you are now processing `K` new tokens. Then the cache position for the new tokens will range from `N` to `N + K - 1`. In other words, you're processing tokens at positions - `[N, N + 1, N + 2, ..., N + K - 1]`
+The cache position tracks where to insert new tokens in the attention cache. It represents the *absolute* position of each token in the context, independent of padding or batch structure. Suppose you already cached `N` tokens and are now processing `K` new tokens. The cache position for the new tokens will range from `N` to `N + K - 1`. In other words, you're processing tokens at positions - `[N, N + 1, N + 2, ..., N + K - 1]`.
 
 Cache position is used internally for two purposes:
 
 1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven’t been cached yet are passed to the model's `forward`.
-2. Storing key/value pairs at the correct positions in the cache. Especially important for fixed-size caches like [`StaticCache`] that preallocate certain length for cache in advance.
+2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, like [`StaticCache`], that pre-allocates a specific cache length.
 
-Usually you don't have to worry about cache position as the generation loop takes care of it. Yet, in cases where you are writing your own custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
+The generation loop usually takes care of the cache position, but if you're writing a custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
 
-There is an example usage with simple custom generation loop above, so let's create a more complex example here. 
 
 ```py
 import torch
