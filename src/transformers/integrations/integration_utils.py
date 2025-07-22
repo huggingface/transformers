@@ -34,8 +34,6 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
-import torch
-import torch.distributed as dist
 
 
 if os.getenv("WANDB_MODE") == "offline":
@@ -58,6 +56,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
@@ -1116,16 +1115,16 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
-        device_idx = torch.cuda.current_device()
-        total_memory = torch.cuda.get_device_properties(device_idx).total_memory
-        memory_allocated = torch.cuda.memory_allocated(device_idx)
+        if is_torch_available() and torch.cuda.is_available() and dist.is_available() and dist.is_initialized():
+            device_idx = torch.cuda.current_device()
+            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
+            memory_allocated = torch.cuda.memory_allocated(device_idx)
 
-        gpu_memory_logs = {
-            f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
-            f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-        }
+            gpu_memory_logs = {
+                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
+                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
+            }
 
-        if dist.is_initialized():
             gathered_logs = [None] * dist.get_world_size()
             dist.all_gather_object(gathered_logs, gpu_memory_logs)
             gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
