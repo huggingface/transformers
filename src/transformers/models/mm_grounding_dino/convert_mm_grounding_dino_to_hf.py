@@ -1,6 +1,9 @@
 import argparse
+import re
 
+import requests
 import torch
+from PIL import Image
 
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.models.grounding_dino.image_processing_grounding_dino import GroundingDinoImageProcessor
@@ -10,15 +13,7 @@ from transformers.models.mm_grounding_dino.modeling_mm_grounding_dino import MMG
 from transformers.models.swin.configuration_swin import SwinConfig
 
 
-try:
-    import mmengine
-    import requests
-    from PIL import Image
-except ModuleNotFoundError as e:
-    raise ModuleNotFoundError('Install "mmengine", "PIL" and "requests" before running the conversion script.') from e
-
-
-CHECKPOINT_URL_MAP = {
+MODEL_NAME_TO_CHECKPOINT_URL_MAPPING = {
     "mm_grounding_dino_tiny_o365v1_goldg": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg/grounding_dino_swin-t_pretrain_obj365_goldg_20231122_132602-4ea751ce.pth",
     "mm_grounding_dino_tiny_o365v1_goldg_grit": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_20231128_200818-169cc352.pth",
     "mm_grounding_dino_tiny_o365v1_goldg_v3det": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_v3det/grounding_dino_swin-t_pretrain_obj365_goldg_v3det_20231218_095741-e316e297.pth",
@@ -33,8 +28,258 @@ CHECKPOINT_URL_MAP = {
 }
 
 
-# copied from: https://github.com/iSEE-Laboratory/LLMDet/blob/96ec8c82a9d97b170db759e043afd5b81445d0f1/hf_model/mmdet2groundingdino_swint.py#L8C1-L13C13
-def correct_unfold_reduction_order(x):
+MODEL_NAME_TO_EXPECTED_OUTPUT_MAPPING = {
+    "mm_grounding_dino_tiny_o365v1_goldg": {
+        "scores": torch.tensor([0.7722, 0.7584, 0.7984, 0.7163]),
+        "boxes": torch.tensor(
+            [
+                [0.5212, 0.1594, 0.5792, 0.3895],
+                [0.5424, 0.0513, 0.9996, 0.7757],
+                [0.0629, 0.1526, 0.2746, 0.2447],
+                [0.0091, 0.1127, 0.4945, 0.9911],
+            ]
+        ),
+    },
+    "mm_grounding_dino_tiny_o365v1_goldg_grit": {
+        "scores": torch.tensor([0.7865, 0.7180, 0.7665, 0.8177]),
+        "boxes": torch.tensor(
+            [
+                [0.0084, 0.1129, 0.4940, 0.9895],
+                [0.5214, 0.1597, 0.5786, 0.3875],
+                [0.5413, 0.0507, 0.9998, 0.7768],
+                [0.0631, 0.1527, 0.2740, 0.2449],
+            ]
+        ),
+    },
+    "mm_grounding_dino_tiny_o365v1_goldg_v3det": {
+        "scores": torch.tensor([0.5690, 0.5553, 0.6075, 0.5775]),
+        "boxes": torch.tensor(
+            [
+                [0.5393, 0.0502, 0.9989, 0.7763],
+                [0.0090, 0.1125, 0.4950, 0.9895],
+                [0.5207, 0.1589, 0.5794, 0.3889],
+                [0.0625, 0.1519, 0.2750, 0.2446],
+            ]
+        ),
+    },
+    "mm_grounding_dino_tiny_o365v1_goldg_grit_v3det": {
+        "scores": torch.tensor([0.8381, 0.8204, 0.7970, 0.7175]),
+        "boxes": torch.tensor(
+            [
+                [0.0099, 0.1129, 0.4942, 0.9903],
+                [0.5413, 0.0506, 0.9998, 0.7753],
+                [0.0626, 0.1527, 0.2744, 0.2443],
+                [0.5211, 0.1596, 0.5790, 0.3890],
+            ]
+        ),
+    },
+    "mm_grounding_dino_base_o365v1_goldg_v3det": {
+        "scores": torch.tensor([0.8418, 0.8364, 0.8342, 0.7885]),
+        "boxes": torch.tensor(
+            [
+                [0.5427, 0.0502, 0.9996, 0.7770],
+                [0.0628, 0.1529, 0.2747, 0.2448],
+                [0.0085, 0.1132, 0.4947, 0.9898],
+                [0.5208, 0.1597, 0.5787, 0.3910],
+            ]
+        ),
+    },
+    "mm_grounding_dino_base_all": {
+        "scores": torch.tensor([0.4713]),
+        "boxes": torch.tensor([[0.5423, 0.0507, 0.9998, 0.7761]]),
+    },
+    "mm_grounding_dino_large_o365v2_oiv6_goldg": {
+        "scores": torch.tensor([0.7824, 0.8275, 0.7715, 0.8211]),
+        "boxes": torch.tensor(
+            [
+                [0.0082, 0.1133, 0.4945, 0.9889],
+                [0.5410, 0.0508, 0.9998, 0.7771],
+                [0.0632, 0.1526, 0.2740, 0.2439],
+                [0.5205, 0.1599, 0.5787, 0.3906],
+            ]
+        ),
+    },
+    "mm_grounding_dino_large_all": {
+        "scores": torch.tensor([0.7373, 0.6208, 0.6913, 0.4523]),
+        "boxes": torch.tensor(
+            [
+                [0.5424, 0.0509, 0.9997, 0.7765],
+                [0.0632, 0.1529, 0.2744, 0.2447],
+                [0.0121, 0.1125, 0.4947, 0.9884],
+                [0.5206, 0.1597, 0.5789, 0.3933],
+            ]
+        ),
+    },
+    "llmdet_tiny": {
+        "scores": torch.tensor([0.7262, 0.7552, 0.7656, 0.8207]),
+        "boxes": torch.tensor(
+            [
+                [0.0114, 0.1132, 0.4947, 0.9854],
+                [0.5387, 0.0513, 0.9992, 0.7765],
+                [0.5212, 0.1605, 0.5788, 0.3890],
+                [0.0634, 0.1536, 0.2743, 0.2440],
+            ]
+        ),
+    },
+    "llmdet_base": {
+        "scores": torch.tensor([0.8646, 0.7567, 0.6978, 0.8084]),
+        "boxes": torch.tensor(
+            [
+                [0.0632, 0.1529, 0.2745, 0.2438],
+                [0.5420, 0.0512, 0.9989, 0.7774],
+                [0.0110, 0.1134, 0.4950, 0.9875],
+                [0.5209, 0.1602, 0.5789, 0.3908],
+            ]
+        ),
+    },
+    "llmdet_large": {
+        "scores": torch.tensor([0.7107, 0.8626, 0.7458, 0.8166]),
+        "boxes": torch.tensor(
+            [
+                [0.0147, 0.1128, 0.4957, 0.9858],
+                [0.0634, 0.1528, 0.2744, 0.2447],
+                [0.5414, 0.0511, 0.9997, 0.7776],
+                [0.5209, 0.1602, 0.5792, 0.3916],
+            ]
+        ),
+    },
+}
+
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # vision backbone
+    r"backbone.patch_embed.projection.(weight|bias)":                                                               r"model.backbone.conv_encoder.model.embeddings.patch_embeddings.projection.\1",
+    r"backbone.patch_embed.norm.(weight|bias)":                                                                     r"model.backbone.conv_encoder.model.embeddings.norm.\1",
+    r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.(relative_position_bias_table|relative_position_index)":        r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.self.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).norm1.(weight|bias)":                                                      r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.layernorm_before.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.(query|key|value).(weight|bias)":                               r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.self.\3.\4", # NOTE: will be split in split_qkv_swin
+    r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.proj.(weight|bias)":                                            r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.output.dense.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).norm2.(weight|bias)":                                                      r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.layernorm_after.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).ffn.layers.0.0.(weight|bias)":                                             r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.intermediate.dense.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).ffn.layers.1.(weight|bias)":                                               r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.output.dense.\3",
+    r"backbone.stages.(\d+).downsample.reduction.weight":                                                           r"model.backbone.conv_encoder.model.encoder.layers.\1.downsample.reduction.weight", # NOTE: will be reordered
+    r"backbone.stages.(\d+).downsample.norm.(weight|bias)":                                                         r"model.backbone.conv_encoder.model.encoder.layers.\1.downsample.norm.\2", # NOTE: will be reordered
+    r"backbone.norms.(\d+).(weight|bias)":                                                                            r"model.backbone.conv_encoder.model.hidden_states_norms.stage\1.\2", # NOTE: original will be shifted one down
+    r"neck.convs.(\d+).conv.(weight|bias)":                                                                         r"model.input_proj_vision.\1.0.\2",
+    r"neck.convs.(\d+).gn.(weight|bias)":                                                                           r"model.input_proj_vision.\1.1.\2",
+    r"neck.extra_convs.(\d+).conv.(weight|bias)":                                                                   r"model.input_proj_vision.\1.0.\2", # NOTE: original will be shifted by normal convs up
+    r"neck.extra_convs.(\d+).gn.(weight|bias)":                                                                     r"model.input_proj_vision.\1.1.\2", # NOTE: original will be shifted by normal convs up
+    # text backbone
+    r"language_model.language_backbone.body.model.(.*)":                                                            r"model.text_backbone.\1",
+    r"text_feat_map.(weight|bias)":                                                                                 r"model.text_projection.\1",
+    # encoder
+    r"encoder.fusion_layers.(\d+).gamma_v":                                                                         r"model.encoder.layers.\1.fusion_layer.vision_param",
+    r"encoder.fusion_layers.(\d+).gamma_l":                                                                         r"model.encoder.layers.\1.fusion_layer.text_param",
+    r"encoder.fusion_layers.(\d+).layer_norm_v.(weight|bias)":                                                      r"model.encoder.layers.\1.fusion_layer.layer_norm_vision.\2",
+    r"encoder.fusion_layers.(\d+).attn.v_proj.(weight|bias)":                                                       r"model.encoder.layers.\1.fusion_layer.attn.vision_proj.\2",
+    r"encoder.fusion_layers.(\d+).attn.values_v_proj.(weight|bias)":                                                r"model.encoder.layers.\1.fusion_layer.attn.values_vision_proj.\2",
+    r"encoder.fusion_layers.(\d+).attn.out_v_proj.(weight|bias)":                                                   r"model.encoder.layers.\1.fusion_layer.attn.out_vision_proj.\2",
+    r"encoder.fusion_layers.(\d+).layer_norm_l.(weight|bias)":                                                      r"model.encoder.layers.\1.fusion_layer.layer_norm_text.\2",
+    r"encoder.fusion_layers.(\d+).attn.l_proj.(weight|bias)":                                                       r"model.encoder.layers.\1.fusion_layer.attn.text_proj.\2",
+    r"encoder.fusion_layers.(\d+).attn.values_l_proj.(weight|bias)":                                                r"model.encoder.layers.\1.fusion_layer.attn.values_text_proj.\2",
+    r"encoder.fusion_layers.(\d+).attn.out_l_proj.(weight|bias)":                                                   r"model.encoder.layers.\1.fusion_layer.attn.out_text_proj.\2",
+    r"encoder.layers.(\d+).self_attn.(sampling_offsets|attention_weights|value_proj|output_proj).(weight|bias)":    r"model.encoder.layers.\1.deformable_layer.self_attn.\2.\3",
+    r"encoder.layers.(\d+).norms.0.(weight|bias)":                                                                  r"model.encoder.layers.\1.deformable_layer.self_attn_layer_norm.\2",
+    r"encoder.layers.(\d+).ffn.layers.0.0.(weight|bias)":                                                           r"model.encoder.layers.\1.deformable_layer.fc1.\2",
+    r"encoder.layers.(\d+).ffn.layers.1.(weight|bias)":                                                             r"model.encoder.layers.\1.deformable_layer.fc2.\2",
+    r"encoder.layers.(\d+).norms.1.(weight|bias)":                                                                  r"model.encoder.layers.\1.deformable_layer.final_layer_norm.\2",
+    r"encoder.text_layers.(\d+).self_attn.attn.(query|key|value)_proj_(weight|bias)":                               r"model.encoder.layers.\1.text_enhancer_layer.self_attn.\2.\3", # NOTE: in_proj will be split
+    r"encoder.text_layers.(\d+).self_attn.attn.out_proj.(weight|bias)":                                             r"model.encoder.layers.\1.text_enhancer_layer.self_attn.out_proj.\2",
+    r"encoder.text_layers.(\d+).norms.0.(weight|bias)":                                                             r"model.encoder.layers.\1.text_enhancer_layer.layer_norm_before.\2",
+    r"encoder.text_layers.(\d+).ffn.layers.0.0.(weight|bias)":                                                      r"model.encoder.layers.\1.text_enhancer_layer.fc1.\2",
+    r"encoder.text_layers.(\d+).ffn.layers.1.(weight|bias)":                                                        r"model.encoder.layers.\1.text_enhancer_layer.fc2.\2",
+    r"encoder.text_layers.(\d+).norms.1.(weight|bias)":                                                             r"model.encoder.layers.\1.text_enhancer_layer.layer_norm_after.\2",
+    r"encoder.bbox_head.cls_branch.bias":                                                                           r"model.encoder_output_class_embed.bias", # NOTE: key needs to be duped from last idx in bbox_head
+    r"encoder.bbox_head.reg_branch.0.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.0.\1", #  NOTE: key needs to be duped from last idx in bbox_head
+    r"encoder.bbox_head.reg_branch.2.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.1.\1", #  NOTE: key needs to be duped from last idx in bbox_head
+    r"encoder.bbox_head.reg_branch.4.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.2.\1", #  NOTE: key needs to be duped from last idx in bbox_head
+    # decoder
+    r"decoder.norm.(weight|bias)":                                                                                  r"model.decoder.layer_norm.\1",
+    r"decoder.ref_point_head.layers.(\d+).(weight|bias)":                                                           r"model.decoder.reference_points_head.layers.\1.\2",
+    r"decoder.layers.(\d+).self_attn.attn.(query|key|value)_proj_(weight|bias)":                                    r"model.decoder.layers.\1.self_attn.\2.\3", # NOTE: will need to be split
+    r"decoder.layers.(\d+).self_attn.attn.out_proj.(weight|bias)":                                                  r"model.decoder.layers.\1.self_attn.out_proj.\2",
+    r"decoder.layers.(\d+).norms.0.(weight|bias)":                                                                  r"model.decoder.layers.\1.self_attn_layer_norm.\2",
+    r"decoder.layers.(\d+).cross_attn_text.attn.(query|key|value)_proj_(weight|bias)":                              r"model.decoder.layers.\1.encoder_attn_text.\2.\3", # NOTE: will need to be split
+    r"decoder.layers.(\d+).cross_attn_text.attn.out_proj.(weight|bias)":                                            r"model.decoder.layers.\1.encoder_attn_text.out_proj.\2",
+    r"decoder.layers.(\d+).norms.1.(weight|bias)":                                                                  r"model.decoder.layers.\1.encoder_attn_text_layer_norm.\2",
+    r"decoder.layers.(\d+).cross_attn.(sampling_offsets|attention_weights|value_proj|output_proj).(weight|bias)":   r"model.decoder.layers.\1.encoder_attn.\2.\3",
+    r"decoder.layers.(\d+).norms.2.(weight|bias)":                                                                  r"model.decoder.layers.\1.encoder_attn_layer_norm.\2",
+    r"decoder.layers.(\d+).ffn.layers.0.0.(weight|bias)":                                                           r"model.decoder.layers.\1.fc1.\2",
+    r"decoder.layers.(\d+).ffn.layers.1.(weight|bias)":                                                             r"model.decoder.layers.\1.fc2.\2",
+    r"decoder.layers.(\d+).norms.3.(weight|bias)":                                                                  r"model.decoder.layers.\1.final_layer_norm.\2",
+    r"decoder.bbox_head.cls_branches.(\d+).bias":                                                                   r"model.decoder.class_embed.\1.bias", # NOTE: key needs to be duplicated from bbox_head...
+    r"decoder.bbox_head.reg_branches.(\d+).0.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.0.\2", # NOTE: key needs to be duplicated from bbox_head...
+    r"decoder.bbox_head.reg_branches.(\d+).2.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.1.\2", # NOTE: key needs to be duplicated from bbox_head...
+    r"decoder.bbox_head.reg_branches.(\d+).4.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.2.\2", # NOTE: key needs to be duplicated from bbox_head...
+    # other
+    r"level_embed":                                                                                                 r"model.level_embed",
+    r"query_embedding.weight":                                                                                      r"model.query_position_embeddings.weight",
+    r"memory_trans_fc.(weight|bias)":                                                                               r"model.enc_output.\1",
+    r"memory_trans_norm.(weight|bias)":                                                                             r"model.enc_output_norm.\1",
+    r"bbox_head.cls_branches.(\d+).bias":                                                                           r"class_embed.\1.bias",
+    r"bbox_head.reg_branches.(\d+).0.(weight|bias)":                                                                r"bbox_embed.\1.layers.0.\2",
+    r"bbox_head.reg_branches.(\d+).2.(weight|bias)":                                                                r"bbox_embed.\1.layers.1.\2",
+    r"bbox_head.reg_branches.(\d+).4.(weight|bias)":                                                                r"bbox_embed.\1.layers.2.\2",
+}
+# fmt: on
+
+
+def get_mm_grounding_dino_config(model_name: str) -> MMGroundingDinoConfig:
+    if "tiny" in model_name:
+        swin_image_size = 224
+        swin_window_size = 7
+        swin_embed_dim = 96
+        swin_depths = (2, 2, 6, 2)
+        swin_num_heads = (3, 6, 12, 24)
+        swin_out_features = ["stage2", "stage3", "stage4"]
+        num_feature_levels = 4
+    elif "base" in model_name:
+        swin_image_size = 384
+        swin_window_size = 12
+        swin_embed_dim = 128
+        swin_depths = (2, 2, 18, 2)
+        swin_num_heads = (4, 8, 16, 32)
+        swin_out_features = ["stage2", "stage3", "stage4"]
+        num_feature_levels = 4
+    elif "large" in model_name:
+        swin_image_size = 384
+        swin_window_size = 12
+        swin_embed_dim = 192
+        swin_depths = (2, 2, 18, 2)
+        swin_num_heads = (6, 12, 24, 48)
+        swin_out_features = ["stage1", "stage2", "stage3", "stage4"]
+        num_feature_levels = 5
+    else:
+        raise ValueError(
+            f"Model name: {model_name} is not supported. Only `tiny`, `base` and `large` models are currently supported."
+        )
+
+    backbone_config = SwinConfig(
+        image_size=swin_image_size,
+        window_size=swin_window_size,
+        embed_dim=swin_embed_dim,
+        depths=swin_depths,
+        num_heads=swin_num_heads,
+        out_features=swin_out_features,
+    )
+
+    model_config = MMGroundingDinoConfig(
+        backbone_config=backbone_config,
+        num_feature_levels=num_feature_levels,
+    )
+
+    return model_config
+
+
+def get_mm_grounding_dino_processor() -> GroundingDinoProcessor:
+    img_processor = GroundingDinoImageProcessor()
+    txt_processor = BertTokenizer.from_pretrained("bert-base-uncased")
+    processor = GroundingDinoProcessor(img_processor, txt_processor)
+    return processor
+
+
+# Copied from: https://github.com/iSEE-Laboratory/LLMDet/blob/96ec8c82a9d97b170db759e043afd5b81445d0f1/hf_model/mmdet2groundingdino_swint.py#L8C1-L13C13
+def correct_unfold_reduction_order(x: torch.Tensor) -> torch.Tensor:
     out_channel, in_channel = x.shape
     x = x.reshape(out_channel, in_channel // 4, 4).transpose(1, 2)
     x = x[:, [0, 2, 1, 3], :]
@@ -42,8 +287,8 @@ def correct_unfold_reduction_order(x):
     return x
 
 
-# copied from: https://github.com/iSEE-Laboratory/LLMDet/blob/96ec8c82a9d97b170db759e043afd5b81445d0f1/hf_model/mmdet2groundingdino_swint.py#L15C1-L20C13
-def correct_unfold_norm_order(x):
+# Copied from: https://github.com/iSEE-Laboratory/LLMDet/blob/96ec8c82a9d97b170db759e043afd5b81445d0f1/hf_model/mmdet2groundingdino_swint.py#L15C1-L20C13
+def correct_unfold_norm_order(x: torch.Tensor) -> torch.Tensor:
     in_channel = x.shape[0]
     x = x.reshape(in_channel // 4, 4).transpose(0, 1)
     x = x[[0, 2, 1, 3], :]
@@ -51,444 +296,195 @@ def correct_unfold_norm_order(x):
     return x
 
 
-def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dict:
-    # key mapping will be a dict of
-    # str: str - one to one key to value mapping
-    # str: tup[str, tup[str]] - where the first element is str for mapping type
-    #      (e.g. to chunk target key into q, k, v values or duplicate to all target keys)
-    #      and the second element is a tuple of target keys
-    key_mapping = {}
-
-    ################
-    # Other params #
-    ################
-
-    key_mapping["level_embed"] = "model.level_embed"
-
-    key_mapping["query_embedding.weight"] = "model.query_position_embeddings.weight"
-
-    for param in ["weight", "bias"]:
-        key_mapping[f"memory_trans_fc.{param}"] = f"model.enc_output.{param}"
-        key_mapping[f"memory_trans_norm.{param}"] = f"model.enc_output_norm.{param}"
-
-    for layer in range(hf_cfg.decoder_layers):
-        key_mapping[f"bbox_head.cls_branches.{layer}.bias"] = (
-            "duplicate",
-            (
-                f"class_embed.{layer}.bias",
-                f"model.decoder.class_embed.{layer}.bias",
-            ),
-        )
-        for param in ["weight", "bias"]:
-            key_mapping[f"bbox_head.reg_branches.{layer}.0.{param}"] = (
-                "duplicate",
-                (
-                    f"bbox_embed.{layer}.layers.0.{param}",
-                    f"model.decoder.bbox_embed.{layer}.layers.0.{param}",
-                ),
-            )
-            key_mapping[f"bbox_head.reg_branches.{layer}.2.{param}"] = (
-                "duplicate",
-                (
-                    f"bbox_embed.{layer}.layers.1.{param}",
-                    f"model.decoder.bbox_embed.{layer}.layers.1.{param}",
-                ),
-            )
-            key_mapping[f"bbox_head.reg_branches.{layer}.4.{param}"] = (
-                "duplicate",
-                (
-                    f"bbox_embed.{layer}.layers.2.{param}",
-                    f"model.decoder.bbox_embed.{layer}.layers.2.{param}",
-                ),
-            )
-
-    # last branch in original gets mapped to encoder
-    enc_idx = hf_cfg.decoder_layers
-    key_mapping[f"bbox_head.cls_branches.{enc_idx}.bias"] = "model.encoder_output_class_embed.bias"
-    for param in ["weight", "bias"]:
-        key_mapping[f"bbox_head.reg_branches.{enc_idx}.0.{param}"] = (
-            f"model.encoder_output_bbox_embed.layers.0.{param}"
-        )
-        key_mapping[f"bbox_head.reg_branches.{enc_idx}.2.{param}"] = (
-            f"model.encoder_output_bbox_embed.layers.1.{param}"
-        )
-        key_mapping[f"bbox_head.reg_branches.{enc_idx}.4.{param}"] = (
-            f"model.encoder_output_bbox_embed.layers.2.{param}"
-        )
-
-    ###################
-    # Vision backbone #
-    ###################
-
-    for param in ["weight", "bias"]:
-        key_mapping[f"backbone.patch_embed.projection.{param}"] = (
-            f"model.backbone.conv_encoder.model.embeddings.patch_embeddings.projection.{param}"
-        )
-        key_mapping[f"backbone.patch_embed.norm.{param}"] = (
-            f"model.backbone.conv_encoder.model.embeddings.norm.{param}"
-        )
-
-    for stage, depth in enumerate(hf_cfg.backbone_config.depths):
-        for block in range(depth):
-            key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.relative_position_bias_table"] = (
-                f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.relative_position_bias_table"
-            )
-            key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.relative_position_index"] = (
-                f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.relative_position_index"
-            )
-
-            for param in ["weight", "bias"]:
-                key_mapping[f"backbone.stages.{stage}.blocks.{block}.norm1.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.layernorm_before.{param}"
+def preprocess_old_state(state_dict: dict, config: MMGroundingDinoConfig) -> dict:
+    """
+    Preprocesses old state dict to enable 1-1 mapping:
+        - split qkv projections in Swin backbone
+        - reorder reduction and norm parameters in Swin backbone
+        - shift output norm indices in Swin backbone
+        - shift output proj indices in neck
+        - split q,k,v projections in text self and cross attentions in encoder and decoder
+        - duplicate detection head parameters for decoder and encoder
+    """
+    new_state_dict = state_dict.copy()
+    for k in state_dict:
+        if k.startswith("backbone"):
+            if "downsample.reduction" in k:
+                new_state_dict[k] = correct_unfold_reduction_order(new_state_dict.pop(k))
+            elif "downsample.norm" in k:
+                new_state_dict[k] = correct_unfold_norm_order(new_state_dict.pop(k))
+            elif "w_msa.qkv" in k:
+                q_param, k_param, v_param = new_state_dict.pop(k).chunk(3)
+                new_state_dict[k.replace("qkv", "query")] = q_param
+                new_state_dict[k.replace("qkv", "key")] = k_param
+                new_state_dict[k.replace("qkv", "value")] = v_param
+            elif "backbone.norm" in k:
+                match = re.match(r"backbone.norm(\d+).(weight|bias)", k)
+                new_state_dict[f"backbone.norms.{int(match.group(1)) + 1}.{match.group(2)}"] = new_state_dict.pop(k)
+        elif k.startswith("neck.extra_convs"):
+            num_normal_convs = len(config.backbone_config.out_indices)
+            if "gn" in k:
+                match = re.match(r"neck.extra_convs.(\d+).gn.(weight|bias)", k)
+                new_state_dict[f"neck.extra_convs.{num_normal_convs + int(match.group(1))}.gn.{match.group(2)}"] = (
+                    new_state_dict.pop(k)
                 )
-                key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.qkv.{param}"] = (
-                    "split_qkv",
-                    (
-                        f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.query.{param}",
-                        f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.key.{param}",
-                        f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.value.{param}",
-                    ),
+            elif "conv" in k:
+                match = re.match(r"neck.extra_convs.(\d+).conv.(weight|bias)", k)
+                new_state_dict[f"neck.extra_convs.{num_normal_convs + int(match.group(1))}.conv.{match.group(2)}"] = (
+                    new_state_dict.pop(k)
                 )
-                key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.proj.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.output.dense.{param}"
-                )
-                key_mapping[f"backbone.stages.{stage}.blocks.{block}.norm2.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.layernorm_after.{param}"
-                )
-                key_mapping[f"backbone.stages.{stage}.blocks.{block}.ffn.layers.0.0.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.intermediate.dense.{param}"
-                )
-                key_mapping[f"backbone.stages.{stage}.blocks.{block}.ffn.layers.1.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.output.dense.{param}"
-                )
-
-        is_last_stage = stage == len(hf_cfg.backbone_config.depths) - 1
-        if not is_last_stage:
-            key_mapping[f"backbone.stages.{stage}.downsample.reduction.weight"] = (
-                f"model.backbone.conv_encoder.model.encoder.layers.{stage}.downsample.reduction.weight"
-            )
-            for param in ["weight", "bias"]:
-                key_mapping[f"backbone.stages.{stage}.downsample.norm.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.downsample.norm.{param}"
-                )
-
-    for out_idx in hf_cfg.backbone_config.out_indices:
-        for param in ["weight", "bias"]:
-            key_mapping[f"backbone.norm{out_idx - 1}.{param}"] = (
-                f"model.backbone.conv_encoder.model.hidden_states_norms.stage{out_idx}.{param}"
-            )
-
-    num_normal_projs = len(hf_cfg.backbone_config.out_indices)
-    for i in range(num_normal_projs):
-        for param in ["weight", "bias"]:
-            key_mapping[f"neck.convs.{i}.conv.{param}"] = f"model.input_proj_vision.{i}.0.{param}"
-            key_mapping[f"neck.convs.{i}.gn.{param}"] = f"model.input_proj_vision.{i}.1.{param}"
-
-    num_extra_projs = hf_cfg.num_feature_levels - num_normal_projs
-    for i in range(num_extra_projs):
-        for param in ["weight", "bias"]:
-            key_mapping[f"neck.extra_convs.{i}.conv.{param}"] = (
-                f"model.input_proj_vision.{num_normal_projs + i}.0.{param}"
-            )
-            key_mapping[f"neck.extra_convs.{i}.gn.{param}"] = (
-                f"model.input_proj_vision.{num_normal_projs + i}.1.{param}"
-            )
-
-    ##################
-    # Language model #
-    ##################
-
-    for k in mm_state:
-        if k.startswith("language_model") and "position_ids" not in k:
-            key_mapping[k] = k.replace("language_model.language_backbone.body.model", "model.text_backbone")
-
-    for param in ["weight", "bias"]:
-        key_mapping[f"text_feat_map.{param}"] = f"model.text_projection.{param}"
-
-    ###########
-    # Encoder #
-    ###########
-
-    for layer in range(hf_cfg.encoder_layers):
-        # fusion
-        key_mapping[f"encoder.fusion_layers.{layer}.gamma_v"] = (
-            f"model.encoder.layers.{layer}.fusion_layer.vision_param"
-        )
-        key_mapping[f"encoder.fusion_layers.{layer}.gamma_l"] = f"model.encoder.layers.{layer}.fusion_layer.text_param"
-        for param in ["weight", "bias"]:
-            key_mapping[f"encoder.fusion_layers.{layer}.layer_norm_v.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.layer_norm_vision.{param}"
-            )
-            key_mapping[f"encoder.fusion_layers.{layer}.attn.v_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.attn.vision_proj.{param}"
-            )
-            key_mapping[f"encoder.fusion_layers.{layer}.attn.values_v_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.attn.values_vision_proj.{param}"
-            )
-            key_mapping[f"encoder.fusion_layers.{layer}.attn.out_v_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.attn.out_vision_proj.{param}"
-            )
-
-            key_mapping[f"encoder.fusion_layers.{layer}.layer_norm_l.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.layer_norm_text.{param}"
-            )
-            key_mapping[f"encoder.fusion_layers.{layer}.attn.l_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.attn.text_proj.{param}"
-            )
-            key_mapping[f"encoder.fusion_layers.{layer}.attn.values_l_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.attn.values_text_proj.{param}"
-            )
-            key_mapping[f"encoder.fusion_layers.{layer}.attn.out_l_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.fusion_layer.attn.out_text_proj.{param}"
-            )
-
-        # img deformable self attention
-        for proj in ["sampling_offsets", "attention_weights", "value_proj", "output_proj"]:
-            for param in ["weight", "bias"]:
-                key_mapping[f"encoder.layers.{layer}.self_attn.{proj}.{param}"] = (
-                    f"model.encoder.layers.{layer}.deformable_layer.self_attn.{proj}.{param}"
-                )
-        for param in ["weight", "bias"]:
-            key_mapping[f"encoder.layers.{layer}.norms.0.{param}"] = (
-                f"model.encoder.layers.{layer}.deformable_layer.self_attn_layer_norm.{param}"
-            )
-            key_mapping[f"encoder.layers.{layer}.ffn.layers.0.0.{param}"] = (
-                f"model.encoder.layers.{layer}.deformable_layer.fc1.{param}"
-            )
-            key_mapping[f"encoder.layers.{layer}.ffn.layers.1.{param}"] = (
-                f"model.encoder.layers.{layer}.deformable_layer.fc2.{param}"
-            )
-            key_mapping[f"encoder.layers.{layer}.norms.1.{param}"] = (
-                f"model.encoder.layers.{layer}.deformable_layer.final_layer_norm.{param}"
-            )
-
-        # text self attention
-        for param in ["weight", "bias"]:
-            key_mapping[f"encoder.text_layers.{layer}.self_attn.attn.in_proj_{param}"] = (
-                "split_qkv",
-                (
-                    f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.query.{param}",
-                    f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.key.{param}",
-                    f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.value.{param}",
-                ),
-            )
-            key_mapping[f"encoder.text_layers.{layer}.self_attn.attn.out_proj.{param}"] = (
-                f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.out_proj.{param}"
-            )
-        for param in ["weight", "bias"]:
-            key_mapping[f"encoder.text_layers.{layer}.norms.0.{param}"] = (
-                f"model.encoder.layers.{layer}.text_enhancer_layer.layer_norm_before.{param}"
-            )
-            key_mapping[f"encoder.text_layers.{layer}.ffn.layers.0.0.{param}"] = (
-                f"model.encoder.layers.{layer}.text_enhancer_layer.fc1.{param}"
-            )
-            key_mapping[f"encoder.text_layers.{layer}.ffn.layers.1.{param}"] = (
-                f"model.encoder.layers.{layer}.text_enhancer_layer.fc2.{param}"
-            )
-            key_mapping[f"encoder.text_layers.{layer}.norms.1.{param}"] = (
-                f"model.encoder.layers.{layer}.text_enhancer_layer.layer_norm_after.{param}"
-            )
-
-    ###########
-    # Decoder #
-    ###########
-
-    for param in ["weight", "bias"]:
-        key_mapping[f"decoder.norm.{param}"] = f"model.decoder.layer_norm.{param}"
-
-    for i in [0, 1]:
-        for param in ["weight", "bias"]:
-            key_mapping[f"decoder.ref_point_head.layers.{i}.{param}"] = (
-                f"model.decoder.reference_points_head.layers.{i}.{param}"
-            )
-
-    for layer in range(hf_cfg.encoder_layers):
-        # query self att
-        for param in ["weight", "bias"]:
-            key_mapping[f"decoder.layers.{layer}.self_attn.attn.in_proj_{param}"] = (
-                "split_qkv",
-                (
-                    f"model.decoder.layers.{layer}.self_attn.query.{param}",
-                    f"model.decoder.layers.{layer}.self_attn.key.{param}",
-                    f"model.decoder.layers.{layer}.self_attn.value.{param}",
-                ),
-            )
-            key_mapping[f"decoder.layers.{layer}.self_attn.attn.out_proj.{param}"] = (
-                f"model.decoder.layers.{layer}.self_attn.out_proj.{param}"
-            )
-            key_mapping[f"decoder.layers.{layer}.norms.0.{param}"] = (
-                f"model.decoder.layers.{layer}.self_attn_layer_norm.{param}"
-            )
-
-        # query-text cross att
-        for param in ["weight", "bias"]:
-            key_mapping[f"decoder.layers.{layer}.cross_attn_text.attn.in_proj_{param}"] = (
-                "split_qkv",
-                (
-                    f"model.decoder.layers.{layer}.encoder_attn_text.query.{param}",
-                    f"model.decoder.layers.{layer}.encoder_attn_text.key.{param}",
-                    f"model.decoder.layers.{layer}.encoder_attn_text.value.{param}",
-                ),
-            )
-            key_mapping[f"decoder.layers.{layer}.cross_attn_text.attn.out_proj.{param}"] = (
-                f"model.decoder.layers.{layer}.encoder_attn_text.out_proj.{param}"
-            )
-            key_mapping[f"decoder.layers.{layer}.norms.1.{param}"] = (
-                f"model.decoder.layers.{layer}.encoder_attn_text_layer_norm.{param}"
-            )
-
-        # query-img deformable cross att
-        for proj in ["sampling_offsets", "attention_weights", "value_proj", "output_proj"]:
-            for param in ["weight", "bias"]:
-                key_mapping[f"decoder.layers.{layer}.cross_attn.{proj}.{param}"] = (
-                    f"model.decoder.layers.{layer}.encoder_attn.{proj}.{param}"
-                )
-        for param in ["weight", "bias"]:
-            key_mapping[f"decoder.layers.{layer}.norms.2.{param}"] = (
-                f"model.decoder.layers.{layer}.encoder_attn_layer_norm.{param}"
-            )
-
-        # ffn
-        for param in ["weight", "bias"]:
-            key_mapping[f"decoder.layers.{layer}.ffn.layers.0.0.{param}"] = f"model.decoder.layers.{layer}.fc1.{param}"
-            key_mapping[f"decoder.layers.{layer}.ffn.layers.1.{param}"] = f"model.decoder.layers.{layer}.fc2.{param}"
-            key_mapping[f"decoder.layers.{layer}.norms.3.{param}"] = (
-                f"model.decoder.layers.{layer}.final_layer_norm.{param}"
-            )
-
-    #################
-    # convert model #
-    #################
-
-    # do a copy here so it errors out with any missed or extra keys
-    hf_state = {}
-
-    # map keys
-    for mm_key, hf_key in key_mapping.items():
-        # str, str -> one to one
-        if isinstance(hf_key, str):
-            hf_state[hf_key] = mm_state[mm_key]
-        # str, tup[str, tup[str]] -> either chunk into qkv or duplicate
-        elif isinstance(hf_key, tuple):
-            mapping_type, keys = hf_key
-            if mapping_type == "split_qkv":
-                q_param, k_param, v_param = mm_state[mm_key].chunk(3)
-                q_key, k_key, v_key = keys
-                hf_state[q_key] = q_param
-                hf_state[k_key] = k_param
-                hf_state[v_key] = v_param
-            elif mapping_type == "duplicate":
-                for key in keys:
-                    hf_state[key] = mm_state[mm_key]
+        elif k.startswith("encoder"):
+            if "self_attn.attn.in_proj" in k:
+                q_param, k_param, v_param = new_state_dict.pop(k).chunk(3)
+                new_state_dict[k.replace("in", "query")] = q_param
+                new_state_dict[k.replace("in", "key")] = k_param
+                new_state_dict[k.replace("in", "value")] = v_param
+        elif k.startswith("decoder"):
+            if "self_attn.attn.in_proj" in k or "cross_attn_text.attn.in_proj" in k:
+                q_param, k_param, v_param = new_state_dict.pop(k).chunk(3)
+                new_state_dict[k.replace("in", "query")] = q_param
+                new_state_dict[k.replace("in", "key")] = k_param
+                new_state_dict[k.replace("in", "value")] = v_param
+        elif k.startswith("bbox_head"):
+            num_decoder_layers = config.decoder_layers
+            match = re.match(r"bbox_head.(cls|reg)_branches.(\d+).(.*)", k)
+            cls_or_reg = match.group(1)
+            layer_idx = int(match.group(2))
+            suffix = match.group(3)
+            if layer_idx < num_decoder_layers:
+                new_key = f"decoder.bbox_head.{cls_or_reg}_branches.{layer_idx}.{suffix}"
+                new_state_dict[new_key] = new_state_dict[k]  # copy
             else:
-                raise ValueError(f"Unknown mapping type: {mapping_type}")
+                new_key = f"encoder.bbox_head.{cls_or_reg}_branch.{suffix}"
+                new_state_dict[new_key] = new_state_dict.pop(k)  # move
 
-    # convert downsample params
-    for k in hf_state:
-        if "downsample.reduction" in k:
-            hf_state[k] = correct_unfold_reduction_order(hf_state[k])
-        if "downsample.norm" in k:
-            hf_state[k] = correct_unfold_norm_order(hf_state[k])
+        # remove unused params
+        if (
+            k == "dn_query_generator.label_embedding.weight"
+            or k == "language_model.language_backbone.body.model.embeddings.position_ids"
+            or k == "image_seperate.weight"
+            or k.startswith("lmm")
+            or k.startswith("connector")
+            or k.startswith("region_connector")
+            or k.startswith("ref_point_head")
+        ):
+            new_state_dict.pop(k)
+
+    return new_state_dict
+
+
+# Copied from transformers/models/siglip2/convert_siglip2_to_hf.py
+def convert_old_keys_to_new_keys(state_dict_keys: list) -> dict:
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
+
+
+def convert_mm_to_hf_state(original_state: dict, hf_cfg: MMGroundingDinoConfig) -> dict:
+    original_state = preprocess_old_state(original_state, hf_cfg)
+    original_state_keys = list(original_state.keys())
+    original_to_hf_key_map = convert_old_keys_to_new_keys(original_state_keys)
+
+    hf_state = {}
+    for original_key in original_state_keys:
+        hf_key = original_to_hf_key_map[original_key]
+        hf_state[hf_key] = original_state.pop(original_key)
 
     return hf_state
 
 
-def convert_mm_to_hf_config(mm_cfg: mmengine.Config) -> MMGroundingDinoConfig:
-    hf_backbone_cfg = SwinConfig(
-        embed_dim=mm_cfg["model"]["backbone"]["embed_dims"],
-        depths=mm_cfg["model"]["backbone"]["depths"],
-        num_heads=mm_cfg["model"]["backbone"]["num_heads"],
-        window_size=mm_cfg["model"]["backbone"]["window_size"],
-        mlp_ratio=mm_cfg["model"]["backbone"]["mlp_ratio"],
-        qkv_bias=mm_cfg["model"]["backbone"]["qkv_bias"],
-        out_indices=[idx + 1 for idx in mm_cfg["model"]["backbone"]["out_indices"]],
-    )
-    hf_cfg = MMGroundingDinoConfig(
-        backbone_config=hf_backbone_cfg,
-        num_queries=mm_cfg["model"]["num_queries"],
-        num_feature_levels=mm_cfg["model"]["neck"]["num_outs"],
-    )
-    return hf_cfg
+def prepare_test_inputs():
+    image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(image_url, stream=True).raw)
+    text = [["cat", "remote"]]
+    return image, text
 
 
-def convert_mm_to_hf(mm_cfg: mmengine.Config, mm_state: dict) -> tuple[MMGroundingDinoConfig, dict]:
-    hf_cfg = convert_mm_to_hf_config(mm_cfg)
+@torch.no_grad()
+def convert_mm_grounding_dino_checkpoint(
+    model_name: str,
+    verify_outputs: bool,
+    push_to_hub: bool,
+    hub_user_name: str,
+) -> tuple[MMGroundingDinoConfig, dict]:
+    # Load original state
+    checkpoint_url = MODEL_NAME_TO_CHECKPOINT_URL_MAPPING[model_name]
+    print(f"Loading checkpoint from: {checkpoint_url}")
+    ckpt = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
+    mm_state = ckpt["state_dict"]
+
+    # Create hf model and processor
+    print("Creating model...")
+    hf_cfg = get_mm_grounding_dino_config(model_name)
     hf_state = convert_mm_to_hf_state(mm_state, hf_cfg)
+    hf_model = MMGroundingDinoForObjectDetection(hf_cfg).eval()
+    hf_model.load_state_dict(hf_state)
+    hf_processor = get_mm_grounding_dino_processor()
+
+    # Verify outputs if needed
+    if verify_outputs:
+        print("Running inference to verify outputs...")
+        image, text = prepare_test_inputs()
+        model_inputs = hf_processor(images=image, text=text, return_tensors="pt")
+        model_outputs = hf_model(**model_inputs)
+        results = hf_processor.post_process_grounded_object_detection(
+            model_outputs,
+            model_inputs.input_ids,
+            box_threshold=0.4,
+            text_threshold=0.3,
+        )
+        result = results[0]
+        print(result)
+        expected = MODEL_NAME_TO_EXPECTED_OUTPUT_MAPPING[model_name]
+        for key in expected:
+            torch.testing.assert_close(result[key], expected[key], atol=1e-3, rtol=1e-3)
+        print("Outputs match.")
+
+    # Push to hub if needed
+    if push_to_hub:
+        print("Pushing to hub...")
+        hub_url = f"{hub_user_name}/{model_name}"
+        hf_model.push_to_hub(hub_url)
+        hf_processor.push_to_hub(hub_url)
+        print(f"Pushed to huggingface hub at: {hub_url}.")
+
     return hf_cfg, hf_state
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--checkpoint",
+        "--model-name",
         required=True,
         type=str,
-        choices=list(CHECKPOINT_URL_MAP.keys()),
+        choices=list(MODEL_NAME_TO_CHECKPOINT_URL_MAPPING.keys()),
         help="URL to the original mm grounding dino checkpoint.",
     )
     parser.add_argument("--hub-user-name", type=str, help="User name on the huggingface hub.")
     parser.add_argument("--push-to-hub", action="store_true", help="Whether to push model to hub or not.")
-    parser.add_argument("--draw-result", action="store_true", help="Whether to draw and display predictions or not.")
+    parser.add_argument(
+        "--verify-outputs", action="store_true", help="Whether to verify that model output is correct or not."
+    )
     return parser.parse_args()
 
 
-def main(args):
-    # download weights
-    ckpt = torch.hub.load_state_dict_from_url(CHECKPOINT_URL_MAP[args.checkpoint], map_location="cpu")
-    mm_cfg = mmengine.Config.fromstring(ckpt["meta"]["cfg"], file_format=".py")
-    mm_state = ckpt["state_dict"]
-
-    # convert model
-    hf_cfg, hf_state = convert_mm_to_hf(mm_cfg, mm_state)
-    hf_model = MMGroundingDinoForObjectDetection(hf_cfg).eval()
-    print(hf_model.load_state_dict(hf_state, strict=True))
-
-    # check predictions
-    image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(image_url, stream=True).raw)
-    text = [["cat", "remote"]]
-
-    # set up processor
-    img_processor = GroundingDinoImageProcessor()
-    txt_processor = BertTokenizer.from_pretrained("bert-base-uncased")
-    processor = GroundingDinoProcessor(img_processor, txt_processor)
-
-    # run inference
-    inputs = processor(images=image, text=text, return_tensors="pt")
-    with torch.no_grad():
-        outputs = hf_model(**inputs)
-    results = processor.post_process_grounded_object_detection(
-        outputs, inputs.input_ids, box_threshold=0.4, text_threshold=0.3, target_sizes=[image.size[::-1]]
-    )
-    result = results[0]
-    for box, score, labels in zip(result["boxes"], result["scores"], result["text_labels"]):
-        box = [round(x, 2) for x in box.tolist()]
-        print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
-
-    # draw results if needed
-    if args.draw_result:
-        try:
-            from torchvision.transforms.v2.functional import pil_to_tensor, to_pil_image
-            from torchvision.utils import draw_bounding_boxes
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError('Please install "torchvision" if you want to draw the result.') from e
-
-        img_draw = to_pil_image(
-            draw_bounding_boxes(
-                pil_to_tensor(image),
-                result["boxes"],
-                [f"{label}: {score:.2f}" for label, score in zip(result["text_labels"], result["scores"])],
-            )
-        )
-        img_draw.show()
-
-    # push to hub if needed
-    if args.push_to_hub:
-        if getattr(args, "hub_user_name", None) is None:
-            raise ValueError('You should provide "--hub-user-name" when pushing to hub.')
-        hf_model.push_to_hub(f"{args.hub_user_name}/{args.checkpoint}")
-        processor.push_to_hub(f"{args.hub_user_name}/{args.checkpoint}")
-
-
 if __name__ == "__main__":
-    main(parse_args())
+    args = parse_args()
+    convert_mm_grounding_dino_checkpoint(
+        args.model_name,
+        args.verify_outputs,
+        args.push_to_hub,
+        args.hub_user_name,
+    )
