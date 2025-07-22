@@ -1075,7 +1075,7 @@ def check_model_inputs(func):
             if key == "hidden_states":
                 if hasattr(outputs, "vision_hidden_states"):
                     collected_outputs[key] += (outputs.vision_hidden_states,)
-                else:
+                elif hasattr(outputs, "last_hidden_state"):
                     collected_outputs[key] += (outputs.last_hidden_state,)
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":

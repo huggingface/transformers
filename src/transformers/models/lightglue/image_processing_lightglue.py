@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 
 def is_grayscale(
-    image: ImageInput,
+    image: np.ndarray,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
