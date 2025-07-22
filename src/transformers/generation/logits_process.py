@@ -361,13 +361,24 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         if self.prompt_ignore_length:
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
-        score = torch.gather(scores, 1, input_ids)
+        # Select the last generated token for each sequence
+        last_token_ids = input_ids[:, -1]  # shape: (batch_size,)
 
-        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
-        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        # Gather scores for those tokens
+        batch_indices = torch.arange(scores.size(0), device=scores.device)
+        token_scores = scores[batch_indices, last_token_ids]
 
-        scores_processed = scores.scatter(1, input_ids, score)
-        return scores_processed
+        # Apply penalty
+        adjusted_scores = torch.where(
+            token_scores < 0,
+            token_scores * self.penalty,
+            token_scores / self.penalty,
+        )
+
+        # Write back into scores tensor
+        scores[batch_indices, last_token_ids] = adjusted_scores
+
+        return scores
 
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
