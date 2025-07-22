@@ -188,9 +188,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         **kwargs: Unpack[Glm4vFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-        """
         return super().preprocess(images, **kwargs)
 
 

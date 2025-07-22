@@ -743,7 +743,7 @@ def get_sine_pos_embed(
 
 @auto_docstring
 class MMGroundingDinoPreTrainedModel(PreTrainedModel):
-    config_class = MMGroundingDinoConfig
+    config: MMGroundingDinoConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 
