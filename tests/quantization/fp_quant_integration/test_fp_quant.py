@@ -165,7 +165,7 @@ class FPQuantPseudoquantTest(unittest.TestCase):
         quantization_config = FPQuantConfig(pseudoquantization=True)
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config, low_cpu_mem_usage=True
+            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
         )
 
     def tearDown(self):
