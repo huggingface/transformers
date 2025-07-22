@@ -1271,7 +1271,7 @@ class ContinuousBatchingManager:
 
     @traced(span_name="logit_processing")
     def _process_logit(self, batch_data, logits):
-        # Pass continuous batching context to logits processor if it supports it
+        # Pass continuous batching context to logits processor if it supports it. TODO we should find a way to make this a little bit cleaner!
         if hasattr(self.logit_processor, "set_continuous_batching_context"):
             self.logit_processor.set_continuous_batching_context(
                 batch_data["logits_indices"], batch_data["cumulative_seqlens_q"]
