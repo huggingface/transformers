@@ -1543,43 +1543,8 @@ class HybridCache(Cache):
         super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
 
 
-class HybridChunkedCache(Cache):
-    """
-    Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
-    attention and global attention in every other layer, with support for prefill chunking (originally implemented
-    for Llama4).
-    Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
-    for global attention. For more information, see the documentation of each subcomponent cache class.
-
-    See `Cache` for details on common methods that are implemented by all cache classes.
-
-    Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
-
-        >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
-
-        >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
-
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = HybridCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        HybridCache()
-        ```
-    """
-
-    def __init__(self, config: PretrainedConfig, *args, **kwargs):
-        if hasattr(config, "layer_types"):
-            layer_classes = [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
-        else:
-            # In this case, fall back to StaticCache
-            layer_classes = [StaticLayer] * config.num_hidden_layers
-        super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
+# The mapping already handles dispatching the correct layers in Hybrid, this is only used for BC
+class HybridChunkedCache(HybridCache): ...
 
 
 class OffloadedHybridCache(HybridChunkedCache):
