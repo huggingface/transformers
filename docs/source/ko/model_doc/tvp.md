@@ -18,20 +18,20 @@ specific language governing permissions and limitations under the License.
 
 ## Overview [[개요]]
 
-텍스트-시각적 프롬프팅(Text-Visual Prompting, TVP) 프레임워크는 Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding이 발표한 논문 [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995)에서 제안되었습니다.
+Text-Visual Prompting(TVP) 프레임워크는 Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding이 발표한 논문 [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995)에서 제안되었습니다.
 
 논문의 초록은 다음과 같습니다:
 
 *본 논문에서는 길고, 편집되지 않은 비디오에서 문장으로 설명된 순간의 시작/종료 시점을 예측하는 것을 목표로 하는 Temporal Video Grounding(TVG) 문제를 다룹니다. 세밀한 3D 시각적 특징 덕분에 TVG 기술은 최근 몇 년 동안 놀라운 발전을 이뤘습니다. 하지만 3D 합성곱 신경망(CNN)의 높은 복잡성으로 인해 밀도 높은 3D 시각적 특징을 추출하는 데 시간이 오래 걸리고 그만큼 많은 메모리와 연산 자원을 필요로 합니다. 효율적인 TVG를 위해, 본 논문에서는 TVG 모델의 시각적 입력과 텍스트 특징 모두에 최적화된 교란 패턴('프롬프트'라고 부름)을 통합하는 새로운 Text-Visual Prompting(TVP) 프레임워크를 제안합니다. 3D CNN과 뚜렷이 대비되게 TVP가 2D TVG 모델에서 비전 인코더와 언어 인코더를 효과적으로 공동 학습할 수 있게 하고, 낮은 복잡도의 희소한 2D 시각적 특징만을 사용하여 크로스 모달 특징 융합의 성능을 향상시킵니다. 더 나아가, TVG의 효율적인 학습을 위해 Temporal-Distance IoU(TDIoU) 손실 함수를 제안합니다. 두 개의 벤치마크 데이터 세트인 Charades-STA와 ActivityNet Captions 데이터셋에 대한 실험을 통해, 제안된 TVP가 2D TVG의 성능을 크게 향상시키고(예: Charades-STA에서 9.79% 향상, ActivityNet Captions에서 30.77% 향상) 3D 시각적 특징을 사용하는 TVG에 비해 5배의 추론 가속을 달성함을 실험적으로 입증합니다.*
 
-이 연구는 Temporal Video Grounding(TVG)을 다룹니다. TVG는 문장으로 설명된 특정 이벤트의 시작 및 종료 시간을 긴 비디오에서 정확히 찾아내는 과정입니다. TVG를 향상시키기 위해 Text-Visual Prompting(TVP)이 제안되었습니다. TVP는 '프롬프트'라고 알려진 특별히 설계된 패턴을 TVG 모델의 시각적(이미지 기반) 및 텍스트(단어 기반) 입력 구성 요소 모두에 통합하는 것을 방식입니다. 이 프롬프트는 추가적인 시공간적 컨텍스트를 제공함으로써 모델이 비디오 내 이벤트 시점을 정확하게 예측하는 능력을 향상시킵니다. 이 접근 방식은 3D 시각적 입력 대신 2D 입력을 사용합니다. 3D 입력은 보다 풍부한 시공간적 세부 정보를 제공하지만 처리하는 데 시간이 더 많이 걸립니다. 프롬프팅 메소드와 함께 2D 입력을 사용하면 유사한 수준의 컨텍스트와 정확도를 더 효율적으로 제공하는 것을 목표로 합니다.
+이 연구는 Temporal Video Grounding(TVG)을 다룹니다. TVG는 문장으로 설명된 특정 이벤트의 시작 및 종료 시점을 긴 비디오에서 정확히 찾아내는 과정입니다. TVG 성능을 향상시키기 위해 Text-Visual Prompting(TVP)이 제안되었습니다. TVP는 '프롬프트'라고 알려진 특별히 설계된 패턴을 TVG 모델의 시각적(이미지 기반) 및 텍스트(단어 기반) 입력 구성 요소 모두에 통합하는 것을 방식입니다. 이 프롬프트는 추가적인 시공간적 컨텍스트를 제공함으로써 모델이 비디오 내 이벤트 시점의 예측 정확도를 높입니다. 이 접근 방식은 3D 시각적 입력 대신 2D 입력을 사용합니다. 3D 입력은 보다 풍부한 시공간적 세부 정보를 제공하지만 처리하는 데 시간이 더 많이 걸립니다. 따라서 프롬프팅 메소드와 함께 2D 입력을 사용하여 이와 유사한 수준의 컨텍스트와 정확도를 더 효율적으로 제공하는 것을 목표로 합니다.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tvp_architecture.png"
 alt="drawing" width="600"/>
 
 <small> TVP 아키텍처. <a href="https://huggingface.co/papers/2303.04995">원본 논문에서 발췌.</a> </small>
 
-이 모델은 [Jiqing Feng](https://huggingface.co/Jiqing)님이 기여했습니다. 원본 코드는 [여기](https://github.com/intel/TVP)에서 찾을 수 있습니다.
+이 모델은 [Jiqing Feng](https://huggingface.co/Jiqing)님이 기여했습니다. 원본 코드는 [이 곳](https://github.com/intel/TVP)에서 찾을 수 있습니다.
 
 ## 사용 팁 및 예시 [[usage-tips-and-examples]]
 
