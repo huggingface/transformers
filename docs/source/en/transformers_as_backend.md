@@ -235,7 +235,7 @@ class MyMultimodalProcessor(ProcessorMixin):
 ```
 </details>
 
-## Additional Resources
+## Resources
 
 * Read the [Transformers backend integration in vLLM](https://blog.vllm.ai/2025/04/11/transformers-backend.html) blog post for more details about the Transformers backend in vLLM.
 * Read the [Transformers backend integration in SGLang](https://huggingface.co/blog/transformers-backend-sglang) blog post for more details about the Transformers backend in SGLang.
