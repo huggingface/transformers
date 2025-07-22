@@ -56,7 +56,13 @@ llm = sgl.Engine("meta-llama/Llama-3.2-1B-Instruct", impl="transformers")
 print(llm.generate(["The capital of France is"], {"max_new_tokens": 20})[0])
 ```
 
-Or launch as an OpenAI-compatible server:
+Add `impl transformers` to `sglang.launch_server` to launch a server with a Transformers' model.
+          
+      
+    
+    
+  
+
 
 ```bash
 python3 -m sglang.launch_server \
