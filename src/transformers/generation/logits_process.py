@@ -367,8 +367,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         if self.prompt_ignore_length:
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
-        input_ids = input_ids.to(torch.int64)
-
         if scores.dim() == 3:
             if self.logits_indices is not None and self.cumulative_seqlens_q is not None:
                 batch_size, seq_len, vocab_size = scores.shape
