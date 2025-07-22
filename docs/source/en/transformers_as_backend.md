@@ -136,7 +136,9 @@ class MyModel(PreTrainedModel):
 
 3. This step is optional, but if you want to support tensor parallel and/or pipeline parallel features, add the following keys to the config.
     * `base_model_tp_plan` enables [tensor parallelism](./perf_infer_gpu_multi) by mapping fully qualified layer name patterns to tensor parallel styles. Only the `"colwise"` and `"rowwise"` partitioning strategies are currently supported.
-    * `base_model_pp_plan` for pipeline parallelism - a dict that maps direct child layer names to tuples of lists of strs.The list in the first element of the tuple contains the names of the input arguments. The list in the last element of the tuple contains the names of the variables the layer outputs to in your modeling code
+    * `base_model_pp_plan` enables pipeline parallelism by mapping direct child layer names to tuples of lists of strings. The list in the first element of the tuple contains the names of the input arguments. The list in the last element of the tuple contains the names of the variables the layer outputs to in the modeling code.
+ 
+ Expand the code below for an example.
 
 <details>
 <summary>configuration_my_model.py</summary>
