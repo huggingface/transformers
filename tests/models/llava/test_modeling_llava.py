@@ -656,11 +656,7 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
 
         EXPECTED_GENERATIONS = Expectations(
             {
-                ("cuda", 7): [
-                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-                                'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
-                            ],
-                ("xpu", 3): [
+                (None, None): [
                                 'What breed is the dog?The dog in the image is a black Labrador Retriever.',
                                 'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
                             ],
