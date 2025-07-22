@@ -237,7 +237,5 @@ class MyMultimodalProcessor(ProcessorMixin):
 
 ## Additional Resources
 
-Refer to the blog posts below to know more about how each inference server was integrated.
-
-* [Blog Post in vLLM](https://blog.vllm.ai/2025/04/11/transformers-backend.html)
-* [Blog Post in SGLang](https://huggingface.co/blog/transformers-backend-sglang)
+* Read the [Transformers backend integration in vLLM](https://blog.vllm.ai/2025/04/11/transformers-backend.html) blog post for more details about the Transformers backend in vLLM.
+* Read the [Transformers backend integration in SGLang](https://huggingface.co/blog/transformers-backend-sglang) blog post for more details about the Transformers backend in SGLang.
