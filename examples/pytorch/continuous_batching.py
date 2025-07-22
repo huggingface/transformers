@@ -11,10 +11,7 @@ torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    attn_implementation="kernels-community/metal-flash-sdpa:paged_attention",
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
+    model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
@@ -31,7 +28,7 @@ generation_config = GenerationConfig(
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
+
 # --- Example 1: Simple Version using generate_batch ---
 print("--- Running CB Generation Example ---")
 
