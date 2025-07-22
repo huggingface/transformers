@@ -39,13 +39,13 @@ alt="drawing" width="600"/>
 
 TVP는 시각 인코더와 크로스 모달 인코더로 구성됩니다. 범용 시각 프롬프트와 텍스트 프롬프트 세트가 각각 샘플링된 비디오 프레임과 텍스트 특징에 통합됩니다. 특히, 서로 다른 시각 프롬프트 세트가 편집되지 않은 한 비디오에서 균일하게 샘플링된 프레임에 순서대로 적용됩니다.
 
-이 모델의 목표는 학습 가능한 프롬프트를 시각적 입력과 텍스트 특징 모두에 통합하여 시간적 비디오 그라운딩(TVG) 문제를 해결하는 것입니다.
+이 모델의 목표는 학습 가능한 프롬프트를 시각적 입력과 텍스트 특징 모두에 통합하여 Temporal Video Grounding(TVG) 문제를 해결하는 것입니다.
 
 원칙적으로, 제안된 아키텍처에는 어떤 시각 인코더나 교차 모달 인코더라도 적용할 수 있습니다.
 
 [TvpProcessor]는 [BertTokenizer]와 [TvpImageProcessor]를 단일 인스턴스로 래핑하여 텍스트를 인코딩하고 이미지를 각각 준비합니다.
 
-다음 예시는 [TvpProcessor]와 [TvpForVideoGrounding]을 사용하여 시간적 비디오 그라운딩을 실행하는 방법을 보여줍니다.
+다음 예시는 [TvpProcessor]와 [TvpForVideoGrounding]을 사용하여 TVG를 실행하는 방법을 보여줍니다.
 
 ```python
 import av
@@ -58,21 +58,21 @@ from transformers import AutoProcessor, TvpForVideoGrounding
 
 def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
     '''
-    Convert the video from its original fps to the target_fps and decode the video with PyAV decoder.
+    원본 fps의 비디오를 지정한 fps(target_fps)로 변환하고 PyAV 디코더로 비디오를 디코딩합니다.
     Args:
-        container (container): pyav container.
-        sampling_rate (int): frame sampling rate (interval between two sampled frames).
-        num_frames (int): number of frames to sample.
-        clip_idx (int): if clip_idx is -1, perform random temporal sampling.
-            If clip_idx is larger than -1, uniformly split the video to num_clips
-            clips, and select the clip_idx-th video clip.
-        num_clips (int): overall number of clips to uniformly sample from the given video.
-        target_fps (int): the input video may have different fps, convert it to
-            the target video fps before frame sampling.
+        container (container): pyav 컨테이너 객체입니다.
+        sampling_rate (int): 프레임 샘플링 속도입니다.(샘플링된 두개의 프레임 사이의 간격을 말합니다)
+        num_frames (int): 샘플링할 프레임 수입니다.
+        clip_idx (int): clip_idx가 -1이면 시간 축에서 무작위 샘플링을 수행합니다.
+            clip_idx가 -1보다 크면 비디오를 num_clips 개로 균등 분할한 후
+            clip_idx번째 비디오 클립을 선택합니다.
+        num_clips (int): 주어진 비디오에서 균일하게 샘플링할 전체 클립 수입니다.
+        target_fps (int): 입력 비디오의 fps가 다를 수 있으므로, 샘플링 전에
+            지정한 fps로 변환합니다
     Returns:
-        frames (tensor): decoded frames from the video. Return None if the no
-            video stream was found.
-        fps (float): the number of frames per second of the video.
+        frames (tensor): 비디오에서 디코딩된 프레임입니다. 비디오 스트림을 찾을 수 없는 경우
+            None을 반환합니다.
+        fps (float): 비디오의 초당 프레임 수입니다.
     '''
     video = container.streams.video[0]
     fps = float(video.average_rate)
@@ -98,19 +98,19 @@ def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, targe
 
 def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
     '''
-    Decode the video and perform temporal sampling.
+    비디오를 디코딩하고 시간 축 샘플링을 수행합니다.
     Args:
-        container (container): pyav container.
-        sampling_rate (int): frame sampling rate (interval between two sampled frames).
-        num_frames (int): number of frames to sample.
-        clip_idx (int): if clip_idx is -1, perform random temporal sampling.
-            If clip_idx is larger than -1, uniformly split the video to num_clips
-            clips, and select the clip_idx-th video clip.
-        num_clips (int): overall number of clips to uniformly sample from the given video.
-        target_fps (int): the input video may have different fps, convert it to
-            the target video fps before frame sampling.
+        container (container): pyav 컨테이너 객체입니다.
+        sampling_rate (int): 프레임 샘플링 속도입니다.(샘플링된 두개의 프레임 사이의 간격을 말합니다)
+        num_frames (int): 샘플링할 프레임 수입니다.
+        clip_idx (int): clip_idx가 -1이면 시간 축에서 무작위 샘플링을 수행합니다.
+            clip_idx가 -1보다 크면 비디오를 num_clips 개로 균등 분할한 후
+            clip_idx번째 비디오 클립을 선택합니다.
+        num_clips (int): 주어진 비디오에서 균일하게 샘플링할 전체 클립 수입니다.
+        target_fps (int): 입력 비디오의 fps가 다를 수 있으므로, 샘플링 전에
+            지정한 fps로 변환합니다
     Returns:
-        frames (tensor): decoded frames from the video.
+        frames (tensor): 비디오에서 디코딩된 프레임입니다.
     '''
     assert clip_idx >= -2, "Not a valid clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
