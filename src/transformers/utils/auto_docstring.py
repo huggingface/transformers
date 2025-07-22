@@ -1170,7 +1170,8 @@ def format_args_docstring(docstring, model_name):
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        docstring = docstring.replace(f"{{{placeholder}}}", value)
+        if placeholder is not None:
+            docstring = docstring.replace(f"{{{placeholder}}}", value)
 
     return docstring
 

@@ -85,6 +85,8 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_flash_attn,
+    require_kernels,
+    require_torch_mps,
     require_flash_attn_3,
     require_non_hpu,
     require_safetensors,
@@ -3563,6 +3565,24 @@ class ModelTesterMixin:
                 else:
                     assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
+    @require_kernels
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_kernel_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
+
+    @require_flash_attn
+    @require_torch_mps
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_kernel_mps_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(
+            attn_implementation="kernels-community/metal-flash-sdpa", padding_side="left"
+        )
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -4255,7 +4275,6 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn:
-
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
