@@ -85,7 +85,7 @@ def get_prs_by_label(label):
         "--limit",
         "100",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     result.check_returncode()
     prs = json.loads(result.stdout)
     for pr in prs:
@@ -97,7 +97,9 @@ def get_prs_by_label(label):
 
 def get_commit_timestamp(commit_sha):
     """Get UNIX timestamp of a commit using git."""
-    result = subprocess.run(["git", "show", "-s", "--format=%ct", commit_sha], capture_output=True, text=True)
+    result = subprocess.run(
+        ["git", "show", "-s", "--format=%ct", commit_sha], check=False, capture_output=True, text=True
+    )
     result.check_returncode()
     return int(result.stdout.strip())
 
@@ -115,6 +117,7 @@ def commit_in_history(commit_sha, base_branch="HEAD"):
     """Return True if commit is already part of base_branch history."""
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", commit_sha, base_branch],
+        check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

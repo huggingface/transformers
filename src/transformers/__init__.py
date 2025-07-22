@@ -371,7 +371,6 @@ else:
         "EncoderDecoderCache",
         "HQQQuantizedCache",
         "HybridCache",
-        "MambaCache",
         "OffloadedCache",
         "OffloadedStaticCache",
         "QuantizedCache",

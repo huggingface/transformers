@@ -1375,9 +1375,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
 
                 for i, conv in enumerate(conversations):
-                    chat_string = tokenizer_r.apply_chat_template(
-                        conversations[i], tokenize=False, chat_template=dummy_template
-                    )
+                    chat_string = tokenizer_r.apply_chat_template(conv, tokenize=False, chat_template=dummy_template)
                     assistant_start = output.char_to_token(i, chat_string.index(assistant_prefix_suffix[i][0][0]))
                     assistant_end = output.char_to_token(
                         i,

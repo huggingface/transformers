@@ -801,7 +801,7 @@ class TrainingArguments:
             `_apply_liger_kernel_to_instance` function, which specifies which kernels to apply. Available options vary by model but typically
             include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', 'rms_norm', etc. If `None`, use the default kernel configurations.
 
-        average_tokens_across_devices (`bool`, *optional*, defaults to `False`):
+        average_tokens_across_devices (`bool`, *optional*, defaults to `True`):
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
@@ -1554,7 +1554,7 @@ class TrainingArguments:
     )
 
     average_tokens_across_devices: Optional[bool] = field(
-        default=False,
+        default=True,
         metadata={
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
             "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
