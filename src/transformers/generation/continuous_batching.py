@@ -948,7 +948,7 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
-        logger.warning(
+        logger.info(
             f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
@@ -1119,7 +1119,8 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
-        self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
+        generation_config = model.generation_config if generation_config is None else generation_config
+        self.logit_processor = self.model._get_logits_processor(generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
         self.profile = getattr(generation_config, "profile", False)
         self.manual_eviction = manual_eviction

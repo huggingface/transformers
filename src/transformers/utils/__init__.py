@@ -21,7 +21,7 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
-from .args_doc import (
+from .auto_docstring import (
     ClassAttrs,
     ClassDocstring,
     ImageProcessorArgs,
@@ -251,6 +251,7 @@ from .import_utils import (
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,

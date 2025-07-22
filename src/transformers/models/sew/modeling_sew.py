@@ -299,7 +299,6 @@ class SEWAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -514,7 +513,7 @@ class SEWEncoder(nn.Module):
 
 @auto_docstring
 class SEWPreTrainedModel(PreTrainedModel):
-    config_class = SEWConfig
+    config: SEWConfig
     base_model_prefix = "sew"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
