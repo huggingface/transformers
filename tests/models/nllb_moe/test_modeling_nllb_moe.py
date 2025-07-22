@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -492,11 +491,11 @@ class NllbMoeRouterTest(unittest.TestCase):
         mask = mask.reshape(-1)
         set_seed(0)
         hidden_states = torch.rand((self.batch_size, self.sequence_length, self.config.hidden_size))
-        classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
+        classifier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
         hf_router = NllbMoeTop2Router(self.config)
 
         _, _, hidden_dim = hidden_states.shape
-        logits = classfier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
+        logits = classifier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
         top_1_mask, router_probs = hf_router.route_tokens(logits, padding_mask=mask)
         torch.argmax(top_1_mask, dim=-1)
         router_mask = router_probs.bool()

@@ -29,7 +29,7 @@ The Qwen2-Audio is the new model series of large audio-language models from the 
 * voice chat: users can freely engage in voice interactions with Qwen2-Audio without text input
 * audio analysis: users could provide audio and text instructions for analysis during the interaction
 
-It was proposed in [Qwen2-Audio Technical Report](https://arxiv.org/abs/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou. 
+It was proposed in [Qwen2-Audio Technical Report](https://huggingface.co/papers/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou.
 
 The abstract from the paper is the following:
 
@@ -39,6 +39,9 @@ The abstract from the paper is the following:
 ## Usage tips
 
 `Qwen2-Audio-7B` and `Qwen2-Audio-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ### Inference
 
@@ -100,7 +103,7 @@ for message in conversation:
         for ele in message["content"]:
             if ele["type"] == "audio":
                 audios.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()), 
+                    BytesIO(urlopen(ele['audio_url']).read()),
                     sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
@@ -125,7 +128,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
 
 conversation = [
-    {'role': 'system', 'content': 'You are a helpful assistant.'}, 
+    {'role': 'system', 'content': 'You are a helpful assistant.'},
     {"role": "user", "content": [
         {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
         {"type": "text", "text": "What's that sound?"},
@@ -148,7 +151,7 @@ for message in conversation:
             if ele["type"] == "audio":
                 audios.append(
                     librosa.load(
-                        BytesIO(urlopen(ele['audio_url']).read()), 
+                        BytesIO(urlopen(ele['audio_url']).read()),
                         sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
@@ -203,7 +206,7 @@ for conversation in conversations:
                 if ele["type"] == "audio":
                     audios.append(
                         librosa.load(
-                            BytesIO(urlopen(ele['audio_url']).read()), 
+                            BytesIO(urlopen(ele['audio_url']).read()),
                             sr=processor.feature_extractor.sampling_rate)[0]
                     )
 
@@ -221,13 +224,18 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 
 [[autodoc]] Qwen2AudioConfig
 
-## Qwen2AudioConfig
+## Qwen2AudioEncoderConfig
 
 [[autodoc]] Qwen2AudioEncoderConfig
 
 ## Qwen2AudioProcessor
 
 [[autodoc]] Qwen2AudioProcessor
+
+## Qwen2AudioEncoder
+
+[[autodoc]] Qwen2AudioEncoder
+    - forward
 
 ## Qwen2AudioForConditionalGeneration
 

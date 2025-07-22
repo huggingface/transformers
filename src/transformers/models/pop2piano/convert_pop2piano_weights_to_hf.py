@@ -26,7 +26,7 @@ from transformers import Pop2PianoConfig, Pop2PianoForConditionalGeneration
 
 # This weights were downloaded from the official pop2piano repository
 # https://huggingface.co/sweetcocoa/pop2piano/blob/main/model-1999-val_0.67311615.ckpt
-official_weights = torch.load("./model-1999-val_0.67311615.ckpt")
+official_weights = torch.load("./model-1999-val_0.67311615.ckpt", weights_only=True)
 state_dict = {}
 
 

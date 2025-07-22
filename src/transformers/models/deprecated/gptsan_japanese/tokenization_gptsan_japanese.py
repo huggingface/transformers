@@ -19,7 +19,7 @@ import json
 import os
 import re
 import sys
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -125,7 +125,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         emoji_file (`str`):
             File containing the emoji.
         unk_token (`str`, *optional*, defaults to `"<|nottoken|>"`):
-            The token used for unknown charactor
+            The token used for unknown character
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
         bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
@@ -237,7 +237,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         text = "".join(words)
         return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -268,8 +268,8 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         # docstyle-ignore
         """
         The tokenizer returns token_type_ids as separators between the Prefix part and the rest.
@@ -318,7 +318,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
+            list[TextInput], list[TextInputPair], list[PreTokenizedInput], list[PreTokenizedInputPair]
         ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -372,7 +372,7 @@ class SubWordJapaneseTokenizer:
     - Decoding byte0~byte255 tokens correctly
     - Added bagofword token handling
 
-    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
+    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT License according to the
     original repository.
 
     MIT License
@@ -427,7 +427,7 @@ class SubWordJapaneseTokenizer:
             )
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
-        self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
+        self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))
 
     def __len__(self):
         return len(self.ids_to_tokens)
@@ -513,3 +513,6 @@ class SubWordJapaneseTokenizer:
 
     def convert_id_to_token(self, index):
         return self.ids_to_tokens[index][0]
+
+
+__all__ = ["GPTSanJapaneseTokenizer"]

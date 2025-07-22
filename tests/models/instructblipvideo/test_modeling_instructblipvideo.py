@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -55,7 +53,11 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import InstructBlipVideoForConditionalGeneration, InstructBlipVideoVisionModel
+    from transformers import (
+        InstructBlipVideoForConditionalGeneration,
+        InstructBlipVideoModel,
+        InstructBlipVideoVisionModel,
+    )
 
 
 class InstructBlipVideoVisionModelTester:
@@ -185,9 +187,9 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -222,14 +224,6 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="InstructBlipVideoVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="InstructBlipVideoVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -486,7 +480,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
             "attention_mask": attention_mask,
             "qformer_input_ids": qformer_input_ids,
             "qformer_attention_mask": qformer_attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 
@@ -495,7 +488,10 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
 class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 ):
-    all_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
+    )
+    additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -518,6 +514,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -538,24 +540,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="There's no base InstructBlipVideoModel")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base InstructBlipVideoModel")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(
-        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -680,13 +667,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
-    @unittest.skip(
-        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -714,15 +694,11 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
-                qformer_attn = "sdpa" if model.qformer._supports_sdpa else "eager"
-
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
+                self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.qformer.config._attn_implementation == "eager")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -733,19 +709,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(
-                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
-                ):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 # We will verify our results on an image of cute cats
@@ -766,7 +735,8 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
     def test_inference_vicuna_7b(self):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b",
+            load_in_8bit=True,
         )
 
         clip = prepare_video()
@@ -784,7 +754,8 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
     def test_expansion_in_processing(self):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b",
+            load_in_8bit=True,
         )
 
         clip = prepare_video()

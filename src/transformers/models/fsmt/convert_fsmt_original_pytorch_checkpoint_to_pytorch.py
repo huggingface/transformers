@@ -257,7 +257,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("Conversion is done!")
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
-    print(f"transformers-cli upload {model_dir}")
+    print(f"transformers upload {model_dir}")
 
 
 if __name__ == "__main__":

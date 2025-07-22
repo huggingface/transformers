@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +28,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    is_flaky,
     require_torch,
     require_torch_sdpa,
     slow,
@@ -180,14 +180,6 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
-    def test_inputs_embeds():
-        pass
-
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
 
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
@@ -347,10 +339,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SmolVLMConfig, has_text_modality=False)
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
-    def test_inputs_embeds():
-        pass
-
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
@@ -373,9 +361,10 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
+    @pytest.mark.generate
+    @is_flaky(description="TODO: check why flaky")
+    def test_generate_methods_with_logits_to_keep(self):
+        super().test_generate_methods_with_logits_to_keep()
 
     @unittest.skip
     def test_training_gradient_checkpointing(self):
@@ -391,14 +380,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Unsupported")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip(reason="Unsupported")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
     @unittest.skip(reason="Unsupported")
@@ -423,6 +404,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip(reason="Cache position is off by one leaving out image tokens, FIXME raushan")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -554,23 +536,24 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ).content
             )
         )
-        self.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
-        )
-        self.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
-            )
-        )
+
+        self.video_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "path": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov",
+                    },
+                    {"type": "text", "text": "Describe this video in detail"},
+                ],
+            },
+        ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    # TODO (Orr?) this is a dummy test to check if the model generates things that make sense.
-    # Needs to be expanded to a tiny video
     def test_integration_test(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
@@ -588,4 +571,27 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         expected_generated_text = "\n\n\n\nIn this image, we see a view of the Statue of Liberty and the"
+        self.assertEqual(generated_texts[0], expected_generated_text)
+
+    @slow
+    def test_integration_test_video(self):
+        model = SmolVLMForConditionalGeneration.from_pretrained(
+            "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+
+        # Create inputs
+        inputs = self.processor.apply_chat_template(
+            self.video_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(device=torch_device, dtype=torch.bfloat16)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        expected_generated_text = 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature'  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)

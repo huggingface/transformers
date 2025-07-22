@@ -78,7 +78,7 @@ Once you've confirmed the bug hasn't already been reported, please include the f
 To get the OS and software versions automatically, run the following command:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 You can also run the same command from the root of the repository:
@@ -221,10 +221,10 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 
    If you're modifying documents under the `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
-   make sure you install the documentation builder:
+   make sure you install the [documentation builder](https://github.com/huggingface/doc-builder).
 
    ```bash
-   pip install ".[docs]"
+   pip install hf-doc-builder
    ```
 
    Run the following command from the root of the repository:

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ import math
 import tempfile
 import unittest
 import warnings
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import load_dataset
@@ -458,7 +456,8 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -559,10 +558,10 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -812,14 +811,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
@@ -851,11 +842,8 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
-    image1 = Image.open(dataset[0]["file"]).convert("RGB")
-    image2 = Image.open(dataset[0]["file"]).convert("RGB")
-
-    return image1, image2
+    ds = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    return list(ds["image"][:2])
 
 
 def normalize(img):

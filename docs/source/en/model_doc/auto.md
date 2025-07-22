@@ -74,6 +74,10 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 [[autodoc]] AutoImageProcessor
 
+## AutoVideoProcessor
+
+[[autodoc]] AutoVideoProcessor
+
 ## AutoProcessor
 
 [[autodoc]] AutoProcessor
@@ -254,6 +258,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForKeypointDetection
 
+### AutoModelForKeypointMatching
+
+[[autodoc]] AutoModelForKeypointMatching
+
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling
@@ -346,6 +354,10 @@ The following auto classes are available for the following audio tasks.
 
 [[autodoc]] AutoModelForTextToWaveform
 
+### AutoModelForAudioTokenization
+
+[[autodoc]] AutoModelForAudioTokenization
+
 ## Multimodal
 
 The following auto classes are available for the following multimodal tasks.
@@ -385,3 +397,9 @@ The following auto classes are available for the following multimodal tasks.
 ### AutoModelForImageTextToText
 
 [[autodoc]] AutoModelForImageTextToText
+
+## Time Series
+
+### AutoModelForTimeSeriesPrediction
+
+[[autodoc]] AutoModelForTimeSeriesPrediction

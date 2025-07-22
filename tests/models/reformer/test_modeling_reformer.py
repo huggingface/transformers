@@ -1,4 +1,3 @@
-# coding=utf-8 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -696,7 +695,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         pass
 
     def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
-        # override because overwise we hit max possible seq length for model (4*8=32)
+        # override because otherwise we hit max possible seq length for model (4*8=32)
         # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
         # NOTE: seq_length has to be multiple of 4, otherwise it fails for other tests
         original_sequence_length = self.model_tester.seq_length
@@ -887,7 +886,7 @@ class ReformerLSHAttnModelTest(
 @require_tokenizers
 class ReformerIntegrationTests(unittest.TestCase):
     """
-    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "lsh" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
+    These integration tests test the current layer activations and gradients against the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "lsh" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
     """
 
     def _get_basic_config_and_input(self):
@@ -1246,7 +1245,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         )
         loss.backward()
 
-        # check last grads to cover all proable errors
+        # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
             [-0.0005, -0.0001, -0.0002, -0.0006, -0.0006],
@@ -1287,7 +1286,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
         )
         loss.backward()
-        # check last grads to cover all proable errors
+        # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
             [0.0004, 0.0003, 0.0006, -0.0004, 0.0002],

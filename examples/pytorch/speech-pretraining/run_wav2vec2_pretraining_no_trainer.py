@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +19,9 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
+import aiohttp
 import datasets
 import torch
 from accelerate import Accelerator
@@ -33,7 +33,6 @@ from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
-    AdamW,
     SchedulerType,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
@@ -315,7 +314,7 @@ class DataCollatorForWav2Vec2Pretraining:
         mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
             Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
-            The default value is taken from the original wav2vec 2.0 article (https://arxiv.org/abs/2006.11477),
+            The default value is taken from the original wav2vec 2.0 article (https://huggingface.co/papers/2006.11477),
             and results in about 49 percent of each sequence being masked on average.
         mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
             Length of each vector mask span to mask along the time axis in the contrastive task. The default value
@@ -329,7 +328,7 @@ class DataCollatorForWav2Vec2Pretraining:
     mask_time_prob: Optional[float] = 0.65
     mask_time_length: Optional[int] = 10
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -456,6 +455,7 @@ def main():
             split=train_split_name,
             cache_dir=args.cache_dir,
             trust_remote_code=args.trust_remote_code,
+            storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=60 * 60)}},
         )
         datasets_splits.append(dataset_split)
 
@@ -583,7 +583,7 @@ def main():
     )
 
     # Optimizer
-    optimizer = AdamW(
+    optimizer = torch.optim.AdamW(
         list(model.parameters()),
         lr=args.learning_rate,
         betas=[args.adam_beta1, args.adam_beta2],
@@ -717,7 +717,7 @@ def main():
                 }
                 log_str = ""
                 for k, v in train_logs.items():
-                    log_str += "| {}: {:.3e}".format(k, v.item())
+                    log_str += f"| {k}: {v.item():.3e}"
 
                 if accelerator.is_local_main_process:
                     progress_bar.write(log_str)
@@ -774,7 +774,7 @@ def main():
 
         log_str = ""
         for k, v in val_logs.items():
-            log_str += "| {}: {:.3e}".format(k, v.item())
+            log_str += f"| {k}: {v.item():.3e}"
 
         if accelerator.is_local_main_process:
             progress_bar.write(log_str)

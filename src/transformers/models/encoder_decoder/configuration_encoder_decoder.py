@@ -72,13 +72,13 @@ class EncoderDecoderConfig(PretrainedConfig):
 
     model_type = "encoder-decoder"
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"A configuration of type {self.model_type} cannot be instantiated because "
                 f"both `encoder` and `decoder` sub-configurations were not passed, only {kwargs}"
             )
         encoder_config = kwargs.pop("encoder")

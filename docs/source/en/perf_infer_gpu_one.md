@@ -44,7 +44,7 @@ Place all inputs on the same device as the model.
 from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-tokenizer = AutoTokenizer("meta-llama/Llama-3.1-8B")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", quantization_config=quantization_config)
 
 prompt = "Hello, my llama is cute"
@@ -177,10 +177,16 @@ There are three supported implementations available.
 
 SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `head_mask` and `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation.
 
+Refer to the [AttentionInterface](./attention_interface) guide to learn how to change the attention implementation after loading a model.
+
 ```py
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", attn_implementation="sdpa")
+
+# Change the model's attention dynamically after loading it
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto")
+model.set_attention_implementation("sdpa")
 ```
 
 SDPA selects the most performant implementation available, but you can also explicitly select an implementation with [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager. The example below shows how to enable the FlashAttention2 implementation with `enable_flash=True`.
@@ -196,7 +202,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_m
 input_text = "Hello, my llama is cute"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-with sdpa_kernel(SDPBackend.FLASH_ATTENTION)::
+with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -234,7 +240,7 @@ FlashAttention2 support is currently limited to Instinct MI210, Instinct MI250 a
 </hfoption>
 </hfoptions>
 
-Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [`~PreTrainedModel.from_pretrained`]. FlashAttention2 is only supported for models with the fp16 or bf16 torch type. Make sure to cast your model to the appropriate data type first.
+Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [`~PreTrainedModel.from_pretrained`] or by setting `model.set_attention_implementation("flash_attention_2")` to dynamically update the [attention interface](./attention_interface). FlashAttention2 is only supported for models with the fp16 or bf16 torch type. Make sure to cast your model to the appropriate data type first.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -244,7 +250,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_m
 
 ### Benchmarks
 
-FlashAttention2 speeds up inference considerably especially for inputs with long sequences. However, since FlashAttention2 doesn't support computing attention scores with padding tokens, you must manually pad and unpad the attention scores for batched inference if a sequence contains padding tokens. The downside is batched generation is slower with padding tokens. 
+FlashAttention2 speeds up inference considerably especially for inputs with long sequences. However, since FlashAttention2 doesn't support computing attention scores with padding tokens, you must manually pad and unpad the attention scores for batched inference if a sequence contains padding tokens. The downside is batched generation is slower with padding tokens.
 
 <hfoptions id="padded">
 <hfoption id="short sequence length">
