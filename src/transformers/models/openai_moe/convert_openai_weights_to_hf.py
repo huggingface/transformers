@@ -130,7 +130,7 @@ def write_model(
     input_base_path,
     safe_serialization=True,
     instruct=False,
-    unpack=True,
+    mxfp4=False,
 ):
     os.makedirs(model_path, exist_ok=True)
     bos_token_id = 128000
@@ -157,7 +157,7 @@ def write_model(
         if file.endswith(".safetensors"):
             final_.update(safe_load(os.path.join(input_base_path, file)))
 
-    print("Converting ..", unpack)
+    print("Converting ..", mxfp4)
     all_keys = final_.keys()
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
@@ -183,7 +183,7 @@ def write_model(
             state_dict[k_key] = k.contiguous().to(torch.bfloat16)
             state_dict[v_key] = v.contiguous().to(torch.bfloat16)
         elif re.search("gate_up_proj|down_proj", new_key) and "bias" not in new_key:
-            if unpack:
+            if not mxfp4:
                 if "scales" in new_key:
                     continue
                 elif "blocks" in new_key:
@@ -214,7 +214,7 @@ def write_model(
     del final_
     gc.collect()
 
-    if unpack:
+    if not mxfp4:
         print("Loading the checkpoint in a OpenAIMoe model for unpacked format")
         with torch.device("meta"):
             model = OpenAIMoeForCausalLM(config)
@@ -227,7 +227,7 @@ def write_model(
         del state_dict, model
 
     else:
-        print("Saving the checkpoint in packed format")
+        print("Saving the checkpoint in mxfp4 format")
         config.quantization_config = {
                                         "quant_method": "mxfp4",
                                         "modules_to_not_convert":[
@@ -243,7 +243,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     # TODO: remove when mxfp4 pr is merged
-    if unpack:
+    if not mxfp4:
         print("Reloading the model to check if it's saved correctly.")
         OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
         print("Model reloaded successfully.")
@@ -515,9 +515,9 @@ def main():
     )
 
     parser.add_argument(
-        "--unpack",
+        "--mxfp4",
         action="store_true",
-        help="Whether to unpack the model or keep the scales as in the original format. Defaults to True if not specified.",
+        help="Whether to use the original model with mxfp4 quantization or default to the full precision model.",
     )
 
     args = parser.parse_args()
@@ -526,7 +526,7 @@ def main():
         input_base_path=args.input_dir,
         safe_serialization=args.safe_serialization,
         instruct=args.instruct,
-        unpack=args.unpack,
+        mxfp4=args.mxfp4,
     )
 
     write_tokenizer(
