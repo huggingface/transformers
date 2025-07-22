@@ -23,7 +23,7 @@ from datasets import load_dataset
 
 from transformers import AutoImageProcessor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -35,6 +35,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import ImageGPTImageProcessor
+
+    if is_torchvision_available():
+        from transformers import ImageGPTImageProcessorFast
 
 
 class ImageGPTImageProcessingTester:
@@ -94,6 +97,7 @@ class ImageGPTImageProcessingTester:
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ImageGPTImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
