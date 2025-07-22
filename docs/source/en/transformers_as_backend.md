@@ -99,7 +99,8 @@ To ensure a model is compatible as a backend to any inference server, make sure 
 
 1. A model must be Transformers-compatible following the model [contribution guidelines](./add_new_model) or the [custom model contribution guidelines](./custom_models). Make sure the model has a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
 
-2. The model's attention module needs to be backend configurable to benefit from performance features of various inference servers. For that the model needs to support the new [AttentionInterface](https://huggingface.co/docs/transformers/en/attention_interface) which allows anyone to register their custom and optimized attention functions to be used in the model. All you have to do is to use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` all the way through your base `MyModel` class to the attention layers. Finally don't forget to set `_supports_attention_backend = True` in you `MyPreTrainedModel` class. Expand the below section for an example pseudo-code.
+2. A model's attentions needs to be configurable with the [AttentionInterface](./attention_interface) to allow custom and optimized attention functions. This is important for enabling the performance features of the different inference servers.
+   Use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs**` from the base `MyModel` class to the attention layers. Set `_supports_attention_backend` to `True` in [`PreTrainedModel`]. Expand the code below for an example.
 
 <details>
 <summary>modeling_my_model.py</summary>
@@ -161,9 +162,14 @@ class MyConfig(PretrainedConfig):
 
 ### Multimodal models
 
-To enable seamless support for vision-language models in inference servers, your model needs to follow a few extra conventions on top of the general ones. These rules ensure that your model integrates properly with multimodal data.
+For multimodal models, you need to include a few more changes on top of the general recommendations. These rules ensure that your model integrates properly with multimodal data.
 
-1. Your model must have a base `MyMultimodalModel` class that handles multimodal fusion without a language modeling head and a separate generative class that adds a head on top. The base model needs to implement a `get_image_features()` method that takes in image pixel values and returns encoded outputs. These will later be merged with language embeddings and thus should not require any postprocessing after. The shape of returned features has to match the number of input images. If the vision encoder returns variable-length outputs (e.g., patch-based), you can return a list of 2D tensors of size `(image_seq_len, image_dim)` - one per image. 
+1. A multimodal model requires a base `MyMultiModalModel` class to handle multimodal fusion without a language modeling head and a separate generative class that adds a head.
+
+    The base model needs to implement the `get_image_features()` method to accept image pixel values and return encoded outputs. These are later merged with the language embeddings and don't require any postprocessing. The shape of the returned features must match the number of input images. If a vision encoder returns variable-length outputs (patch-based), return a list of 2D tensors of size `(image_seq_len, image_dim)` for each image.
+
+Expand the code below for an example.
+
 <details>
 <summary>modeling_my_multimodal_model.py</summary>
 
