@@ -423,8 +423,6 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -442,37 +440,28 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images,
-                    size=size,
-                    interpolation=interpolation,
-                )
-            if do_center_crop:
-                stacked_images = self.center_crop(image=stacked_images, size=crop_size)
-
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
             stacked_images = self.rescale_and_normalize(
-                stacked_images,
-                do_rescale,
-                rescale_factor,
-                do_normalize,
-                image_mean,
-                image_std,
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         processed_segmentation_maps = None
         if segmentation_maps is not None:
-            processed_segmentation_maps = []
-            for seg_map in segmentation_maps:
+            grouped_segmentation_maps, grouped_segmentation_maps_index = group_images_by_shape(
+                segmentation_maps, disable_grouping=disable_grouping
+            )
+            processed_segmentation_maps_grouped = {}
+            for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
-                    seg_map = self.resize(
-                        seg_map.unsqueeze(0),
-                        size=size,
-                        interpolation=F.InterpolationMode.NEAREST,
-                    ).squeeze(0)
-                processed_segmentation_maps.append(seg_map)
+                    stacked_segmentation_maps = self.resize(
+                        stacked_segmentation_maps, size=size, interpolation=F.InterpolationMode.NEAREST_EXACT
+                    )
+                processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
+            processed_segmentation_maps = reorder_images(
+                processed_segmentation_maps_grouped, grouped_segmentation_maps_index
+            )
 
         encoded_inputs = self._encode_inputs_fast(
             processed_images,
@@ -536,8 +525,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `BatchFeature`: Padded images and optional pixel masks.
         """
-        max_height, max_width = get_max_height_width(images)
-        pad_size = (max_height, max_width)
+        pad_size = get_max_height_width(images)
 
         padded_images = []
         pixel_masks = []
@@ -574,8 +562,6 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
     ):
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
-        ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks_fast(
             segmentation_map=segmentation_map,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
@@ -692,31 +678,10 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         if task_inputs is None:
             task_inputs = ["panoptic"]
 
-        max_height, max_width = get_max_height_width(pixel_values_list)
-        pad_size = (max_height, max_width)
+        pad_size = get_max_height_width(pixel_values_list)
+        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
-        padded_images = []
-        pixel_masks = []
-
-        for image in pixel_values_list:
-            pad_bottom = pad_size[0] - image.shape[1]
-            pad_right = pad_size[1] - image.shape[2]
-            padded_image = F.pad(image, padding=[0, 0, pad_right, pad_bottom], fill=0)
-            padded_images.append(padded_image)
-
-            mask = torch.zeros(pad_size, dtype=torch.int64, device=image.device)
-            mask[: image.shape[1], : image.shape[2]] = 1
-            pixel_masks.append(mask)
-
-        if return_tensors:
-            padded_images = torch.stack(padded_images, dim=0)
-            pixel_masks = torch.stack(pixel_masks, dim=0)
-
-        encoded_inputs = BatchFeature(
-            data={"pixel_values": padded_images, "pixel_mask": pixel_masks},
-            tensor_type=return_tensors,
-        )
-
+        annotations = None
         if segmentation_maps is not None:
             annotations = []
             for idx, segmentation_map in enumerate(segmentation_maps):
@@ -735,59 +700,37 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                 )
 
                 annotations.append({"masks": masks, "classes": classes})
-            # Process annotations using existing methods (they work with torch tensors)
-            if annotations:
-                mask_labels = []
-                class_labels = []
-                text_inputs = []
-                num_class_obj = dict.fromkeys(self.metadata["class_names"], 0)
 
-                for i, label in enumerate(annotations):
-                    task = task_inputs[i]
+        if annotations is not None:
+            mask_labels = []
+            class_labels = []
+            text_inputs = []
+            num_class_obj = dict.fromkeys(self.metadata["class_names"], 0)
 
-                    if task == "semantic":
-                        classes, masks, texts = self.get_semantic_annotations(label, num_class_obj)
-                    elif task == "instance":
-                        classes, masks, texts = self.get_instance_annotations(label, num_class_obj)
-                    elif task == "panoptic":
-                        classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
-                    else:
-                        raise ValueError(f"{task} was not expected, expected `semantic`, `instance` or `panoptic`")
-                    # Pad masks to max size using torch operations
-                    padded_masks = []
-                    for mask in masks:
-                        mask_tensor = mask
+            for i, label in enumerate(annotations):
+                task = task_inputs[i]
 
-                        if mask_tensor.dim() == 2:
-                            mask_tensor = mask_tensor.unsqueeze(0)
+                if task == "semantic":
+                    classes, masks, texts = self.get_semantic_annotations(label, num_class_obj)
+                elif task == "instance":
+                    classes, masks, texts = self.get_instance_annotations(label, num_class_obj)
+                elif task == "panoptic":
+                    classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
+                else:
+                    raise ValueError(f"{task} was not expected, expected `semantic`, `instance` or `panoptic`")
+                # Pad masks to max size using torch operations
+                padded_masks = [
+                    self._pad_image_fast(image=mask, output_size=pad_size, constant_values=ignore_index)
+                    for mask in masks
+                ]
+                padded_masks = torch.cat(padded_masks, dim=0)
+                mask_labels.append(padded_masks)
+                class_labels.append(classes)
+                text_inputs.append(texts)
 
-                        pad_bottom = pad_size[0] - mask_tensor.shape[1]
-                        pad_right = pad_size[1] - mask_tensor.shape[2]
-
-                        padded_mask = F.pad(
-                            mask_tensor,
-                            padding=[0, 0, pad_right, pad_bottom],
-                            fill=ignore_index if ignore_index is not None else 0,
-                        )
-                        padded_masks.append(padded_mask)
-
-                    if padded_masks:
-                        padded_masks = torch.cat(padded_masks, dim=0)
-                    else:
-                        padded_masks = torch.zeros(
-                            (0, pad_size[0], pad_size[1]),
-                            device=pixel_values_list[0].device,
-                        )
-
-                    mask_labels.append(padded_masks)
-
-                    class_labels.append(classes)
-
-                    text_inputs.append(texts)
-
-                encoded_inputs["mask_labels"] = mask_labels
-                encoded_inputs["class_labels"] = class_labels
-                encoded_inputs["text_inputs"] = text_inputs
+            encoded_inputs["mask_labels"] = mask_labels
+            encoded_inputs["class_labels"] = class_labels
+            encoded_inputs["text_inputs"] = text_inputs
 
         encoded_inputs["task_inputs"] = [f"the task is {task_input}" for task_input in task_inputs]
         return encoded_inputs

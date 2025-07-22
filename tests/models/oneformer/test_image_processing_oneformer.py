@@ -405,19 +405,13 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
         image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-
-        self.assertTrue(torch.allclose(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
-        )
-        print(image_encoding_slow.mask_labels)
-        print(image_encoding_fast.mask_labels)
-        # for mask_label_slow, mask_label_fast in zip(image_encoding_slow.mask_labels, image_encoding_fast.mask_labels):
-        #     self.assertTrue(torch.allclose(mask_label_slow, mask_label_fast, atol=1e-1))
+        self._assert_slow_fast_tensors_equivalence(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values)
+        for mask_label_slow, mask_label_fast in zip(image_encoding_slow.mask_labels, image_encoding_fast.mask_labels):
+            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
         for class_label_slow, class_label_fast in zip(
             image_encoding_slow.class_labels, image_encoding_fast.class_labels
         ):
-            self.assertTrue(torch.allclose(class_label_slow, class_label_fast, atol=1e-1))
+            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
         self.assertEqual(image_encoding_slow.text_inputs, image_encoding_fast.text_inputs)
         self.assertEqual(image_encoding_slow.task_inputs, image_encoding_fast.task_inputs)
 
@@ -451,7 +445,10 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             return_tensors="pt",
         )
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        for mask_label_slow, mask_label_fast in zip(encoding_slow.mask_labels, encoding_fast.mask_labels):
+            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
+        for class_label_slow, class_label_fast in zip(encoding_slow.class_labels, encoding_fast.class_labels):
+            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
+        self.assertEqual(encoding_slow.text_inputs, encoding_fast.text_inputs)
+        self.assertEqual(encoding_slow.task_inputs, encoding_fast.task_inputs)
