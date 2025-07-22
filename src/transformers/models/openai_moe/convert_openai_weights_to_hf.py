@@ -296,7 +296,7 @@ def save_sharded_model(state_dict, model_path):
 
 def create_safetensors_index(safetensors_index, num_shards, model_path):
     for shard_id in range(num_shards):
-        safetensors_index["weight_map"][f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors"] = shard_id
+        safetensors_index["weight_map"][shard_id] = f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors"
     with open(os.path.join(model_path, "model.safetensors.index.json"), "w") as f:
         json.dump(safetensors_index, f)
 
