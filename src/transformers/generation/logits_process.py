@@ -1181,14 +1181,17 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"The model vocabulary size is {vocabulary_size}, but the following tokens were being biased: "
                 f"{invalid_biases}"
             )
-
-        # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
-        # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float, device=scores.device)
+        # Extract single-token sequences and their biases
+        single_token_ids = []
+        single_token_biases = []
         for sequence_ids, bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:
-                self.length_1_bias[sequence_ids[-1]] = bias
+                single_token_ids.append(sequence_ids[0])
+                single_token_biases.append(bias)
 
+        if single_token_ids:  # Only if we have any single-token sequences
+            self.length_1_bias[single_token_ids] = torch.tensor(single_token_biases, device=scores.device)
         self.prepared_bias_variables = True
 
     def _validate_arguments(self):
@@ -1305,7 +1308,8 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
 
             eos_set = set(eos_token_id)
             bad_words_ids = [
-                bad_token_seq for bad_token_seq in bad_words_ids
+                bad_token_seq
+                for bad_token_seq in bad_words_ids
                 if len(bad_token_seq) != 1 or bad_token_seq[0] not in eos_set
             ]
         # Forbidding a sequence is equivalent to setting its bias to -inf
