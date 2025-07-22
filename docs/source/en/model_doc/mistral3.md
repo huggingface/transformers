@@ -138,7 +138,7 @@ print(decoded_output)
 ( o.o )
  > ^ <
 ```"
-```
+````
 
 - Mistral 3 accepts batched image and text inputs. 
 ```py
