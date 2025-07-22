@@ -1971,7 +1971,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support `torch.compile(fullgraph=True)`
     _can_compile_fullgraph = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
