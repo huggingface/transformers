@@ -742,8 +742,8 @@
         title: (번역중) TVLT
       - local: in_translation
         title: (번역중) ViLT
-      - local: in_translation
-        title: (번역중) Vision Encoder Decoder Models
+      - local: model_doc/vision-encoder-decoder
+        title: Vision Encoder Decoder Models
       - local: in_translation
         title: (번역중) Vision Text Dual Encoder
       - local: in_translation
