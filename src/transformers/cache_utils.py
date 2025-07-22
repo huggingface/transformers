@@ -4,7 +4,6 @@ import importlib.metadata
 import inspect
 import json
 import os
-import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
@@ -976,6 +975,38 @@ def apply_processors(
     return _wrapped_update
 
 
+class KeyValuesWrapper:
+    """Helper class for Cache that simulates layer-indexed key/value lists from a layered cache.
+    This allows for BC access and writing, e.g., cache.key_cache[idx] = ...
+    Deprecated in favor of Cache.layers[idx].keys/values. TODO: remove in v4.56.0"""
+
+    def __init__(self, layers, cache_type="keys"):
+        self.layers = layers
+        self.cache_type = cache_type
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return [getattr(layer, self.cache_type) for layer in self.layers[idx]]
+        return getattr(self.layers[idx], self.cache_type)
+
+    def __setitem__(self, idx, value):
+        if isinstance(idx, slice):
+            for layer, val in zip(self.layers[idx], value):
+                setattr(layer, self.cache_type, val)
+        else:
+            setattr(self.layers[idx], self.cache_type, value)
+
+    def __len__(self):
+        return len(self.layers)
+
+    def __iter__(self):
+        for layer in self.layers:
+            yield getattr(layer, self.cache_type)
+
+    def __bool__(self):
+        return bool(self.layers)
+
+
 class Cache:
     """
     Base container for per-layer key/value caches.
@@ -1161,17 +1192,17 @@ class Cache:
         return kv_length, kv_offset
 
     @property
-    def key_cache(self) -> "KeyValuesWrapper":
+    def key_cache(self) -> KeyValuesWrapper:
         """List-like object of key cache tensors indexed by layer. Deprecated in favor of `cache.layers[idx].keys`"""
-        warnings.warn(
+        logger.warning_once(
             "`cache.key_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].keys` instead."
         )
         return KeyValuesWrapper(self.layers, "keys")
 
     @property
-    def value_cache(self) -> "KeyValuesWrapper":
+    def value_cache(self) -> KeyValuesWrapper:
         """List-like object of value cache tensors indexed by layer. Deprecated in favor of `cache.layers[idx].values`"""
-        warnings.warn(
+        logger.warning_once(
             "`cache.value_cache[idx]` is deprecated and will be removed in v4.56.0. Use `cache.layers[idx].values` instead."
         )
         return KeyValuesWrapper(self.layers, "values")
@@ -1424,11 +1455,10 @@ class HybridCache(Cache):
     """
 
     def __init__(self, config: PretrainedConfig, *args, **kwargs):
-        layer_classes = (
-            [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
-            if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None
-            else [StaticLayer]
-        )
+        if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None:
+            layer_classes = [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
+        else:
+            layer_classes = [StaticLayer]
         super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
 
 
@@ -1654,12 +1684,13 @@ class HybridChunkedCache(Cache):
     """
 
     def __init__(self, config: PretrainedConfig, *args, **kwargs):
-        layer_classes = (
-            [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
-            if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None
-            else [StaticLayer]
-        )
-        layer_classes = [ChunkedSlidingLayer if cls == SlidingWindowLayer else cls for cls in layer_classes]
+        hybrid_map = LAYER_CLASS_MAP.copy()
+        hybrid_map["sliding_attention"] = ChunkedSlidingLayer
+        hybrid_map["chunked_attention"] = ChunkedSlidingLayer
+        if hasattr(config, "layer_types") and getattr(config, "layer_types", None) is not None:
+            layer_classes = [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
+        else:
+            layer_classes = [StaticLayer]
         super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
 
 
@@ -1979,38 +2010,6 @@ PROCESSOR_CLASS_MAP: dict[str, type["CacheProcessor"]] = {
 ### Deprecated classes
 
 
-class KeyValuesWrapper:
-    """Helper class for Cache that simulates layer-indexed key/value lists from a layered cache.
-    This allows for BC access and writing, e.g., cache.key_cache[idx] = ...
-    Deprecated in favor of Cache.layers[idx].keys/values. TODO: remove in v4.56.0"""
-
-    def __init__(self, layers, cache_type="keys"):
-        self.layers = layers
-        self.cache_type = cache_type
-
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            return [getattr(layer, self.cache_type) for layer in self.layers[idx]]
-        return getattr(self.layers[idx], self.cache_type)
-
-    def __setitem__(self, idx, value):
-        if isinstance(idx, slice):
-            for layer, val in zip(self.layers[idx], value):
-                setattr(layer, self.cache_type, val)
-        else:
-            setattr(self.layers[idx], self.cache_type, value)
-
-    def __len__(self):
-        return len(self.layers)
-
-    def __iter__(self):
-        for layer in self.layers:
-            yield getattr(layer, self.cache_type)
-
-    def __bool__(self):
-        return bool(self.layers)
-
-
 class SinkCache(Cache):
     """
     Is its now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
@@ -2035,10 +2034,8 @@ class CacheConfig:
     cache_implementation: None
 
     def __post_init__(self):
-        warnings.warn(
-            ("CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."),
-            FutureWarning,
-            stacklevel=2,
+        logger.warning_once(
+            "CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
         )
 
     @classmethod
@@ -2052,10 +2049,8 @@ class CacheConfig:
         Returns:
             CacheConfig: Instance of CacheConfig constructed from the dictionary.
         """
-        warnings.warn(
-            ("CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."),
-            FutureWarning,
-            stacklevel=2,
+        logger.warning_once(
+            "CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
         )
         config = cls(**config_dict)
         to_remove = []
@@ -2172,10 +2167,8 @@ class QuantizedCacheConfig(CacheConfig):
         compute_dtype: Optional[torch.dtype] = torch.float16,
         device: Optional[str] = "cpu",
     ):
-        warnings.warn(
-            ("CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."),
-            FutureWarning,
-            stacklevel=2,
+        logger.warning_once(
+            "CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
         )
         self.backend = backend
         self.nbits = nbits
@@ -2248,10 +2241,8 @@ class StaticCacheConfig(CacheConfig):
     cache_implementation = "static"
 
     def __init__(self, batch_size: int, max_cache_len: int, device="cpu"):
-        warnings.warn(
-            ("CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."),
-            FutureWarning,
-            stacklevel=2,
+        logger.warning_once(
+            "CacheConfig is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
         )
         self.batch_size = batch_size
         self.max_cache_len = max_cache_len
@@ -2347,13 +2338,9 @@ class StaticCacheConfig(CacheConfig):
 # PEP 562: Lazy loading for deprecated location of MambaCache
 def __getattr__(name: str) -> Any:
     if name == "MambaCache":
-        warnings.warn(
-            (
-                "Importing `MambaCache` from `transformers.cache_utils` is deprecated and will be removed "
-                "in a future version. Please import it from `transformers` or `transformers.models.mamba.cache_mamba` instead."
-            ),
-            FutureWarning,
-            stacklevel=2,
+        logger.warning_once(
+            "Importing `MambaCache` from `transformers.cache_utils` is deprecated and will be removed "
+            "in a future version. Please import it from `transformers` or `transformers.models.mamba.cache_mamba` instead."
         )
 
         class MambaCache:
