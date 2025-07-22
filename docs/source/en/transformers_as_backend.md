@@ -156,7 +156,7 @@ class MyConfig(PretrainedConfig):
 ```
 </details>
 
-### Multimodal Requirements
+### Multimodal models
 
 To enable seamless support for vision-language models in inference servers, your model needs to follow a few extra conventions on top of the general ones. These rules ensure that your model integrates properly with multimodal data.
 
