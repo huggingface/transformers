@@ -102,7 +102,7 @@ To make your custom model work out of the box with backends like vLLM and SGLang
 
 For a model to be supported via the Transformers backend:
 
-1. It must be Transformers-compatible following model guidelines. That means the model has to be supported in the core library  following [these rules](https://huggingface.co/docs/transformers/en/add_new_model) or contain custom code in the Hub following [custom code sharing guidelines](https://huggingface.co/docs/transformers/en/custom_models) in the Hub. Make sure that the model has a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
+1. A model must be Transformers-compatible following the model [contribution guidelines](./add_new_model) or the [custom model contribution guidelines](./custom_models). Make sure the model has a valid `config.json` in its directory and a valid `auto_map` field pointing to the model class in the config.
 
 2. The model's attention module needs to be backend configurable to benefit from performance features of various inference servers. For that the model needs to support the new [AttentionInterface](https://huggingface.co/docs/transformers/en/attention_interface) which allows anyone to register their custom and optimized attention functions to be used in the model. All you have to do is to use `ALL_ATTENTION_FUNCTIONS` when defining the attention layer and propagate `**kwargs` all the way through your base `MyModel` class to the attention layers. Finally don't forget to set `_supports_attention_backend = True` in you `MyPreTrainedModel` class. Expand the below section for an example pseudo-code.
 
