@@ -107,7 +107,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Notes
 
-- OPT uses the GPT-2 byte-level [Byte-Pair Encoding (BPE)](https://github.com/huggingface/tokenizers/blob/main/docs/tokenizers/implementations/bytelevelbpe.md) tokenizer with a vocabulary size of 50,272. It splits text into Unicode subword tokens that include spaces, which enables reversible encoding of any UTF-8 text. Since GPT-style tokenizers insert spaces as part of tokenization, tokens always begin with a space, which is why the decoded string correctly reconstructs spacing and punctuation.
+- OPT uses the GPT-2 byte-level Byte-Pair Encoding (BPE) tokenizer with a vocabulary size of 50,272. It splits text into Unicode subword tokens that include spaces, which enables reversible encoding of any UTF-8 text. Since GPT-style tokenizers insert spaces as part of tokenization, tokens always begin with a space, which is why the decoded string correctly reconstructs spacing and punctuation.
 
 ## OPTConfig
 
