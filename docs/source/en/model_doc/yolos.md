@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-## YOLOS
+# YOLOS
 
 [YOLOS](https://huggingface.co/papers/2106.00666) proposes to just leverage the plain [Vision Transformer (ViT)](vit) for object detection, inspired by DETR. It turns out that a base-sized encoder-only Transformer can also achieve 42 AP on COCO, similar to DETR and much more complex frameworks such as Faster R-CNN.
 
