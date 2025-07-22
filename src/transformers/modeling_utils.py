@@ -2609,10 +2609,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             repo_id = repo_id.strip()
             try:
                 kernel = get_kernel(repo_id)
-                if "flash_attention" in kernel_name:
+                if hasattr("flash_attn_varlen", kernel):
                     ALL_ATTENTION_FUNCTIONS[repo_id] = partial(flash_attention_forward, implementation=kernel)
-                elif "paged_attention" in kernel_name:
-                    ALL_ATTENTION_FUNCTIONS[repo_id] = partial(paged_attention_forward, implementation=kernel)
                 else:
                     ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
                 ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
