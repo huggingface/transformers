@@ -24,7 +24,7 @@ This guide shows how to use Transformers' models as a backend to some popular in
 
 ## vLLM
 
-[vLLM](https://github.com/vllm-project/vllm) is a high-performance inference engine optimized for serving LLMs at scale. It supports many models implemented in the 🤗 Transformers library through its transformers backend, including all decoder-only LLMs and several vision-language models. For VLMs, currently only image inputs are supported, supporting video inputs is planned. 
+[vLLM](https://github.com/vllm-project/vllm) is a high-performance inference engine optimized for serving LLMs at scale. It supports many Transformers' models, including all decoder-only LLMs and several vision-language models (VLMs). VLMs currently support image inputs only, with video support planned.
 
 vLLM automatically selects the best backend. If the model isn’t natively supported, it falls back to Transformers. You can also force the use of the Transformers backend by setting `model_impl="transformers"`.
 
