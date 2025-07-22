@@ -97,7 +97,7 @@ def _sliding_cache_update(
     # Sliding window logic for generation phase or prefill < window
     slicing = torch.arange(max_cache_len, device=value_states.device)
     current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
-    to_shift = current_seq_len > max_cache_len
+    to_shift = current_seq_len >= max_cache_len
     indices = (slicing + to_shift.sum()) % max_cache_len
 
     k_out_shifted = k_cache[:, :, indices]
