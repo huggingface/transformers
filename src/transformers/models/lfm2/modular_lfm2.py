@@ -207,9 +207,10 @@ class Lfm2HybridConvCache(DynamicCache):
         if self.get_seq_length() <= max_length:
             return
 
-        if self.key_cache is not None and self.key_cache.numel():
-            self.key_cache = self.key_cache[..., :max_length, :]
-            self.value_cache = self.value_cache[..., :max_length, :]
+        for idx in range(len(self.key_cache)):
+            if self.key_cache[idx].numel():
+                self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
+                self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
