@@ -57,7 +57,7 @@ class AwqQuantizer(HfQuantizer):
             and not torch.cuda.is_available()
             and not torch.xpu.is_available()
         ):
-            logger.warning_once("No CUDA or XPU found, replace GEMM with IPEX version to support non-cuda AWQ model.")
+            logger.warning_once("No CUDA or XPU found, consider switching to the IPEX version for CPU-only execution.")
             self.quantization_config.version = AWQLinearVersion.IPEX
 
         if self.quantization_config.version == AWQLinearVersion.IPEX:
