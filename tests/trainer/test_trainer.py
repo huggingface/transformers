@@ -99,6 +99,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     require_torch_non_multi_gpu,
+    require_torch_optimi,
     require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
@@ -1142,6 +1143,34 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             for _ in range(num_steps):
                 trainer.lr_scheduler.step()
             self.assertEqual(trainer.lr_scheduler.get_last_lr()[0], 1e-5)
+
+    def test_cosine_with_min_lr_schedule_with_warmup_lr_rate(self):
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps, num_warmup_steps = 10, 2
+        extra_kwargs = {"min_lr": 1e-5}  # Non-default arguments
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="cosine_warmup_with_min_lr",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+            report_to="none",
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        # Check the last learning rate
+        step_lrs = []
+        for _ in range(num_steps):
+            step_lrs.append(trainer.optimizer.param_groups[0]["lr"])
+            trainer.lr_scheduler.step()
+        self.assertEqual(step_lrs[0], 0.1)
+        self.assertEqual(step_lrs[1], 0.2)
+        self.assertEqual(step_lrs[-1], 1e-05)
 
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
@@ -2490,6 +2519,123 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # warm up steps << total steps
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
+    @require_torch_optimi
+    @require_torch_gpu
+    def test_stable_adamw(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        _ = trainer.train()
+
+    @require_torch_optimi
+    @require_torch_gpu
+    def test_stable_adamw_extra_args(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            optim="stable_adamw",
+            optim_args="decouple_lr=True,max_lr=1e-3,kahan_sum=True",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # Check this works
+        _ = trainer.train()
+
+    @require_torch_optimi
+    @require_torch_gpu
+    def test_stable_adamw_lr_display_without_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 1e-9
+        num_steps = 10
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=learning_rate,
+            logging_steps=5,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # reflects displayed lr in trainer
+        self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_torch_optimi
+    @require_torch_gpu
+    def test_stable_adamw_lr_display_with_scheduler(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 2e-4
+        num_train_epochs = 10
+        num_warmup_steps = 5
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            num_train_epochs=num_train_epochs,
+            learning_rate=learning_rate,
+            warmup_steps=num_warmup_steps,
+            lr_scheduler_type="cosine",
+            logging_steps=1,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+        # creating log history of trainer, results don't matter
+        trainer.train()
+        logs = trainer.state.log_history[1:][:-1]
+
+        # reach given learning rate peak and end with 0 lr
+        self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
+        self.assertTrue(logs[-1]["learning_rate"] == 0)
+
+        # increasing and decreasing pattern of lrs
+        increasing_lrs = [
+            logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
+            for i in range(len(logs))
+            if i < num_warmup_steps - 2
+        ]
+        decreasing_lrs = [
+            logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
+            for i in range(len(logs) - 1)
+            if i >= num_warmup_steps - 2
+        ]
+
+        self.assertTrue(all(increasing_lrs))
+        self.assertTrue(all(decreasing_lrs))
+
+        # warm up steps << total steps
+        self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
+
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
         model = RegressionModel()
@@ -3248,7 +3394,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        self.assertEqual(trainer._train_batch_size, 8)
+        self.assertEqual(trainer._train_batch_size, 14)
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
@@ -3268,16 +3414,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 8
-        self.assertEqual(trainer._train_batch_size, 8)
+        # After `auto_find_batch_size` is ran we should now be at 16*0.9=14
+        self.assertEqual(trainer._train_batch_size, 14)
 
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
         # Check we are at 16 to start
         self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 8)
+        # We should be back to 14 again, picking up based upon the last ran Trainer
+        self.assertEqual(trainer._train_batch_size, 14)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):

@@ -108,16 +108,14 @@ class MiniMaxCache(DynamicCache):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
             else:
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+                self.layers[layer_idx].batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
             else:
-                self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
-                self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
+                self.layers[layer_idx].batch_select_indices(indices)
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
@@ -580,7 +578,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MiniMaxPreTrainedModel(PreTrainedModel):
-    config_class = MiniMaxConfig
+    config: MiniMaxConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxDecoderLayer"]
@@ -588,8 +586,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True  # Note: only supports MiniMaxCache
-    _supports_quantized_cache = False
+    # Note: only supports MiniMaxCache
     _supports_static_cache = False
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -597,19 +594,6 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MiniMaxRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class MiniMaxRotaryEmbedding(nn.Module):
@@ -663,12 +647,6 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     @auto_docstring
@@ -846,18 +824,6 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -975,12 +941,6 @@ class MiniMaxForSequenceClassification(MiniMaxPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1066,12 +1026,6 @@ class MiniMaxForTokenClassification(MiniMaxPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

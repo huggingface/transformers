@@ -127,6 +127,7 @@ _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
+_torch_optimi_available = importlib.util.find_spec("optimi") is not None
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -476,6 +477,10 @@ def is_apollo_torch_available():
     return _apollo_torch_available
 
 
+def is_torch_optimi_available():
+    return _torch_optimi_available
+
+
 def is_lomo_available():
     return _lomo_available
 
@@ -510,6 +515,10 @@ def is_fastapi_available():
 
 def is_uvicorn_available():
     return _uvicorn_available
+
+
+def is_openai_available():
+    return _openai_available
 
 
 def is_pretty_midi_available():
@@ -725,10 +734,6 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
-
-
-def is_openai_available():
-    return _openai_available
 
 
 def is_flax_available():
@@ -1922,6 +1927,12 @@ UVICORN_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+OPENAI_IMPORT_ERROR = """
+{0} requires the openai library but it was not found in your environment. You can install it with pip:
+`pip install openai`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
 `pip install pytesseract`. Please note that you may need to restart your runtime after installation.
@@ -2051,6 +2062,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
         ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
+        ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
         ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
     ]
 )
@@ -2181,12 +2193,12 @@ class _LazyModule(ModuleType):
                 self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
-                    if len(missing_backends):
+                    if missing_backends:
                         self._object_missing_backend[key] = missing_backends
 
                     for value in values:
                         self._class_to_module[value] = key
-                        if len(missing_backends):
+                        if missing_backends:
                             self._object_missing_backend[value] = missing_backends
                     _import_structure.setdefault(key, []).extend(values)
 
@@ -2381,7 +2393,7 @@ def requires(*, backends=()):
     """
 
     if not isinstance(backends, tuple):
-        raise ValueError("Backends should be a tuple.")
+        raise TypeError("Backends should be a tuple.")
 
     applied_backends = []
     for backend in backends:
