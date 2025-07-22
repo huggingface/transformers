@@ -677,7 +677,7 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
-        if "flash" in self.config._attn_implementation:
+        if "flash" in self.config._attn_implementation and self._supports_attention_backend:
             tensor_kws = {"dtype": torch.int32, "device": self.device}
             pos = model_inputs["position_ids"][:, -1]
 

@@ -249,7 +249,7 @@ def _prepare_from_posids(query, key, value, position_ids):
 
 def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
     warnings.warn(
-        "prepare_fa2_from_position_ids is deprecated, use _prepare_flash_attention_from_position_ids",
+        "prepare_fa2_from_position_ids is deprecated, use _prepare_from_posids",
         FutureWarning,
     )
     return _prepare_from_posids(query, key, value, position_ids)
@@ -370,16 +370,19 @@ def _flash_attention_forward(
         globals()["_pad_fn"] = pad_fn
         globals()["_unpad_fn"] = unpad_fn
         globals()["_is_fa3"] = is_fa3
+        flash_supports_window =   "window_size" in inspect.signature(flash_varlen_fn).parameters)
+        globals()["_flash_supports_window"] = flash_supports_window
     else:
         flash_fn = globals()["_flash_fn"]
         flash_varlen_fn = globals()["_flash_varlen_fn"]
         pad_fn = globals()["_pad_fn"]
         unpad_fn = globals()["_unpad_fn"]
         is_fa3 = globals()["_is_fa3"]
+        flash_supports_window = globals()["_flash_supports_window"]
 
     causal = is_causal and not (use_top_left_mask and query_length == 1)
     use_sw = (
-        (_flash_supports_window or "window_size" in inspect.signature(flash_varlen_fn).parameters)
+        (_flash_supports_window or flash_supports_window)
         and sliding_window
         and key_states.shape[1] > sliding_window
     )
@@ -395,7 +398,7 @@ def _flash_attention_forward(
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
     )
-    use_varlen = position_ids is not None or all([cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k])
+    use_mask = position_ids is not None or all([cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k])
     if attention_mask is not None:
         q, k, v, idx, (cu_q, cu_k), (mq, mk) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
@@ -415,7 +418,7 @@ def _flash_attention_forward(
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
         out = pad_fn(out_unpad, idx, query_states.shape[0], query_length)
-    elif use_varlen:
+    elif use_mask:
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
             if position_ids is None:
                 raise ValueError(

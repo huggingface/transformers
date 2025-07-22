@@ -3476,8 +3476,7 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.head_dim = 64
-            print(config)
+            config.head_dim = 64  # fa2 does not always support arbitrary headim
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
