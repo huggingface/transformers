@@ -147,9 +147,6 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-        """
         return super().preprocess(images, videos, **kwargs)
 
     def _preprocess_image_like_inputs(
