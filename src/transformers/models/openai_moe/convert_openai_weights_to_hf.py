@@ -263,7 +263,6 @@ def write_model(
 
 
 def save_sharded_model(state_dict, model_path):
-    import math
     from safetensors.torch import save_file
 
     max_shard_size = 4800000000 # 4.8 GB
@@ -272,8 +271,13 @@ def save_sharded_model(state_dict, model_path):
     shard_id = 0
     shard_state_dict = {}
     total_sharded_dict = {}
+    safetensors_index = {}
+    safetensors_index["metadata"] = {"total_size": 0}
+    safetensors_index["weight_map"] = {}
     for key in state_dict.keys():
         size = state_dict[key].numel()*state_dict[key].element_size()
+        safetensors_index["metadata"]["total_size"] += size
+        safetensors_index["weight_map"][key] = shard_id
         if shard_size_counter + size > max_shard_size:
             total_sharded_dict[shard_id] = shard_state_dict
             shard_id += 1
@@ -288,6 +292,14 @@ def save_sharded_model(state_dict, model_path):
             shard_state_dict,
             os.path.join(model_path, f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors")
         )
+    create_safetensors_index(safetensors_index, num_shards, model_path)
+
+def create_safetensors_index(safetensors_index, num_shards, model_path):
+    for shard_id in range(num_shards):
+        safetensors_index["weight_map"][f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors"] = shard_id
+    with open(os.path.join(model_path, "model.safetensors.index.json"), "w") as f:
+        json.dump(safetensors_index, f)
+
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
@@ -477,12 +489,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/fsx/mohamed/oai-hf/tests/20b",
+        default="/fsx/mohamed/oai-hf/tests/120b",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
-        default="/fsx/mohamed/oai-hf/tests/20b_converted_packed",
+        default="/fsx/mohamed/oai-hf/tests/120b_converted_packed",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
