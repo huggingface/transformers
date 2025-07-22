@@ -14,40 +14,40 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# X-CLIP
+# X-CLIP[[x-clip]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+## 개요[[overview]]
 
-The X-CLIP model was proposed in [Expanding Language-Image Pretrained Models for General Video Recognition](https://huggingface.co/papers/2208.02816) by Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling.
-X-CLIP is a minimal extension of [CLIP](clip) for video. The model consists of a text encoder, a cross-frame vision encoder, a multi-frame integration Transformer, and a video-specific prompt generator.
+X-CLIP 모델은 Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling이 [Expanding Language-Image Pretrained Models for General Video Recognition](https://huggingface.co/papers/2208.02816)에서 제안했습니다.
+X-CLIP은 비디오를 위해 [CLIP](clip)을 최소한으로 확장한 모델입니다. 이 모델은 텍스트 인코더, 교차 프레임 비전 인코더, 다중 프레임 통합 Transformer, 비디오별 프롬프트 생성기로 구성됩니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다:
 
-*Contrastive language-image pretraining has shown great success in learning visual-textual joint representation from web-scale data, demonstrating remarkable "zero-shot" generalization ability for various image tasks. However, how to effectively expand such new language-image pretraining methods to video domains is still an open problem. In this work, we present a simple yet effective approach that adapts the pretrained language-image models to video recognition directly, instead of pretraining a new model from scratch. More concretely, to capture the long-range dependencies of frames along the temporal dimension, we propose a cross-frame attention mechanism that explicitly exchanges information across frames. Such module is lightweight and can be plugged into pretrained language-image models seamlessly. Moreover, we propose a video-specific prompting scheme, which leverages video content information for generating discriminative textual prompts. Extensive experiments demonstrate that our approach is effective and can be generalized to different video recognition scenarios. In particular, under fully-supervised settings, our approach achieves a top-1 accuracy of 87.1% on Kinectics-400, while using 12 times fewer FLOPs compared with Swin-L and ViViT-H. In zero-shot experiments, our approach surpasses the current state-of-the-art methods by +7.6% and +14.9% in terms of top-1 accuracy under two popular protocols. In few-shot scenarios, our approach outperforms previous best methods by +32.1% and +23.1% when the labeled data is extremely limited.*
+*대조적 언어-이미지 사전 학습은 웹 스케일 데이터로부터 시각-텍스트 공동 표현을 학습하는 데 큰 성공을 거두었으며, 다양한 이미지 작업에 대해 뛰어난 "제로샷(zero-shot)" 일반화 능력을 보여주었습니다. 그러나 이러한 새로운 언어-이미지 사전 학습 방법을 비디오 도메인으로 효과적으로 확장하는 방법은 아직 해결되지 않은 문제입니다. 본 연구에서는 새로운 모델을 처음부터 사전 학습하는 대신, 사전 학습된 언어-이미지 모델을 비디오 인식에 직접 적용하는 간단하면서도 효과적인 접근 방식을 제시합니다. 더 구체적으로, 시간 차원에서 프레임 간의 장기적인 의존성을 포착하기 위해 프레임 간 정보를 명시적으로 교환하는 교차 프레임 어텐션 메커니즘을 제안합니다. 이러한 모듈은 가벼우며 사전 학습된 언어-이미지 모델에 원활하게 통합될 수 있습니다. 또한, 비디오 콘텐츠 정보를 활용하여 식별력 있는 텍스트 프롬프트를 생성하는 비디오별 프롬프팅 기법을 제안합니다. 광범위한 실험을 통해 우리의 접근 방식이 효과적이며 다양한 비디오 인식 시나리오에 일반화될 수 있음을 입증합니다. 특히, 완전 지도 학습 환경에서 우리 접근 방식은 Kinectics-400에서 87.1%의 top-1 정확도를 달성하면서도 Swin-L 및 ViViT-H에 비해 FLOPs를 12배 적게 사용합니다. 제로샷 실험에서는 두 가지 인기 있는 프로토콜 하에서 top-1 정확도 측면에서 현재 최첨단 방법들을 +7.6% 및 +14.9% 능가합니다. 퓨샷(few-shot) 시나리오에서는 레이블이 지정된 데이터가 극히 제한적일 때 이전 최고 방법들을 +32.1% 및 +23.1% 능가합니다.*
 
-Tips:
+팁:
 
-- Usage of X-CLIP is identical to [CLIP](clip).
+- X-CLIP의 사용법은 [CLIP](clip)과 동일합니다.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xclip_architecture.png"
 alt="drawing" width="600"/>
 
-<small> X-CLIP architecture. Taken from the <a href="https://huggingface.co/papers/2208.02816">original paper.</a> </small>
+<small> X-CLIP 아키텍처. <a href="https://huggingface.co/papers/2208.02816">원본 논문</a>에서 가져왔습니다. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/microsoft/VideoX/tree/master/X-CLIP).
+이 모델은 [nielsr](https://huggingface.co/nielsr)님이 기여했습니다.
+원본 코드는 [여기](https://github.com/microsoft/VideoX/tree/master/X-CLIP)에서 찾을 수 있습니다.
 
-## Resources
+## 리소스[[resources]]
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with X-CLIP.
+X-CLIP을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(🌎로 표시) 리소스 목록입니다.
 
-- Demo notebooks for X-CLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/X-CLIP).
+- X-CLIP 데모 노트북은 [여기](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/X-CLIP)에서 찾을 수 있습니다.
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+여기에 포함할 리소스를 제출하는 데 관심이 있다면, 언제든지 Pull Request를 열어주세요. 검토 후 반영하겠습니다! 리소스는 기존 리소스를 복제하는 대신 새로운 것을 보여주는 것이 이상적입니다.
 
 ## XCLIPProcessor
 
