@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -18,7 +17,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Optional
 
 import numpy as np
 from utils_multiple_choice import MultipleChoiceDataset, Split, processors
@@ -187,7 +186,7 @@ def main():
         else None
     )
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
+    def compute_metrics(p: EvalPrediction) -> dict:
         preds = np.argmax(p.predictions, axis=1)
         return {"acc": simple_accuracy(preds, p.label_ids)}
 
@@ -228,7 +227,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key, value in result.items():
                     logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    writer.write("{} = {}\n".format(key, value))
 
                 results.update(result)
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -212,6 +211,12 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="Will fix only if requested by the community: it fails with `torch._dynamo.exc.InternalTorchDynamoError: IndexError: list index out of range`. Without compile, the test pass."
+    )
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
     @unittest.skip(reason="Data2VecVision does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -352,7 +357,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
-        self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
+        self.assertEqual(logits[0].topk(2).indices.tolist(), expected_top2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

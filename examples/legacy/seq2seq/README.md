@@ -209,7 +209,7 @@ th 56 \
 ```
 
 ### Multi-GPU Evaluation
-here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases
+here is a command to run xsum evaluation on 8 GPUs. It is more than linearly faster than run_eval.py in some cases
 because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have
 `{type_path}.source` and `{type_path}.target`. Run `./run_distributed_eval.py --help` for all clargs.
 

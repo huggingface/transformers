@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -212,14 +211,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/pix2struct-textcaps-base"
@@ -359,14 +350,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Pix2Struct does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Pix2StructTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -543,7 +526,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             loss = model(**inputs).loss
             loss.backward()
 
-    # override as the `logit_scale` parameter initilization is different for Pix2Struct
+    # override as the `logit_scale` parameter initialization is different for Pix2Struct
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -552,7 +535,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -561,8 +544,19 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
+                        # See PR #38607 (to avoid flakiness)
+                        data = torch.flatten(param.data)
+                        n_elements = torch.numel(data)
+                        # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                        # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                        n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                        data_to_check = torch.sort(data).values
+                        if n_elements_to_skip_on_each_side > 0:
+                            data_to_check = data_to_check[
+                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
+                            ]
                         self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )

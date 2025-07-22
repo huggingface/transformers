@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 The key-value (KV) vectors are used to calculate attention scores. For autoregressive models, KV scores are calculated *every* time because the model predicts one token at a time. Each prediction depends on the previous tokens, which means the model performs the same computations each time.
 
-A KV *cache* stores these calculations so they can be reused without recomputing them. Efficient caching is crucial for optimizing model performance because it reduces computation time and improves response rates. Refer to the [Caching](./cache_explanation.md) doc for a more detailed explanation about how a cache works.
+A KV *cache* stores these calculations so they can be reused without recomputing them. Efficient caching is crucial for optimizing model performance because it reduces computation time and improves response rates. Refer to the [Caching](./cache_explanation) doc for a more detailed explanation about how a cache works.
 
 Transformers offers several [`Cache`] classes that implement different caching mechanisms. Some of these [`Cache`] classes are optimized to save memory while others are designed to maximize generation speed. Refer to the table below to compare cache types and use it to help you select the best cache for your use case.
 
@@ -30,7 +30,6 @@ Transformers offers several [`Cache`] classes that implement different caching m
 | Offloaded Static Cache  | No               | Yes                      | Yes                        | High    | Yes                     |
 | Quantized Cache        | Yes              | No                       | No                         | Low     | Yes                     |
 | Sliding Window Cache   | No               | Yes                      | Yes                        | High    | No                      |
-| Sink Cache             | Yes              | No                       | Yes                        | Mid     | Yes                     |
 
 This guide introduces you to the different [`Cache`] classes and shows you how to use them for generation.
 
@@ -45,7 +44,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
 model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
@@ -60,7 +59,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
 past_key_values = DynamicCache()
@@ -143,13 +142,14 @@ Enable [`QuantizedCache`] by configuring `cache_implementation="quantized"` in [
 For [`HQQQuantizedCache`], we recommend setting the `axis-key` and `axis-value` parameters to `1`.
 
 ```py
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"axis-key": 1, "axis-value": 1, "backend": "hqq"})
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"backend": "HQQ"})
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
 ```
@@ -160,41 +160,20 @@ I like rock music because it's loud and energetic. It's a great way to express m
 For [`QuantoQuantizedCache`], we recommend setting the `axis-key` and `axis-value` parameters to `0`.
 
 ```py
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "axis-key": 0, "axis-value": 0, "backend": "quanto"})
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
 ```
 
 </hfoption>
 </hfoptions>
-
-### Sink cache
-
-[`SinkCache`] is capable of generating very long sequences ("infinite length" according to the paper) by only retaining a few initial tokens from the sequence. These are called the *sink tokens* because they account for a significant portion of the attention scores during generation. Subsequent tokens are discarded on a sliding windowed basis, and only the latest `window_size` tokens are kept. This means most of the previous knowledge is discarded.
-
-The sink tokens allow a model to maintain stable performance even when it's dealing with very long text sequences.
-
-Enable [`SinkCache`] by initializing it first with the [window_length](https://hf.co/docs/transformers/main/en/internal/generation_utils#transformers.SinkCache.window_length) and [num_sink_tokens](https://hf.co/docs/transformers/main/en/internal/generation_utils#transformers.SinkCache.num_sink_tokens) parameters before passing it to [past_key_values](https://hf.co/docs/transformers/internal/generation_utils#transformers.generation.GenerateDecoderOnlyOutput.past_key_values) in [`~GenerationMixin.generate`].
-
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, SinkCache
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
-inputs = tokenizer("This is a long story about unicorns, fairies and magic.", return_tensors="pt").to(model.device)
-
-past_key_values = SinkCache(window_length=256, num_sink_tokens=4)
-out = model.generate(**inputs, do_sample=False, max_new_tokens=30, past_key_values=past_key_values)
-tokenizer.batch_decode(out, skip_special_tokens=True)[0]
-"This is a long story about unicorns, fairies and magic. It is a fantasy world where unicorns and fairies live together in harmony. The story follows a young girl named Lily"
-```
 
 ## Speed optimized caches
 
@@ -230,14 +209,14 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map={"": 0})
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="offloaded_static")
 tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
 ```
-Cache offloading requires a CUDA GPU.
+Cache offloading requires a CUDA GPU or Intel XPU.
 
 ### Sliding window cache
 
@@ -247,10 +226,10 @@ Enable [`SlidingWindowCache`] by configuring `cache_implementation="sliding_wind
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, SinkCache
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("Yesterday I was on a rock concert and.", return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, do_sample=False, max_new_tokens=30, cache_implementation="sliding_window")
@@ -284,16 +263,15 @@ A cache can also work in iterative generation settings where there is back-and-f
 
 For iterative generation with a cache, start by initializing an empty cache class and then you can feed in your new prompts. Keep track of dialogue history with a [chat template](./chat_templating).
 
-If you're using [`SinkCache`], the inputs need to be truncated to the maximum length because [`SinkCache`] can generate text that exceeds its maximum window size. However, the first input shouldn't exceed the maximum cache length.
+The following example demonstrates [Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf). If you’re using a different chat-style model, [`~PreTrainedTokenizer.apply_chat_template`] may process messages differently. It might cut out important tokens depending on how the Jinja template is written.
 
-The example below demonstrates how to use a cache for iterative generation.
+For example, some models use special `<think> ... </think>` tokens during reasoning. These could get lost during re-encoding, causing indexing issues. You might need to manually remove or adjust extra tokens from the completions to keep things stable.
 
 ```py
 import torch
 from transformers import AutoTokenizer,AutoModelForCausalLM
 from transformers.cache_utils import (
     DynamicCache,
-    SinkCache,
     StaticCache,
     SlidingWindowCache,
     QuantoQuantizedCache,
@@ -307,14 +285,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
 
 past_key_values = DynamicCache()
-max_cache_length = past_key_values.get_max_length()
 
 messages = []
 for prompt in user_prompts:
     messages.append({"role": "user", "content": prompt})
     inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
-    if isinstance(past_key_values, SinkCache):
-        inputs = {k: v[:, -max_cache_length:] for k, v in inputs.items()}
     input_length = inputs["input_ids"].shape[1]
     outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256, past_key_values=past_key_values)
     completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
@@ -333,15 +308,15 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, StaticCache
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda")
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map={"": 0})
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-# Init StaticCache with big enough max-length (1024 tokens for the below example) 
+# Init StaticCache with big enough max-length (1024 tokens for the below example)
 # You can also init a DynamicCache, if that suits you better
-prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16)
+prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device=model.device.type, dtype=torch.bfloat16)
 
 INITIAL_PROMPT = "You are a helpful assistant. "
-inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
+inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(model.device.type)
 # This is the common prompt cached, we need to run forward without grad to be able to copy
 with torch.no_grad():
      prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
@@ -349,9 +324,9 @@ with torch.no_grad():
 prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
 responses = []
 for prompt in prompts:
-    new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
+    new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(model.device.type)
     past_key_values = copy.deepcopy(prompt_cache)
-    outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20) 
+    outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20)
     response = tokenizer.batch_decode(outputs)[0]
     responses.append(response)
 

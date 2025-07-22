@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, Union
+from typing import Union
 
 
 try:
@@ -25,16 +25,37 @@ try:
 
     _hub_kernels_available = True
 
-    _KERNEL_MAPPING: Dict[str, Dict[Union[Device, str], LayerRepository]] = {
+    _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
             )
-        }
+        },
+        "Llama4TextMoe": {
+            "cuda": LayerRepository(
+                # Move to kernels-community/moe once we release.
+                repo_id="kernels-community/moe",
+                layer_name="Llama4TextMoe",
+            )
+        },
+        "RMSNorm": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/liger_kernels",
+                layer_name="LigerRMSNorm",
+                # revision="pure-layer-test",
+            )
+        },
+        "MLP": {
+            "cuda": LayerRepository(
+                repo_id="medmekk/triton-llama-mlp",
+                layer_name="TritonLlamaMLP",
+            )
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
+
 
 except ImportError:
     # Stub to make decorators int transformers work when `kernels`

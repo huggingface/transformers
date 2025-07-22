@@ -14,7 +14,7 @@
 # limitations under the License.
 """BARK model configuration"""
 
-from typing import Dict
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
@@ -243,10 +243,10 @@ class BarkConfig(PretrainedConfig):
 
     def __init__(
         self,
-        semantic_config: Dict = None,
-        coarse_acoustics_config: Dict = None,
-        fine_acoustics_config: Dict = None,
-        codec_config: Dict = None,
+        semantic_config: Optional[dict] = None,
+        coarse_acoustics_config: Optional[dict] = None,
+        fine_acoustics_config: Optional[dict] = None,
+        codec_config: Optional[dict] = None,
         initializer_range=0.02,
         **kwargs,
     ):

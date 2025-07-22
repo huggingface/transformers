@@ -29,17 +29,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 在 Transformers 4.20.0 中，[`~PreTrainedModel.from_pretrained`] 方法已重新设计，以适应使用 [Accelerate](https://huggingface.co/docs/accelerate/big_modeling) 加载大型模型的场景。这需要您使用的 Accelerate 和 PyTorch 版本满足： Accelerate >= 0.9.0， PyTorch >= 1.9.0。除了创建完整模型，然后在其中加载预训练权重（这会占用两倍于模型大小的内存空间，一个用于随机初始化模型，一个用于预训练权重），我们提供了一种选项，将模型创建为空壳，然后只有在加载预训练权重时才实例化其参数。
 
-您可以使用 `low_cpu_mem_usage=True` 激活此选项。首先，在 Meta 设备上创建模型（带有空权重），然后将状态字典加载到其中（在分片检查点的情况下逐片加载）。这样，最大使用的内存占用仅为模型的完整大小。
-
-```python
-from transformers import AutoModelForSeq2SeqLM
-
-t0pp = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", low_cpu_mem_usage=True)
-```
-
 此外，如果内存不足以放下加载整个模型（目前仅适用于推理），您可以直接将模型放置在不同的设备上。使用 `device_map="auto"`，Accelerate 将确定将每一层放置在哪个设备上，以最大化使用最快的设备（GPU），并将其余部分卸载到 CPU，甚至硬盘上（如果您没有足够的 GPU 内存 或 CPU 内存）。即使模型分布在几个设备上，它也将像您通常期望的那样运行。
-
-在传递 `device_map` 时，`low_cpu_mem_usage` 会自动设置为 `True`，因此您不需要指定它：
 
 ```python
 from transformers import AutoModelForSeq2SeqLM

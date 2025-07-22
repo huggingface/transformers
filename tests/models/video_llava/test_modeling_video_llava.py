@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoLlava model."""
 
+import copy
 import unittest
 
 import numpy as np
@@ -24,6 +24,7 @@ from parameterized import parameterized
 from transformers import (
     VideoLlavaConfig,
     VideoLlavaForConditionalGeneration,
+    VideoLlavaModel,
     VideoLlavaProcessor,
     is_torch_available,
     is_vision_available,
@@ -191,7 +192,14 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     Model tester for `VideoLlavaForConditionalGeneration`.
     """
 
-    all_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            VideoLlavaModel,
+            VideoLlavaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -226,10 +234,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
@@ -240,46 +244,49 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_mixed_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            curr_inputs = copy.deepcopy(inputs)
             model = model_class(config).to(torch_device).eval()
             # test that the forward does not fail
             with torch.no_grad():
-                _ = model(**inputs)
+                _ = model(**curr_inputs)
 
             # if we remove some images from inputs leaving only one
             # image number mismatch error should raise
-            inputs["pixel_values_images"] = inputs["pixel_values_images"][:1]
+            curr_inputs["pixel_values_images"] = curr_inputs["pixel_values_images"][:1]
             with self.assertRaises(ValueError):
-                _ = model(**inputs)
+                _ = model(**curr_inputs)
 
     def test_video_only_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            curr_inputs = copy.deepcopy(inputs)
             model = model_class(config).to(torch_device).eval()
             # replace image token id with dummy id
             # Error will be raised as num-image-tokens and num-of-image-embeds mismatch
-            inputs["input_ids"][:, : self.model_tester.num_image_tokens] = 2
+            curr_inputs["input_ids"][:, : self.model_tester.num_image_tokens] = 2
             with self.assertRaises(ValueError):
-                _ = model(**inputs)
+                _ = model(**curr_inputs)
 
-            inputs["pixel_values_images"] = None
-            _ = model(**inputs)
+            curr_inputs["pixel_values_images"] = None
+            _ = model(**curr_inputs)
 
     def test_image_only_input(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            curr_inputs = copy.deepcopy(inputs)
             model = model_class(config).to(torch_device).eval()
             # set dummy id, which is not video token id
             # Error will be raised as num-video-tokens and num-of-video-embeds mismatch
-            inputs["input_ids"][
+            curr_inputs["input_ids"][
                 :,
                 self.model_tester.num_image_tokens : self.model_tester.num_image_tokens
                 + self.model_tester.num_video_tokens,
             ] = 2
             with self.assertRaises(ValueError):
-                _ = model(**inputs)
+                _ = model(**curr_inputs)
 
-            inputs["pixel_values_videos"] = None
-            _ = model(**inputs)
+            curr_inputs["pixel_values_videos"] = None
+            _ = model(**curr_inputs)
 
     def test_batching_equivalence(self):
         def recursive_check(batched_object, single_row_object, model_name, key):
@@ -337,51 +344,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                     continue
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values_images"]
-            del inputs["pixel_values_videos"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values_images"]
-            del inputs["pixel_values_videos"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -391,16 +353,17 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values_images"] = input_dict["pixel_values_images"][-1:, ...]
+            curr_input_dict["pixel_values_images"] = curr_input_dict["pixel_values_images"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values_images"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values_images"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -434,7 +397,8 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
 
@@ -457,7 +421,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, videos=video_file, return_tensors="pt").to(torch_device)
 
         EXPECTED_INPUT_IDS = torch.tensor([1,  3148, 1001, 29901, 29871, 13, 11008, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901], device=torch_device)  # fmt: skip
         non_video_inputs = inputs["input_ids"][inputs["input_ids"] != 32001]
@@ -487,9 +451,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompts, images=[image], videos=[video_file], padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self.processor(
+            text=prompts, images=[image], videos=[video_file], padding=True, return_tensors="pt"
+        ).to(torch_device)
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
@@ -513,7 +477,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = self.processor(text=prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER: \nDescribe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
@@ -545,7 +509,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
         )
 
-        inputs = processor(prompts, videos=[video_1, video_2], return_tensors="pt", padding=True).to(torch_device)
+        inputs = processor(text=prompts, videos=[video_1, video_2], return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
 

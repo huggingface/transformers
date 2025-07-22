@@ -78,7 +78,7 @@ Once you've confirmed the bug hasn't already been reported, please include the f
 To get the OS and software versions automatically, run the following command:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 You can also run the same command from the root of the repository:

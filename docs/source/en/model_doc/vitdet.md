@@ -18,7 +18,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ViTDet model was proposed in [Exploring Plain Vision Transformer Backbones for Object Detection](https://arxiv.org/abs/2203.16527) by Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He.
+The ViTDet model was proposed in [Exploring Plain Vision Transformer Backbones for Object Detection](https://huggingface.co/papers/2203.16527) by Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He.
 VitDet leverages the plain [Vision Transformer](vit) for the task of object detection.
 
 The abstract from the paper is the following:

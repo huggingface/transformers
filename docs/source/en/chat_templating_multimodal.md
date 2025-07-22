@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Multimodal model chat templates expect a similar [template](./chat_templating) as text-only models. It needs `messages` that includes a dictionary of the `role` and `content`.
 
-Multimodal templates are included in the [Processor](./processors) class and requires an additional `type` key for specifying whether the included content is an image, video, or text.
+Multimodal templates are included in the [Processor](./processors) class and require an additional `type` key for specifying whether the included content is an image, video, or text.
 
 This guide will show you how to format chat templates for multimodal models as well as some best practices for configuring the template
 
@@ -56,7 +56,7 @@ Create a [`ImageTextToTextPipeline`] and pass the chat to it. For large models, 
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device="cuda", torch_dtype=torch.float16)
+pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map="auto", torch_dtype=torch.float16)
 pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 [{'input_text': [{'role': 'system',
     'content': [{'type': 'text',
@@ -109,7 +109,7 @@ These inputs are now ready to be used in [`~GenerationMixin.generate`].
 
 Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
 
-- The content `"type"` should be `"video"` to indicate the the content is a video.
+- The content `"type"` should be `"video"` to indicate the content is a video.
 - For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
 
 > [!WARNING]
@@ -141,7 +141,7 @@ Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input
 
 The `video_load_backend` parameter refers to a specific framework to load a video. It supports [PyAV](https://pyav.basswood-io.com/docs/stable/), [Decord](https://github.com/dmlc/decord), [OpenCV](https://github.com/opencv/opencv), and [torchvision](https://pytorch.org/vision/stable/index.html).
 
-The examples below uses Decord as the backend because it is a bit faster than PyAV.
+The examples below use Decord as the backend because it is a bit faster than PyAV.
 
 <hfoptions id="sampling">
 <hfoption id="fixed number of frames">
@@ -175,36 +175,7 @@ processed_chat = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
-    video_fps=32,
-    video_load_backend="decord",
-)
-print(processed_chat.keys())
-```
-
-</hfoption>
-<hfoption id="custom frame sampling">
-
-Some models don't sample frames *uniformly* and require more complex logic to determine which frames to use. For example, the model may have an *adaptive frame selection* or if the model prioritizes *key moments* in a video rather than evenly spaced frames.
-
-If a model has a different sampling strategy, you can write a function that customizes frame selection. The function should include the following requirements.
-
-- Use the `sample_indices_fn` parameter to pass a callable function for sampling.
-- If provided, this function *overrides* the standard `num_frames` and `fps` parameters.
-- The function receives all the parameters passed to `load_video` and must return valid frame indices to sample from.
-
-An example function is shown below. This gives you full control over frame selection, making the model more adaptable to different video scenarios.
-
-```py
-def sample_indices_fn(metadata, **kwargs):
-    # samples only the first and the second frame
-    return [0, 1]
-
-processed_chat = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    sample_indices_fn=sample_indices_fn,
+    video_fps=16,
     video_load_backend="decord",
 )
 print(processed_chat.keys())

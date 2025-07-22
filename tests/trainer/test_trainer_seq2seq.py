@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -180,9 +179,9 @@ class Seq2seqTrainerTester(TestCasePlus):
         for num_return_sequences in range(3, 0, -1):
             gen_config.num_return_sequences = num_return_sequences
             metrics = trainer.evaluate(eval_dataset=prepared_dataset, generation_config=gen_config)
-            assert (
-                metrics["eval_samples"] == dataset_len * num_return_sequences
-            ), f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+            assert metrics["eval_samples"] == dataset_len * num_return_sequences, (
+                f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+            )
 
     @require_torch
     def test_bad_generation_config_fail_early(self):
@@ -203,4 +202,4 @@ class Seq2seqTrainerTester(TestCasePlus):
                 data_collator=data_collator,
                 compute_metrics=lambda x: {"samples": x[0].shape[0]},
             )
-        self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
+        self.assertIn("Fix these issues to train your model", str(exc.exception))

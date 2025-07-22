@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 def convert(src_path: str, map_location: str = "cpu", save_path: Union[str, None] = None) -> None:
     """Convert a pytorch_model.bin or model.pt file to torch.float16 for faster downloads, less disk space."""
-    state_dict = torch.load(src_path, map_location=map_location)
+    state_dict = torch.load(src_path, map_location=map_location, weights_only=True)
     for k, v in tqdm(state_dict.items()):
         if not isinstance(v, torch.Tensor):
             raise TypeError("FP16 conversion only works on paths that are saved state dicts, like pytorch_model.bin")

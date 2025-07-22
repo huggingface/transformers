@@ -63,11 +63,11 @@ def make_choice_type_function(choices: list) -> Callable[[str], Any]:
 
 def HfArg(
     *,
-    aliases: Union[str, list[str]] = None,
-    help: str = None,
+    aliases: Optional[Union[str, list[str]]] = None,
+    help: Optional[str] = None,
     default: Any = dataclasses.MISSING,
     default_factory: Callable[[], Any] = dataclasses.MISSING,
-    metadata: dict = None,
+    metadata: Optional[dict] = None,
     **kwargs,
 ) -> dataclasses.Field:
     """Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.
@@ -81,7 +81,7 @@ def HfArg(
     ```
 
     Args:
-        aliases (Union[str, List[str]], optional):
+        aliases (Union[str, list[str]], optional):
             Single string or list of strings of aliases to pass on to argparse, e.g. `aliases=["--example", "-e"]`.
             Defaults to None.
         help (str, optional): Help string to pass on to argparse that can be displayed with --help. Defaults to None.
@@ -119,7 +119,7 @@ class HfArgumentParser(ArgumentParser):
     Args:
         dataclass_types (`DataClassType` or `Iterable[DataClassType]`, *optional*):
             Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Passed to `argparse.ArgumentParser()` in the regular way.
     """
 

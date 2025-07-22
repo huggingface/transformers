@@ -13,7 +13,6 @@
 # limitations under the License.
 import inspect
 import unittest
-from typing import List
 
 from datasets import load_dataset
 
@@ -43,8 +42,8 @@ class SuperGlueModelTester:
         image_height=60,
         keypoint_detector_config=None,
         hidden_size: int = 64,
-        keypoint_encoder_sizes: List[int] = [32, 64],
-        gnn_layers_types: List[str] = ["self", "cross"] * 2,
+        keypoint_encoder_sizes: list[int] = [32, 64],
+        gnn_layers_types: list[str] = ["self", "cross"] * 2,
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,

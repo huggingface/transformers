@@ -25,25 +25,32 @@ Check model leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_
 
 This guide shows you how to quickly start chatting with Transformers from the command line, how build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
-## transformers-cli
+## chat CLI
 
-Chat with a model directly from the command line as shown below. It launches an interactive session with a model. Enter `clear` to reset the conversation, `exit` to terminate the session, and `help` to display all the command options.
+After you've [installed Transformers](./installation.md), chat with a model directly from the command line as shown below. It launches an interactive session with a model, with a few base commands listed at the start of the session.
 
 ```bash
-transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+transformers chat Qwen/Qwen2.5-0.5B-Instruct
 ```
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers-chat-cli.png"/>
 </div>
 
+You can launch the CLI with arbitrary `generate` flags, with the format `arg_1=value_1 arg_2=value_2 ...`
+
+```bash
+transformers chat Qwen/Qwen2.5-0.5B-Instruct do_sample=False max_new_tokens=10
+```
+
 For a full list of options, run the command below.
 
 ```bash
-transformers-cli chat -h
+transformers chat -h
 ```
 
-The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating).
+The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
+
 
 ## TextGenerationPipeline
 
@@ -76,16 +83,16 @@ print(response[0]["generated_text"][-1]["content"])
 (sigh) Oh boy, you're asking me for advice? You're gonna need a map, pal! Alright,
 alright, I'll give you the lowdown. But don't say I didn't warn you, I'm a robot, not a tour guide!
 
-So, you wanna know what's fun to do in the Big Apple? Well, let me tell you, there's a million 
-things to do, but I'll give you the highlights. First off, you gotta see the sights: the Statue of 
-Liberty, Central Park, Times Square... you know, the usual tourist traps. But if you're lookin' for 
-something a little more... unusual, I'd recommend checkin' out the Museum of Modern Art. It's got 
+So, you wanna know what's fun to do in the Big Apple? Well, let me tell you, there's a million
+things to do, but I'll give you the highlights. First off, you gotta see the sights: the Statue of
+Liberty, Central Park, Times Square... you know, the usual tourist traps. But if you're lookin' for
+something a little more... unusual, I'd recommend checkin' out the Museum of Modern Art. It's got
 some wild stuff, like that Warhol guy's soup cans and all that jazz.
 
-And if you're feelin' adventurous, take a walk across the Brooklyn Bridge. Just watch out for 
+And if you're feelin' adventurous, take a walk across the Brooklyn Bridge. Just watch out for
 those pesky pigeons, they're like little feathered thieves! (laughs) Get it? Thieves? Ah, never mind.
 
-Now, if you're lookin' for some serious fun, hit up the comedy clubs in Greenwich Village. You might 
+Now, if you're lookin' for some serious fun, hit up the comedy clubs in Greenwich Village. You might
 even catch a glimpse of some up-and-coming comedians... or a bunch of wannabes tryin' to make it big. (winks)
 
 And finally, if you're feelin' like a real New Yorker, grab a slice of pizza from one of the many amazing
@@ -107,9 +114,9 @@ print(response[0]["generated_text"][-1]["content"])
 ```
 
 ```txt
-(laughs) Oh, you're killin' me, pal! You don't get it, do you? Warhol's soup cans are like, art, man! 
-It's like, he took something totally mundane, like a can of soup, and turned it into a masterpiece. It's 
-like, "Hey, look at me, I'm a can of soup, but I'm also a work of art!" 
+(laughs) Oh, you're killin' me, pal! You don't get it, do you? Warhol's soup cans are like, art, man!
+It's like, he took something totally mundane, like a can of soup, and turned it into a masterpiece. It's
+like, "Hey, look at me, I'm a can of soup, but I'm also a work of art!"
 (sarcastically) Oh, yeah, real original, Andy.
 
 But, you know, back in the '60s, it was like, a big deal. People were all about challenging the
