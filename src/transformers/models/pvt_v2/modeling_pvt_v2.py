@@ -388,7 +388,7 @@ class PvtV2Encoder(nn.Module):
 
 @auto_docstring
 class PvtV2PreTrainedModel(PreTrainedModel):
-    config_class = PvtV2Config
+    config: PvtV2Config
     base_model_prefix = "pvt_v2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

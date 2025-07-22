@@ -882,15 +882,14 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class PhimoePreTrainedModel(PreTrainedModel):
-    config_class = PhimoeConfig
+    config: PhimoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PhimoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
@@ -932,12 +931,6 @@ class PhimoeModel(PhimoePreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1214,22 +1207,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1399,12 +1376,6 @@ class PhimoeForSequenceClassification(PhimoePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

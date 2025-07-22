@@ -821,14 +821,13 @@ class JetMoeBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
-    config_class = JetMoeConfig
+    config: JetMoeConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -875,14 +874,6 @@ class JetMoeModel(JetMoePreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1131,22 +1122,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1258,12 +1233,6 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

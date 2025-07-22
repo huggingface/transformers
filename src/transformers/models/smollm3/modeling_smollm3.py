@@ -284,7 +284,7 @@ class SmolLM3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class SmolLM3PreTrainedModel(PreTrainedModel):
-    config_class = SmolLM3Config
+    config: SmolLM3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SmolLM3DecoderLayer"]
@@ -292,8 +292,7 @@ class SmolLM3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -367,12 +366,6 @@ class SmolLM3Model(SmolLM3PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     @auto_docstring
@@ -462,18 +455,6 @@ class SmolLM3ForCausalLM(SmolLM3PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -571,12 +552,6 @@ class SmolLM3ForSequenceClassification(SmolLM3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -662,12 +637,6 @@ class SmolLM3ForTokenClassification(SmolLM3PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

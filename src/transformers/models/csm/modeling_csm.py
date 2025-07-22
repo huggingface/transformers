@@ -361,7 +361,7 @@ class CsmDecoderLayer(GradientCheckpointingLayer):
 )
 @auto_docstring
 class CsmPreTrainedModel(PreTrainedModel):
-    config_class = CsmConfig
+    config: CsmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
@@ -370,8 +370,7 @@ class CsmPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     # does not because of Mimi codec model
     # _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -399,7 +398,7 @@ class CsmPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CsmDepthDecoderModel(CsmPreTrainedModel):
-    config_class = CsmDepthDecoderConfig
+    config: CsmDepthDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -416,12 +415,6 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     @auto_docstring
@@ -554,12 +547,6 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -688,12 +675,6 @@ class CsmBackboneModel(CsmPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -793,12 +774,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:

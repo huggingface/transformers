@@ -914,7 +914,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
 class Gemma3nAudioEncoder(PreTrainedModel):
     """An audio encoder based on the [Universal Speech Model](https://arxiv.org/abs/2303.01037) architecture."""
 
-    config_class = Gemma3nAudioConfig
+    config: Gemma3nAudioConfig
 
     main_input_name = "audio_mel"
 
@@ -1481,7 +1481,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Gemma3nPreTrainedModel(PreTrainedModel):
-    config_class = Gemma3nConfig
+    config: Gemma3nConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
@@ -1489,8 +1489,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
+
     _supports_static_cache = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -1524,7 +1523,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")
 class Gemma3nTextModel(Gemma3nPreTrainedModel):
-    config_class = Gemma3nTextConfig
+    config: Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):
         super().__init__(config)
@@ -1582,12 +1581,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1781,7 +1774,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = Gemma3nTextConfig
+    config: Gemma3nTextConfig
     base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
 
@@ -1793,18 +1786,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -2212,12 +2193,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
