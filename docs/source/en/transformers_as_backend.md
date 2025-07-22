@@ -34,7 +34,7 @@ llm = LLM(model="meta-llama/Llama-3.2-1B", model_impl="transformers")
 ```
 Add `--model-impl transformers` to `vllm serve` to launch a server with a Transformers' model.
 
-```
+```bash
 vllm serve meta-llama/Llama-3.2-1B \
     --task generate \
     --model-impl transformers
