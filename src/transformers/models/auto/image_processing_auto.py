@@ -49,7 +49,7 @@ from .configuration_auto import (
 logger = logging.get_logger(__name__)
 
 
-FORCE_FAST_MODELS = ["qwen2_vl", "qwen2_5_vl"]
+FORCE_FAST_IMAGE_PROCESSOR = ["Qwen2VLImageProcessor"]
 
 
 if TYPE_CHECKING:
@@ -516,6 +516,13 @@ class AutoImageProcessor:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
                 use_fast = image_processor_type.endswith("Fast")
+                if not use_fast and image_processor_type in FORCE_FAST_IMAGE_PROCESSOR:
+                    use_fast = True
+                    logger.warning_once(
+                        f"The image processor of type `{image_processor_type}` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. "
+                        "This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. "
+                        "Note that this behavior will be extended to all models in a future release."
+                    )
                 if not use_fast:
                     logger.warning_once(
                         "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
