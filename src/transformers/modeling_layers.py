@@ -121,7 +121,7 @@ class GenericForSequenceClassification(ABC):
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
-        transformer_outputs: BaseModelOutputWithPast = self.model(
+        transformer_outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -201,7 +201,7 @@ class GenericForQuestionAnswering(ABC):
         end_positions: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> QuestionAnsweringModelOutput:
-        outputs: BaseModelOutputWithPast = self.transformer(
+        outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -264,7 +264,7 @@ class GenericForTokenClassification(ABC):
         use_cache: Optional[bool] = None,
         **kwargs,
     ) -> TokenClassifierOutput:
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
