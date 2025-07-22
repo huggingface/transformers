@@ -59,8 +59,9 @@ class EncodecEncoderOutput(ModelOutput):
     audio_scales (list of length `nb_frames` of `torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     last_frame_pad_length (`int`, *optional*):
-        The length of the padding in the last frame, if any. This is used to ensure that the encoded frames
-        can be outputted as a tensor.
+        The length of the padding in the last frame, if any. This is used to ensure that the encoded frames can be
+        outputted as a tensor. This value should be passed during decoding to ensure padding is removed from the
+        encoded frames.
     """
 
     audio_codes: Optional[torch.LongTensor] = None
