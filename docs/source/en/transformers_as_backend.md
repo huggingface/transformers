@@ -202,7 +202,7 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
 </details>
 
 
-2. Your config must be nested, with a minimal set of the following fields:
+2. A multimodal model config must be nested with the following fields.
     * text_config: decoder language model config
     * vision_config: vision encoder config
     * image_token_id: ID of the image placeholder token used in input to indicate image position
