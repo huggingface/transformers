@@ -33,6 +33,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
+import warnings
+
 
 logger = logging.get_logger(__name__)
 
@@ -430,6 +432,17 @@ class VoxtralProcessor(ProcessorMixin):
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
         return texts
+
+    # Deprecated typo'd method for backward compatibility
+    def apply_transcrition_request(self, *args, **kwargs):
+        """
+        Deprecated typo'd method. Use `apply_transcription_request` instead.
+        """
+        warnings.warn(
+            "`apply_transcrition_request` is deprecated due to a typo and will be removed in a future release. Please use `apply_transcription_request` instead.",
+            FutureWarning,
+        )
+        return self.apply_transcription_request(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
