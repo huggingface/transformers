@@ -186,7 +186,6 @@ class PerceptionLMProcessor(ProcessorMixin):
                     * (width // self.patch_size // self.pooling_ratio)
                     * num_tiles
                 )
-                print("EXPAND", num_media_tokens, height, width, num_tiles, media.shape)
                 media_token_list.append(num_media_tokens)
             sample = ""
             for i, num_media_tokens in enumerate(media_token_list):
@@ -234,7 +233,6 @@ class PerceptionLMProcessor(ProcessorMixin):
                     * (tile_size // self.patch_size // self.pooling_ratio)
                     * num_tiles
                 )
-                print("INFEER", num_image_tokens[-1], num_tiles)
                 num_image_patches.append(num_tiles)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
