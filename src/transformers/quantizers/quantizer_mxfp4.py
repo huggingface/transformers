@@ -209,7 +209,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         
                         dequantized_gate_up_proj = convert_moe_packed_tensors(module.gate_up_proj_blocks, module.gate_up_proj_scales)
                         dequantized_gate_up_proj = dequantized_gate_up_proj.transpose(1,2).to(target_device)
-
+                        
+                        module.device_mesh = kwargs.get("device_mesh")
+                        module.rank = kwargs.get("rank")
+                        
                         if self.quantization_config.dequantize:
                             module.gate_up_proj = dequantized_gate_up_proj
                             return
@@ -245,7 +248,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         
                         dequantized_down_proj = convert_moe_packed_tensors(module.down_proj_blocks, module.down_proj_scales)
                         dequantized_down_proj = dequantized_down_proj.transpose(1,2).to(target_device)
-
+                        module.device_mesh = kwargs.get("device_mesh")
+                        module.rank = kwargs.get("rank")
                         if self.quantization_config.dequantize:
                             module.down_proj = dequantized_down_proj
                             return
@@ -266,20 +270,20 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import shuffle_weight, Mxfp4OpenAIMoeExperts, reverse_replace_with_mxfp4_linear
-        if not self.pre_quantized:
-            for module in model.modules():
-                if isinstance(module, Mxfp4OpenAIMoeExperts):
-                    # gate_up_proj_bias = shuffle_weight(module.gate_up_proj_bias)
-                    gate_up_proj_bias = module.gate_up_proj_bias.to(torch.float32)
-                    gate_up_proj_bias = torch.nn.functional.pad(gate_up_proj_bias, (0, module.gate_up_proj_right_pad, 0, 0),
-                                    mode="constant",
-                                    value=0)
-                    down_proj_bias = module.down_proj_bias.to(torch.float32)
-                    down_proj_bias = torch.nn.functional.pad(down_proj_bias, (0, module.down_proj_right_pad, 0, 0),
-                                    mode="constant",
-                                    value=0)
-                    module.gate_up_proj_bias = torch.nn.Parameter(gate_up_proj_bias, requires_grad=False)
-                    module.down_proj_bias = torch.nn.Parameter(down_proj_bias, requires_grad=False)
+        # if not self.pre_quantized:
+        #     for module in model.modules():
+        #         if isinstance(module, Mxfp4OpenAIMoeExperts):
+        #             # gate_up_proj_bias = shuffle_weight(module.gate_up_proj_bias)
+        #             gate_up_proj_bias = module.gate_up_proj_bias.to(torch.float32)
+        #             gate_up_proj_bias = torch.nn.functional.pad(gate_up_proj_bias, (0, module.gate_up_proj_right_pad, 0, 0),
+        #                             mode="constant",
+        #                             value=0)
+        #             down_proj_bias = module.down_proj_bias.to(torch.float32)
+        #             down_proj_bias = torch.nn.functional.pad(down_proj_bias, (0, module.down_proj_right_pad, 0, 0),
+        #                             mode="constant",
+        #                             value=0)
+        #             module.gate_up_proj_bias = torch.nn.Parameter(gate_up_proj_bias, requires_grad=False)
+        #             module.down_proj_bias = torch.nn.Parameter(down_proj_bias, requires_grad=False)
 
         if self.quantization_config.dequantize:
             reverse_replace_with_mxfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config, config=model.config, tp_plan=model._tp_plan)
@@ -333,9 +337,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
             "layers.*.self_attn.v_proj": "colwise",
             "layers.*.self_attn.o_proj": "rowwise",
             "layers.*.self_attn.sinks": "local_rowwise",
+            "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
             "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
             "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
             "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
+            "layers.*.mlp.experts.down_proj": "local_colwise",
             "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
             "layers.*.mlp.experts.down_proj_scales": "local_colwise",
             "layers.*.mlp.experts.down_proj_bias": "local_colwise",
@@ -349,9 +355,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
             "layers.*.self_attn.sinks": "local_rowwise",
             "layers.*.mlp.experts": "gather",
             "layers.*.mlp.router": "ep_router",
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
             "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
             "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
             "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
             "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
             "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
             "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",

@@ -36,7 +36,6 @@ def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
     from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
 
-    
     swizzle_axis = 2 if swizzle_mx_scale or swizzle_mx_value else None
     w = w.to(torch.bfloat16)
 
@@ -168,6 +167,9 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         """
         # type check, uint8 means mxfp4
         #TODO: fp8 x mxfp4 on blackwell
+        # print("routing_data", routing_data)
+        # print("gather_idx", gather_idx)
+        # print("scatter_idx", scatter_idx)
         assert hidden_states.dtype == torch.bfloat16
         assert self.gate_up_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
         assert self.down_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
@@ -221,13 +223,139 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         torch.cuda.synchronize()
         return output_states
 
+def create_expert_indices_for_rank(router_logits, top_k, ep_rank, ep_size, total_experts):
+    """Create expert indices that only select experts belonging to ep_rank"""
+    num_local_experts = total_experts // ep_size
+    router_top_value, router_indices = torch.topk(router_logits, top_k, dim=-1)  # (seq_len, top_k)
+    router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+    router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+
+    router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
+    router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
+    router_indices = router_indices % num_local_experts
+    # Create indices that only point to local experts
+    return router_indices
+
+
 def mlp_forward(self, hidden_states):
     from triton_kernels.routing import routing
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False, simulated_ep=2)
+    # expert_indices = create_expert_indices_for_rank(router_logits, self.router.top_k, self.experts.rank, self.experts.device_mesh.size(), self.experts.num_experts)
+    # print("expert_indices.shape", expert_indices.shape)
+    # print("expert_indices", expert_indices)
+    routing_data, gather_idx, scatter_idx = routing_torch_ep_2(router_logits, self.router.top_k)
+    # print("routing_data", routing_data)
+    # print("gather_idx", gather_idx)
+    # print("scatter_idx", scatter_idx)
+    # raise ValueError("stop here")
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
+    
+def routing_torch_ep_2(
+    logits,
+    n_expts_act,
+):
+    import os
+    print("in routing_torch_ep_2")
+    from triton_kernels.routing import GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch
+
+    with torch.cuda.device(logits.device):
+        world_size = torch.distributed.get_world_size() 
+        # world_size = 1
+        rank = int(os.environ.get("LOCAL_RANK", 0))
+        
+        replace_value = -1
+        
+        n_tokens = logits.shape[0]
+        n_expts_tot = logits.shape[1]
+
+        n_local_experts = n_expts_tot // world_size
+        # rank = 1
+        local_expert_start = rank * n_local_experts
+        local_expert_end = (rank + 1) * n_local_experts
+
+        # TODO: check why +20 ? 
+        n_gates_pad = n_tokens * n_expts_act
+
+        def topk(vals, k, expt_indx):
+            tk_indx = torch.argsort(-vals, dim=1, stable=True)[:, :k]
+            tk_indx = tk_indx.long()
+            tk_val = torch.take_along_dim(vals, tk_indx, dim=1)
+            return tk_val, tk_indx.int()
+
+        expt_scal, expt_indx = topk(logits, n_expts_act, None)
+        expt_scal = torch.softmax(expt_scal, dim=-1)
+        expt_indx, sort_indices = torch.sort(expt_indx, dim=1)
+        expt_scal = torch.gather(expt_scal, 1, sort_indices)
+        # print("expt_indx and expt_scal")
+        # print(expt_indx)
+        # print(expt_scal)
+
+        # Flatten and mask for local experts
+        expt_scal = expt_scal.reshape(-1)
+        # print("local_experts")
+        # print(local_expert_start)
+        # print(local_expert_end)
+        hist = torch.histc(expt_indx, bins=n_expts_tot, max=n_expts_tot - 1)[local_expert_start : local_expert_end]
+
+        # for each row, count how many of its experts are local
+        # num_local_expts = (expt_indx < local_expert_end) & (local_expert_start <= expt_indx)
+        # num_local_expts = num_local_expts.sum(dim=1)
+        
+        # Count the number of rows that are for local experts, padded to an alignment.
+        # n_local_rows = (num_local_expts != 0).sum()
+        # n_local_rows = ((n_local_rows + row_align - 1) // row_align) * row_align
+
+        # TODO: check if reorder really impacts or not the performances
+        # is_active = torch.argsort((num_local_expts == 0).to(torch.int8), stable=True)
+        # expt_indx = expt_indx[is_active]
+        expt_indx = expt_indx.view(-1).to(torch.int32)
+        # print("expt_indx 2 ")
+        # print(expt_indx)
+
+        # Note: Because the number of rows routed to each expert is only known at runtime,
+        # we do not drop tokens that are not routed to the local expert. This ensures that
+        # the tensor shapes are fixed.
+        # Create topk_indx/gate_indx.
+        
+        # try to move values that were seen to later
+        # print(expt_indx)
+        expt_indx = torch.where(expt_indx < local_expert_start, 1000, expt_indx)
+        # print('after')
+        # print(expt_indx)
+        topk_indx = torch.argsort(expt_indx, stable=True).to(torch.int32)
+        # print("topk_indx")
+        # print(topk_indx)
+        gate_indx = torch.argsort(topk_indx).to(torch.int32)
+        # print("gate_indx")
+        # print(gate_indx)
+        # Now filter out all experts 
+        expt_indx = torch.where(expt_indx < local_expert_end, expt_indx, replace_value)
+        expt_indx = torch.where(local_expert_start <= expt_indx, expt_indx, replace_value)
+        # print(expt_indx)
+
+        gate_indx = torch.where(expt_indx == replace_value, replace_value, gate_indx)
+        gate_indx = torch.where(expt_indx == replace_value, replace_value, gate_indx)
+        gate_scal = expt_scal[topk_indx]
+        # print("updated expt_scal")
+        # print(gate_scal)
+        
+        topk_indx = torch.where(gate_indx[topk_indx] == replace_value, replace_value, topk_indx)
+
+        # print(topk_indx)
+
+        # # Routing metadata for local expert computation
+        gather_indx = GatherIndx(src_indx=topk_indx.int(), dst_indx=gate_indx.int())
+        scatter_indx = ScatterIndx(src_indx=gate_indx.int(), dst_indx=topk_indx.int())
+        
+        # n_gates_pad = local_expt_indx.numel()
+        expt_data = compute_expt_data_torch(hist, n_local_experts, n_gates_pad)
+        # print("expt_data")
+        # print(expt_data)
+        # hitted_experts = len(local_expt_indx) -> maybe try to get the closest power of 2 later on 
+        hitted_experts = n_expts_act
+    return RoutingData(gate_scal, hist, n_local_experts, hitted_experts, expt_data), gather_indx, scatter_indx
 
 def should_convert_module(current_key_name, patterns):
     current_key_name_str = ".".join(current_key_name)
@@ -260,6 +388,8 @@ def _replace_with_mxfp4_linear(
         if module.__class__.__name__ == "OpenAIMoeExperts":
             with init_empty_weights():
                 # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
+                _forward_pre_hooks = module._forward_pre_hooks
+                _forward_hooks = module._forward_hooks
                 model._modules[name] = Mxfp4OpenAIMoeExperts(config)
                 has_been_replaced=True
         if module.__class__.__name__ == "OpenAIMoeMLP" and not quantization_config.dequantize:
@@ -334,7 +464,11 @@ def _reverse_replace_with_mxfp4_linear(
             down_proj = module.down_proj
             gate_up_proj_bias = module.gate_up_proj_bias
             down_proj_bias = module.down_proj_bias
+            _forward_pre_hooks = module._forward_pre_hooks
+            _forward_hooks = module._forward_hooks
             model._modules[name] = OpenAIMoeExperts(config)
+            model._modules[name]._forward_pre_hooks = _forward_pre_hooks
+            model._modules[name]._forward_hooks = _forward_hooks
             model._modules[name].gate_up_proj = torch.nn.Parameter(gate_up_proj, requires_grad=False)   
             model._modules[name].down_proj = torch.nn.Parameter(down_proj, requires_grad=False)
             model._modules[name].gate_up_proj_bias = torch.nn.Parameter(gate_up_proj_bias, requires_grad=False)
