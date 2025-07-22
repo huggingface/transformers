@@ -142,6 +142,7 @@ class EncodecConfig(PretrainedConfig):
         self.num_filters = num_filters
         self.num_residual_layers = num_residual_layers
         self.upsampling_ratios = upsampling_ratios
+        self.hop_length = int(np.prod(upsampling_ratios))
         self.norm_type = norm_type
         self.kernel_size = kernel_size
         self.last_kernel_size = last_kernel_size
@@ -182,8 +183,7 @@ class EncodecConfig(PretrainedConfig):
 
     @property
     def frame_rate(self) -> int:
-        hop_length = np.prod(self.upsampling_ratios)
-        return math.ceil(self.sampling_rate / hop_length)
+        return math.ceil(self.sampling_rate / self.hop_length)
 
     @property
     def num_quantizers(self) -> int:
