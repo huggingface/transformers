@@ -18,16 +18,16 @@ specific language governing permissions and limitations under the License.
 
 # ViTPose
 
-[ViTPose](https://huggingface.co/papers/2204.12484) is a vision transformer-based model for keypoint (pose) estimation. It uses a simple, non-hierarchical [ViT](./vit) backbone and a lightweight decoder head. This architecture simplifies model design, takes advantage of transformer scalability, and can be adapted to different training strategies.
+[ViTPose](https://huggingface.co/papers/2204.12484)는 키포인트(포즈) 추정을 위한 비전 트랜스포머 기반 모델입니다. 간단하고 비계층적인 [ViT](./vit) 백본과 경량 디코더 헤드를 사용합니다. 이 아키텍처는 모델 설계를 단순화하고, 트랜스포머의 확장성을 활용하며, 다양한 훈련 전략에 적응할 수 있습니다.
 
-[ViTPose++](https://huggingface.co/papers/2212.04246) improves on ViTPose by incorporating a mixture-of-experts (MoE) module in the backbone and using more diverse pretraining data.
+[ViTPose++](https://huggingface.co/papers/2212.04246)는 백본에 혼합 전문가(MoE) 모듈을 통합하고 더 다양한 사전 훈련 데이터를 사용하여 ViTPose를 개선합니다.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-architecture.png"
 alt="drawing" width="600"/>
 
-You can find all ViTPose and ViTPose++ checkpoints under the [ViTPose collection](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335).
+모든 ViTPose와 ViTPose++ 체크포인트는 [ViTPose 컬렉션](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335)에서 찾을 수 있습니다.
 
-The example below demonstrates pose estimation with the [`VitPoseForPoseEstimation`] class.
+아래 예시는 [`VitPoseForPoseEstimation`] 클래스를 사용한 포즈 추정을 보여줍니다.
 
 ```py
 import torch
@@ -42,7 +42,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
 
-# Detect humans in the image
+# 이미지에서 사람을 감지합니다
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
 person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map=device)
 
@@ -56,15 +56,15 @@ results = person_image_processor.post_process_object_detection(
 )
 result = results[0]
 
-# Human label refers 0 index in COCO dataset
+# 사람 라벨은 COCO 데이터셋에서 0 인덱스를 참조합니다
 person_boxes = result["boxes"][result["labels"] == 0]
 person_boxes = person_boxes.cpu().numpy()
 
-# Convert boxes from VOC (x1, y1, x2, y2) to COCO (x1, y1, w, h) format
+# 박스를 VOC (x1, y1, x2, y2)에서 COCO (x1, y1, w, h) 형식으로 변환합니다
 person_boxes[:, 2] = person_boxes[:, 2] - person_boxes[:, 0]
 person_boxes[:, 3] = person_boxes[:, 3] - person_boxes[:, 1]
 
-# Detect keypoints for each person found
+# 발견된 각 사람에 대해 키포인트를 감지합니다
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-base-simple")
 model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=device)
 
@@ -106,9 +106,9 @@ annotated_frame
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose.png"/>
 </div>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 더 많은 양자화 백엔드에 대해서는 [양자화](../quantization/overview) 개요를 참조하세요.
 
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
+아래 예시는 [torchao](../quantization/torchao)를 사용하여 가중치만 int4로 양자화합니다.
 
 ```py
 # pip install torchao
@@ -154,11 +154,11 @@ pose_results = image_processor.post_process_pose_estimation(outputs, boxes=[pers
 image_pose_result = pose_results[0]
 ```
 
-## Notes
+## 주의사항[[notes]]
 
-- Use [`AutoProcessor`] to automatically prepare bounding box and image inputs.
-- ViTPose is a top-down pose estimator. It uses a object detector to detect individuals first before keypoint prediction.
-- ViTPose++ has 6 different MoE expert heads (COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`) which supports 6 different datasets. Pass a specific value corresponding to the dataset to the `dataset_index` to indicate which expert to use.
+- [`AutoProcessor`]를 사용하여 바운딩 박스와 이미지 입력을 자동으로 준비하세요.
+- ViTPose는 탑다운 방식의 포즈 추정기입니다. 키포인트 예측 전에 먼저 객체 감지기를 사용하여 개인을 감지합니다.
+- ViTPose++는 6개의 다른 MoE 전문가 헤드(COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`)를 가지고 있어 6개의 다른 데이터셋을 지원합니다. 사용할 전문가를 나타내기 위해 데이터셋에 해당하는 특정 값을 `dataset_index`에 전달하세요.
 
     ```py
     from transformers import AutoProcessor, VitPoseForPoseEstimation
@@ -169,13 +169,13 @@ image_pose_result = pose_results[0]
     model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device=device)
 
     inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(device)
-    dataset_index = torch.tensor([0], device=device) # must be a tensor of shape (batch_size,)
+    dataset_index = torch.tensor([0], device=device) # (batch_size,) 형태의 텐서여야 합니다
 
     with torch.no_grad():
         outputs = model(**inputs, dataset_index=dataset_index)
     ```
 
-- [OpenCV](https://opencv.org/) is an alternative option for visualizing the estimated pose.
+- [OpenCV](https://opencv.org/)는 추정된 포즈를 시각화하는 대안적인 옵션입니다.
 
     ```py
     # pip install opencv-python
@@ -232,7 +232,7 @@ image_pose_result = pose_results[0]
                     else:
                         cv2.line(image, (x1, y1), (x2, y2), color, thickness=thickness)
 
-    # Note: keypoint_edges and color palette are dataset-specific
+    # 주의: keypoint_edges와 색상 팔레트는 데이터셋별로 다릅니다
     keypoint_edges = model.config.edges
 
     palette = np.array(
@@ -269,22 +269,22 @@ image_pose_result = pose_results[0]
         scores = np.array(pose_result["scores"])
         keypoints = np.array(pose_result["keypoints"])
 
-        # draw each point on image
+        # 이미지에 각 포인트를 그립니다
         draw_points(numpy_image, keypoints, scores, keypoint_colors, keypoint_score_threshold=0.3, radius=4, show_keypoint_weight=False)
 
-        # draw links
+        # 링크를 그립니다
         draw_links(numpy_image, keypoints, scores, keypoint_edges, link_colors, keypoint_score_threshold=0.3, thickness=1, show_keypoint_weight=False)
 
     pose_image = Image.fromarray(numpy_image)
     pose_image
     ```
 
-## Resources
+## 리소스[[resources]]
 
-Refer to resources below to learn more about using ViTPose.
+ViTPose 사용에 대해 더 알아보려면 아래 리소스를 참조하세요.
 
-- This [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTPose/Inference_with_ViTPose_for_body_pose_estimation.ipynb) demonstrates inference and visualization.
-- This [Space](https://huggingface.co/spaces/hysts/ViTPose-transformers) demonstrates ViTPose on images and video.
+- 이 [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTPose/Inference_with_ViTPose_for_body_pose_estimation.ipynb)은 추론과 시각화를 보여줍니다.
+- 이 [Space](https://huggingface.co/spaces/hysts/ViTPose-transformers)는 이미지와 비디오에서 ViTPose를 보여줍니다.
 
 ## VitPoseImageProcessor
 
