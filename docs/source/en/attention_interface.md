@@ -60,11 +60,11 @@ You will see it prints "I just entered the attention computation" as many times 
 
 ## Dynamically switching attention function
 
-You could dynamically change the model's attention function as well, by overriding the `config._attn_implementation` field:
+You could dynamically change the model's attention function as well:
 
 ```python
 # Back to use original sdpa implementation
-model.config._attn_implementation = "sdpa"
+model.set_attn_implementation("sdpa")
 
 model(torch.ones(1, 5, dtype=int))
 ```

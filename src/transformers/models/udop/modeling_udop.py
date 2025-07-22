@@ -1132,9 +1132,6 @@ class UdopStack(UdopPreTrainedModel):
         relative_bias_list = create_relative_bias(config)
         return RelativePositionBiasAggregated(relative_bias_list)
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     def get_output_embeddings(self):
         return self.embed_tokens
 
@@ -1712,12 +1709,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def get_encoder(self):
         return self.encoder
