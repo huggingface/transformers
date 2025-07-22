@@ -23,7 +23,7 @@ import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import VocosFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, slow
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -196,45 +196,46 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
-    @slow
+    # @slow
     def test_integration(self):
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [
                 -1.7723,
-                -1.7531,
-                -2.2033,
-                -3.0990,
-                -3.2203,
-                -3.1770,
-                -4.0464,
-                -4.1972,
-                -4.4663,
-                -4.4624,
-                -3.5428,
-                -3.7132,
-                -4.6585,
-                -4.9242,
-                -4.3465,
-                -3.7554,
-                -3.1663,
-                -2.6248,
-                -3.2250,
-                -3.3957,
-                -2.5886,
-                -3.4748,
-                -4.1101,
-                -3.8742,
-                -4.3047,
-                -3.0862,
-                -2.6331,
-                -2.8929,
-                -3.9914,
-                -4.2564,
+                -2.6265,
+                -4.3446,
+                -3.1139,
+                -2.8543,
+                -2.9732,
+                -2.4957,
+                -2.2525,
+                -2.2552,
+                -2.6201,
+                -2.9786,
+                -2.9158,
+                -3.6589,
+                -2.4617,
+                -2.5469,
+                -2.1645,
+                -2.7375,
+                -2.8342,
+                -3.9452,
+                -3.0140,
+                -3.8436,
+                -3.6883,
+                -3.6017,
+                -3.2762,
+                -3.0133,
+                -2.3405,
+                -2.8324,
+                -2.7181,
+                -2.8962,
+                -2.8469,
             ]
         )
 
-        speech, sr = self._load_datasamples(1)
+        speech = self._load_datasamples(1)
         feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/Vocos")
-        input_features = feature_extractor(speech, sampling_rate=sr[0], return_tensors="pt").input_features
-        self.assertEqual(input_features.shape, (1, feature_extractor.feature_size, 549))
-        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
+        input_features = feature_extractor(speech, return_tensors="pt").input_features
+        self.assertEqual(input_features.shape, (1, feature_extractor.feature_size, 550))
+        # the numpy backend of melspectogram causes small numerical differences between cuda and cpu wheels
+        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-3, atol=1e-4)
