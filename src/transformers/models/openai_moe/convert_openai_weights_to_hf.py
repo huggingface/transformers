@@ -150,14 +150,14 @@ def write_model(
       }
 
     config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, **original_config)
-    print(config)
+
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
     for file in list(os.listdir(input_base_path)):
         if file.endswith(".safetensors"):
             final_.update(safe_load(os.path.join(input_base_path, file)))
 
-    print("Converting ..", mxfp4)
+    print("Converting ..")
     all_keys = final_.keys()
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
