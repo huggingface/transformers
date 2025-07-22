@@ -371,23 +371,29 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         if scores.dim() == 3:
             if self.logits_indices is not None and self.cumulative_seqlens_q is not None:
-    batch_size, seq_len, vocab_size = scores.shape
-    last_positions = self.logits_indices
-    last_scores = scores[0, last_positions, :]
-    
-    # Prepare token mask
-    token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
-    cu_seq_lens = self.cumulative_seqlens_q
-    lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
-    seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
-    token_mask[seq_indices, input_ids] = True
-    
-    # Apply penalty
-    penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
-    scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
+                batch_size, seq_len, vocab_size = scores.shape
+                last_positions = self.logits_indices
+                last_scores = scores[0, last_positions, :]
+
+                # Prepare token mask
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                cu_seq_lens = self.cumulative_seqlens_q
+                lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
+                seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
+                token_mask[seq_indices, input_ids] = True
+
+                # Apply penalty
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
+            else:
+                batch_size, seq_len, vocab_size = scores.shape
+                last_scores = scores[:, -1, :]
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                if input_ids.dim() == 1:
+                    unique_tokens = torch.unique(input_ids)
+                    token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
                 else:
-                    for i in range(seq_len):
-                        token_mask.scatter_(1, input_ids[:, i : i + 1], True)
+                    token_mask.scatter_(1, input_ids, True)
                 # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
                 scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
