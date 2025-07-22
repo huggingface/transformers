@@ -372,7 +372,7 @@ class JanusConfig(PretrainedConfig):
                 f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
                 f" Type found: {type(vq_config)}"
             )
-        
+
         self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size

@@ -42,7 +42,6 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
-    MistralPreTrainedModel,
     MistralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,

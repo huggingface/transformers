@@ -19,7 +19,6 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
-    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
@@ -167,7 +166,6 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
 
 class PhiRotaryEmbedding(LlamaRotaryEmbedding):
     pass
-
 
 
 class PhiModel(LlamaModel):

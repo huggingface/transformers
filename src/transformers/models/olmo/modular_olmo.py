@@ -14,7 +14,6 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
-    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     eager_attention_forward,
     rotate_half,
