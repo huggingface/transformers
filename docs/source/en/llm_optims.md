@@ -353,6 +353,14 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
+
+# Change the model's attention dynamically after loading
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-2b",
+    quantization_config=quant_config,
+    torch_dtype=torch.bfloat16
+)
+model.set_attention_implementation("flash_attention_2")
 ```
 
 ### PyTorch scaled dot product attention

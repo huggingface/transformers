@@ -183,6 +183,10 @@ Refer to the [AttentionInterface](./attention_interface) guide to learn how to c
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", attn_implementation="sdpa")
+
+# Change the model's attention dynamically after loading it
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto")
+model.set_attention_implementation("sdpa")
 ```
 
 SDPA selects the most performant implementation available, but you can also explicitly select an implementation with [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager. The example below shows how to enable the FlashAttention2 implementation with `enable_flash=True`.

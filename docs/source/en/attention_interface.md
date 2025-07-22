@@ -74,7 +74,7 @@ This allows to quickly change an attention function, without needing to reload t
 
 ## Different attention per backbone in multimodal models
 
-For multimodal models, you may want to load different backbones with different attention functions. For example, some vision backbones perform better with full precision only and are incompatible with Flash Attention. If you want to take advantage of Flash Attention while keeping your vision encoder in fp32, you can configure different attention implementations per backbone.
+For multimodal models different attention functions may work better for each backbone module. For example, some vision backbones perform better in fp32, but are incompatible with FlashAttention. To continue using FlashAttention while keeping the vision encoder in fp32, create a dict and map each config to an attention implementation as shown below.
 
 ```python
 from transformers import AutoModelForImageTextToText
