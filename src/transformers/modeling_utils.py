@@ -2979,18 +2979,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
         elif (
-            isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            isinstance(
+                module, (nn.LayerNorm, nn.RMSNorm, nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
+            )
             or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
         ):
-            # Norms can exist without weights
+            # Norms can exist without weights (in which case they are None from torch primitives)
             if module.weight is not None:
                 module.weight.data.fill_(1.0)
-            if module.bias is not None:
+            if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
-        # We cannot use `isinstance` on the RMSNorms as they change names between modelings
-        elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.fill_(1.0)
 
     def _initialize_weights(self, module):
         """

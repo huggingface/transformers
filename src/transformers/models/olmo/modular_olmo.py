@@ -165,4 +165,8 @@ class OlmoForCausalLM(LlamaForCausalLM):
     pass
 
 
-__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]  # noqa: F822
+__all__ = [
+    "OlmoForCausalLM",
+    "OlmoModel",
+    "OlmoPreTrainedModel",  # noqa: F822
+]

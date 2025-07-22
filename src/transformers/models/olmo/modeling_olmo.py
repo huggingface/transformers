@@ -468,4 +468,4 @@ class OlmoForCausalLM(OlmoPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]  # noqa: F822
+__all__ = ["OlmoForCausalLM", "OlmoModel", "OlmoPreTrainedModel"]
