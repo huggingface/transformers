@@ -32,6 +32,8 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    "Ernie4_5Config": ["tie_word_embeddings"],
+    "Ernie4_5_MoEConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
