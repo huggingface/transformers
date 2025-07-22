@@ -13,17 +13,14 @@
 # limitations under the License.
 
 """Ernie VL model"""
-import re
-import math
 import itertools
-from dataclasses import dataclass
-from collections import defaultdict
+import math
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import partial
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,11 +31,13 @@ from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
+
 from .configuration_ernie4_5_vl import (
     DFNRopeVisionTransformerConfig,
     Ernie4_5_MoEConfig,
     Ernie4_5_VLMoEConfig,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -254,50 +253,6 @@ class RopeEmbedding(nn.Module):
             rotate_half_k.to(torch.float32) * sin_pos
         )
         return query, key
-
-
-class Ernie4_5_MLP(nn.Module):
-    """
-    Ernie4_5_MLP - Gated Multi-Layer Perceptron module used in Ernie model.
-    """
-
-    def __init__(self, config, layer_idx=0):
-        """
-        Initialize the MLP module with configuration options.
-
-        Args:
-            config (Ernie4_5_Config): Model configurations.
-            layer_idx (int): Index of current layer (default: 0)
-        """
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-
-        self.gate_proj = nn.Linear(
-            self.hidden_size, self.intermediate_size, bias=config.use_bias
-        )
-        self.up_proj = nn.Linear(
-            self.hidden_size, self.intermediate_size, bias=config.use_bias
-        )
-        self.down_proj = nn.Linear(
-            self.intermediate_size, self.hidden_size, bias=config.use_bias
-        )
-
-    def forward(self, x):
-        """
-        Forward pass through the MLP module.
-
-        Args:
-            x (Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Tensor: Output tensor of shape [batch_size, seq_len, hidden_size]
-        """
-        current_device = self.gate_proj.weight.data.device
-        x = x.to(current_device)
-        down_proj = self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 
 class Ernie4_5_Attention(nn.Module):
@@ -629,134 +584,43 @@ class Ernie4_5_Attention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class FusedDropoutImpl(nn.Module):
-    """
-    Fused dropout implementation with residual connection support.
-
-    This layer combines dropout and residual addition in a single operation for better performance,
-    particularly on GPU devices. The dropout is conditionally applied based on the probability.
-
-    Args:
-        prob (float): Dropout probability (between 0 and 1)
-        mode (str): Dropout mode, either 'upscale_in_train' or 'downscale_in_infer'
-
-    Attributes:
-        prob (float): Stores the dropout probability
-        mode (str): Stores the dropout mode
-        dropout (nn.Dropout): The actual dropout layer instance
-    """
-
-    def __init__(self, prob, mode):
+# Copy LlamaRMSNorm
+class Ernie4_5_MoERMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
         """
-        Initialize the fused dropout layer.
-
-        Args:
-            prob (float): Dropout probability (0 means no dropout)
-            mode (str): Dropout mode ('upscale_in_train' or 'downscale_in_infer')
+        Ernie4_5_MoERMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.prob = prob
-        self.dropout = nn.Dropout(p=prob)
-
-    def forward(self, x, y):
-        """
-        Forward pass of the fused dropout layer.
-
-        Args:
-            x (Tensor): Input tensor to potentially apply dropout on
-            y (Tensor): Residual tensor to add to the (possibly dropped out) x
-
-        Returns:
-            Tensor: Result of x (with optional dropout) + y
-        """
-        if self.prob > 0:
-            x = self.dropout(x)
-        output = x + y
-
-        return output
-
-
-class RMSNorm(nn.Module):
-    """
-    Root Mean Square Layer Normalization (RMSNorm) implementation.
-
-    RMSNorm is a simplified version of LayerNorm that focuses on the root mean square of inputs,
-    omitting the mean-centering operation. This provides computational efficiency while maintaining
-    good performance.
-
-    """
-
-    def __init__(self, config):
-        """
-        Initialize RMSNorm layer.
-
-        Args:
-            config (Ernie4_5_Config): Model configuration.
-        """
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.weight = nn.Parameter(
-            torch.ones(self.hidden_size, dtype=torch.get_default_dtype())
-        )
-        self.variance_epsilon = config.rms_norm_eps
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        """
-        Apply RMS normalization to input hidden states.
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
-        Args:
-            hidden_states (Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
-
-        Returns:
-            Tensor: Normalized output tensor of same shape as input
-
-        Note:
-            - computes RMSNorm manually:
-                1. Compute variance of features
-                2. Apply reciprocal square root normalization
-                3. Scale by learned weight parameter
-            - Maintains original dtype for numerical stability during computation
-        """
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = torch.rsqrt(variance + self.variance_epsilon) * hidden_states
-        return hidden_states.to(self.weight.dtype) * self.weight
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Ernie4_5_MoeMLP(Ernie4_5_MLP):
-    """Mixture of Experts (MoE) variant of ERNIE's MLP layer."""
+# Copy Ernie4_5_MoE
+class Ernie4_5_MoeMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
 
-    def __init__(self, config, layer_idx=0):
-        """Initialize the MoE MLP layer.
-
-        Args:
-            config (Ernie4_5_MoEConfig): Configuration for MoE architecture.
-            layer_idx (int): Index of current layer in transformer stack
-        """
-
-        if getattr(config, "disable_ffn_model_parallel", False):
-            config = deepcopy(config)
-            config.tensor_parallel_degree = 1
-
-        super().__init__(config, layer_idx=layer_idx)
-        self.moe_dropout_prob = config.moe_dropout_prob
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        """Forward pass through MoE MLP layer.
-
-        Args:
-            x (paddle.Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
-                              or [seq_len, hidden_size]
-
-        Returns:
-            paddle.Tensor: Output tensor with same shape as input
-        """
-        current_device = self.gate_proj.weight.data.device
-        x = x.to(current_device)
-        x = F.silu(self.gate_proj(x)) * self.up_proj(x)
-        if self.moe_dropout_prob > 0:
-            x = F.dropout(input=x, p=self.moe_dropout_prob)
-        ret = self.down_proj(x)
-        return ret
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def masked_fill(x, mask, value):
@@ -792,6 +656,7 @@ def compute_optimal_transport(M, r, c, lam=1.0, epsilon=1e-8, max_iters: int = 1
     return P, _
 
 
+# TODO: seems like only topk is used
 class Top2Gate(nn.Module):
     """
     Gate module implementing Top2Gating as described in Gshard paper.
@@ -2542,19 +2407,12 @@ class Ernie4_5_DecoderLayer(nn.Module):
                 lambda: _mlp_text
             )  # This lambda prevents the text parameter from being scanned into the state-dict
         else:
-            self.mlp = Ernie4_5_MLP(config)
+            self.mlp = Ernie4_5_MoeMLP(config)
 
-        Norm = RMSNorm
+        Norm = Ernie4_5_MoERMSNorm
 
-        self.input_layernorm = Norm(config)
-        self.post_attention_layernorm = Norm(config)
-
-        self.residual_add1 = FusedDropoutImpl(
-            config.hidden_dropout_prob, mode="upscale_in_train"
-        )
-        self.residual_add2 = FusedDropoutImpl(
-            config.hidden_dropout_prob, mode="upscale_in_train"
-        )
+        self.input_layernorm = Norm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Norm(config.hidden_size, config.rms_norm_eps)
 
     def _init_shared_experts(self):
         """init shared experts
@@ -2576,7 +2434,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
                     cfg.intermediate_size * cfg.moe_num_shared_experts
                 )
             cfg.disable_ffn_model_parallel = False  # split shared epxert
-            shared_experts = Ernie4_5_MoeMLP(cfg, True)
+            shared_experts = Ernie4_5_MoeMLP(cfg)
         else:
             shared_experts = None
         return shared_experts
@@ -2707,7 +2565,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
                 token_type_ids=token_type_ids,
             )
         )
-        hidden_states = self.residual_add1(hidden_states, residual)
+        hidden_states = hidden_states + residual
 
         # Fully Connected
         residual = hidden_states
@@ -2726,7 +2584,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
             hidden_states = self.mlp(hidden_states)
             gate_logits, router_loss = None, None
 
-        hidden_states = self.residual_add2(hidden_states, residual)
+        hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
 
@@ -2783,26 +2641,10 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         self.layers = nn.ModuleList(
             [Ernie4_5_DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
         )
-        Norm = RMSNorm
-        self.norm = Norm(config)
+        Norm = Ernie4_5_MoERMSNorm
+        self.norm = Norm(config.hidden_size, config.rms_norm_eps)
 
         self.gradient_checkpointing = False
-
-    def get_input_embeddings(self):
-        """Get the input embedding layer.
-
-        Returns:
-            nn.Embedding: The embedding layer for input tokens
-        """
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        """Set new input embeddings.
-
-        Args:
-            value (nn.Embedding): New embedding layer to use
-        """
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -2966,236 +2808,6 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         )
 
 
-def parallel_matmul(
-    x,
-    y,
-    bias=None,
-    transpose_y=False,
-):
-    """
-    Performs parallel matrix multiplication with tensor model parallelism support.
-
-    Args:
-        x (torch.Tensor): Input tensor with shape [batch_size, seq_len, hidden_size]
-        y (Union[torch.Tensor, EagerParamBase]): Weight matrix which can be:
-            - Regular tensor
-            - Distributed parameter in tensor parallel mode
-        bias (Optional[torch.Tensor]): Optional bias tensor
-        transpose_y (bool): Whether to transpose the 'y' matrix before multiplication
-        # tensor_parallel_degree (int): Degree of tensor model parallelism (default: 1)
-        # tensor_parallel_output (bool): Whether to keep output in tensor parallel format
-            or gather across devices (default: True)
-        fuse_linear (bool): Whether to use fused linear operation for optimization
-
-    Returns:
-        torch.Tensor
-
-    Raises:
-        AssertionError: If tensor parallel is enabled but weight is not distributed
-        AttributeError: If called without distributed.launch context
-    """
-    if transpose_y:
-        logits = torch.matmul(x, y.T)
-    else:
-        logits = torch.matmul(x, y)
-    if bias is not None:
-        logits += bias
-    return logits
-
-
-def calc_lm_head_logits(
-    config, hidden_states, weight, bias, tensor_parallel_output=None, training=True
-):
-    """
-    Calculate language model head logits with support for various parallelization strategies.
-
-    This is the core function that computes the final output logits for a language model,
-    handling sequence parallelism and tensor parallelism configurations.
-
-    Args:
-        config (Ernie4_5_Config): Model configuration.
-        hidden_states (Tensor): Hidden states from the transformer layers
-        weight (Tensor): Weight matrix for the language model head
-        bias (Tensor): Bias vector for the language model head
-        tensor_parallel_output (bool, optional): Override for tensor parallel output behavior.
-                                               If None, uses config.tensor_parallel_output.
-                                               Defaults to None.
-        training (bool, optional): Whether in training mode. Defaults to True.
-
-    Returns:
-        Tensor: The computed logits for language modeling.
-    """
-    if tensor_parallel_output is None:
-        tensor_parallel_output = config.tensor_parallel_output
-    logits = parallel_matmul(
-        hidden_states,
-        weight,
-        bias=bias,
-        transpose_y=config.tie_word_embeddings,
-    )
-
-    return logits
-
-
-def calc_multimodal_logits(
-    last_hidden_state: torch.Tensor,
-    lm_head_weight: torch.Tensor,
-    lm_head_bias: torch.Tensor,
-    mm_head_weight: torch.Tensor,
-    mm_head_bias: torch.Tensor,
-    token_type_ids_shifted: torch.Tensor,
-    config: Ernie4_5_VLMoEConfig,
-):
-    """
-    calculate logits for pure text, multimodal text, and image
-    Args:
-        last_hidden_state: The hidden of the last layer, in sequence-parallel, is in the split state.
-        ...
-        token_type_ids_shifted: # Non-sp split tensor
-            The token-type-ids at the label position is used to select the lm-head corresponding to each token.
-            Note: In the id sequence of alternating images and texts, the last text token will predict the image id,
-            and vice versa, so it is necessary to select the lmhead weight corresponding to the label type.
-    """
-    # Align the type of ids with the type of label. For the last ids, assume that the token type remains unchanged.
-    # TODO: Pass token-type-ids from reader
-    assert last_hidden_state.shape[:2] == token_type_ids_shifted.shape, (
-        last_hidden_state.shape,
-        token_type_ids_shifted.shape,
-    )
-    parallel_matmul_tp = partial(
-        parallel_matmul,
-    )
-
-    if mm_head_weight is None:
-        if config.use_recompute_loss_fn:
-            return last_hidden_state, None, None
-        score_text = parallel_matmul_tp(last_hidden_state, lm_head_weight, lm_head_bias)
-        return score_text, None, None
-
-    image_mask_shifted = token_type_ids_shifted == TokenType.image
-    text_pos_shifted = token_type_ids_shifted == TokenType.text
-
-    if text_pos_shifted.any().item() > 0:
-        score_text = parallel_matmul_tp(
-            last_hidden_state[text_pos_shifted], lm_head_weight, lm_head_bias
-        )
-    else:
-        score_text = None
-
-    if mm_head_weight is not None and image_mask_shifted.any().item() > 0:
-        score_image = parallel_matmul_tp(
-            last_hidden_state[image_mask_shifted], mm_head_weight, mm_head_bias
-        )
-    else:
-        score_image = None
-
-    return score_text, score_image, None
-
-
-class Ernie4_5_MoeLMHead(nn.Module):
-    """Language model head for ERNIE with support for tensor parallelism."""
-
-    def __init__(self, config):
-        """Initialize the language model head.
-
-        Args:
-            config (Ernie4_5_Config): Model configuration containing:
-                - vocab_size: Size of vocabulary
-                - hidden_size: Dimension of hidden states
-                # - tensor_parallel_degree: Degree of tensor parallelism
-                - tie_word_embeddings: Whether to tie input/output embeddings
-                - weight_share_add_bias: Whether to add bias when weight sharing
-                - use_bias: Whether to use bias term
-                - use_recompute_loss_fn: Whether to defer logits computation to loss function
-                - use_sparse_head_and_loss_fn: Whether to use sparse head computation
-        """
-
-        super(Ernie4_5_MoeLMHead, self).__init__()
-        self.config = config
-        if config.tensor_parallel_degree > 1:
-            vocab_size = config.vocab_size // config.tensor_parallel_degree
-        else:
-            vocab_size = config.vocab_size
-
-        if config.tie_word_embeddings:
-            self.weight = nn.Parameter(
-                torch.empty(
-                    vocab_size, config.hidden_size, dtype=torch.get_default_dtype()
-                )
-            )
-        else:
-            self.weight = nn.Parameter(
-                torch.empty(
-                    config.hidden_size, vocab_size, dtype=torch.get_default_dtype()
-                )
-            )
-        nn.init.xavier_uniform_(self.weight)
-
-        logger.info(
-            f"output-weight:{self.weight.shape} tie_word_embeddings:{config.tie_word_embeddings}"
-        )
-
-        if config.weight_share_add_bias and config.use_bias:
-            self.bias = nn.Parameter(
-                torch.zeros(vocab_size, dtype=torch.get_default_dtype())
-            )
-        else:
-            self.bias = None
-
-        # Must set distributed attr for Tensor Parallel !
-        self.weight.is_distributed = (
-            True if (vocab_size != config.vocab_size) else False
-        )
-        if config.weight_share_add_bias and config.use_bias:
-            self.bias.is_distributed = (
-                True if (vocab_size != config.vocab_size) else False
-            )
-
-        if self.weight.is_distributed:
-            self.weight.split_axis = 1
-        if (
-            config.weight_share_add_bias
-            and config.use_bias
-            and self.bias.is_distributed
-        ):
-            self.bias.split_axis = 0
-
-        if self.config.use_recompute_loss_fn:
-            logger.info(
-                "Using recompute_loss_fn, the calculation of logits will be moved into "
-                "loss_fn for memory optimization"
-            )
-
-    def forward(self, hidden_states, tensor_parallel_output=None):
-        """Project hidden states to vocabulary logits.
-
-        Args:
-            hidden_states (torch.Tensor): Input tensor of shape [batch_size, seq_len, hidden_size]
-            tensor_parallel_output (Optional[bool]): Whether to output parallel results. Defaults to None.
-
-        Returns:
-            Union[
-                Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-                    # When use_recompute_loss_fn or use_sparse_head_and_loss_fn
-                    - hidden_states: Original input
-                    - weight: Projection weights
-                    - bias: Optional bias term
-                Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], bool]:  # With tensor_parallel_output
-                    Same as above plus tensor_parallel_output flag
-                torch.Tensor:  # Normal case
-                    Logits tensor of shape [batch_size, seq_len, vocab_size]
-            ]
-        """
-        return calc_lm_head_logits(
-            self.config,
-            hidden_states,
-            self.weight,
-            self.bias,
-            tensor_parallel_output,
-            training=self.training,
-        )
-
-
 class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel, GenerationMixin):
     """ERNIE Mixture of Experts (MoE) model for causal language modeling."""
 
@@ -3219,36 +2831,14 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel, GenerationMixin):
         config.initializer_range = new_initializer_range
         self.config = config
         self.model = Ernie4_5_Model(config)
-        self.lm_head = Ernie4_5_MoeLMHead(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
-        self.tie_weights()  # maybe weight share
-
-    def get_input_embeddings(self):
-        """Returns the input embeddings layer."""
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        """Sets the input embeddings layer."""
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        """Returns the output embeddings (LM head)."""
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        """Sets the output embeddings layer."""
-        self.lm_head = new_embeddings
+        self.post_init()  # maybe weight share
 
     def set_decoder(self, decoder):
-        """Sets the ERNIE decoder model."""
         self.model = decoder
 
     def get_decoder(self):
-        """Get the transformer decoder.
-
-        Returns:
-            nn.Layer: The decoder module
-        """
         return self.model
 
     # @staticmethod
@@ -3684,7 +3274,7 @@ class VariableResolutionResamplerModel(nn.Module):
 
             out_config = deepcopy(config)
             out_config.hidden_size = out_dim
-            self.after_norm = RMSNorm(out_config)
+            self.after_norm = Ernie4_5_MoERMSNorm(out_config.hidden_size, config.rms_norm_eps)
 
     def spatial_conv_reshape(self, x, spatial_conv_size):
         """
@@ -3791,61 +3381,6 @@ class VariableResolutionResamplerModel(nn.Module):
             x = fwd_temporal(x)
         x = fwd_mlp(x)
         return x
-
-
-class Ernie4_5_MoeVLHead(Ernie4_5_MoeLMHead):
-    """Ernie4_5_MoeVLHead"""
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.config = config
-        if config.mm_vocab_size > 0:
-            mm_vocab_config = deepcopy(config)
-            mm_vocab_config.vocab_size = config.mm_vocab_size
-            assert mm_vocab_config.vocab_size > 0, mm_vocab_config
-            assert (
-                mm_vocab_config.im_patch_id >= mm_vocab_config.max_text_id
-            ), mm_vocab_config
-            self.mm_head = Ernie4_5_MoeLMHead(mm_vocab_config)
-        else:
-            self.mm_head = None
-
-    def forward(self, hidden_state, token_type_ids_labels, use_cache=False):
-        """
-        Args:
-            hidden_state(torch.Tensor): hidden state
-            token_type_ids_labels(torch.Tensor): token ids
-            use_cache(bool): whether to use cache, default is False
-
-        Returns:
-            logits_text(torch.Tensor): text logits
-            logits_image(torch.Tensor): image logits
-        """
-        if not use_cache:
-            mm_head_weight = self.mm_head.weight if self.mm_head is not None else None
-            mm_head_bias = self.mm_head.bias if self.mm_head is not None else None
-            logits_text, logits_image, _ = calc_multimodal_logits(
-                hidden_state,
-                self.weight,
-                self.bias,
-                mm_head_weight,
-                mm_head_bias,
-                token_type_ids_labels,
-                self.config,
-            )
-            return logits_text, logits_image, None
-        else:
-            # TODO，support lm_head decode only
-            return (
-                parallel_matmul(
-                    hidden_state[:, -1:, :],
-                    self.weight,
-                    self.bias,
-                    transpose_y=self.config.tie_word_embeddings,
-                ),
-                None,
-                None,
-            )
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
