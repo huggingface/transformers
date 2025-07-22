@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for OneFormer."""
 
-from typing import Optional, Union, Unpack
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -32,6 +32,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
