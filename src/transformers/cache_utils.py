@@ -558,10 +558,10 @@ class OffloadedCacheProcessor(CacheProcessor):
         self.is_static = any(isinstance(layer, StaticLayer) for layer in cache.layers)
         if self.is_static:
             for i, layer in enumerate(cache.layers):
-                device = cache.layer_init_args["device"] if i == 0 else self.offload_device
+                device = cache.layer_init_kwargs["device"] if i == 0 else self.offload_device
                 layer.keys = layer.keys.to(device)
                 layer.values = layer.values.to(device)
-                self.original_device.append(cache.layer_init_args["device"])
+                self.original_device.append(cache.layer_init_kwargs["device"])
             if len(cache) != cache.num_hidden_layers:
                 raise ValueError("If static layers are used, all cache layers must be initialized")
 
@@ -1080,7 +1080,7 @@ class Cache:
             tp_size=tp_size,
         )
         processor_kwargs, kwargs = parse_processor_args(processor_class, kwargs)
-        self.layer_init_args = parse_layer_args_from_model_config(config, **kwargs)
+        self.layer_init_kwargs = parse_layer_args_from_model_config(config, **kwargs)
         self.num_hidden_layers = getattr(config, "num_hidden_layers", 1)
 
         self.append_new_layers(self.num_hidden_layers - 1)
@@ -1138,10 +1138,10 @@ class Cache:
                 The index of the layer to append.
         """
         while len(self.layers) <= layer_idx:
-            args = self.layer_init_args.copy()
-            if self.layer_init_args.get("layer_device_map", None) is not None:
-                args["device"] = args.pop("layer_device_map")[layer_idx]
-            new_layer = self.layer_classes[len(self.layers) % len(self.layer_classes)](**args)
+            kwargs = self.layer_init_kwargs.copy()
+            if self.layer_init_kwargs.get("layer_device_map", None) is not None:
+                kwargs["device"] = kwargs.pop("layer_device_map")[layer_idx]
+            new_layer = self.layer_classes[len(self.layers) % len(self.layer_classes)](**kwargs)
             self.layers.append(new_layer)
 
     @apply_processors
