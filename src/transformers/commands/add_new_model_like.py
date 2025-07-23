@@ -29,12 +29,7 @@ import yaml
 
 from ..models import auto as auto_module
 from ..models.auto.configuration_auto import model_type_to_module_name
-from ..utils import (
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-    logging,
-)
+from ..utils import logging
 from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
 
@@ -930,8 +925,6 @@ AUTO_CLASSES_PATTERNS = {
     "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
     "image_processing_auto.py": ['        ("{model_type}", "{image_processor_classes}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
-    "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
-    "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
     "processing_auto.py": ['        ("{model_type}", "{processor_class}"),'],
 }
 
@@ -952,12 +945,7 @@ def add_model_to_auto_classes(
         new_patterns = []
         for pattern in patterns:
             if re.search("any_([a-z]*)_class", pattern) is not None:
-                new_patterns.extend(
-                    [
-                        pattern.replace("{" + f"any_pt_class" + "}", cls)
-                        for cls in model_classes
-                    ]
-                )
+                new_patterns.extend([pattern.replace("{" + "any_pt_class" + "}", cls) for cls in model_classes])
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
             elif "{image_processor_classes}" in pattern:
@@ -1245,9 +1233,7 @@ def create_new_model_like(
             add_copied_from=add_copied_from and "modeling" in new_module_name,
         )
 
-    clean_init(
-        module_folder / "__init__.py", keep_processing=not keep_old_processing
-    )
+    clean_init(module_folder / "__init__.py", keep_processing=not keep_old_processing)
 
     # 2. We add our new model to the models init and the main init
     add_content_to_file(
@@ -1256,9 +1242,7 @@ def create_new_model_like(
         add_after=f"    {old_module_name},",
         exact_match=True,
     )
-    add_model_to_main_init(
-        old_model_patterns, new_model_patterns, with_processing=not keep_old_processing
-    )
+    add_model_to_main_init(old_model_patterns, new_model_patterns, with_processing=not keep_old_processing)
 
     # 3. Add test files
     files_to_adapt = model_files["test_files"]
