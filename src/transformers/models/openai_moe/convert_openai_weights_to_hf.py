@@ -250,10 +250,12 @@ def write_model(
     if instruct:
         print("Saving generation config...")
         generation_config = GenerationConfig(
+            bos_token_id=199998,  # <|startoftext|>
             do_sample=True,
+            eos_token_id=[200002, 199999],  # <|return|>, <|endoftext|>
+            pad_token_id=199999,  # <|endoftext|>
             temperature=0.6,
             top_p=0.9,
-            eos_token_id=eos_token_id,
         )
         generation_config.save_pretrained(model_path)
 
