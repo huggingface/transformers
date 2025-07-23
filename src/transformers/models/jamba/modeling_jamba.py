@@ -28,7 +28,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
@@ -202,7 +202,7 @@ class HybridMambaAttentionDynamicCache(Cache):
     is_compileable = False
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
-        super().__init__()
+        super().__init__(layer_classes=DynamicLayer)
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
