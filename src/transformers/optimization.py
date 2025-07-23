@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch optimization for BERT model."""
 
-import importlib.util
 import math
 import warnings
 from functools import partial
@@ -974,15 +973,6 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
     return AdafactorSchedule(optimizer, initial_lr)
 
 
-# Muon optimizer wrapper functions
-def _check_muon_available():
-    if importlib.util.find_spec("muon") is None:
-        raise ImportError(
-            "The Muon optimizer is not available. Please install it with: "
-            "`pip install git+https://github.com/KellerJordan/Muon.git`"
-        )
-
-
 class MuonWithAuxAdam:
     """
     Distributed Muon variant that can be used for all parameters in the network, since it runs an
@@ -1015,10 +1005,40 @@ class MuonWithAuxAdam:
     """
 
     def __new__(cls, *args, **kwargs):
-        _check_muon_available()
         from muon import MuonWithAuxAdam as _MuonWithAuxAdam
 
         return _MuonWithAuxAdam(*args, **kwargs)
+
+
+class SingleDeviceMuon:
+    """
+    Single-device variant of Muon optimizer.
+
+    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-
+    processing step, in which each 2D parameter's update is replaced with the nearest orthogonal
+    matrix. For efficient orthogonalization we use a Newton-Schulz iteration, which has the
+    advantage that it can be stably run in bfloat16 on the GPU.
+
+    This single-device variant is optimized for training on a single GPU/device.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import SingleDeviceMuon
+
+    # Optimizer for hidden weight layers only
+    hidden_params = [p for n, p in model.named_parameters() if p.ndim >= 2 and "embed" not in n and "head" not in n]
+    optimizer = SingleDeviceMuon(hidden_params, lr=0.02, momentum=0.95)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
+    """
+
+    def __new__(cls, *args, **kwargs):
+        from muon import SingleDeviceMuon as _SingleDeviceMuon
+
+        return _SingleDeviceMuon(*args, **kwargs)
 
 
 class SingleDeviceMuonWithAuxAdam:
@@ -1047,7 +1067,6 @@ class SingleDeviceMuonWithAuxAdam:
     """
 
     def __new__(cls, *args, **kwargs):
-        _check_muon_available()
         from muon import SingleDeviceMuonWithAuxAdam as _SingleDeviceMuonWithAuxAdam
 
         return _SingleDeviceMuonWithAuxAdam(*args, **kwargs)
@@ -1080,7 +1099,6 @@ class MuonOptimizer:
     """
 
     def __new__(cls, *args, **kwargs):
-        _check_muon_available()
         from muon import Muon as _Muon
 
         return _Muon(*args, **kwargs)

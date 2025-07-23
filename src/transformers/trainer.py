@@ -1427,6 +1427,36 @@ class Trainer:
 
             optimizer_cls = Muon
             optimizer_kwargs.update({"momentum": 0.95})
+        elif args.optim == OptimizerNames.MUON_ADAM:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import MuonWithAuxAdam
+
+            optimizer_cls = MuonWithAuxAdam
+            optimizer_kwargs.update({"lr": 3e-4, "betas": (0.9, 0.95)})
+        elif args.optim == OptimizerNames.MUON_SINGLE:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import SingleDeviceMuon
+
+            optimizer_cls = SingleDeviceMuon
+            optimizer_kwargs.update({"momentum": 0.95})
+        elif args.optim == OptimizerNames.MUON_SINGLE_ADAM:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import SingleDeviceMuonWithAuxAdam
+
+            optimizer_cls = SingleDeviceMuonWithAuxAdam
+            optimizer_kwargs.update({"lr": 3e-4, "betas": (0.9, 0.95)})
         elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED]:
             from torch.optim import AdamW
 
