@@ -31,7 +31,7 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -104,7 +104,7 @@ class HybridMambaAttentionDynamicCache(Cache):
     is_compileable = False
 
     def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__()
+        super().__init__(layer_classes=DynamicLayer)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
