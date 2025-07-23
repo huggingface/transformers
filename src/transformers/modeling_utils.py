@@ -791,7 +791,6 @@ def _load_state_dict_into_meta_model(
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            # TODO: Fix this properly
             shard_and_distribute_module(
                 model,
                 param,
