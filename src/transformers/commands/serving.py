@@ -463,8 +463,6 @@ class ServeCommand(BaseTransformersCLICommand):
         # 1. Tracks models in memory, to prevent reloading the model unnecessarily
         self.loaded_models: dict[str, TimedModel] = {}
         self.running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
-        self.model: PreTrainedModel
-        self.processor: PreTrainedTokenizerFast | BaseImageProcessor | ProcessorMixin
 
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefil
