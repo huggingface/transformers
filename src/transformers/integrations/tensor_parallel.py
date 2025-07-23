@@ -1068,7 +1068,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param_inside=True
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     Main uses cases:
@@ -1118,7 +1118,8 @@ def shard_and_distribute_module(
     # otherwise loading is crazy slow
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
-    setattr(module_to_tp, param_type, param)
+    if set_param_inside:
+        setattr(module_to_tp, param_type, param)
     # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
 

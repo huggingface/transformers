@@ -127,10 +127,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        # print("#######################expert_dim: ", self.expert_dim)
-        # print("#######################num_experts: ", self.num_experts)
-        # print(config)
-        # dtype torch.float4_e2m1fn not supported yet
+
         self.gate_up_proj_blocks = nn.Parameter(
             torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size//32, 16, dtype=torch.uint8), requires_grad=False,
         )
@@ -238,33 +235,30 @@ def create_expert_indices_for_rank(router_logits, top_k, ep_rank, ep_size, total
 
 
 def mlp_forward(self, hidden_states):
-    from triton_kernels.routing import routing
+    import torch.distributed as dist
+    if dist.is_available() and dist.is_initialized():
+        routing = routing_torch_ep_2
+    else:
+        from triton_kernels.routing import routing
+        routing = routing
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-    # expert_indices = create_expert_indices_for_rank(router_logits, self.router.top_k, self.experts.rank, self.experts.device_mesh.size(), self.experts.num_experts)
-    # print("expert_indices.shape", expert_indices.shape)
-    # print("expert_indices", expert_indices)
-    routing_data, gather_idx, scatter_idx = routing_torch_ep_2(router_logits, self.router.top_k)
-    # print("routing_data", routing_data)
-    # print("gather_idx", gather_idx)
-    # print("scatter_idx", scatter_idx)
-    # raise ValueError("stop here")
+    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False)
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
     
 def routing_torch_ep_2(
     logits,
     n_expts_act,
+    sm_first=False
 ):
     import os
-    print("in routing_torch_ep_2")
     from triton_kernels.routing import GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch
 
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size() 
         # world_size = 1
         rank = int(os.environ.get("LOCAL_RANK", 0))
-        
         replace_value = -1
         
         n_tokens = logits.shape[0]
@@ -417,6 +411,10 @@ def replace_with_mxfp4_linear(
     config=None,
     tp_plan=None,
 ):
+
+    if quantization_config.dequantize:
+        return model
+    
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 
     if quantization_config.modules_to_not_convert is not None:
@@ -430,86 +428,7 @@ def replace_with_mxfp4_linear(
         config=config,
         tp_plan=tp_plan,
     )
-    if not has_been_replaced:
-        logger.warning(
-            "You are loading your model using mixed-precision FP4 quantization but no linear modules were found in your model."
-            " Please double check your model architecture, or submit an issue on github if you think this is"
-            " a bug."
-        )
-
-    return model
-
-def _reverse_replace_with_mxfp4_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    has_been_replaced=False,
-    config=None,
-    tp_plan=None,
-):
-    if current_key_name is None:
-        current_key_name = []
-
-    for name, module in model.named_children():
-        current_key_name.append(name)
-        # if isinstance(module, nn.Linear):
-        #     raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
-        from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
-        from accelerate import init_empty_weights
-        if module.__class__.__name__ == "Mxfp4OpenAIMoeExperts":
-            
-                # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
-            gate_up_proj = module.gate_up_proj
-            down_proj = module.down_proj
-            gate_up_proj_bias = module.gate_up_proj_bias
-            down_proj_bias = module.down_proj_bias
-            _forward_pre_hooks = module._forward_pre_hooks
-            _forward_hooks = module._forward_hooks
-            model._modules[name] = OpenAIMoeExperts(config)
-            model._modules[name]._forward_pre_hooks = _forward_pre_hooks
-            model._modules[name]._forward_hooks = _forward_hooks
-            model._modules[name].gate_up_proj = torch.nn.Parameter(gate_up_proj, requires_grad=False)   
-            model._modules[name].down_proj = torch.nn.Parameter(down_proj, requires_grad=False)
-            model._modules[name].gate_up_proj_bias = torch.nn.Parameter(gate_up_proj_bias, requires_grad=False)
-            model._modules[name].down_proj_bias = torch.nn.Parameter(down_proj_bias, requires_grad=False)
-            has_been_replaced=True
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _reverse_replace_with_mxfp4_linear(
-                module,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-                config=config,
-                tp_plan=tp_plan,
-            )
-        current_key_name.pop(-1)
-    return model, has_been_replaced
-
-
-def reverse_replace_with_mxfp4_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    config=None,
-    tp_plan=None,
-):
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-
-    if quantization_config.modules_to_not_convert is not None:
-        modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-    modules_to_not_convert = list(set(modules_to_not_convert))
-    model, has_been_replaced = _reverse_replace_with_mxfp4_linear(
-        model,
-        modules_to_not_convert,
-        current_key_name,
-        quantization_config,
-        config=config,
-        tp_plan=tp_plan,
-    )
-    if not has_been_replaced:
+    if not has_been_replaced :
         logger.warning(
             "You are loading your model using mixed-precision FP4 quantization but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"

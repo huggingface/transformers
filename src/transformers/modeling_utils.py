@@ -710,6 +710,7 @@ def _infer_parameter_dtype(
         if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
+            QuantizationMethod.MXFP4,
         }:
             return True, None
         else:
@@ -829,16 +830,8 @@ def _load_state_dict_into_meta_model(
                 "rank": device_mesh.get_local_rank(),
                 "device_mesh": device_mesh
             }
-            if device_map is None:
-                param_device = "cpu"
-            else:
-                module_layer = re.search(device_map_regex, param_name)
-                if not module_layer:
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                else:
-                    param_device = device_map[module_layer.group()]
             hf_quantizer.create_quantized_param(
-                    model, param, param_name, param_device, state_dict, unexpected_keys, **sharding_kwargs
+                    model, param, param_name, device_mesh.get_local_rank(), state_dict, unexpected_keys, **sharding_kwargs
             )
         else:
             param = param[...]
@@ -6181,8 +6174,15 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
             continue
-
-        param = model.get_parameter_or_buffer(param_name)
+        try:
+            param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            if hf_quantizer.quantization_config.quant_method in {QuantizationMethod.MXFP4} and ("blocks" in param_name or "scales" in param_name):
+                neutral_param_name = param_name[:-len("_blocks")] if "blocks" in param_name else param_name[:-len("_scales")]
+            try:
+                param = model.get_parameter_or_buffer(neutral_param_name)
+            except AttributeError:
+                raise AttributeError(f"Parameter {param_name} not found in model")
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()
 
