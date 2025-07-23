@@ -101,33 +101,20 @@ class RopeEmbedding(nn.Module):
         """
         super().__init__()
         self.head_dim = head_dim
-        self.compression_ratio = compression_ratio
-        self.base = base
+        self.inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(dtype=torch.float) / head_dim))
 
         # num of freq allocated to time
         self.freq_allocation = freq_allocation
 
+    #"""
     def forward(self, seq_length, position_ids=None):
-        """
-        Compute rotary position embeddings for given sequence length.
-
-        Args:
-            seq_length (int): Maximum sequence length
-            position_ids (Tensor, optional): Custom position indices. Defaults to None.
-
-        Returns:
-            Tensor: Rotary position embeddings of shape [1, 1, seq_length, head_dim]
-        """
-        indices = torch.arange(0, self.head_dim, 2, dtype=torch.float32)
-        indices = 1 / self.base ** (indices / self.head_dim)
+        indices = self.inv_freq
         if position_ids is None:
             position_ids = torch.arange(
                 0, seq_length, 1, dtype=torch.float32
             ).unsqueeze(1)
-            position_ids = position_ids / self.compression_ratio
             sinusoid_inp = position_ids * indices.unsqueeze(0)
         else:
-            position_ids = position_ids / self.compression_ratio
             seq_length = position_ids.shape[-1]
             sinusoid_inp = position_ids.unsqueeze(-1).to(
                 torch.float32
@@ -135,40 +122,7 @@ class RopeEmbedding(nn.Module):
         pos_emb = torch.cat([torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)], dim=-1)
         pos_emb = pos_emb.view(-1, 1, seq_length, self.head_dim)
         pos_emb = pos_emb.detach()
-        return pos_emb
-
-    def apply_rotary(self, rp, q, k):
-        """
-        Apply rotary position embeddings to queries and keys.
-
-        Args:
-            rp (Tensor): Rotary position embeddings
-            q (Tensor): Query tensor [batch, heads, seq_len, dim]
-            k (Tensor): Key tensor [batch, heads, seq_len, dim]
-
-        Returns:
-            Tuple[Tensor, Tensor]: Rotated queries and keys
-        """
-        sin, cos = torch.chunk(rp, 2, dim=-1)
-        # sin [θ0,θ1,θ2......θd/2-1] -> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        sin_pos = torch.stack([sin, sin], dim=-1).reshape(rp.shape)
-        # cos [θ0,θ1,θ2......θd/2-1] -> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        cos_pos = torch.stack([cos, cos], dim=-1).reshape(rp.shape)
-        # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
-        rotate_half_q = torch.stack(
-            [-q[:, :, :, 1::2], q[:, :, :, 0::2]], dim=-1
-        ).reshape(q.shape)
-        query = (q.to(torch.float32) * cos_pos) + (
-            rotate_half_q.to(torch.float32) * sin_pos
-        )
-        # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
-        rotate_half_k = torch.stack(
-            [-k[:, :, :, 1::2], k[:, :, :, 0::2]], dim=-1
-        ).reshape(k.shape)
-        key = (k.to(torch.float32) * cos_pos) + (
-            rotate_half_k.to(torch.float32) * sin_pos
-        )
-        return query, key
+        return pos_emb#"""
 
     def apply_rotary_3d(self, rp, q, k, position_ids):
         """
@@ -180,16 +134,30 @@ class RopeEmbedding(nn.Module):
             k: [bsz, seqlen, head, head_dim]
             position_ids: [bsz, seqlen, 3]
         """
-        current_device = q.device
-        sin, cos = torch.chunk(rp, 2, axis=-1)
+        #current_device = q.device
+        #sin, cos = torch.chunk(rp, 2, axis=-1)
         assert position_ids.shape[:1] == q.shape[:1]
-        batch_indices = torch.arange(end=position_ids.shape[0])
-        batch_indices = batch_indices[..., None]
-        sin = sin.tile(position_ids.shape[0], 1, 1, 1).to(device=position_ids.device)
-        cos = cos.tile(position_ids.shape[0], 1, 1, 1).to(device=position_ids.device)
+        #batch_indices = torch.arange(end=position_ids.shape[0])
+        #batch_indices = batch_indices[..., None]
+        #sin = sin.tile(position_ids.shape[0], 1, 1, 1).to(device=position_ids.device)
+        #cos = cos.tile(position_ids.shape[0], 1, 1, 1).to(device=position_ids.device)
+
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[0], -1, 1).to(position_ids.device)
+        position_ids_expanded = position_ids.permute(2, 0, 1)[:, :, None, :].float()  # shape (3, bs, 1, positions)
+        freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+        cos_2 = freqs.cos()
+        sin_2 = freqs.sin()
+
+        sin_2_t = sin_2.split([44, 20], dim=-1)[-1][0].unsqueeze(-2)
+        sin_2_h = sin_2.split([44, 20], dim=-1)[0][1][..., 0::2].unsqueeze(-2)
+        sin_2_w = sin_2.split([44, 20], dim=-1)[0][2][..., 1::2].unsqueeze(-2)
+
+        cos_2_t = cos_2.split([44, 20], dim=-1)[-1][0].unsqueeze(-2)
+        cos_2_h = cos_2.split([44, 20], dim=-1)[0][1][..., 0::2].unsqueeze(-2)
+        cos_2_w = cos_2.split([44, 20], dim=-1)[0][2][..., 1::2].unsqueeze(-2)
 
         assert self.freq_allocation != 0
-        sin_t = sin[batch_indices, position_ids[..., 0], :, -self.freq_allocation :]
+        """sin_t = sin[batch_indices, position_ids[..., 0], :, -self.freq_allocation :]
         sin_h = sin[
             batch_indices,
             position_ids[..., 1],
@@ -202,10 +170,6 @@ class RopeEmbedding(nn.Module):
             :,
             1 : self.head_dim // 2 - self.freq_allocation : 2,
         ]
-        sin_hw = torch.stack([sin_h, sin_w], dim=-1).reshape(
-            sin_h.shape[:-1] + (sin_h.shape[-1] * 2,)
-        )
-        sin_thw = torch.cat([sin_hw, sin_t], dim=-1)
 
         cos_t = cos[batch_indices, position_ids[..., 0], :, -self.freq_allocation :]
         cos_h = cos[
@@ -220,23 +184,28 @@ class RopeEmbedding(nn.Module):
             :,
             1 : self.head_dim // 2 - self.freq_allocation : 2,
         ]
-        cos_hw = torch.stack([cos_h, cos_w], dim=-1).reshape(
-            cos_h.shape[:-1] + (cos_h.shape[-1] * 2,)
-        )
-        cos_thw = torch.cat([cos_hw, cos_t], dim=-1)
+
+        print(torch.allclose(sin_2_t, sin_t))
+        print(torch.allclose(sin_2_h, sin_h))
+        print(torch.allclose(sin_2_w, sin_w))
+        print(torch.allclose(cos_2_t, cos_t))
+        print(torch.allclose(cos_2_h, cos_h))
+        print(torch.allclose(cos_2_w, cos_w))
+        print()"""
 
         # sin [θ0,θ1,θ2......θd/2-1] -> sin_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        sin_pos = (
-            torch.stack([sin_thw, sin_thw], dim=-1)
-            .reshape(sin_thw.shape[:3] + (sin_thw.shape[-1] * 2,))
-            .to(current_device)
+        sin_hw = torch.stack([sin_2_h, sin_2_w], dim=-1).reshape(
+            sin_2_h.shape[:-1] + (sin_2_h.shape[-1] * 2,)
         )
+        sin_thw = torch.cat([sin_hw, sin_2_t], dim=-1)
+        sin_pos = sin_thw.repeat_interleave(2, dim=-1)
+
         # cos [θ0,θ1,θ2......θd/2-1] -> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        cos_pos = (
-            torch.stack([cos_thw, cos_thw], dim=-1)
-            .reshape(cos_thw.shape[:3] + (cos_thw.shape[-1] * 2,))
-            .to(current_device)
+        cos_hw = torch.stack([cos_2_h, cos_2_w], dim=-1).reshape(
+            cos_2_h.shape[:-1] + (cos_2_h.shape[-1] * 2,)
         )
+        cos_thw = torch.cat([cos_hw, cos_2_t], dim=-1)
+        cos_pos = cos_thw.repeat_interleave(2, dim=-1)
 
         # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
         rotate_half_q = torch.stack(
