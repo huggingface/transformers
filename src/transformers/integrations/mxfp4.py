@@ -32,9 +32,9 @@ FP4_VALUES = [
     -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
 ]
 
-def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale): 
-    from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
+def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
     from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
+    from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
 
     swizzle_axis = 2 if swizzle_mx_scale or swizzle_mx_value else None
     w = w.to(torch.bfloat16)
@@ -152,11 +152,11 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
 
         self.gate_up_proj_right_pad = 0#    smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
-        self.gate_up_proj_bottom_pad = 0 
-        
+        self.gate_up_proj_bottom_pad = 0
+
         self.down_proj_right_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
         self.down_proj_bottom_pad = 0#self.gate_up_proj_right_pad // 2
-            
+
         self.hidden_size_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         """
@@ -204,7 +204,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
 
             torch.cuda.synchronize()
 
-        with torch.cuda.device(hidden_states.device):    
+        with torch.cuda.device(hidden_states.device):
             intermediate_cache3 = matmul_ogs(
                 intermediate_cache1,
                 self.down_proj,
@@ -213,7 +213,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                 scatter_indx=scatter_idx,
                 precision_config=self.down_proj_precision_config,
                 gammas=None if apply_router_weight_on_input else routing_data.gate_scal)
-            
+
             torch.cuda.synchronize()
             # manually crop the tensor since oai kernel pad the output
             output_states = intermediate_cache3[..., :self.hidden_size].contiguous()
@@ -246,21 +246,22 @@ def mlp_forward(self, hidden_states):
     routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False)
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
-    
+
 def routing_torch_ep_2(
     logits,
     n_expts_act,
     sm_first=False
 ):
     import os
+
     from triton_kernels.routing import GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch
 
     with torch.cuda.device(logits.device):
-        world_size = torch.distributed.get_world_size() 
+        world_size = torch.distributed.get_world_size()
         # world_size = 1
         rank = int(os.environ.get("LOCAL_RANK", 0))
         replace_value = -1
-        
+
         n_tokens = logits.shape[0]
         n_expts_tot = logits.shape[1]
 
@@ -269,7 +270,7 @@ def routing_torch_ep_2(
         local_expert_start = rank * n_local_experts
         local_expert_end = (rank + 1) * n_local_experts
 
-        # TODO: check why +20 ? 
+        # TODO: check why +20 ?
         n_gates_pad = n_tokens * n_expts_act
 
         def topk(vals, k, expt_indx):
@@ -296,7 +297,7 @@ def routing_torch_ep_2(
         # for each row, count how many of its experts are local
         # num_local_expts = (expt_indx < local_expert_end) & (local_expert_start <= expt_indx)
         # num_local_expts = num_local_expts.sum(dim=1)
-        
+
         # Count the number of rows that are for local experts, padded to an alignment.
         # n_local_rows = (num_local_expts != 0).sum()
         # n_local_rows = ((n_local_rows + row_align - 1) // row_align) * row_align
@@ -312,7 +313,7 @@ def routing_torch_ep_2(
         # we do not drop tokens that are not routed to the local expert. This ensures that
         # the tensor shapes are fixed.
         # Create topk_indx/gate_indx.
-        
+
         # try to move values that were seen to later
         # print(expt_indx)
         expt_indx = torch.where(expt_indx < local_expert_start, 1000, expt_indx)
@@ -324,7 +325,7 @@ def routing_torch_ep_2(
         gate_indx = torch.argsort(topk_indx).to(torch.int32)
         # print("gate_indx")
         # print(gate_indx)
-        # Now filter out all experts 
+        # Now filter out all experts
         expt_indx = torch.where(expt_indx < local_expert_end, expt_indx, replace_value)
         expt_indx = torch.where(local_expert_start <= expt_indx, expt_indx, replace_value)
         # print(expt_indx)
@@ -334,7 +335,7 @@ def routing_torch_ep_2(
         gate_scal = expt_scal[topk_indx]
         # print("updated expt_scal")
         # print(gate_scal)
-        
+
         topk_indx = torch.where(gate_indx[topk_indx] == replace_value, replace_value, topk_indx)
 
         # print(topk_indx)
@@ -342,12 +343,12 @@ def routing_torch_ep_2(
         # # Routing metadata for local expert computation
         gather_indx = GatherIndx(src_indx=topk_indx.int(), dst_indx=gate_indx.int())
         scatter_indx = ScatterIndx(src_indx=gate_indx.int(), dst_indx=topk_indx.int())
-        
+
         # n_gates_pad = local_expt_indx.numel()
         expt_data = compute_expt_data_torch(hist, n_local_experts, n_gates_pad)
         # print("expt_data")
         # print(expt_data)
-        # hitted_experts = len(local_expt_indx) -> maybe try to get the closest power of 2 later on 
+        # hitted_experts = len(local_expt_indx) -> maybe try to get the closest power of 2 later on
         hitted_experts = n_expts_act
     return RoutingData(gate_scal, hist, n_local_experts, hitted_experts, expt_data), gather_indx, scatter_indx
 
@@ -414,7 +415,7 @@ def replace_with_mxfp4_linear(
 
     if quantization_config.dequantize:
         return model
-    
+
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 
     if quantization_config.modules_to_not_convert is not None:

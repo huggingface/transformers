@@ -51,9 +51,9 @@ if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
 from .configuration_utils import PretrainedConfig
+from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .distributed import DistributedConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -2289,7 +2289,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
-                
+
         if is_torch_greater_or_equal("2.5") and _torch_distributed_available and getattr(self.config, "device_mesh", None) is not None:
             # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
             device_mesh = self.config.device_mesh

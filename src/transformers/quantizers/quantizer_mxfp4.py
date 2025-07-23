@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from .base import HfQuantizer
 
@@ -19,7 +19,13 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_torch_available, logging, is_accelerate_available, is_triton_kernels_availalble, is_triton_available
+from ..utils import (
+    is_accelerate_available,
+    is_torch_available,
+    is_triton_available,
+    is_triton_kernels_availalble,
+    logging,
+)
 from .quantizers_utils import get_module_from_name
 
 
@@ -67,14 +73,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 raise ValueError(
                     "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed"
                 )
-        
+
         if major < 9:
             raise ValueError(
-                "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+                "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
             )
         if not is_accelerate_available():
             raise ImportError(
-                f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>=1.8.0'`"
+                "Using mxfp4 requires Accelerate: `pip install 'accelerate>=1.8.0'`"
             )
 
         device_map = kwargs.get("device_map", None)
@@ -127,7 +133,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ):
         from ..integrations import Mxfp4OpenAIMoeExperts
@@ -149,14 +155,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import quantize_to_mxfp4, Mxfp4OpenAIMoeExperts, shuffle_weight, convert_moe_packed_tensors
         from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
-        from ..modeling_utils import _load_parameter_into_model
+
+        from ..integrations import Mxfp4OpenAIMoeExperts, convert_moe_packed_tensors, quantize_to_mxfp4, shuffle_weight
         from ..integrations.tensor_parallel import shard_and_distribute_module
+        from ..modeling_utils import _load_parameter_into_model
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
 
         if not self.pre_quantized:
@@ -251,7 +258,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                 else:
                                     _load_parameter_into_model(model, param_name, param_value)
                             else:
-                                raise ValueError(f"Something went horribly wrong mate in gate_up_proj")
+                                raise ValueError("Something went horribly wrong mate in gate_up_proj")
 
                             dequantized_gate_up_proj = convert_moe_packed_tensors(module.gate_up_proj_blocks, module.gate_up_proj_scales)
                             dequantized_gate_up_proj = dequantized_gate_up_proj.transpose(1,2).to(target_device)
@@ -267,7 +274,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                                     value=0)
                             del dequantized_gate_up_proj
                             torch.cuda.empty_cache()
-                            with torch.cuda.device(target_device):    
+                            with torch.cuda.device(target_device):
                                 loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
                             module.gate_up_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                             module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
@@ -285,9 +292,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                     shard_and_distribute_module(model, param_value, kwargs.get("empty_param"), param_name, kwargs.get("casting_dtype"), kwargs.get("to_contiguous"), kwargs.get("rank"), kwargs.get("device_mesh"))
                                 else:
                                     _load_parameter_into_model(model, param_name, param_value)
-                            else: 
-                                raise ValueError(f"Something went horribly wrong mate in down_proj")
-                            
+                            else:
+                                raise ValueError("Something went horribly wrong mate in down_proj")
+
                             dequantized_down_proj = convert_moe_packed_tensors(module.down_proj_blocks, module.down_proj_scales)
                             dequantized_down_proj = dequantized_down_proj.transpose(1,2).to(target_device)
                             module.device_mesh = kwargs.get("device_mesh")
@@ -301,16 +308,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                                     value=0)
                             del dequantized_down_proj
                             torch.cuda.empty_cache()
-                            with torch.cuda.device(target_device):    
+                            with torch.cuda.device(target_device):
                                 loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
-                            
+
                             module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                             module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
 
-    def update_expected_keys(self, model: "PreTrainedModel", expected_keys: List[str], checkpoint_keys: List[str]):
+    def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
         # Replace expected_keys for experts' gate_up_proj and down_proj with their _blocks and _scales variants
         new_expected_keys = []
         for key in expected_keys:
@@ -329,7 +336,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_mxfp4_linear
@@ -350,7 +357,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import Mxfp4OpenAIMoeExperts
 
         not_missing_keys = []
