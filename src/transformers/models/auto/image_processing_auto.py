@@ -516,7 +516,7 @@ class AutoImageProcessor:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
                 use_fast = image_processor_type.endswith("Fast")
-                if not use_fast and image_processor_type in FORCE_FAST_IMAGE_PROCESSOR:
+                if not use_fast and image_processor_type in FORCE_FAST_IMAGE_PROCESSOR and is_torchvision_available():
                     use_fast = True
                     logger.warning_once(
                         f"The image processor of type `{image_processor_type}` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. "

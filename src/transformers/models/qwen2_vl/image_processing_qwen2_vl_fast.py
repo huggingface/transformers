@@ -35,7 +35,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -46,7 +45,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from ...video_utils import VideoInput, group_videos_by_shape, make_batched_videos, reorder_videos
+from ...video_utils import VideoInput, make_batched_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
@@ -135,6 +134,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             if "shortest_edge" not in size or "longest_edge" not in size:
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
             min_pixels = size["shortest_edge"]
+            max_pixels = size["longest_edge"]
         else:
             size = {**self.size}
 
@@ -182,7 +182,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 torch.stack(self._prepare_image_like_inputs(video, do_convert_rgb, input_data_format, device))
                 for video in videos
             ]
-            batch_feature.update(**self._preprocess_videos(videos, **kwargs).data)
+            video_outputs = self._preprocess(videos, **kwargs)
+            batch_feature.update(
+                {"pixel_values_videos": video_outputs.pixel_values, "video_grid_thw": video_outputs.image_grid_thw}
+            )
         return batch_feature
 
     def _preprocess(
@@ -232,11 +235,12 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             resized_height, resized_width = stacked_images.shape[-2:]
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            # add a temporal dimension
-            patches = stacked_images.unsqueeze(1)
+            if patches.ndim == 4:
+                # add a temporal dimension if we have images
+                patches = patches.unsqueeze(1)
             if patches.shape[1] % temporal_patch_size != 0:
                 repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
@@ -256,6 +260,8 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 merge_size,
                 patch_size,
             )
+            # Reorder dimensions to group grid and patch information for subsequent flattening.
+            # (batch, grid_t, grid_h, grid_w, merge_h, merge_w, channel, temp_patch_size, patch_h, patch_w)
             patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
             flatten_patches = patches.reshape(
                 batch_size,
@@ -275,99 +281,34 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def _preprocess_videos(
-        self,
-        videos: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
-    ):
-        # Group videos by size for batched resizing
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
-        resized_videos_grouped = {}
-        for shape, stacked_videos in grouped_videos.items():
-            height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
-            resized_height, resized_width = height, width
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
-                )
-                stacked_videos = self.resize(
-                    image=stacked_videos,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
-                )
-            resized_videos_grouped[shape] = stacked_videos
-        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
 
-        # Group videos by size for further processing
-        # Needed in case do_resize is False, or resize returns videos with different sizes
-        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
-        processed_videos_grouped = {}
-        processed_grids = {}
-        for shape, stacked_videos in grouped_videos.items():
-            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
 
-            # Fused rescale and normalize
-            stacked_videos = self.rescale_and_normalize(
-                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            patches = stacked_videos
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
+        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
 
-            # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
-            )
-
-            processed_videos_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
-
-        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
-        pixel_values_videos = torch.cat(processed_videos, dim=0)
-        video_grid_thw = torch.tensor(processed_grids)
-
-        return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
-            tensor_type=return_tensors,
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
 __all__ = ["Qwen2VLImageProcessorFast"]
