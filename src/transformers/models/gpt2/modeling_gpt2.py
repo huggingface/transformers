@@ -563,7 +563,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_attention_backend = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

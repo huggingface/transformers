@@ -827,7 +827,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
@@ -1360,7 +1360,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     config: InstructBlipVideoConfig
     main_input_name = "pixel_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipVideoConfig):

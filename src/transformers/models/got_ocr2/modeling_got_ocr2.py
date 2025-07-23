@@ -283,7 +283,7 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_flex_attn = False
     _supports_attention_backend = True
 

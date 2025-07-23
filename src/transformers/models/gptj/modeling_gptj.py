@@ -472,7 +472,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTJBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_param_buffer_assignment = False
 
     def __init__(self, *inputs, **kwargs):
