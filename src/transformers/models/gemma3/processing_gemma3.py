@@ -19,7 +19,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import to_py_obj
@@ -100,21 +100,23 @@ class Gemma3Processor(ProcessorMixin):
 
         image_inputs = {}
         if images is not None:
+            images = self.image_processor.fetch_images(images)
+            batched_images = make_nested_list_of_images(images)
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
             # Create empty text to be replaced with placeholders
             if not text:
-                text = [" ".join([self.boi_token] * len(images)) for images in images]
+                text = [" ".join([self.boi_token] * len(images)) for images in batched_images]
 
-            if len(images) != len(text):
+            if len(batched_images) != len(text):
                 raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
+                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(text)})."
                 )
 
             # Replace image tokens by the full expanded sequence
             num_crops = to_py_obj(image_inputs.pop("num_crops"))
-            batch_num_crops = [[num_crops.pop(0) for _ in range(len(images))] for images in images]
-            for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, images, batch_num_crops)):
+            batch_num_crops = [[num_crops.pop(0) for _ in range(len(images))] for images in batched_images]
+            for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, batched_images, batch_num_crops)):
                 image_indexes = [m.start() for m in re.finditer(self.boi_token, prompt)]
 
                 if len(images) != len(image_indexes):

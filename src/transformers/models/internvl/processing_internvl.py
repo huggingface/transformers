@@ -242,9 +242,11 @@ class InternVLProcessor(ProcessorMixin):
                 video_num_patches_indices,
                 video_patch_indices,
             )
-            if images is not None and image_index != len(images):
+            num_images = len(images) if isinstance(images, (list, tuple)) else 1
+            num_videos = len(videos) if isinstance(videos, (list, tuple)) else 1
+            if images is not None and image_index != num_images:
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-            if videos is not None and video_index != len(videos):
+            if videos is not None and video_index != num_videos:
                 raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
 
             # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
