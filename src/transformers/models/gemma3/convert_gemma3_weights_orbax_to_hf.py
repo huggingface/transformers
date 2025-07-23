@@ -537,7 +537,7 @@ def convert(
                 update_tree(path, weights, config.text_config.dtype)
 
     if variant == _VARIANT_GEMMA_3_EMBEDDING:
-        return hf_tree, [weight[1].T for weight in orbax_tree_flat[:_NUM_LINEAR_LAYERS.value]]
+        return hf_tree, [weight[1].T for weight in orbax_tree_flat[: _NUM_LINEAR_LAYERS.value]]
     elif config.vision_config is None:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
     else:
@@ -652,9 +652,9 @@ def main(*args):
         for linear_weight in st_linears:
             in_size, out_size = linear_weight.shape[:2]
             dense = models.Dense(in_size, out_size, bias=False, activation_function=None)
-            dense.linear.weight.data = torch.from_numpy(
-                linear_weight.astype("float32")
-            ).type(getattr(torch, _TRANSFORMER_DTYPE.value))
+            dense.linear.weight.data = torch.from_numpy(linear_weight.astype("float32")).type(
+                getattr(torch, _TRANSFORMER_DTYPE.value)
+            )
             linears.append(dense)
 
         model = SentenceTransformer(modules=[transformer, pooling, *linears])
