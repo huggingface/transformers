@@ -90,7 +90,7 @@ class AyaVisionMultiModalProjector(nn.Module):
 
 
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
 
 class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
