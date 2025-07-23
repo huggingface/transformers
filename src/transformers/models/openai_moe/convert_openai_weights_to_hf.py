@@ -511,6 +511,11 @@ def main():
         help="Whether the model is an instruct model",
     )
 
+    # Only specify this if you want to use the model with mxfp4 quantization
+    # It means the model will be unpacked, and quantized using mxfp4 during inference if all the triton requirements are satisfied (triton >= 3.4.0)
+    # Else we have a fallback to the full precision model (bfloat16)
+    # If not specified, the model will be unpacked during conversion, and will be in fp8/bfloat16 during inference
+    # Note: mxfp4 should bring an important speedup in inference time with blackwell gpus
     parser.add_argument(
         "--mxfp4",
         action="store_true",
