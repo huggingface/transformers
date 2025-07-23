@@ -13,18 +13,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Attention Interface
+# 어텐션 인터페이스[[attention-interface]]
 
-This page describes how to use the `AttentionInterface` in order to register custom attention functions to use with
-supported models.
+이 페이지에서는 `AttentionInterface`를 사용하여 지원되는 모델과 함께 사용할 사용자 지정 어텐션 함수를 등록하는 방법을 설명합니다.
 
-## Customizing attention function
+## 어텐션 함수 사용자 지정[[customizing-attention-function]]
 
-Most recent models can now switch from one attention function used in the Attention layer to the other, thanks to a simple mapping.
-By default, we provide the implementation for [`sdpa`](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html),
-[`flash_attention_2`](https://github.com/Dao-AILab/flash-attention) and [`flex_attention`](https://pytorch.org/docs/stable/nn.attention.flex_attention.html#module-torch.nn.attention.flex_attention)
-as well as `eager`, which is a simple matrix multiplication without any optimization on top.  
-This is the setting you can usually choose when instantiating a model:
+대부분의 최신 모델은 이제 간단한 매핑 덕분에 어텐션 레이어에 사용되는 하나의 어텐션 함수에서 다른 어텐션 함수로 전환할 수 있습니다.
+기본적으로 [`sdpa`](https://www.google.com/search?q=%5Bhttps://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html%5D\(https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html\)),
+[`flash_attention_2`](https://www.google.com/search?q=%5Bhttps://github.com/Dao-AILab/flash-attention%5D\(https://github.com/Dao-AILab/flash-attention\)) 및 [`flex_attention`](https://www.google.com/search?q=%5Bhttps://pytorch.org/docs/stable/nn.attention.flex_attention.html%23module-torch.nn.attention.flex_attention%5D\(https://pytorch.org/docs/stable/nn.attention.flex_attention.html%23module-torch.nn.attention.flex_attention\))
+뿐만 아니라, 어떠한 최적화도 없는 간단한 행렬 곱셈인 `eager`에 대한 구현을 제공합니다.
+이는 일반적으로 모델을 인스턴스화할 때 선택할 수 있는 설정입니다.
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -35,8 +34,7 @@ model_id = "meta-llama/Llama-3.2-1B"
 model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="flash_attention_2")
 ```
 
-But what if you wanted to create your own attention function? Or simply play around with existing ones, adding
-a few statements here and there? You can now do so with the `AttentionInterface`! Here is an example:
+하지만 자신만의 어텐션 함수를 만들고 싶거나, 단순히 기존 함수를 사용하여 몇 가지 구문을 추가하고 싶다면 어떻게 해야 할까요? 이제 `AttentionInterface`를 사용하여 그렇게 할 수 있습니다\! 다음은 예시입니다.
 
 ```python
 from transformers import AutoModelForCausalLM, AttentionInterface
@@ -56,11 +54,11 @@ model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="my_n
 model(torch.ones(1, 5, dtype=int))
 ```
 
-You will see it prints "I just entered the attention computation" as many times as there are layers in the model (with this example, 16 times).
+모델의 레이어 수(이 예시에서는 16회)만큼 "I just entered the attention computation"이 출력되는 것을 보실 수 있습니다.
 
-## Dynamically switching attention function
+## 어텐션 함수 동적 전환[[dynamically-switching-attention-function]]
 
-You could dynamically change the model's attention function as well:
+모델의 어텐션 함수를 동적으로 변경할 수도 있습니다.
 
 ```python
 # Back to use original sdpa implementation
@@ -69,12 +67,12 @@ model.set_attn_implementation("sdpa")
 model(torch.ones(1, 5, dtype=int))
 ```
 
-and it will stop printing the statements, as it now uses the `sdpa` attention.  
-This allows to quickly change an attention function, without needing to reload the model!
+이제 `sdpa` 어텐션을 사용하므로 문장 출력이 중지됩니다.
+이를 통해 모델을 다시 로드할 필요 없이 어텐션 함수를 빠르게 변경할 수 있습니다\!
 
-## Different attention per backbone in multimodal models
+## 멀티모달 모델의 백본별 다른 어텐션[[different-attention-per-backbone-in-multimodal-models]]
 
-For multimodal models different attention functions may work better for each backbone module. For example, some vision backbones perform better in fp32, but are incompatible with FlashAttention. To continue using FlashAttention while keeping the vision encoder in fp32, create a dict and map each config to an attention implementation as shown below.
+멀티모달 모델의 경우 각 백본 모듈에 따라 다른 어텐션 함수가 더 잘 작동할 수 있습니다. 예를 들어, 일부 비전 백본은 fp32에서 더 잘 작동하지만 FlashAttention과 호환되지 않습니다. 비전 인코더를 fp32로 유지하면서 FlashAttention을 계속 사용하려면 아래와 같이 딕셔너리를 생성하고 각 config를 어텐션 구현에 매핑하세요.
 
 ```python
 from transformers import AutoModelForImageTextToText
@@ -100,11 +98,9 @@ model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementatio
 model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"": "eager"})
 ```
 
-## What about new args needed in my custom attention function?
+## 사용자 지정 어텐션 함수에 필요한 새 인수는 어떻게 처리하나요?[[what-about-new-args-needed-in-my-custom-attention-function]]
 
-But indeed, what if the new function requires a new arg to be properly used? It's no issue! Models supporting the
-`AttentionInterface` propagate kwargs all the way to the Attention layers, and to the used attention function. That way,
-you can simply pass the arg (as a kwargs, i.e. you need to qualify the name of the arg) in the model's forward, and it will be correctly used in the attention. However, custom attention functions have some limitations. In particular, it must follow the signature and return format of other attention functions, i.e.
+새 함수가 올바르게 사용되기 위해 새 인수를 필요로 한다면 어떻게 될까요? 문제 없습니다\! `AttentionInterface`를 지원하는 모델은 kwargs를 어텐션 레이어 및 사용되는 어텐션 함수로 모두 전달합니다. 그렇게 하면 모델의 포워드(forward)에서 인수를 (kwargs, 즉 인수의 이름을 명시해야 함) 전달하기만 하면 어텐션에서 올바르게 사용될 것입니다. 그러나 사용자 지정 어텐션 함수에는 몇 가지 제한 사항이 있습니다. 특히 다른 어텐션 함수의 시그니처와 반환 형식을 따라야 합니다. 즉,
 
 ```python
 from transformers import AutoModelForCausalLM, AttentionInterface
@@ -120,8 +116,8 @@ def custom_attention(
     a_new_kwargs = None,  # You can now add as many kwargs as you need
     another_new_kwargs = None,  # You can now add as many kwargs as you need
     **kwargs,  # You need to accept **kwargs as models will pass other args
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]
-    ...  # do your magic!
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    # do your magic!
     return attn_output, attn_weights  # attn_weights are optional here
 
 AttentionInterface.register("custom", custom_attention)
@@ -131,13 +127,11 @@ model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="cust
 model(torch.ones(1, 5, dtype=int), a_new_kwargs=..., another_new_kwargs=...)
 ```
 
-If in doubt about what args/kwargs a given model sends to the attention function, simply check that model's modeling code on [GitHub](https://github.com/huggingface/transformers/tree/main/src/transformers/models)!
+주어진 모델이 어텐션 함수로 어떤 args/kwargs를 보내는지 확실하지 않다면 [GitHub](https://github.com/huggingface/transformers/tree/main/src/transformers/models)에서 해당 모델의 모델링 코드를 확인하십시오\!
 
-## Accessing current available implementations
+## 현재 사용 가능한 구현에 접근[[accessing-current-available-implementations]]
 
-Most of the time, you will simply need to `register` a new function. If, however, you need to access an existing one,
-and/or perform a few checks, the preferred way is to use the global `ALL_ATTENTION_FUNCTIONS`. It behaves the same way you
-would expect from a usual Python dictionary:
+대부분의 경우 새 함수를 `register`하기만 하면 됩니다. 그러나 기존 함수에 접근하거나 몇 가지 검사를 수행해야 하는 경우, 전역 `ALL_ATTENTION_FUNCTIONS`를 사용하는 것이 좋습니다. 이는 일반적인 Python 딕셔너리와 동일하게 작동합니다.
 
 ```python
 >>> from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -155,11 +149,9 @@ would expect from a usual Python dictionary:
 >>> ALL_ATTENTION_FUNCTIONS.register("new_func", new_func)
 ```
 
-## Attention Mask Interface
+## 어텐션 마스크 인터페이스[[attention-mask-interface]]
 
-Having a new attention function may mean that you need a new format of attention mask to decide what key and value tokens
-the query tokens should attend to. This is now possible with the `AttentionMaskInterface`! It works in the same way as
-the `AttentionInterface`:
+새로운 어텐션 함수를 사용하면 쿼리 토큰이 어떤 키 및 값 토큰에 어텐션해야 하는지 결정하기 위해 새로운 형식의 어텐션 마스크가 필요할 수 있습니다. 이제 `AttentionMaskInterface`를 통해 이것이 가능합니다\! 이는 `AttentionInterface`와 동일한 방식으로 작동합니다.
 
 ```python
 from transformers import AttentionMaskInterface
@@ -173,11 +165,10 @@ def my_new_sdpa_mask(*args, **kwargs):
 AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
 ```
 
-The reason you have to register it is because we need to automatically correct your mask format based on the attention implementation (for example, flex attention uses a BlockMask format, while sdpa uses a 4D tensor).
-By default, if you do not register an attention mask function along with your attention function, mask creation will be skipped
-and `attention_mask=None` will be passed along to the Attention layers.
+이를 등록해야 하는 이유는 어텐션 구현에 따라 마스크 형식을 자동으로 수정해야 하기 때문입니다(예를 들어, flex attention은 BlockMask 형식을 사용하는 반면 sdpa는 4D 텐서를 사용합니다).
+기본적으로 어텐션 함수와 함께 어텐션 마스크 함수를 등록하지 않으면 마스크 생성이 건너뛰어지고 `attention_mask=None`이 어텐션 레이어로 전달됩니다.
 
-The default signature of the attention mask functions is the following:
+어텐션 마스크 함수의 기본 시그니처는 다음과 같습니다.
 
 ```python
 def custom_attention_mask(
@@ -191,6 +182,6 @@ def custom_attention_mask(
 ) -> Optional[torch.Tensor]:
 ```
 
-It mostly works thanks to the `mask_function`, which is a `Callable` in the form of [torch's mask_mod functions](https://pytorch.org/blog/flexattention/), taking 4 indices as input and returning a boolean to indicate if this position should take part in the attention computation.
+이는 주로 `mask_function` 덕분에 작동하며, 이 함수는 [torch의 mask\_mod 함수](https://pytorch.org/blog/flexattention/) 형태의 `Callable`로, 4개의 인덱스를 입력으로 받아 해당 위치가 어텐션 계산에 참여해야 하는지 여부를 나타내는 부울 값을 반환합니다.
 
-If you cannot use the `mask_function` to create your mask for some reason, you can try to work around it by doing something similar to our [torch export workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py).
+어떤 이유로든 `mask_function`을 사용하여 마스크를 생성할 수 없는 경우, [torch export workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py)와 유사한 방식으로 문제를 해결할 수 있습니다.
