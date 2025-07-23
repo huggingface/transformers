@@ -3724,30 +3724,65 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
-        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
+        Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
+        in the batch.
+
+        Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
+        `self.pad_token_id` and `self.pad_token_type_id`).
+
+        Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
+        text followed by a call to the `pad` method to get a padded encoding.
+
+        <Tip>
+
+        If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        PyTorch tensors, you will lose the specific device of your tensors however.
+
+        </Tip>
 
         Args:
-            encoded_inputs:
-                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
-            max_length: maximum length of the returned list and optionally padding length (see below).
-                Will truncate by taking into account the special tokens.
-            padding_strategy: PaddingStrategy to use for padding.
+            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `dict[str, list[int]]`, `dict[str, list[list[int]]` or `list[dict[str, list[int]]]`):
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `dict[str, list[int]]`) or a batch of
+                tokenized inputs (list of [`BatchEncoding`], *dict[str, list[list[int]]]* or *list[dict[str,
+                list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function.
 
-                - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
-                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
-                - PaddingStrategy.DO_NOT_PAD: Do not pad
-                The tokenizer padding sides are defined in `padding_side` argument:
+                Instead of `list[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
+                the note above for the return type.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
 
-                    - 'left': pads on the left of the sequences
-                    - 'right': pads on the right of the sequences
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
+                - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value.
+
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
-            padding_side:
+            padding_side (`str`, *optional*):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
                 Default value is picked from the class attribute of the same name.
-            return_attention_mask:
-                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific tokenizer's default, defined by the `return_outputs` attribute.
+
+                [What are attention masks?](../glossary#attention-mask)
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            verbose (`bool`, *optional*, defaults to `True`):
+                Whether or not to print more information and warnings.
         """
         # Load from model defaults
         if return_attention_mask is None:
