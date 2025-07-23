@@ -468,35 +468,20 @@ class CsmGenerationMixin(GenerationMixin):
             # infer the codec model
             audio = []
             with torch.no_grad():
-                generated_audio_codes = generate_output.sequences if generate_returned_dict else generate_output
-
-                # Find EOS positions for all batches at once
-                eos_mask = (generated_audio_codes == self.config.codebook_eos_token_id).all(dim=-1)
-                eos_positions = torch.zeros(
-                    generated_audio_codes.shape[0], dtype=torch.long, device=generated_audio_codes.device
-                )
-
-                for i in range(generated_audio_codes.shape[0]):
-                    eos_idxs = eos_mask[i].nonzero()
+                # =======================================
+                # TODO: @eustlb, this should be batched !!!
+                # but requires making sure batched inference of the codec model works as intended
+                for audio_codes_batch in generated_audio_codes:
+                    eos_idxs = (audio_codes_batch == self.config.codebook_eos_token_id).all(dim=-1).nonzero()
                     if eos_idxs.numel() != 0:
-                        eos_positions[i] = eos_idxs.min()
+                        cutoff_idx = eos_idxs.min()
                     else:
-                        eos_positions[i] = generated_audio_codes.shape[1]
+                        cutoff_idx = audio_codes_batch.shape[0]
 
-                # Create a mask for valid positions
-                max_len = eos_positions.max().item()
-                valid_mask = torch.arange(max_len, device=generated_audio_codes.device).unsqueeze(
-                    0
-                ) < eos_positions.unsqueeze(1)
-
-                # Truncate and pad audio codes
-                truncated_codes = generated_audio_codes[:, :max_len]
-                masked_codes = truncated_codes * valid_mask.unsqueeze(-1)
-
-                # Decode all batches at once
-                transposed_codes = masked_codes.transpose(1, 2)
-                codec_decode_output = self.codec_model.decode(transposed_codes)
-                audio = codec_decode_output.audio_values.squeeze(1)
+                    audio_codes_batch = audio_codes_batch[:cutoff_idx]
+                    codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
+                    audio.append(codec_decode_output.audio_values[0, 0])
+                # =======================================
 
         if generate_returned_dict:
             return CsmGenerateOutput(audio=audio, **generate_output)
