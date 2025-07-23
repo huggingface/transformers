@@ -360,27 +360,13 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": GPTNeoXDecoderLayer,
         "attentions": GPTNeoXAttention,
     }
     _keys_to_ignore_on_load_unexpected = [r"attention.bias", r"attention.masked_bias"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
@@ -398,12 +384,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_in
-
-    def set_input_embeddings(self, value):
-        self.embed_in = value
 
     @check_model_inputs
     @auto_docstring
@@ -516,6 +496,12 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+
+    def get_input_embeddings(self):
+        return self.embed_in
+
+    def set_input_embeddings(self, value):
+        self.embed_in = value
 
 
 @auto_docstring(

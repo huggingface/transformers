@@ -132,6 +132,7 @@ class InformerConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
         "num_hidden_layers": "encoder_layers",
+        "initializer_range": "init_std",
     }
 
     def __init__(

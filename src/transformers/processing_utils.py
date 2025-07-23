@@ -15,6 +15,7 @@
 Processing saving/loading class for common processors.
 """
 
+import bisect
 import copy
 import inspect
 import json
@@ -1183,7 +1184,7 @@ class ProcessorMixin(PushToHubMixin):
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:
+        for modality in default_kwargs:  # noqa: PLC0206
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
@@ -1201,7 +1202,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
-        for modality in output_kwargs:
+        for modality, output_kwarg in output_kwargs.items():
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
@@ -1219,7 +1220,7 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     kwarg_value = "__empty__"
                 if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
-                    output_kwargs[modality][modality_key] = kwarg_value
+                    output_kwarg[modality_key] = kwarg_value
                     used_keys.add(modality_key)
 
         # Determine if kwargs is a flat dictionary or contains nested dictionaries
@@ -1233,18 +1234,18 @@ class ProcessorMixin(PushToHubMixin):
                             used_keys.add(subkey)
         else:
             # kwargs is a flat dictionary
-            for key in kwargs:
+            for key, kwarg in kwargs.items():
                 if key not in used_keys:
                     if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
-                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                        output_kwargs["common_kwargs"][key] = kwarg
                     elif key not in possible_modality_keywords:
                         logger.warning_once(
                             f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                         )
 
         # all modality-specific kwargs are updated with common kwargs
-        for modality in output_kwargs:
-            output_kwargs[modality].update(output_kwargs["common_kwargs"])
+        for kwarg in output_kwargs.values():
+            kwarg.update(output_kwargs["common_kwargs"])
         return output_kwargs
 
     @classmethod
@@ -1468,6 +1469,8 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 chat_template = chat_template
 
+        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
                 raise ValueError(
@@ -1475,6 +1478,15 @@ class ProcessorMixin(PushToHubMixin):
                 )
             if kwargs.get("return_assistant_tokens_mask", False):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if kwargs.get("return_assistant_tokens_mask", False):
+            if not is_tokenizers_fast:
+                raise ValueError(
+                    "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
+                    "If the error persists, open an issue to support a Fast tokenizer for your model."
+                )
+            else:
+                kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
 
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
@@ -1605,19 +1617,27 @@ class ProcessorMixin(PushToHubMixin):
                 video_metadata=batch_video_metadata,
                 **kwargs,
             )
+
             if return_dict:
                 if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
                     assistant_masks = []
+                    offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
+                        offsets = offset_mapping[i]
+                        offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
+                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
+                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+
+                            if not (
+                                start_pos >= 0
+                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
+                            ):
                                 # start_token is out of bounds maybe due to truncation.
-                                break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                                continue
+                            for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
