@@ -18,7 +18,7 @@ import math
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -29,7 +29,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers.activations import ACT2FN
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import ModelOutput
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.utils import logging
 
 from .configuration_ernie4_5_vl import (
@@ -255,43 +255,73 @@ class RopeEmbedding(nn.Module):
         return query, key
 
 
+# copy Llama
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+# copy Llama
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs#: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Ernie4_5_Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx=0):
-        """Initialize the attention layer.
-
-        Args:
-            config (Ernie4_5_Config): Model configuration.
-            layer_idx (int, optional): Index in transformer stack. Defaults to 0.
-        """
         super().__init__()
+        self.config = config
         self.layer_idx = layer_idx
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.is_gqa = (
-            self.num_key_value_heads is not None
-            and self.num_key_value_heads != self.num_heads
-        )
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = 0.0
+        self.is_causal = True
 
-        q_hidden_size = self.head_dim * self.num_heads
-        kv_hidden_size = self.head_dim * self.num_key_value_heads
-
-        self.q_proj = nn.Linear(self.hidden_size, q_hidden_size, bias=config.use_bias)
-        self.k_proj = nn.Linear(self.hidden_size, kv_hidden_size, bias=config.use_bias)
-        self.v_proj = nn.Linear(self.hidden_size, kv_hidden_size, bias=config.use_bias)
-
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias
+        )
         self.o_proj = nn.Linear(
-            self.hidden_size,
-            self.hidden_size,
-            bias=config.use_bias,
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias
         )
 
+        # TODO: rope to be moved outside
         self.freq_allocation = getattr(config, "freq_allocation", 0)
         self.rotary_emb = RopeEmbedding(
             self.head_dim,
@@ -299,36 +329,16 @@ class Ernie4_5_Attention(nn.Module):
             base=config.rope_theta,
             freq_allocation=self.freq_allocation,
         )
-        self.config = config
 
     def forward(
         self,
         hidden_states,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        attn_mask_start_row_indices: Optional[torch.Tensor] = None,
         position_ids: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
-        token_type_ids: Optional[Tuple[torch.Tensor]] = None,  # MLLM
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Compute attention outputs.
-
-        Args:
-            hidden_states (torch.Tensor): Input tensor [bsz, seq_len, hidden_size]
-            past_key_value (Optional[Tuple[torch.Tensor, torch.Tensor]]): Cached key/value states
-            attention_mask (Optional[torch.Tensor]): Attention mask tensor
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length attention indices
-            position_ids (Optional[torch.Tensor]): Position indices for RoPE
-            output_attentions (bool): Return attention weights if True
-            use_cache (bool): Cache key/value states if True
-
-        Returns:
-            Tuple containing:
-                - attention_output: [bsz, seq_len, hidden_size]
-                - attention_weights: Optional attention probabilities
-                - updated_key_value_cache: Optional updated cache
-        """
         assert position_ids is not None, "rope3d requires pos-id"
 
         input_shape = hidden_states.shape[:-1]
@@ -368,23 +378,24 @@ class Ernie4_5_Attention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            attn_output = F.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                attn_mask=None,
-                dropout_p=0.0 if not self.training else self.attention_dropout,
-                is_causal=query_states.shape[-2] == key_states.shape[-2],
-                scale=self.scaling,
-                enable_gqa=self.is_gqa,
-            )
-        attn_output = attn_output.transpose(1, 2)
+        #attention_interface: Callable = eager_attention_forward
+        #if self.config._attn_implementation != "eager":
+        #    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]  # forcing sdpa for now
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
-        #if not output_attentions:
-        attn_weights = None
 
         return attn_output, attn_weights, past_key_value
 
