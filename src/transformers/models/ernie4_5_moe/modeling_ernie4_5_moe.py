@@ -473,7 +473,7 @@ class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_MoESparseMoeBlock, index=1),
