@@ -2340,14 +2340,14 @@ class Sam2Model(Sam2PreTrainedModel):
 
         low_res_masks = low_res_multimasks
         high_res_masks = None
-        obj_ptr = None
+        object_pointer = None
 
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
             pred_masks=low_res_masks,
             low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
-            object_pointer=obj_ptr,
+            object_pointer=object_pointer,
             object_score_logits=object_score_logits,
             image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,
@@ -2610,7 +2610,7 @@ class Sam2VideoInferenceSession:
             return
 
         # Device placement: small tensors stay on inference device, large ones go to inference state device
-        if output_key in ["obj_ptr", "object_score_logits"]:  # Small tensors
+        if output_key in ["object_pointer", "object_score_logits"]:  # Small tensors
             target_dict[obj_idx][storage_key][frame_idx][output_key] = output_value
         elif isinstance(output_value, torch.Tensor):  # Large tensors like masks, features
             target_dict[obj_idx][storage_key][frame_idx][output_key] = output_value.to(
@@ -3080,18 +3080,18 @@ class Sam2VideoModel(Sam2Model):
             low_res_masks, high_res_masks = low_res_multimasks[:, :, 0], high_res_multimasks[:, :, 0]
 
         # Extract object pointer from the SAM output token (with occlusion handling)
-        obj_ptr = self.object_pointer_proj(sam_output_token)
-        lambda_is_obj_appearing = is_obj_appearing.to(obj_ptr.dtype)
+        object_pointer = self.object_pointer_proj(sam_output_token)
+        lambda_is_obj_appearing = is_obj_appearing.to(object_pointer.dtype)
 
-        obj_ptr = lambda_is_obj_appearing * obj_ptr
-        obj_ptr = obj_ptr + (1 - lambda_is_obj_appearing) * self.no_object_pointer
+        object_pointer = lambda_is_obj_appearing * object_pointer
+        object_pointer = object_pointer + (1 - lambda_is_obj_appearing) * self.no_object_pointer
 
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
             pred_masks=low_res_masks,
             low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
-            object_pointer=obj_ptr,
+            object_pointer=object_pointer,
             object_score_logits=object_score_logits,
             image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,
@@ -3235,9 +3235,6 @@ class Sam2VideoModel(Sam2Model):
         """
         # Only batch size 1 is supported (single frame inference)
         batch_size = 1
-        if frame is not None:
-            frame_idx = inference_session.add_new_frame(frame)
-
         obj_ids = inference_session.obj_with_new_inputs
         obj_idxs = [inference_session.obj_id_to_idx(obj_id) for obj_id in obj_ids]
 
@@ -3412,15 +3409,15 @@ class Sam2VideoModel(Sam2Model):
         consolidate_at_video_res (`bool`, *optional*, defaults to `True`):
             Whether to consolidate the output at the original video resolution
         """
+        if frame is not None:
+            frame_idx = inference_session.add_new_frame(frame)
+
         if inference_session.obj_with_new_inputs:
             return self._infer_on_video_frame_with_new_inputs(
                 inference_session, frame_idx=frame_idx, frame=frame, consolidate_at_video_res=consolidate_at_video_res
             )
         elif frame is not None and inference_session.get_obj_num() == 0:
             raise ValueError("No objects are provided for tracking; please add inputs first.")
-
-        if frame is not None:
-            frame_idx = inference_session.add_new_frame(frame)
 
         batch_size = inference_session.get_obj_num()
         pred_masks_per_obj = [None] * batch_size
@@ -3669,14 +3666,14 @@ class Sam2VideoModel(Sam2Model):
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
         maskmem_pos_enc = self._get_maskmem_pos_enc(inference_session, current_out)
         # object pointer is a small tensor, so we always keep it on GPU memory for fast access
-        obj_ptr = current_out["obj_ptr"]
+        object_pointer = current_out["object_pointer"]
         object_score_logits = current_out["object_score_logits"]
         # make a compact version of this frame's output to reduce the state size
         compact_current_out = {
             "maskmem_features": maskmem_features,
             "maskmem_pos_enc": maskmem_pos_enc,
             "pred_masks": pred_masks,
-            "obj_ptr": obj_ptr,
+            "object_pointer": object_pointer,
             "object_score_logits": object_score_logits,
         }
         return compact_current_out, pred_masks
@@ -3705,7 +3702,7 @@ class Sam2VideoModel(Sam2Model):
         # a dummy IoU prediction of all 1's under mask input
         iou_scores = mask_inputs.new_ones(mask_inputs.size(0), 1).to(backbone_features[0].dtype)
         # produce an object pointer using the SAM decoder from the mask input
-        obj_ptr = self.sam2_forward(
+        object_pointer = self.sam2_forward(
             input_masks=self.mask_downsample(mask_inputs_float.to(backbone_features[0].dtype)),
             image_embeddings=high_res_features + [backbone_features],
         ).object_pointer
@@ -3716,14 +3713,14 @@ class Sam2VideoModel(Sam2Model):
         is_obj_appearing = is_obj_appearing[..., None]
         lambda_is_obj_appearing = is_obj_appearing.to(backbone_features[0].dtype)
         object_score_logits = out_scale * lambda_is_obj_appearing + out_bias
-        obj_ptr = lambda_is_obj_appearing * obj_ptr
-        obj_ptr = obj_ptr + (1 - lambda_is_obj_appearing) * self.no_object_pointer
+        object_pointer = lambda_is_obj_appearing * object_pointer
+        object_pointer = object_pointer + (1 - lambda_is_obj_appearing) * self.no_object_pointer
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
             pred_masks=low_res_masks,
             low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
-            object_pointer=obj_ptr,
+            object_pointer=object_pointer,
             object_score_logits=object_score_logits,
             image_embeddings=high_res_features + [backbone_features],
         )
@@ -3881,7 +3878,7 @@ class Sam2VideoModel(Sam2Model):
                 temporal_difference = (frame_idx - t_idx) * temporal_position_sign_multiplier
                 if not self.preserve_temporal_direction_in_object_pointers:
                     temporal_difference = abs(temporal_difference)
-                temporal_diff_and_pointers.append((temporal_difference, out_data["obj_ptr"]))
+                temporal_diff_and_pointers.append((temporal_difference, out_data["object_pointer"]))
 
             # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
             for t_diff_offset in range(1, max_object_pointers_to_use):
@@ -3895,7 +3892,7 @@ class Sam2VideoModel(Sam2Model):
                     ref_frame_idx, None
                 )
                 if out_data is not None:
-                    temporal_diff_and_pointers.append((t_diff_offset, out_data["obj_ptr"]))
+                    temporal_diff_and_pointers.append((t_diff_offset, out_data["object_pointer"]))
 
             if temporal_diff_and_pointers:
                 temporal_differences, object_pointers_list = zip(*temporal_diff_and_pointers)
@@ -4195,7 +4192,7 @@ class Sam2VideoModel(Sam2Model):
             `dict`: Dictionary containing the tracking results for the current frame, including:
                 - pred_masks: Predicted low-resolution masks.
                 - pred_masks_high_res: Predicted high-resolution masks.
-                - obj_ptr: Object pointer for memory.
+                - object_pointer: Object pointer for memory.
                 - object_score_logits: Object score logits (inference only).
                 - maskmem_features: Memory features for future frames.
                 - maskmem_pos_enc: Memory positional encodings.
@@ -4217,12 +4214,12 @@ class Sam2VideoModel(Sam2Model):
 
         low_res_masks = sam_outputs.low_res_masks
         high_res_masks = sam_outputs.high_res_masks
-        obj_ptr = sam_outputs.object_pointer
+        object_pointer = sam_outputs.object_pointer
         object_score_logits = sam_outputs.object_score_logits
 
         current_out["pred_masks"] = low_res_masks
         current_out["pred_masks_high_res"] = high_res_masks
-        current_out["obj_ptr"] = obj_ptr
+        current_out["object_pointer"] = object_pointer
         if not self.training:
             # Only add this in inference (to avoid unused param in activation checkpointing;
             # it's mainly used in the demo to encode spatial memories w/ consolidated masks)
