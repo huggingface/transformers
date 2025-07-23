@@ -15,7 +15,7 @@
 from typing import TYPE_CHECKING, Any
 
 from ..integrations import prepare_for_hqq_linear
-from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -70,9 +70,6 @@ class HqqHfQuantizer(HfQuantizer):
                 "Converting weights from tf/flax weights is currently not supported, please make"
                 " sure the weights are in PyTorch format."
             )
-
-        if not (torch.cuda.is_available() or is_torch_xpu_available()):
-            raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for quantization.")
 
         if self.torch_dtype is None:
             if "torch_dtype" in kwargs:
@@ -256,8 +253,8 @@ class HqqHfQuantizer(HfQuantizer):
             return
 
         # Step 1: populate module with weight/bias from module state dict
-        for key in module_state_dict:
-            setattr(module, key, torch.nn.Parameter(module_state_dict[key]))
+        for key, tensor in module_state_dict.items():
+            setattr(module, key, torch.nn.Parameter(tensor))
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.
