@@ -1307,7 +1307,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         config = copy.deepcopy(self.config)
         config.num_hidden_layers = 2
-        config.layer_types = ["full_attention", "sliding_attention"]
+        config.layer_types = ["full_attention", "chunked_attention"]
         config.sliding_window = 2
         max_cache_len = 4
         chunked_cache = HybridChunkedCache(config=config, max_batch_size=1, max_cache_len=max_cache_len)
@@ -1387,7 +1387,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         config = copy.deepcopy(self.config)
         config.num_hidden_layers = 1
-        config.layer_types = ["sliding_attention"]
+        config.layer_types = ["chunked_attention"]
         config.sliding_window = 3
         cache = HybridChunkedCache(config, max_batch_size=1, max_cache_len=3)
 
