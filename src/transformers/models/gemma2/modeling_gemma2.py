@@ -351,19 +351,6 @@ class Gemma2PreTrainedModel(PreTrainedModel):
         "attentions": Gemma2Attention,
     }
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Gemma2RMSNorm):
-            module.weight.data.fill_(1.0)
-
 
 @auto_docstring
 class Gemma2Model(Gemma2PreTrainedModel):

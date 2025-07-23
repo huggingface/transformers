@@ -59,6 +59,7 @@ from .integrations import (
     is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
@@ -104,6 +105,7 @@ from .utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
@@ -584,6 +586,16 @@ def require_flash_attn(test_case):
 
     """
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+
+
+def require_kernels(test_case):
+    """
+    Decorator marking a test that requires Flash Attention.
+
+    These tests are skipped when Flash Attention isn't installed.
+
+    """
+    return unittest.skipUnless(is_kernels_available(), "test requires Flash Attention")(test_case)
 
 
 def require_flash_attn_3(test_case):
@@ -1103,6 +1115,11 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_mps(test_case):
+    """Decorator marking a test that requires CUDA and PyTorch."""
+    return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
+
+
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
@@ -1256,6 +1273,16 @@ def require_swanlab(test_case):
 
     """
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
+
+
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio.
+
+    These tests are skipped when trackio isn't installed.
+
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
 
 
 def require_wandb(test_case):
