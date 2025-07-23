@@ -1115,19 +1115,22 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
-        if is_torch_available() and torch.cuda.is_available() and dist.is_available() and dist.is_initialized():
+        if is_torch_available() and torch.cuda.is_available():
             device_idx = torch.cuda.current_device()
             total_memory = torch.cuda.get_device_properties(device_idx).total_memory
             memory_allocated = torch.cuda.memory_allocated(device_idx)
-
+            power = torch.cuda.power_draw(device_idx)
             gpu_memory_logs = {
                 f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
                 f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
+                f"gpu/{device_idx}/power": power / 1000,  # Watts
             }
-
-            gathered_logs = [None] * dist.get_world_size()
-            dist.all_gather_object(gathered_logs, gpu_memory_logs)
-            gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
+            if dist.is_available() and dist.is_initialized():
+                gathered_logs = [None] * dist.get_world_size()
+                dist.all_gather_object(gathered_logs, gpu_memory_logs)
+                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
+        else:
+            gpu_memory_logs = {}
 
         if not self._initialized:
             self.setup(args, state, model)
