@@ -147,6 +147,19 @@ class MaskFormerImageProcessingTester:
         )
 
 
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
+def prepare_semantic_single_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
+
+
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
+def prepare_semantic_batch_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
+
+
 @require_torch
 @require_vision
 class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
@@ -555,3 +568,50 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # test we still support reduce_labels with config
         image_processor = self.image_processing_class.from_dict(image_processor_dict)
         self.assertEqual(image_processor.do_reduce_labels, True)
+
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image, dummy_map = prepare_semantic_single_inputs()
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values)
+        for mask_label_slow, mask_label_fast in zip(image_encoding_slow.mask_labels, image_encoding_fast.mask_labels):
+            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
+        for class_label_slow, class_label_fast in zip(
+            image_encoding_slow.class_labels, image_encoding_fast.class_labels
+        ):
+            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
+
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        for mask_label_slow, mask_label_fast in zip(encoding_slow.mask_labels, encoding_fast.mask_labels):
+            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
+        for class_label_slow, class_label_fast in zip(encoding_slow.class_labels, encoding_fast.class_labels):
+            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())

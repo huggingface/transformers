@@ -22,7 +22,7 @@ import os
 import random
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple, Union
+from typing import Any, Mapping, Union
 
 import albumentations as A
 import datasets
@@ -62,7 +62,7 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 
 # Copied from examples/pytorch/object-detection/run_object_detection.format_image_annotations_as_coco
 def format_image_annotations_as_coco(
-    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
+    image_id: str, categories: list[int], areas: list[float], bboxes: list[tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
@@ -97,7 +97,7 @@ def format_image_annotations_as_coco(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.convert_bbox_yolo_to_pascal
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
     """
     Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
     to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
@@ -162,8 +162,8 @@ def augment_and_transform_batch(
     examples: Mapping[str, Any],
     transform: A.Compose,
     processor: AutoProcessor,
-    id2label: Dict[int, str],
-    label2id: Dict[str, int],
+    id2label: dict[int, str],
+    label2id: dict[str, int],
     random_text_prompt: bool = False,
     return_pixel_mask: bool = False,
 ) -> BatchFeature:
@@ -230,7 +230,7 @@ def augment_and_transform_batch(
     return result
 
 
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["input_ids"] = torch.stack([x["input_ids"] for x in batch])

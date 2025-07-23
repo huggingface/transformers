@@ -12,19 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Optional
 
 from transformers.models.maskformer.image_processing_maskformer_fast import MaskFormerImageProcessorFast
 
-from ...image_processing_utils import get_size_dict
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-)
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    PILImageResampling,
-)
 from ...utils import (
     TensorType,
     is_torch_available,
@@ -45,117 +36,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast, BaseImageProcessorFast):
-    r"""
-    Constructs a fast Mask2Former image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
-        size (`int`, *optional*, defaults to 800):
-            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`. If size is a
-            sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
-            the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
-            height / width, size)`.
-        size_divisor (`int`, *optional*, defaults to 32):
-            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-            Swin Transformer.
-        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
-            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
-            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
-            to `True`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the input to a certain `scale`.
-        rescale_factor (`float`, *optional*, defaults to `1/ 255`):
-            Rescale the input by the given factor. Only has an effect if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
-            The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
-        image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
-            ImageNet std.
-        ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
-        do_reduce_labels (`bool`, *optional*, defaults to `False`):
-            Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-            is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-            The background label will be replaced by `ignore_index`.
-        num_labels (`int`, *optional*):
-            The number of labels in the segmentation map.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-    """
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        size_divisor: int = 32,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        ignore_index: Optional[int] = None,
-        do_reduce_labels: bool = False,
-        num_labels: Optional[int] = None,
-        pad_size: Optional[Dict[str, int]] = None,
-        **kwargs,
-    ) -> None:
-        # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-        # `size` can still be pass in as an int
-        self._max_size = kwargs.pop("max_size", 1333)
-
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
-        size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
-
-        BaseImageProcessorFast.__init__(**kwargs)
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.size_divisor = size_divisor
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.ignore_index = ignore_index
-        self.do_reduce_labels = do_reduce_labels
-        self.num_labels = num_labels
-        self.pad_size = pad_size
-
-        self._valid_processor_keys = [
-            "images",
-            "segmentation_maps",
-            "instance_id_to_semantic_id",
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "ignore_index",
-            "do_reduce_labels",
-            "pad_size",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
-
-    def post_process_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for Mask2Former yet.")
-
+class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast):
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
+        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`Mask2FormerForUniversalSegmentation`] into semantic segmentation maps. Only supports
@@ -215,10 +98,10 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast, BaseImageProce
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
         return_binary_maps: Optional[bool] = False,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
         Only supports PyTorch. If instances could overlap, set either return_coco_annotation or return_binary_maps
@@ -271,7 +154,7 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast, BaseImageProce
         num_queries = class_queries_logits.shape[-2]
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(class_queries_logits.shape[0]):
             mask_pred = masks_queries_logits[i]
@@ -336,9 +219,9 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast, BaseImageProce
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[Set[int]] = None,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
-    ) -> List[Dict]:
+        label_ids_to_fuse: Optional[set[int]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
+    ) -> list[dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
@@ -396,7 +279,7 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast, BaseImageProce
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
@@ -424,6 +307,9 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast, BaseImageProce
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+    def post_process_segmentation():
+        raise NotImplementedError("Segmentation post-processing is not implemented for Mask2Former yet.")
 
 
 __all__ = ["Mask2FormerImageProcessorFast"]
