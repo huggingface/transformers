@@ -233,3 +233,11 @@ class TextClassificationPipelineTests(unittest.TestCase):
             [{"label": ANY(str), "score": ANY(float)}],
         )
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
+    def test_empty_string(self):
+        """
+        Test that the pipeline returns a list even for empty input.
+        """
+        pipe = pipeline("text-classification")
+        result = pipe("")
+        self.assertIsInstance(result, list)
+        self.assertEqual(result, [])
