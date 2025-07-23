@@ -266,9 +266,9 @@ def _test_eager_matches_sdpa_inference(
         set_model_for_less_flaky_test(model_eager)
         set_model_for_less_flaky_test(model_sdpa)
 
-        # can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-        # if not (self.has_attentions and can_output_attn) and output_attentions:
-        #     self.skipTest(reason="Model does not support output_attentions")
+        can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+        if not (self.has_attentions and can_output_attn) and output_attentions:
+            self.skipTest(reason="Model does not support output_attentions")
 
         # TODO: if we can also check with `batch_size=1` without being flaky?
         for batch_size in [7]:
