@@ -4315,14 +4315,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
         if tp_plan is not None:
-            if device_mesh is None and tp_plan is not None:
+            if device_mesh is None:
                 tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
-                assert device_mesh is not None and "tp" in device_mesh.mesh_dim_names, (
-                    "device_mesh must contain a 'tp' dimension"
-                )
+                if "tp" not in device_mesh.mesh_dim_names:
+                    raise ValueError(
+                        "When using `tp_plan`, the `device_mesh` must contain a 'tp' dimension. "
+                        "Please provide a valid `device_mesh`."
+                    )
                 device_mesh = device_mesh["tp"]
                 tp_size = device_mesh["tp"].size()
+                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
         if use_auth_token is not None:
             warnings.warn(
@@ -5194,10 +5197,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Post-processing for tensor parallelism
         if device_mesh is not None:
             # When using TP, the device map is a single device for all parameters
-            if device_map:
-                tp_device = list(device_map.values())[0]
-            else:
-                tp_device = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+            tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
