@@ -1333,14 +1333,11 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,
     """
 )
-class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
+class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin):
     config: MusicgenConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
 
     def __init__(
         self,

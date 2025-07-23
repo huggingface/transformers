@@ -470,7 +470,7 @@ class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_MoESparseMoeBlock, index=1),
@@ -480,18 +480,8 @@ class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Ernie4_5_MoERMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Ernie4_5_MoEStatics):
+        super()._init_weights(module)
+        if isinstance(module, Ernie4_5_MoEStatics):
             module.e_score_correction_bias.data.zero_()
 
 
