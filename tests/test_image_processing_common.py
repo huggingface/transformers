@@ -246,7 +246,7 @@ class ImageProcessingTestMixin:
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # Check is_fast is set correctly
-            if "Fast" in image_processing_class.__name__:
+            if isinstance(image_processing_class, BaseImageProcessorFast):
                 self.assertTrue(image_processor.is_fast)
             else:
                 self.assertFalse(image_processor.is_fast)
