@@ -276,35 +276,11 @@ class Ernie4_5_Attention(nn.Module):
             self.num_key_value_heads is not None
             and self.num_key_value_heads != self.num_heads
         )
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = 0.0
 
-        self.freq_allocation = getattr(config, "freq_allocation", 0)
-        assert (
-            self.freq_allocation is not None
-        ), "freq_allocation must be provided if rope_3d is on."
-
-        if config.tensor_parallel_degree > 1:
-            assert (
-                self.num_heads % config.tensor_parallel_degree == 0
-            ), f"num_heads: {self.num_heads}, tensor_parallel_degree: {config.tensor_parallel_degree}"
-            self.num_heads = self.num_heads // config.tensor_parallel_degree
-            if self.is_gqa:
-                assert (
-                    self.num_key_value_heads % config.tensor_parallel_degree == 0
-                ), f"num_heads: {self.num_key_value_heads}, tensor_parallel_degree: {config.tensor_parallel_degree}"
-                self.num_key_value_heads = (
-                    self.num_key_value_heads // config.tensor_parallel_degree
-                )
         q_hidden_size = self.head_dim * self.num_heads
-        if self.is_gqa:
-            logger.info(
-                f"use GQA - num_heads: {self.num_heads}- num_key_value_heads: {self.num_key_value_heads}"
-            )
-            assert (
-                self.num_heads % self.num_key_value_heads == 0
-            ), f"num_heads: {self.num_heads}, num_key_value_heads: {self.num_key_value_heads}"
-            kv_hidden_size = self.head_dim * self.num_key_value_heads
-        else:
-            kv_hidden_size = self.head_dim * self.num_heads
+        kv_hidden_size = self.head_dim * self.num_key_value_heads
 
         self.q_proj = nn.Linear(self.hidden_size, q_hidden_size, bias=config.use_bias)
         self.k_proj = nn.Linear(self.hidden_size, kv_hidden_size, bias=config.use_bias)
@@ -316,6 +292,7 @@ class Ernie4_5_Attention(nn.Module):
             bias=config.use_bias,
         )
 
+        self.freq_allocation = getattr(config, "freq_allocation", 0)
         self.rotary_emb = RopeEmbedding(
             self.head_dim,
             compression_ratio=config.compression_ratio,
@@ -352,72 +329,17 @@ class Ernie4_5_Attention(nn.Module):
                 - attention_weights: Optional attention probabilities
                 - updated_key_value_cache: Optional updated cache
         """
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids[:, :-1]
-
-        bsz, q_len, _ = hidden_states.shape
-        query_states = self.q_proj(hidden_states).reshape(
-            [bsz, q_len, -1, self.head_dim]
-        )
-        key_states = self.k_proj(hidden_states).reshape([bsz, q_len, -1, self.head_dim])
-        value_states = self.v_proj(hidden_states).reshape(
-            [bsz, q_len, -1, self.head_dim]
-        )
-
-        attn_output, attn_weights, past_key_value = self.rope_attn(
-            query_states=query_states,
-            key_states=key_states,
-            value_states=value_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            attn_mask_start_row_indices=attn_mask_start_row_indices,
-        )
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-    def rope_attn(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        position_ids,
-        output_attentions=False,
-        past_key_value=None,
-        use_cache=False,
-        attn_mask_start_row_indices=None,
-    ):
-        """Attention computation with rotary embeddings.
-
-        Args:
-            mix_layer (Optional[torch.Tensor]): Combined QKV projection
-            query_states (torch.Tensor): Query states
-            key_states (torch.Tensor): Key states
-            value_states (torch.Tensor): Value states
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            position_ids (Optional[torch.Tensor]): Position indices
-            output_attentions (bool): Return attention weights
-            past_key_value (Optional[Tuple[torch.Tensor, torch.Tensor]]): Cached states
-            use_cache (bool): Cache new states
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length indices
-
-        Returns:
-            Tuple containing:
-                - attention_output: Result tensor
-                - attention_weights: Optional weights
-                - updated_key_value_cache: Optional cache
-        """
-
-        query_states_dtype = query_states.dtype
-
         assert position_ids is not None, "rope3d requires pos-id"
+
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+
+        # rope
+        query_states_dtype = query_states.dtype
         kv_seq_len = position_ids.max() + 1
         offset = 0
         if past_key_value is not None:
@@ -431,38 +353,40 @@ class Ernie4_5_Attention(nn.Module):
         query_states, key_states = self.rotary_emb.apply_rotary_3d(
             cos_sin, query_states, key_states, position_ids
         )
-
         query_states = query_states.to(query_states_dtype)
         key_states = key_states.to(query_states_dtype)
+
+        # cache
         if past_key_value is not None:
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=1)
             value_states = torch.cat([past_key_value[1], value_states], dim=1)
-
-        # shape: [2, b, s, kvh, d]
         past_key_value = [key_states, value_states] if use_cache else None
-        seq_length = query_states.shape[1]
 
-        q = query_states.transpose(1, 2)
-        k = key_states.transpose(1, 2)
-        v = value_states.transpose(1, 2)
+        # core attention
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            out = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
+            attn_output = F.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
                 attn_mask=None,
-                dropout_p=self.config.attention_probs_dropout_prob,
-                is_causal=q.shape[-2] == k.shape[-2],
-                scale=1
-                / (getattr(self.config, "scale_qk_coeff", 1.0) * self.head_dim**0.5),
+                dropout_p=0.0 if not self.training else self.attention_dropout,
+                is_causal=query_states.shape[-2] == key_states.shape[-2],
+                scale=self.scaling,
                 enable_gqa=self.is_gqa,
             )
-        out = out.transpose(1, 2)
-        out = out.contiguous().view(out.size(0), out.size(1), -1)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
 
-        return out, None, past_key_value
+        #if not output_attentions:
+        attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
 
 
 # Copy LlamaRMSNorm
