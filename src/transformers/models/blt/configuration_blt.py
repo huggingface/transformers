@@ -383,12 +383,6 @@ class BLTConfig(PretrainedConfig):
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
-        # Add decoder config attributes to main config for compatibility with tests
-        # These mirror the decoder config attributes since the main model interface uses the decoder
-        # self.hidden_size = self.decoder_config.hidden_size
-        # self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        # self.num_attention_heads = self.decoder_config.num_attention_heads
-
 
 __all__ = [
     "BLTConfig",

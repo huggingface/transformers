@@ -140,6 +140,8 @@ class BLTModelTester(CausalLMModelTester):
             "dropout": self.dropout,
         }
 
+        self.num_hidden_layers = self.encoder_config["num_hidden_layers"]
+
     def get_config(self):
         config = BLTConfig(
             vocab_size=self.vocab_size,
@@ -163,7 +165,7 @@ class BLTModelTester(CausalLMModelTester):
         )
 
         config.num_attention_heads = config.decoder_config.num_attention_heads
-        config.num_hidden_layers = config.decoder_config.num_hidden_layers
+        config.num_hidden_layers = config.encoder_config.num_hidden_layers
         config.hidden_size = config.decoder_config.hidden_size
 
         return config
@@ -311,6 +313,34 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_flex_attention_with_grads():
         return
+
+    def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        config._attn_implementation = "eager"
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            # For BLT, check separate attention outputs from each component
+            attentions = outputs.attentions
+            encoder_attentions = outputs.encoder_attentions  
+            global_attentions = outputs.global_attentions
+            
+            # Each component should have attention outputs equal to their layer count
+            self.assertEqual(len(attentions), config.decoder_config.num_hidden_layers)
+            self.assertEqual(len(encoder_attentions), config.encoder_config.num_hidden_layers) 
+            self.assertEqual(len(global_attentions), config.global_config.num_hidden_layers)
 
 
 @require_torch_accelerator

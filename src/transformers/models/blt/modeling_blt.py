@@ -30,7 +30,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, OutputRecorder
 
 from .configuration_blt import (
     BLTConfig,
@@ -145,7 +145,7 @@ class BLTTransformerLayer(nn.Module):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -312,6 +312,7 @@ class BLTDecoderLayer(BLTTransformerLayer):
 class BLTLocalEncoder(nn.Module):
     def __init__(self, config: BLTLocalEncoderConfig):
         super().__init__()
+        self.gradient_checkpointing = False
         self.config = config
         self.layers = nn.ModuleList(
             [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -417,6 +418,7 @@ class BLTLocalEncoder(nn.Module):
 class BLTLocalDecoder(nn.Module):
     def __init__(self, config: BLTLocalDecoderConfig):
         super().__init__()
+        self.gradient_checkpointing = False
         self.config = config
         self.cross_attn_decoder = True
         self.layers = nn.ModuleList(
@@ -436,6 +438,7 @@ class BLTLocalDecoder(nn.Module):
                 BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
 
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -818,7 +821,9 @@ class BLTPreTrainedModel(PreTrainedModel):
 
     _can_record_outputs = {
         "hidden_states": BLTDecoderLayer,
-        "attentions": BLTSelfAttention,
+        "attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="local_decoder"),
+        "encoder_attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="local_encoder"),
+        "global_attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="global_transformer"),
     }
 
     def _init_weights(self, module):
@@ -966,6 +971,7 @@ class BLTPreTrainedModel(PreTrainedModel):
 class BLTModel(BLTPreTrainedModel):
     def __init__(self, config: BLTConfig):
         super().__init__(config)
+        self.gradient_checkpointing = False
         self.config = config
         self.local_encoder = BLTLocalEncoder(config.encoder_config)
         self.global_transformer = BLTGlobalTransformer(config.global_config)
@@ -1371,7 +1377,8 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
         ```
         """
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: BaseModelOutputWithPast = self.model(            input_ids=input_ids,
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
             cross_attention_states=cross_attention_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1392,13 +1399,21 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        output = CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+        
+       # Add BLT-specific attention outputs
+        if hasattr(outputs, 'encoder_attentions'):
+            output.encoder_attentions = outputs.encoder_attentions
+        if hasattr(outputs, 'global_attentions'):
+            output.global_attentions = outputs.global_attentions
+            
+        return output
 
 
 __all__ = [
