@@ -2121,6 +2121,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
+
+        This is also used when the user is running distributed code. We add hooks to the modules here, according to
+        the model's tp_plan!
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
@@ -2155,7 +2158,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
         self._tp_plan = (
             self.config.base_model_ep_plan.copy()
-            if self.config.base_model_ep_plan is not None
+            if self.config.base_model_ep_plan is not None and self.config.distributed_config.enable_expert_parallel
             else self.config.base_model_tp_plan
         )
         for name, module in self.named_children():
@@ -2168,8 +2171,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
-            if True:
-                self._tp_plan = self.config.base_model_ep_plan
             # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
             device_mesh = self.config.device_mesh
             for name, module in self.named_modules():
@@ -2180,7 +2181,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         model=self,
                         module=module,
                         tp_plan=self._tp_plan,
-                        layer_name="",  # TODO: make this optional?
+                        layer_name="",
                         current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
                         device_mesh=device_mesh,
                         parameter_name=None,
