@@ -23,7 +23,7 @@ import numpy as np
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
-from .image_utils import load_image
+from .image_utils import is_valid_image, load_image
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
@@ -38,7 +38,7 @@ from .utils import (
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -524,7 +524,7 @@ class ImageProcessingMixin(PushToHubMixin):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
             return load_image(image_url_or_urls)
-        elif isinstance(image_url_or_urls, Image.Image):
+        elif is_valid_image(image_url_or_urls):
             return image_url_or_urls
         else:
             raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
