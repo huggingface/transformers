@@ -445,6 +445,14 @@ class GatherParallel(TensorParallelLayer):
             dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
         return outputs
 
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
+        )
+
 
 class IsolatedParallel(TensorParallelLayer):
     """

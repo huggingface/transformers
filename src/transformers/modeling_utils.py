@@ -1989,7 +1989,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # - `_pp_plan["layers"][PipelineParallel.inputs]`
     # - `_pp_plan["layers"][PipelineParallel.outputs]`
     _pp_plan = None
-
+    distributed_config = None
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
@@ -2158,7 +2158,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
         self._tp_plan = (
             self.config.base_model_ep_plan.copy()
-            if self.config.base_model_ep_plan is not None and self.config.distributed_config.enable_expert_parallel
+            if self.config.base_model_ep_plan is not None
+            and getattr(self.distributed_config, "enable_expert_parallel", False)
+            and True
             else self.config.base_model_tp_plan
         )
         for name, module in self.named_children():
@@ -4414,7 +4416,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
-        distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4425,6 +4426,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
         ):
             key_mapping = cls._checkpoint_conversion_mapping
+
+        cls.distributed_config: DistributedConfig = kwargs.pop("distributed_config", {})
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -4769,7 +4772,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         config.name_or_path = pretrained_model_name_or_path
-        if True and distributed_config is not None and distributed_config.enable_expert_parallel:
+        if (
+            cls.distributed_config is not None
+            and getattr(cls.distributed_config, "enable_expert_parallel", False)
+            and True
+        ):
             # TODO: add proper support for ep_plan independently of tp_plan
             if getattr(config, "base_model_ep_plan", None) is None:
                 raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
