@@ -19,7 +19,6 @@ import math
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, StaticCache
@@ -98,7 +97,6 @@ class DiffLlamaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -151,12 +149,7 @@ class DiffLlamaAttention(nn.Module):
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
-
         attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
 
 
@@ -182,7 +175,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -191,8 +183,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-
-        output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -308,11 +298,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
+        return attn_output, None
 
 
 class DiffLlamaSdpaAttention(DiffLlamaAttention):
@@ -330,7 +316,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -397,7 +382,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
-
         return attn_output, None
 
 
@@ -420,18 +404,8 @@ class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = False
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, DiffLlamaRMSNorm):  # noqa: F821
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, DiffLlamaAttention):
+        LlamaPreTrainedModel._init_weights(module)
+        if isinstance(module, DiffLlamaAttention):
             module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
             module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
             module.lambda_q2.data.normal_(0, self.config.lambda_std_dev)

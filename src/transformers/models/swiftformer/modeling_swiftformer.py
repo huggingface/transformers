@@ -388,21 +388,29 @@ class SwiftFormerEncoder(nn.Module):
 
 @auto_docstring
 class SwiftFormerPreTrainedModel(PreTrainedModel):
-    config_class = SwiftFormerConfig
+    config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwiftFormerEncoderBlock"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Conv2d, nn.Linear)):
             nn.init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
+        elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
+            module.layer_scale.data.fill_(1.0)
+        elif isinstance(module, SwiftFormerEncoderBlock):
+            if self.config.use_layer_scale:
+                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+        elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
+            nn.init.normal_(module.w_g)
 
 
 @auto_docstring

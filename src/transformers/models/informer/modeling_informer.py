@@ -34,6 +34,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -250,23 +251,15 @@ class InformerValueEmbedding(nn.Module):
 
 @auto_docstring
 class InformerPreTrainedModel(PreTrainedModel):
-    config_class = InformerConfig
+    config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, InformerSinusoidalPositionalEmbedding):
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, InformerSinusoidalPositionalEmbedding):
             module._init_weight()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
@@ -483,8 +476,8 @@ class InformerAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -521,7 +514,7 @@ class InformerAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class InformerProbSparseAttention(nn.Module):
@@ -600,8 +593,8 @@ class InformerProbSparseAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -740,11 +733,11 @@ class InformerProbSparseAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class InformerConvLayer(nn.Module):
+class InformerConvLayer(GradientCheckpointingLayer):
     def __init__(self, c_in):
         super().__init__()
         self.downConv = nn.Conv1d(
@@ -767,7 +760,7 @@ class InformerConvLayer(nn.Module):
         return x
 
 
-class InformerEncoderLayer(nn.Module):
+class InformerEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: InformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -813,7 +806,7 @@ class InformerEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -845,7 +838,7 @@ class InformerEncoderLayer(nn.Module):
         return outputs
 
 
-class InformerDecoderLayer(nn.Module):
+class InformerDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: InformerConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -923,7 +916,7 @@ class InformerDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights, past_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
@@ -940,7 +933,7 @@ class InformerDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights, past_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -966,9 +959,6 @@ class InformerDecoderLayer(nn.Module):
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
-
-        if use_cache:
-            outputs += (past_key_value,)
 
         return outputs
 
@@ -1086,27 +1076,15 @@ class InformerEncoder(InformerPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = self._gradient_checkpointing_func(conv_layer, layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-                    if conv_layer is not None:
-                        output = conv_layer(layer_outputs[0])
-                        layer_outputs = (output,) + layer_outputs[1:]
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
+                if conv_layer is not None:
+                    output = conv_layer(layer_outputs[0])
+                    layer_outputs = (output,) + layer_outputs[1:]
 
                 hidden_states = layer_outputs[0]
 
@@ -1279,7 +1257,6 @@ class InformerDecoder(InformerPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -1299,39 +1276,19 @@ class InformerDecoder(InformerPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[3 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1343,19 +1300,18 @@ class InformerDecoder(InformerPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -1461,8 +1417,14 @@ class InformerModel(InformerPreTrainedModel):
         )
 
         # static features
-        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
-        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        if loc.ndim == 3:
+            squeezed_loc = loc.squeeze(1)
+            squeezed_scale = scale.squeeze(1)
+        else:
+            squeezed_loc = loc
+            squeezed_scale = scale
+        log_abs_loc = squeezed_loc.abs().log1p()
+        log_scale = squeezed_scale.log()
         static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
 
         if static_real_features is not None:

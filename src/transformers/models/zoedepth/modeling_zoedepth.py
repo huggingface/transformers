@@ -34,30 +34,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class ZoeDepthDepthEstimatorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Extension of `DepthEstimatorOutput` to include domain logits (ZoeDepth specific).
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-
-        domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
-            Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class ZoeDepthDepthEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
+        Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -812,11 +799,6 @@ class ZoeDepthMultiheadAttention(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         queries: torch.Tensor,
@@ -825,9 +807,18 @@ class ZoeDepthMultiheadAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        query_layer = self.transpose_for_scores(self.query(queries))
-        key_layer = self.transpose_for_scores(self.key(keys))
-        value_layer = self.transpose_for_scores(self.value(values))
+        batch_size, seq_length, _ = queries.shape
+        query_layer = (
+            self.query(queries)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(keys).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(values).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -1215,7 +1206,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 # avoiding sdpa and flash_attn_2 support, it's done int the backend
 @auto_docstring
 class ZoeDepthPreTrainedModel(PreTrainedModel):
-    config_class = ZoeDepthConfig
+    config: ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

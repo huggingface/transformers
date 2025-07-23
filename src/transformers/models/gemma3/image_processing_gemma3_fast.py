@@ -25,12 +25,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ImageInput,
-    SizeDict,
-)
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -83,6 +78,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
     default_to_square = True
+    do_convert_rgb = True
     do_resize = True
     do_rescale = True
     do_normalize = True
@@ -205,12 +201,13 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         # Group images by size for batched processing
         processed_images_grouped = {}
         num_crops_grouped = {}
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         for shape_images, stacked_images in grouped_images.items():
             if do_pan_and_scan:
                 pas_images, num_crops = self._process_images_for_pan_and_scan(
@@ -224,7 +221,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = [stacked_images] + pas_images
                 # Group images by size for batched resizing (this will typically group thumbnails together and cropped patches together)
                 processed_image_patches_grouped = {}
-                grouped_image_patches, grouped_image_patches_index = group_images_by_shape(stacked_images)
+                grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                    stacked_images, disable_grouping=disable_grouping
+                )
                 for shape, stacked_image_patches in grouped_image_patches.items():
                     stacked_image_patches = self.resize(
                         image=stacked_image_patches,
@@ -254,7 +253,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize

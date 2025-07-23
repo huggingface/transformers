@@ -53,6 +53,11 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-object-detection).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 

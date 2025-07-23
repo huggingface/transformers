@@ -27,13 +27,7 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import (
-    FEATURE_EXTRACTOR_NAME,
-    PROCESSOR_NAME,
-    VIDEO_PROCESSOR_NAME,
-    cached_file,
-    logging,
-)
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -51,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("aimv2", "CLIPProcessor"),
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
@@ -67,11 +62,14 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clvp", "ClvpProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
+        ("dia", "DiaProcessor"),
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
+        ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
+        ("glm4v", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -85,6 +83,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("internvl", "InternVLProcessor"),
         ("janus", "JanusProcessor"),
         ("kosmos-2", "Kosmos2Processor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llama4", "Llama4Processor"),
@@ -102,6 +101,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
+        ("perception_lm", "PerceptionLMProcessor"),
         ("phi4_multimodal", "Phi4MultimodalProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("pixtral", "PixtralProcessor"),
@@ -118,6 +118,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
         ("siglip2", "Siglip2Processor"),
+        ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
@@ -131,6 +132,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViltProcessor"),
         ("vipllava", "LlavaProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+        ("voxtral", "VoxtralProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),

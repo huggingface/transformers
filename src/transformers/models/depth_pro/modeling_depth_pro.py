@@ -32,26 +32,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class DepthProOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for DepthPro's outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        features (`Union[torch.FloatTensor, list[torch.FloatTensor]]`, *optional*):
-            Features from encoders. Can be a single feature or a list of features.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, n_patches_per_batch, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DepthProOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    features (`Union[torch.FloatTensor, List[torch.FloatTensor]]`, *optional*):
+        Features from encoders. Can be a single feature or a list of features.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -61,28 +52,17 @@ class DepthProOutput(ModelOutput):
 
 
 @dataclass
-class DepthProDepthEstimatorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for DepthProForDepthEstimation's output.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-        field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
-            Field of View Scaler.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, n_patches_per_batch, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DepthProDepthEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
+        Field of View Scaler.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -627,7 +607,7 @@ class DepthProNeck(nn.Module):
 
 @auto_docstring
 class DepthProPreTrainedModel(PreTrainedModel):
-    config_class = DepthProConfig
+    config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

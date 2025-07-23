@@ -27,6 +27,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
@@ -37,31 +38,20 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    DonutSwin encoder's outputs, with potential hidden states and attentions.
+    """
+)
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
 class DonutSwinEncoderOutput(ModelOutput):
-    """
-    DonutSwin encoder's outputs, with potential hidden states and attentions.
+    r"""
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -71,33 +61,22 @@ class DonutSwinEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    DonutSwin model's outputs that also contains a pooling of the last hidden states.
+    """
+)
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
 class DonutSwinModelOutput(ModelOutput):
-    """
-    DonutSwin model's outputs that also contains a pooling of the last hidden states.
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
+        Average pooling of the last layer hidden-state.
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
-            Average pooling of the last layer hidden-state.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -108,33 +87,24 @@ class DonutSwinModelOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    DonutSwin outputs for image classification.
+    """
+)
 # Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
 class DonutSwinImageClassifierOutput(ModelOutput):
-    """
-    DonutSwin outputs for image classification.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -435,11 +405,6 @@ class DonutSwinSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -448,11 +413,11 @@ class DonutSwinSelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
-        mixed_query_layer = self.query(hidden_states)
+        hidden_shape = (batch_size, dim, -1, self.attention_head_size)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -706,7 +671,7 @@ class DonutSwinLayer(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->DonutSwin
-class DonutSwinStage(nn.Module):
+class DonutSwinStage(GradientCheckpointingLayer):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
@@ -816,19 +781,9 @@ class DonutSwinEncoder(nn.Module):
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    input_dimensions,
-                    layer_head_mask,
-                    output_attentions,
-                    always_partition,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
-                )
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+            )
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
@@ -871,7 +826,7 @@ class DonutSwinEncoder(nn.Module):
 @auto_docstring
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 class DonutSwinPreTrainedModel(PreTrainedModel):
-    config_class = DonutSwinConfig
+    config: DonutSwinConfig
     base_model_prefix = "donut"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

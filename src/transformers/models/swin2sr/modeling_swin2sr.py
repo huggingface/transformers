@@ -24,6 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
@@ -35,26 +36,12 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class Swin2SREncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Swin2SR encoder's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
     """
-
+)
+class Swin2SREncoderOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -309,11 +296,6 @@ class Swin2SRSelfAttention(nn.Module):
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -322,11 +304,21 @@ class Swin2SRSelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # cosine attention
         attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(
@@ -592,7 +584,7 @@ class Swin2SRLayer(nn.Module):
         return layer_outputs
 
 
-class Swin2SRStage(nn.Module):
+class Swin2SRStage(GradientCheckpointingLayer):
     """
     This corresponds to the Residual Swin Transformer Block (RSTB) in the original implementation.
     """
@@ -705,12 +697,7 @@ class Swin2SREncoder(nn.Module):
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
-                )
-            else:
-                layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -736,7 +723,7 @@ class Swin2SREncoder(nn.Module):
 
 @auto_docstring
 class Swin2SRPreTrainedModel(PreTrainedModel):
-    config_class = Swin2SRConfig
+    config: Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

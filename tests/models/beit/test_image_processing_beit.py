@@ -27,8 +27,6 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import BeitImageProcessor
 
     if is_torchvision_available():
@@ -98,23 +96,14 @@ class BeitImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image = Image.open(dataset[0]["file"])
-    map = Image.open(dataset[1]["file"])
-
-    return image, map
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
 
 
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
-
-    image1 = Image.open(ds[0]["file"])
-    map1 = Image.open(ds[1]["file"])
-    image2 = Image.open(ds[2]["file"])
-    map2 = Image.open(ds[3]["file"])
-
-    return [image1, image2], [map1, map2]
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -157,7 +146,6 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
             self.assertEqual(image_processor.do_reduce_labels, True)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
@@ -265,7 +253,6 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_reduce_labels(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
@@ -282,7 +269,6 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
-    @unittest.skip("temporary to avoid failing on circleci")
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
@@ -298,11 +284,10 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
         image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
+        self._assert_slow_fast_tensors_equivalence(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(
+            image_encoding_slow.labels.float(), image_encoding_fast.labels.float()
         )
-        self.assertTrue(torch.allclose(image_encoding_slow.labels, image_encoding_fast.labels, atol=1e-1))
 
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
@@ -324,7 +309,5 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.labels.float(), encoding_fast.labels.float())

@@ -36,13 +36,14 @@ if is_torch_available():
     import torch
 
 
+@auto_docstring
 class ColQwen2PreTrainedModel(PreTrainedModel):
-    config_class = ColQwen2Config
+    config: ColQwen2Config
     base_model_prefix = "model"
     _no_split_modules = []
-    _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_cache_class = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = (
@@ -62,32 +63,23 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class ColQwen2ForRetrievalOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for ColQwen2 embeddings output.
+    """
+)
+class ColQwen2ForRetrievalOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the model.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The embeddings of the model.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -112,21 +104,21 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
+    _checkpoint_conversion_mapping = {}
+
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
-        self.vlm = vlm
+        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
+        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.post_init()
 
@@ -137,7 +129,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         labels: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -180,7 +172,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.model.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
@@ -235,12 +227,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.vlm.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.vlm.get_decoder()
 
     def tie_weights(self):
         return self.vlm.tie_weights()

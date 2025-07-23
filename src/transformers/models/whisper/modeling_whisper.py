@@ -30,6 +30,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -315,7 +316,8 @@ class WhisperAttention(nn.Module):
         query_states = query_states.view(*q_input_shape)
         query_states = query_states.transpose(1, 2).contiguous()
 
-        if past_key_value is not None:
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
@@ -328,8 +330,8 @@ class WhisperAttention(nn.Module):
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = past_key_value.layers[self.layer_idx].keys
+            value_states = past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
@@ -362,11 +364,11 @@ class WhisperAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
-class WhisperEncoderLayer(nn.Module):
+class WhisperEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -405,7 +407,7 @@ class WhisperEncoderLayer(nn.Module):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
@@ -426,15 +428,10 @@ class WhisperEncoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
-class WhisperDecoderLayer(nn.Module):
+class WhisperDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: WhisperConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -501,7 +498,7 @@ class WhisperDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
@@ -517,7 +514,7 @@ class WhisperDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -527,9 +524,6 @@ class WhisperDecoderLayer(nn.Module):
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-
-            # add cross-attn to positions 1 of present_key_value tuple
-            present_key_value = (present_key_value, cross_attn_present_key_value)
 
         # Fully Connected
         residual = hidden_states
@@ -545,24 +539,21 @@ class WhisperDecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         return outputs
 
 
 @auto_docstring
 class WhisperPreTrainedModel(PreTrainedModel):
-    config_class = WhisperConfig
+    config: WhisperConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -649,8 +640,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
         Args:
             input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
@@ -686,9 +678,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        embed_pos = self.embed_positions.weight
+        all_positions = torch.arange(self.embed_positions.num_embeddings, device=inputs_embeds.device)
 
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds + self.embed_positions(all_positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
@@ -713,21 +705,12 @@ class WhisperEncoder(WhisperPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        encoder_layer.__call__,
-                        hidden_states,
-                        None,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        None,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    None,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -778,12 +761,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -887,20 +864,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        return_legacy_cache = False
-        return_self_attention_cache = False
-        if use_cache or past_key_values is not None:
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                return_legacy_cache = True
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.43.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is None:
+            if self.config.is_encoder_decoder:
+                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            else:
+                past_key_values = DynamicCache()
 
         past_key_values_length = 0
         if cache_position is not None:
@@ -935,6 +903,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         if self.gradient_checkpointing and self.training:
@@ -964,34 +933,17 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    encoder_hidden_states,
-                    None,  # encoder attention mask
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,  # past_key_value
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_values if use_cache else None,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
+                past_key_value=past_key_values if use_cache else None,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1006,10 +958,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = past_key_values if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
         if not return_dict:
             return tuple(
                 v
@@ -1108,7 +1056,7 @@ class WhisperModel(WhisperPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache]] = None,
         decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1118,12 +1066,6 @@ class WhisperModel(WhisperPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1277,7 +1219,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache]] = None,
         decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1288,12 +1230,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1317,15 +1253,15 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
-            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
-            only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
+            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
+            only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
 
         Example:
 
@@ -1473,7 +1409,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1567,15 +1503,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
 
 @auto_docstring(
     custom_intro="""
@@ -1622,12 +1549,6 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

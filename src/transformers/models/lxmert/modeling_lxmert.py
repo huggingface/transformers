@@ -42,39 +42,40 @@ class GeLU(nn.Module):
 
 
 @dataclass
-class LxmertModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilities for the language,
     visual, and, cross-modality encoders. (note: the visual encoder in Lxmert is referred to as the "relation-ship"
     encoder")
-
-
-    Args:
-        language_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the language encoder.
-        vision_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the visual encoder.
-        pooled_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification, CLS, token) further processed
-            by a Linear layer and a Tanh activation function. The Linear
-        language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-        vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-        language_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    """
+)
+class LxmertModelOutput(ModelOutput):
+    r"""
+    language_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the language encoder.
+    vision_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the visual encoder.
+    pooled_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Last layer hidden-state of the first token of the sequence (classification, CLS, token) further processed
+        by a Linear layer and a Tanh activation function. The Linear
+    language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
+    language_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    cross_encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
     """
 
     language_output: Optional[torch.FloatTensor] = None
@@ -88,34 +89,36 @@ class LxmertModelOutput(ModelOutput):
 
 
 @dataclass
-class LxmertForQuestionAnsweringOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`LxmertForQuestionAnswering`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction
-            (classification) loss.k.
-        question_answering_score (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`, *optional*):
-            Prediction scores of question answering objective (classification).
-        language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-        vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-        language_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    """
+)
+class LxmertForQuestionAnsweringOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the masked language modeling loss and the next sequence prediction
+        (classification) loss.k.
+    question_answering_score (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`, *optional*):
+        Prediction scores of question answering objective (classification).
+    language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
+    language_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    cross_encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -128,40 +131,41 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
 
 
 @dataclass
-class LxmertForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`LxmertForPreTraining`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction
-            (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cross_relationship_score (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the textual matching objective (classification) head (scores of True/False
-            continuation before SoftMax).
-        question_answering_score (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`):
-            Prediction scores of question answering objective (classification).
-        language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-        vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-        language_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-
+    """
+)
+class LxmertForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the masked language modeling loss and the next sequence prediction
+        (classification) loss.
+    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    cross_relationship_score (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Prediction scores of the textual matching objective (classification) head (scores of True/False
+        continuation before SoftMax).
+    question_answering_score (`torch.FloatTensor` of shape `(batch_size, n_qa_answers)`):
+        Prediction scores of question answering objective (classification).
+    language_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for input features + one for the output of each cross-modality layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
+    language_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
+    cross_encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -315,22 +319,21 @@ class LxmertAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(context)
-        mixed_value_layer = self.value(context)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(context).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(context)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -756,7 +759,7 @@ class LxmertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class LxmertPreTrainedModel(PreTrainedModel):
-    config_class = LxmertConfig
+    config: LxmertConfig
     load_tf_weights = load_tf_weights_in_lxmert
     base_model_prefix = "lxmert"
     _supports_param_buffer_assignment = False

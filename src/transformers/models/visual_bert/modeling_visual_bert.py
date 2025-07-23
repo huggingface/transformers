@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -192,11 +193,6 @@ class VisualBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states,
@@ -204,12 +200,22 @@ class VisualBertSelfAttention(nn.Module):
         head_mask=None,
         output_attentions=False,
     ):
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -330,7 +336,7 @@ class VisualBertOutput(nn.Module):
         return hidden_states
 
 
-class VisualBertLayer(nn.Module):
+class VisualBertLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -394,16 +400,7 @@ class VisualBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -500,7 +497,7 @@ class VisualBertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class VisualBertPreTrainedModel(PreTrainedModel):
-    config_class = VisualBertConfig
+    config: VisualBertConfig
     base_model_prefix = "visual_bert"
     supports_gradient_checkpointing = True
 
@@ -520,30 +517,21 @@ class VisualBertPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class VisualBertForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`VisualBertForPreTraining`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the sentence-image prediction
-            (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the sentence-image prediction (classification) head (scores of True/False continuation
-            before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class VisualBertForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the masked language modeling loss and the sentence-image prediction
+        (classification) loss.
+    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Prediction scores of the sentence-image prediction (classification) head (scores of True/False continuation
+        before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1384,21 +1372,18 @@ class VisualBertRegionToPhraseAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(self, query, key, attention_mask):
+        batch_size, seq_length, _ = query.shape
         attention_mask = attention_mask.to(query.dtype)
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         attention_mask = (1.0 - attention_mask) * torch.finfo(query.dtype).min
 
-        mixed_query_layer = self.query(query)
-        mixed_key_layer = self.key(key)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
+        query_layer = (
+            self.query(query).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        key_layer = (
+            self.key(key).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
 
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 

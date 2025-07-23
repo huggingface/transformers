@@ -24,11 +24,13 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    can_return_tuple,
     logging,
     torch_int,
 )
@@ -52,28 +54,28 @@ def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
+@auto_docstring
 class XCLIPOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for video-text similarity.
-        logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
-            The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
-        video_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The video embeddings obtained by applying the projection layer to the pooled output of
-            [`XCLIPVisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`XCLIPTextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`XCLIPVisionModel`].
-        mit_output (`BaseModelOutputWithPooling`):
-            The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for video-text similarity.
+    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The video embeddings obtained by applying the projection layer to the pooled output of
+        [`XCLIPVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`XCLIPTextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`XCLIPVisionModel`].
+    mit_output (`BaseModelOutputWithPooling`):
+        The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -239,6 +241,7 @@ def eager_attention_forward(
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -338,7 +341,7 @@ class XCLIPMLP(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
-class XCLIPEncoderLayer(nn.Module):
+class XCLIPEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -424,7 +427,7 @@ class XCLIPDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class XCLIPVisionEncoderLayer(nn.Module):
+class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
     """
     This corresponds to the `CrossFramelAttentionBlock` class in the original implementation.
     """
@@ -506,7 +509,7 @@ class XCLIPVisionEncoderLayer(nn.Module):
 
 @auto_docstring
 class XCLIPPreTrainedModel(PreTrainedModel):
-    config_class = XCLIPConfig
+    config: XCLIPConfig
     base_model_prefix = "x_clip"
     supports_gradient_checkpointing = True
 
@@ -574,6 +577,7 @@ class XCLIPEncoder(nn.Module):
         self.layers = nn.ModuleList([XCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -625,21 +629,12 @@ class XCLIPEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -649,8 +644,6 @@ class XCLIPEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -727,7 +720,7 @@ class XCLIPTextTransformer(nn.Module):
 
 
 class XCLIPTextModel(XCLIPPreTrainedModel):
-    config_class = XCLIPTextConfig
+    config: XCLIPTextConfig
 
     def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
@@ -842,21 +835,12 @@ class XCLIPVisionEncoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -929,7 +913,7 @@ class XCLIPVisionTransformer(nn.Module):
 
 
 class XCLIPVisionModel(XCLIPPreTrainedModel):
-    config_class = XCLIPVisionConfig
+    config: XCLIPVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: XCLIPVisionConfig):
@@ -1170,7 +1154,7 @@ class XCLIPPromptGenerator(nn.Module):
 
 @auto_docstring
 class XCLIPModel(XCLIPPreTrainedModel):
-    config_class = XCLIPConfig
+    config: XCLIPConfig
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)
@@ -1189,6 +1173,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         text_config = config.text_config
         vision_config = config.vision_config
+        # The module using it is not a PreTrainedModel subclass so we need this
+        text_config._attn_implementation = config._attn_implementation
+        # The module using it is not a PreTrainedModel subclass so we need this
+        vision_config._attn_implementation = config._attn_implementation
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size

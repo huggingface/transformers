@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     ModelOutput,
@@ -48,32 +49,34 @@ _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 
 
 
 @dataclass
-class CanineModelOutputWithPooling(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`CanineModel`]. Based on [`~modeling_outputs.BaseModelOutputWithPooling`], but with slightly
     different `hidden_states` and `attentions`, as these also include the hidden states and attentions of the shallow
     Transformer encoders.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model (i.e. the output of the final
-            shallow Transformer encoder).
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Hidden-state of the first token of the sequence (classification token) at the last layer of the deep
-            Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
-            weights are trained from the next sentence prediction (classification) objective during pretraining.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of each
-            encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length //
-            config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of each layer plus the
-            initial input to each Transformer encoder. The hidden states of the shallow encoders have length
-            `sequence_length`, but the hidden states of the deep encoder have length `sequence_length` //
-            `config.downsampling_rate`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
-            num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length //
-            config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions weights after the
-            attention softmax, used to compute the weighted average in the self-attention heads.
+    """
+)
+class CanineModelOutputWithPooling(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model (i.e. the output of the final
+        shallow Transformer encoder).
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Hidden-state of the first token of the sequence (classification token) at the last layer of the deep
+        Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
+        weights are trained from the next sentence prediction (classification) objective during pretraining.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of each
+        encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length //
+        config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of each layer plus the
+        initial input to each Transformer encoder. The hidden states of the shallow encoders have length
+        `sequence_length`, but the hidden states of the deep encoder have length `sequence_length` //
+        `config.downsampling_rate`.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
+        num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length //
+        config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions weights after the
+        attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -407,11 +410,6 @@ class CanineSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         from_tensor: torch.Tensor,
@@ -420,16 +418,27 @@ class CanineSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        mixed_query_layer = self.query(from_tensor)
+        batch_size, seq_length, _ = from_tensor.shape
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
 
-        key_layer = self.transpose_for_scores(self.key(to_tensor))
-        value_layer = self.transpose_for_scores(self.value(to_tensor))
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = (
+            self.key(to_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(to_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        query_layer = (
+            self.query(from_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -672,7 +681,7 @@ class CanineOutput(nn.Module):
         return hidden_states
 
 
-class CanineLayer(nn.Module):
+class CanineLayer(GradientCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -779,16 +788,7 @@ class CanineEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -873,7 +873,7 @@ class CanineOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class CaninePreTrainedModel(PreTrainedModel):
-    config_class = CanineConfig
+    config: CanineConfig
     load_tf_weights = load_tf_weights_in_canine
     base_model_prefix = "canine"
     supports_gradient_checkpointing = True
