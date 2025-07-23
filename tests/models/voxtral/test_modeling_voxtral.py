@@ -153,6 +153,42 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Voxtral is audio+text model (not vision+text)
