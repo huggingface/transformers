@@ -29,12 +29,8 @@ import yaml
 
 from ..models import auto as auto_module
 from ..models.auto.configuration_auto import model_type_to_module_name
-from ..utils import logging
 from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
-
-
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 CURRENT_YEAR = date.today().year
