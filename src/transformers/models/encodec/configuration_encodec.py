@@ -142,7 +142,6 @@ class EncodecConfig(PretrainedConfig):
         self.num_filters = num_filters
         self.num_residual_layers = num_residual_layers
         self.upsampling_ratios = upsampling_ratios
-        self.hop_length = int(np.prod(upsampling_ratios))
         self.norm_type = norm_type
         self.kernel_size = kernel_size
         self.last_kernel_size = last_kernel_size
@@ -154,7 +153,6 @@ class EncodecConfig(PretrainedConfig):
         self.num_lstm_layers = num_lstm_layers
         self.trim_right_ratio = trim_right_ratio
         self.codebook_size = codebook_size
-        self.codebook_nbits = math.ceil(math.log2(codebook_size))
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
         self.use_conv_shortcut = use_conv_shortcut
 
@@ -180,6 +178,14 @@ class EncodecConfig(PretrainedConfig):
             return None
         else:
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
+
+    @property
+    def hop_length(self) -> int:
+        return int(np.prod(self.upsampling_ratios))
+
+    @property
+    def codebook_nbits(self) -> int:
+        return math.ceil(math.log2(self.codebook_size))
 
     @property
     def frame_rate(self) -> int:
