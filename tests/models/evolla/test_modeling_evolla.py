@@ -328,6 +328,10 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(self):
         pass
+    
+    @unittest.skip("Evolla does not support eager attention implementation.")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     @unittest.skip(
         "Evolla has a separate test runner for generation tests with complex inheritance, causing this check to fail."
