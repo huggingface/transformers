@@ -1565,7 +1565,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_param_buffer_assignment = False
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         std = self.config.init_std

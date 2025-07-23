@@ -59,6 +59,7 @@ from .integrations import (
     is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
@@ -89,6 +90,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flax_available,
     is_flute_available,
+    is_fp_quant_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
@@ -126,6 +128,7 @@ from .utils import (
     is_pytest_available,
     is_pytorch_quantization_available,
     is_quark_available,
+    is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -1274,6 +1277,16 @@ def require_swanlab(test_case):
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
 
 
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio.
+
+    These tests are skipped when trackio isn't installed.
+
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
+
+
 def require_wandb(test_case):
     """
     Decorator marking a test that requires wandb.
@@ -1454,6 +1467,20 @@ def require_flute_hadamard(test_case):
     return unittest.skipUnless(
         is_flute_available() and is_hadamard_available(), "test requires flute and fast_hadamard_transform"
     )(test_case)
+
+
+def require_fp_quant(test_case):
+    """
+    Decorator marking a test that requires fp_quant and qutlass
+    """
+    return unittest.skipUnless(is_fp_quant_available(), "test requires fp_quant")(test_case)
+
+
+def require_qutlass(test_case):
+    """
+    Decorator marking a test that requires qutlass
+    """
+    return unittest.skipUnless(is_qutlass_available(), "test requires qutlass")(test_case)
 
 
 def require_phonemizer(test_case):

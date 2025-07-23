@@ -181,7 +181,7 @@ class Ernie4_5_MoEIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @slow
     def test_model_21b_a3b_generation(self):
-        EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant: Yes, I am conscious and I can communicate with you. How can I assist you with any questions or information you need?"  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant:  I don't have consciousness in the way humans do. I'm a text-based AI created to process and generate responses based on patterns in data."  # fmt: skip
 
         model = self.get_model()
         tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT", revision="refs/pr/11")

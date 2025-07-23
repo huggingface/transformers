@@ -437,7 +437,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
 
 class Lfm2Model(LlamaModel):

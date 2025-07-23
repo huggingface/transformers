@@ -127,6 +127,7 @@ _import_structure = {
         "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
+        "is_trackio_available",
         "is_wandb_available",
     ],
     "loss": [],
@@ -274,6 +275,7 @@ _import_structure = {
         "HqqConfig",
         "QuantoConfig",
         "QuarkConfig",
+        "FPQuantConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -759,6 +761,7 @@ if TYPE_CHECKING:
         is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
+        is_trackio_available,
         is_wandb_available,
     )
     from .integrations.executorch import (
@@ -959,6 +962,7 @@ if TYPE_CHECKING:
         EetqConfig,
         FbgemmFp8Config,
         FineGrainedFP8Config,
+        FPQuantConfig,
         GPTQConfig,
         HiggsConfig,
         HqqConfig,

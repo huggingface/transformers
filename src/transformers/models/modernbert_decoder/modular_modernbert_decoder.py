@@ -401,7 +401,7 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = False
     _supports_gradient_checkpointing = True
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ModernBertDecoderLayer,
