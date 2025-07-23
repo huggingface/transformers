@@ -49,7 +49,6 @@ from transformers.utils.import_utils import (
 
 from .. import (
     AutoConfig,
-    BaseImageProcessor,
     LogitsProcessorList,
     PreTrainedTokenizerFast,
     ProcessorMixin,
