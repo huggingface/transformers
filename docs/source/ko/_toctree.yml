@@ -332,7 +332,7 @@
       title: (번역중) Optimization
     - local: main_classes/output
       title: 모델 출력
-    - local: main_classes/PEFT
+    - local: main_classes/peft
       title: PEFT
     - local: in_translation
       title: (번역중) Pipelines
