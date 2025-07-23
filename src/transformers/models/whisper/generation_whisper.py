@@ -1149,8 +1149,8 @@ class WhisperGenerationMixin(GenerationMixin):
                     for layer_idx in range(self.config.decoder_layers):
                         layer_past_key_values = []
                         for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.key_cache, cache_cls.value_cache]:
-                                layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
+                            for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
+                                layer_past_key_values.append(v[batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
                 else:
