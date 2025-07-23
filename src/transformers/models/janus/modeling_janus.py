@@ -63,7 +63,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_param_buffer_assignment = False
 
 
@@ -1105,7 +1105,7 @@ class JanusModel(JanusPreTrainedModel):
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)

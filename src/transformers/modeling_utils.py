@@ -2063,8 +2063,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support `torch.compile(fullgraph=True)`
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
