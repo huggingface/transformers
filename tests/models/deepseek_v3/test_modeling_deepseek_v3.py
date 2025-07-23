@@ -440,13 +440,11 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         # difference: last dim
         k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
         v_embed_dim = config.v_head_dim
-        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
         # build the full cache shapes
         num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [
-            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
-        ]
+        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @require_torch_large_accelerator

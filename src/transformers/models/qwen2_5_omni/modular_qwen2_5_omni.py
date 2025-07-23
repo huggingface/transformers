@@ -35,7 +35,6 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
-    Qwen2RMSNorm,
     eager_attention_forward,
 )
 from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
@@ -49,7 +48,9 @@ from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     check_torch_load_is_safe,
     logging,
@@ -1131,29 +1132,8 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
-    config_class = Qwen2_5OmniConfig
-    _supports_static_cache = False
-
-    def _init_weights(self, module):
-        # important: this ported version of Qwen2.5OmniThinker isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
-
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            if module.weight is not None:
-                module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Qwen2RMSNorm):
-            module.weight.data.fill_(1.0)
+    config: Qwen2_5OmniConfig
+    _can_compile_fullgraph = False
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
@@ -1729,7 +1709,7 @@ class SinusoidsPositionEmbedding(nn.Module):
     """
 )
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniAudioEncoderConfig
+    config: Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
     _supports_sdpa = True
@@ -1794,13 +1774,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         **kwargs,
     ):
         r"""
-        input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
-            the soundfile library (`pip install soundfile`). To prepare the array into
-            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
         aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`):
@@ -2022,7 +1995,7 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
-    config_class = Qwen2_5OmniVisionEncoderConfig
+    config: Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
@@ -2132,7 +2105,7 @@ class Qwen2MLP(Qwen2_5_VLMLP):
 
 
 class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
-    config_class = Qwen2_5OmniTextConfig
+    config: Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTextConfig):
@@ -2145,24 +2118,17 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
     """
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
-    config_class = Qwen2_5OmniThinkerConfig
+    config: Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
+    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
         super().__init__(config)
-        self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(
-            config.audio_config, attn_implementation=config._attn_implementation
-        )
-
-        self.visual = Qwen2_5OmniVisionEncoder._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
-
+        self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(config.audio_config)
+        self.visual = Qwen2_5OmniVisionEncoder._from_config(config.vision_config)
         self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerTextModel._from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.spatial_merge_size = config.vision_config.spatial_merge_size
@@ -2274,19 +2240,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         use_audio_in_video: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         video_second_per_grid: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Qwen2_5OmniThinkerCausalLMOutputWithPast]:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-            the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-            To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
-            See [`~WhisperFeatureExtractor.__call__`]
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`NewTaskModelProcessor`] uses
-            [`SiglipImageProcessor`] for processing videos).
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -2440,6 +2396,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -2551,7 +2508,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
-    config_class = Qwen2_5OmniTalkerConfig
+    config: Qwen2_5OmniTalkerConfig
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
@@ -2560,7 +2517,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
 
 
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
-    config_class = Qwen2_5OmniTalkerConfig
+    config: Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
@@ -3288,7 +3245,6 @@ class DiTAttention(nn.Module):
         self.heads = config.num_attention_heads
         self.inner_dim = config.head_dim * config.num_attention_heads
         self.dropout = config.dropout
-        self._attn_implementation = config._attn_implementation
         self.is_causal = False
 
         self.to_q = nn.Linear(config.hidden_size, self.inner_dim)
@@ -3322,7 +3278,7 @@ class DiTAttention(nn.Module):
         cos, sin = position_embeddings
         query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS[self._attn_implementation]
+        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attention_weights, _ = attention_interface(
             self,
             query,
@@ -3556,7 +3512,7 @@ class TorchActivation1d(nn.Module):
     ):
         super().__init__()
         if not callable(activation):
-            raise ValueError("Activation function must be callable")
+            raise TypeError("Activation function must be callable")
         self.act = activation
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
@@ -3664,7 +3620,7 @@ class AMPBlock(torch.nn.Module):
     """
 )
 class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniBigVGANConfig
+    config: Qwen2_5OmniBigVGANConfig
 
     def __init__(self, config: Qwen2_5OmniBigVGANConfig):
         super().__init__(config)
@@ -3799,7 +3755,7 @@ class RungeKutta4ODESolver:
     """
 )
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniDiTConfig
+    config: Qwen2_5OmniDiTConfig
     _no_split_modules = ["DiTDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
@@ -3954,7 +3910,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
-    config_class = Qwen2_5OmniToken2WavConfig
+    config: Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
     _no_split_modules = ["Qwen2_5OmniToken2WavDiTModel", "Qwen2_5OmniToken2WavBigVGANModel"]
 
@@ -4022,7 +3978,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """
 )
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
-    config_class = Qwen2_5OmniConfig
+    config: Qwen2_5OmniConfig
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
         "Qwen2_5OmniToken2WavModel",
