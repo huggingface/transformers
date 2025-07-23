@@ -410,6 +410,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         # rope attributes may not appear directly in the modeling but are used
         "rope_theta",
         "local_rope_theta",
+        "rope_scaling",
+        "local_rope_scaling",
         "partial_rotary_factor",
         "pretraining_tp",
         "boi_token_id",
