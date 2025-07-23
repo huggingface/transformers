@@ -565,17 +565,11 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
 
 class Gemma2ForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Gemma2Model(config)
-        self.post_init()
+    pass
 
 
 class Gemma2ForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Gemma2Model(config)
-        self.post_init()
+    pass
 
 
 __all__ = [
