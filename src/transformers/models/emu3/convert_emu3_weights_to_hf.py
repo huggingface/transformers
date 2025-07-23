@@ -15,7 +15,7 @@ import argparse
 import json
 import os
 import re
-from typing import Dict, Optional
+from typing import Optional
 
 import requests
 import torch
@@ -66,7 +66,7 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: Dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -258,7 +258,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     # Convert and save processor
     tokenizer_tiktoken = AutoTokenizer.from_pretrained(llm_model_id, trust_remote_code=True)
     convert_tiktoken(tokenizer_tiktoken, output_dir)
-    extra_special_tokens = extra_special_tokens = {
+    extra_special_tokens = {
         "image_token": "<image>",
         "boi_token": "<|image start|>",
         "eoi_token": "<|image end|>",

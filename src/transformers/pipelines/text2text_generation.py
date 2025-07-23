@@ -1,5 +1,6 @@
 import enum
 import warnings
+from typing import Any, Union
 
 from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
@@ -67,6 +68,10 @@ class Text2TextGenerationPipeline(Pipeline):
     ```"""
 
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
     # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
@@ -145,7 +150,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args = (prefix + args[0],)
             padding = False
         else:
-            raise ValueError(
+            raise TypeError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
         inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
@@ -154,12 +159,12 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, list[str]], **kwargs: Any) -> list[dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Input text for the encoder.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -276,7 +281,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Summarize the text(s) given as inputs.
 
         Args:
-            documents (*str* or `List[str]`):
+            documents (*str* or `list[str]`):
                 One or several articles (or one list of articles) to summarize.
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs
@@ -377,7 +382,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         Translate the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Texts to be translated.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.

@@ -20,7 +20,7 @@
 """video processor class for Qwen2-VL."""
 
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -127,7 +127,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         max_frames: int,
         metadata: Optional[Union[VideoMetadata, dict]] = None,
         num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
@@ -147,7 +147,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int`, *optional*):
+            fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
@@ -191,8 +191,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
-        video_metadata: Union[List[VideoMetadata], List[dict]],
+        videos: list["torch.Tensor"],
+        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -201,18 +201,19 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         rescale_factor: float,
         do_normalize: bool,
         do_sample_frames: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
-        fps: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
         num_frames: Optional[int] = None,
         min_frames: Optional[int] = None,
         max_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
         if do_sample_frames:
@@ -230,6 +231,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 for video, metadata in zip(videos, video_metadata)
             ]
 
+        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
+        # moving the whole video incurs high GPU mem usage for long videos
+        if device is not None:
+            videos = [video.to(device) for video in videos]
+
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -244,8 +250,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     min_pixels=min_pixels,
                     max_pixels=max_pixels,
                 )
-                stacked_videos = F.resize(
-                    stacked_videos, size=(resized_height, resized_width), interpolation=interpolation
+                stacked_videos = self.resize(
+                    image=stacked_videos,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)

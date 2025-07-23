@@ -271,6 +271,20 @@ class OwlViTConfig(PretrainedConfig):
         self.return_dict = return_dict
         self.initializer_factor = 1.0
 
+    @classmethod
+    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
+        r"""
+        Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
+        model configuration.
+
+        Returns:
+            [`OwlViTConfig`]: An instance of a configuration object
+        """
+        config_dict = {}
+        config_dict["text_config"] = text_config
+        config_dict["vision_config"] = vision_config
+
+        return cls.from_dict(config_dict, **kwargs)
 
 class OwlViTOnnxConfig(OnnxConfig):
     @property

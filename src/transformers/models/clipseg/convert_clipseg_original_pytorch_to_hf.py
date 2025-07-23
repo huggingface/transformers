@@ -181,7 +181,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
     if missing_keys != ["clip.text_model.embeddings.position_ids", "clip.vision_model.embeddings.position_ids"]:
-        raise ValueError("Missing keys that are not expected: {}".format(missing_keys))
+        raise ValueError(f"Missing keys that are not expected: {missing_keys}")
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
 

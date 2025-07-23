@@ -14,9 +14,10 @@
 # limitations under the License.
 """LayoutLM model configuration"""
 
+import warnings
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
@@ -130,9 +131,21 @@ class LayoutLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
+        self._position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+    @property
+    def position_embedding_type(self):
+        warnings.warn(
+            "The `position_embedding_type` attribute is deprecated and will be removed in v4.55.",
+            FutureWarning,
+        )
+        return self._position_embedding_type
+
+    @position_embedding_type.setter
+    def position_embedding_type(self, value):
+        self._position_embedding_type = value
 
 
 class LayoutLMOnnxConfig(OnnxConfig):
@@ -140,7 +153,7 @@ class LayoutLMOnnxConfig(OnnxConfig):
         self,
         config: PretrainedConfig,
         task: str = "default",
-        patching_specs: Optional[List[PatchingSpec]] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs)
         self.max_2d_positions = config.max_2d_position_embeddings - 1

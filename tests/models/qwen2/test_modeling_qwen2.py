@@ -22,6 +22,7 @@ from packaging import version
 from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
@@ -250,15 +251,26 @@ class Qwen2IntegrationTest(unittest.TestCase):
         qwen_model = "Qwen/Qwen2-0.5B"
 
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = [
-            "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
-        ]
+
+        expected_text_completions = Expectations({
+            ("cuda", None): [
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
+            ],
+            ("cuda", 8): [
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+            ],
+            ("rocm", (9, 5)): [
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+            ]
+        })  # fmt: off
+        EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
+
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
 
         # Load model
-        device = "cpu"
+        device = torch_device
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"

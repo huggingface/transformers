@@ -62,7 +62,7 @@ class AwqConfigTest(unittest.TestCase):
 
         # Only cuda and xpu devices can run this function
         support_llm_awq = False
-        device_type, major = get_device_properties()
+        device_type, major, _ = get_device_properties()
         if device_type == "cuda" and major >= 8:
             support_llm_awq = True
         elif device_type == "xpu":
