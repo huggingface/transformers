@@ -3098,6 +3098,8 @@ class Trainer:
         if self.control.should_evaluate:
             metrics = self._evaluate(trial, ignore_keys_for_eval)
             is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
+            if is_new_best_metric:
+                self._save_checkpoint(self._get_output_dir(trial), trial)
 
             if self.args.save_strategy == SaveStrategy.BEST:
                 self.control.should_save = is_new_best_metric
