@@ -52,7 +52,7 @@ class Glm4vVideoProcessingTester:
         image_std=IMAGENET_STANDARD_STD,
         do_convert_rgb=True,
     ):
-        size = size if size is not None else {"longest_edge": 20}
+        size = size if size is not None else {"longest_edge": 58 * 58, "shortest_edge": 26 * 26}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -129,6 +129,8 @@ class Glm4vVideoProcessingTester:
                 height,
                 width,
                 factor=self.patch_size * self.merge_size,
+                max_pixels=self.size["longest_edge"],
+                min_pixels=self.size["shortest_edge"],
             )
             grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
             seq_len += grid_t * grid_h * grid_w

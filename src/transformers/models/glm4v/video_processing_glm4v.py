@@ -176,8 +176,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     width=width,
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
                     max_pixels=size["longest_edge"],
+                    min_pixels=size["shortest_edge"],
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
                 stacked_videos = self.resize(

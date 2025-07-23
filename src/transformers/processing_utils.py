@@ -1514,7 +1514,7 @@ class ProcessorMixin(PushToHubMixin):
         def get_modality_fname(content_field, modality):
             content_type = content_field.get("type")
             if content_type == modality:
-                for key in ["url", "path", "base64"]:
+                for key in ["url", "path", "base64", modality]:
                     if key in content_field:
                         return content_field[key]
 
@@ -1527,7 +1527,7 @@ class ProcessorMixin(PushToHubMixin):
                 for message in conversation:
                     for content in message["content"]:
                         content_type = content.get("type")
-                        for key in ["url", "path", "base64"]:
+                        for key in ["url", "path", "base64", "image", "video", "audio"]:
                             if key in content:
                                 if content_type == "image":
                                     image_fnames.append(get_modality_fname(content, "image"))

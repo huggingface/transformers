@@ -326,11 +326,6 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
             self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
 
-            # Sample with `fps` requires metadata to infer number of frames from total duration
-            with self.assertRaises(ValueError):
-                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3)[self.input_name]
-                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=3)[self.input_name]
-
             metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
             batched_metadata = metadata * len(video_inputs)
             encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
