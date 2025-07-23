@@ -158,6 +158,7 @@ from .utils import (
     is_in_notebook,
     is_liger_kernel_available,
     is_lomo_available,
+    is_muon_available,
     is_peft_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -1417,6 +1418,11 @@ class Trainer:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
         elif args.optim == OptimizerNames.MUON:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
             from .optimization import Muon
 
             optimizer_cls = Muon

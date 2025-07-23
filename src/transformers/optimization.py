@@ -13,13 +13,13 @@
 # limitations under the License.
 """PyTorch optimization for BERT model."""
 
+import importlib.util
 import math
 import warnings
 from functools import partial
 from typing import Optional, Union
 
 import torch
-import torch.distributed as dist
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
@@ -1138,46 +1138,16 @@ class Muon(Optimizer):
         return loss
 
 
-class SingleDeviceMuon(torch.optim.Optimizer):
-    """
-    Muon variant for usage in non-distributed settings.
-    """
-
-    def __init__(self, params, lr=0.02, weight_decay=0, momentum=0.95):
-        defaults = {"lr": lr, "weight_decay": weight_decay, "momentum": momentum}
-        super().__init__(params, defaults)
-
-    @torch.no_grad()
-    def step(self, closure=None):
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            for p in group["params"]:
-                if p.grad is None:
-                    # continue
-                    p.grad = torch.zeros_like(p)  # Force synchronization
-                state = self.state[p]
-                if len(state) == 0:
-                    state["momentum_buffer"] = torch.zeros_like(p)
-                update = muon_update(p.grad, state["momentum_buffer"], beta=group["momentum"])
-                p.mul_(1 - group["lr"] * group["weight_decay"])
-                p.add_(update.reshape(p.shape), alpha=-group["lr"])
-
-        return loss
+# Muon optimizer wrapper functions
+def _check_muon_available():
+    if importlib.util.find_spec("muon") is None:
+        raise ImportError(
+            "The Muon optimizer is not available. Please install it with: "
+            "`pip install git+https://github.com/KellerJordan/Muon.git`"
+        )
 
 
-def adam_update(grad, buf1, buf2, step, betas, eps):
-    buf1.lerp_(grad, 1 - betas[0])
-    buf2.lerp_(grad.square(), 1 - betas[1])
-    buf1c = buf1 / (1 - betas[0] ** step)
-    buf2c = buf2 / (1 - betas[1] ** step)
-    return buf1c / (buf2c.sqrt() + eps)
-
-
-class MuonWithAuxAdam(torch.optim.Optimizer):
+class MuonWithAuxAdam:
     """
     Distributed Muon variant that can be used for all parameters in the network, since it runs an
     internal AdamW for the parameters that are not compatible with Muon. The user must manually
@@ -1187,148 +1157,94 @@ class MuonWithAuxAdam(torch.optim.Optimizer):
     The point of this class is to allow the user to have a single optimizer in their code, rather
     than having both a Muon and an Adam which each need to be stepped.
 
-    You can see an example usage below:
+    Example usage:
 
-    https://github.com/KellerJordan/modded-nanogpt/blob/master/records/052525_MuonWithAuxAdamExample/b01550f9-03d8-4a9c-86fe-4ab434f1c5e0.txt#L470
-    ```
-    hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and "embed" not in n]
-    embed_params = [p for n, p in model.named_parameters() if "embed" in n]
-    scalar_params = [p for p in model.parameters() if p.ndim < 2]
-    head_params = [model.lm_head.weight]
+    ```python
+    from transformers.optimization import MuonWithAuxAdam
 
-    from muon import MuonWithAuxAdam
-    adam_groups = [dict(params=head_params, lr=0.22), dict(params=embed_params, lr=0.6), dict(params=scalar_params, lr=0.04)]
-    adam_groups = [dict(**g, betas=(0.8, 0.95), eps=1e-10, use_muon=False) for g in adam_groups]
-    muon_group = dict(params=hidden_matrix_params, lr=0.05, momentum=0.95, use_muon=True)
-    param_groups = [*adam_groups, muon_group]
+    hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
+    hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
+    nonhidden_params = [*model.head.parameters(), *model.embed.parameters()]
+    param_groups = [
+        dict(params=hidden_weights, use_muon=True,
+             lr=0.02, weight_decay=0.01),
+        dict(params=hidden_gains_biases+nonhidden_params, use_muon=False,
+             lr=3e-4, betas=(0.9, 0.95), weight_decay=0.01),
+    ]
     optimizer = MuonWithAuxAdam(param_groups)
     ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
     """
 
-    def __init__(self, param_groups):
-        for group in param_groups:
-            assert "use_muon" in group
-            if group["use_muon"]:
-                group["params"] = sorted(group["params"], key=lambda x: x.size(), reverse=True)
-                # defaults
-                group["lr"] = group.get("lr", 0.02)
-                group["momentum"] = group.get("momentum", 0.95)
-                group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == {"params", "lr", "momentum", "weight_decay", "use_muon"}
-            else:
-                # defaults
-                group["lr"] = group.get("lr", 3e-4)
-                group["betas"] = group.get("betas", (0.9, 0.95))
-                group["eps"] = group.get("eps", 1e-10)
-                group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == {"params", "lr", "betas", "eps", "weight_decay", "use_muon"}
-        super().__init__(param_groups, {})
+    def __new__(cls, *args, **kwargs):
+        _check_muon_available()
+        from muon import MuonWithAuxAdam as _MuonWithAuxAdam
 
-    @torch.no_grad()
-    def step(self, closure=None):
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            if group["use_muon"]:
-                params = group["params"]
-                params_pad = params + [torch.empty_like(params[-1])] * (
-                    dist.get_world_size() - len(params) % dist.get_world_size()
-                )
-                for base_i in range(len(params))[:: dist.get_world_size()]:
-                    if base_i + dist.get_rank() < len(params):
-                        p = params[base_i + dist.get_rank()]
-                        if p.grad is None:
-                            # continue
-                            p.grad = torch.zeros_like(p)  # Force synchronization
-                        state = self.state[p]
-                        if len(state) == 0:
-                            state["momentum_buffer"] = torch.zeros_like(p)
-                        update = muon_update(p.grad, state["momentum_buffer"], beta=group["momentum"])
-                        p.mul_(1 - group["lr"] * group["weight_decay"])
-                        p.add_(update.reshape(p.shape), alpha=-group["lr"])
-                    dist.all_gather(
-                        params_pad[base_i : base_i + dist.get_world_size()], params_pad[base_i + dist.get_rank()]
-                    )
-            else:
-                for p in group["params"]:
-                    if p.grad is None:
-                        # continue
-                        p.grad = torch.zeros_like(p)  # Force synchronization
-                    state = self.state[p]
-                    if len(state) == 0:
-                        state["exp_avg"] = torch.zeros_like(p)
-                        state["exp_avg_sq"] = torch.zeros_like(p)
-                        state["step"] = 0
-                    state["step"] += 1
-                    update = adam_update(
-                        p.grad, state["exp_avg"], state["exp_avg_sq"], state["step"], group["betas"], group["eps"]
-                    )
-                    p.mul_(1 - group["lr"] * group["weight_decay"])
-                    p.add_(update, alpha=-group["lr"])
-
-        return loss
+        return _MuonWithAuxAdam(*args, **kwargs)
 
 
-class SingleDeviceMuonWithAuxAdam(torch.optim.Optimizer):
+class SingleDeviceMuonWithAuxAdam:
     """
     Non-distributed variant of MuonWithAuxAdam.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import SingleDeviceMuonWithAuxAdam
+
+    hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
+    hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
+    nonhidden_params = [*model.head.parameters(), *model.embed.parameters()]
+    param_groups = [
+        dict(params=hidden_weights, use_muon=True,
+             lr=0.02, weight_decay=0.01),
+        dict(params=hidden_gains_biases+nonhidden_params, use_muon=False,
+             lr=3e-4, betas=(0.9, 0.95), weight_decay=0.01),
+    ]
+    optimizer = SingleDeviceMuonWithAuxAdam(param_groups)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
     """
 
-    def __init__(self, param_groups):
-        for group in param_groups:
-            assert "use_muon" in group
-            if group["use_muon"]:
-                # defaults
-                group["lr"] = group.get("lr", 0.02)
-                group["momentum"] = group.get("momentum", 0.95)
-                group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == {"params", "lr", "momentum", "weight_decay", "use_muon"}
-            else:
-                # defaults
-                group["lr"] = group.get("lr", 3e-4)
-                group["betas"] = group.get("betas", (0.9, 0.95))
-                group["eps"] = group.get("eps", 1e-10)
-                group["weight_decay"] = group.get("weight_decay", 0)
-                assert set(group.keys()) == {"params", "lr", "betas", "eps", "weight_decay", "use_muon"}
-        super().__init__(param_groups, {})
+    def __new__(cls, *args, **kwargs):
+        _check_muon_available()
+        from muon import SingleDeviceMuonWithAuxAdam as _SingleDeviceMuonWithAuxAdam
 
-    @torch.no_grad()
-    def step(self, closure=None):
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
+        return _SingleDeviceMuonWithAuxAdam(*args, **kwargs)
 
-        for group in self.param_groups:
-            if group["use_muon"]:
-                for p in group["params"]:
-                    if p.grad is None:
-                        # continue
-                        p.grad = torch.zeros_like(p)  # Force synchronization
-                    state = self.state[p]
-                    if len(state) == 0:
-                        state["momentum_buffer"] = torch.zeros_like(p)
-                    update = muon_update(p.grad, state["momentum_buffer"], beta=group["momentum"])
-                    p.mul_(1 - group["lr"] * group["weight_decay"])
-                    p.add_(update.reshape(p.shape), alpha=-group["lr"])
-            else:
-                for p in group["params"]:
-                    if p.grad is None:
-                        # continue
-                        p.grad = torch.zeros_like(p)  # Force synchronization
-                    state = self.state[p]
-                    if len(state) == 0:
-                        state["exp_avg"] = torch.zeros_like(p)
-                        state["exp_avg_sq"] = torch.zeros_like(p)
-                        state["step"] = 0
-                    state["step"] += 1
-                    update = adam_update(
-                        p.grad, state["exp_avg"], state["exp_avg_sq"], state["step"], group["betas"], group["eps"]
-                    )
-                    p.mul_(1 - group["lr"] * group["weight_decay"])
-                    p.add_(update, alpha=-group["lr"])
 
-        return loss
+class MuonOptimizer:
+    """
+    Muon - MomentUm Orthogonalized by Newton-schulz
+
+    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-
+    processing step, in which each 2D parameter's update is replaced with the nearest orthogonal
+    matrix. For efficient orthogonalization we use a Newton-Schulz iteration, which has the
+    advantage that it can be stably run in bfloat16 on the GPU.
+
+    Muon should only be used for hidden weight layers. The input embedding, final output layer,
+    and any internal gains or biases should be optimized using a standard method such as AdamW.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import MuonOptimizer
+
+    # Optimizer for hidden weight layers only
+    hidden_params = [p for n, p in model.named_parameters() if p.ndim >= 2 and "embed" not in n and "head" not in n]
+    optimizer = MuonOptimizer(hidden_params, lr=0.02, momentum=0.95)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
+    """
+
+    def __new__(cls, *args, **kwargs):
+        _check_muon_available()
+        from muon import Muon as _Muon
+
+        return _Muon(*args, **kwargs)

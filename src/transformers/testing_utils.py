@@ -109,6 +109,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_muon_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
@@ -387,6 +388,14 @@ def require_torch_optimi(test_case):
     https://github.com/jxnl/torch-optimi
     """
     return unittest.skipUnless(is_torch_optimi_available(), "test requires torch-optimi")(test_case)
+
+
+def require_muon(test_case):
+    """
+    Decorator marking a test that requires muon. These tests are skipped when muon isn't installed.
+    https://github.com/KellerJordan/Muon
+    """
+    return unittest.skipUnless(is_muon_available(), "test requires muon")(test_case)
 
 
 def require_lomo(test_case):

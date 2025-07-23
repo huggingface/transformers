@@ -184,6 +184,7 @@ from .import_utils import (
     is_matplotlib_available,
     is_mistral_common_available,
     is_mlx_available,
+    is_muon_available,
     is_natten_available,
     is_ninja_available,
     is_nltk_available,
