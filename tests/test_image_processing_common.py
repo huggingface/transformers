@@ -241,6 +241,16 @@ class ImageProcessingTestMixin:
 
         self.assertLessEqual(fast_time, slow_time)
 
+    def test_is_fast(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+
+            # Check is_fast is set correctly
+            if "Fast" in image_processing_class.__name__:
+                self.assertTrue(image_processor.is_fast)
+            else:
+                self.assertFalse(image_processor.is_fast)
+
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
