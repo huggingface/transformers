@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 from datasets import Audio, load_dataset
+from parameterized import parameterized
 
 from transformers import AutoProcessor, DacConfig, DacModel
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
@@ -392,120 +393,54 @@ def compute_rmse(arr1, arr2):
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
-@slow
-@require_torch
-class DacIntegrationTest(unittest.TestCase):
-    """
-    Integration tests for DAC.
+"""
+Integration tests for DAC.
 
-    Code for reproducing expected outputs can be found here:
-    - Single file: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_integration_single-py
-    - Batched: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_integration-py
+Code for reproducing expected outputs can be found here:
+- test_integration: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_integration_single-py
+- test_batch: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_integration-py
 
-    See https://github.com/huggingface/transformers/pull/39313 for reason behind large tolerance between for encoder
-    and decoder outputs (1e-3). In summary, original model uses weight normalization, while Transformers does not. This
-    leads to accumulating error. However, this does not affect the quantizer codes, thanks to discretization being
-    robust to precision errors. Moreover, codec error is similar between Transformers and original.
+See https://github.com/huggingface/transformers/pull/39313 for reason behind large tolerance between for encoder
+and decoder outputs (1e-3). In summary, original model uses weight normalization, while Transformers does not. This
+leads to accumulating error. However, this does not affect the quantizer codes, thanks to discretization being
+robust to precision errors. Moreover, codec error is similar between Transformers and original.
 
-    Moreover, here is a script to debug outputs and weights layer-by-layer:
-    https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_layer_by_layer_debugging-py
-    """
+Moreover, here is a script to debug outputs and weights layer-by-layer:
+https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_layer_by_layer_debugging-py
+"""
 
-    def test_integration_16khz(self):
-        model_name = "dac_16khz"
-
-        # expected values
-        EXPECTED_PREPROC_SHAPE = torch.tensor([1, 1, 93760])
-        EXPECTED_ENC_LOSS = 24.84908103942871
-        EXPECTED_QUANT_CODES = torch.tensor(
+# fmt: off
+# -- test_integration
+EXPECTED_PREPROC_SHAPE = {
+    "dac_16khz": torch.tensor([1, 1, 93760]),
+    "dac_24khz": torch.tensor([1, 1, 140800]),
+    "dac_44khz": torch.tensor([1, 1, 258560]),
+}
+EXPECTED_ENC_LOSS = {
+    "dac_16khz": 24.84908103942871,
+    "dac_24khz": 28.112096786499023,
+    "dac_44khz": 23.78483772277832,
+}
+EXPECTED_QUANT_CODES = {
+    "dac_16khz": torch.tensor(
+        [
             [
-                [
-                    [804, 25, 977, 52, 68, 867, 388, 653, 315, 706, 301, 305, 140, 25, 40],
-                    [77, 955, 532, 601, 431, 375, 967, 56, 54, 261, 871, 552, 735, 341, 228],
-                    [355, 908, 77, 927, 617, 443, 790, 149, 403, 707, 511, 226, 995, 883, 644],
-                    [184, 162, 611, 54, 211, 890, 906, 253, 677, 1007, 302, 577, 378, 330, 778],
-                    [763, 322, 6, 321, 116, 228, 911, 865, 1000, 234, 6, 901, 10, 174, 895],
-                    [454, 1, 622, 622, 487, 668, 749, 833, 382, 900, 372, 959, 232, 418, 964],
-                    [203, 43, 173, 307, 961, 593, 318, 1011, 386, 949, 343, 899, 536, 824, 38],
-                    [82, 810, 692, 83, 131, 866, 483, 362, 519, 531, 853, 121, 1010, 512, 710],
-                    [1003, 691, 530, 460, 827, 903, 81, 76, 629, 298, 168, 177, 368, 613, 762],
-                    [571, 752, 544, 394, 198, 479, 952, 437, 222, 992, 934, 316, 741, 123, 538],
-                    [686, 421, 393, 635, 246, 330, 908, 384, 962, 873, 92, 254, 912, 496, 83],
-                    [721, 977, 148, 204, 993, 660, 176, 395, 901, 323, 342, 849, 474, 8, 513],
-                ]
+                [804, 25, 977, 52, 68, 867, 388, 653, 315, 706, 301, 305, 140, 25, 40],
+                [77, 955, 532, 601, 431, 375, 967, 56, 54, 261, 871, 552, 735, 341, 228],
+                [355, 908, 77, 927, 617, 443, 790, 149, 403, 707, 511, 226, 995, 883, 644],
+                [184, 162, 611, 54, 211, 890, 906, 253, 677, 1007, 302, 577, 378, 330, 778],
+                [763, 322, 6, 321, 116, 228, 911, 865, 1000, 234, 6, 901, 10, 174, 895],
+                [454, 1, 622, 622, 487, 668, 749, 833, 382, 900, 372, 959, 232, 418, 964],
+                [203, 43, 173, 307, 961, 593, 318, 1011, 386, 949, 343, 899, 536, 824, 38],
+                [82, 810, 692, 83, 131, 866, 483, 362, 519, 531, 853, 121, 1010, 512, 710],
+                [1003, 691, 530, 460, 827, 903, 81, 76, 629, 298, 168, 177, 368, 613, 762],
+                [571, 752, 544, 394, 198, 479, 952, 437, 222, 992, 934, 316, 741, 123, 538],
+                [686, 421, 393, 635, 246, 330, 908, 384, 962, 873, 92, 254, 912, 496, 83],
+                [721, 977, 148, 204, 993, 660, 176, 395, 901, 323, 342, 849, 474, 8, 513],
             ]
-        ).to(torch_device)
-        # fmt: off
-        EXPECTED_DEC_OUTPUTS = torch.tensor([[ 7.2661e-05,  5.9626e-04,  1.0609e-03,  1.4515e-03,  1.6704e-03,
-            1.0837e-03,  4.6979e-04, -1.3811e-04, -2.7733e-04,  2.0613e-04,
-            4.0715e-04,  8.4999e-04,  1.7112e-03,  2.7275e-03,  2.5560e-03,
-            1.6202e-03,  1.4603e-03,  1.1447e-03,  7.4274e-04,  7.6758e-04,
-            1.5931e-03,  2.5598e-03,  2.6844e-03,  2.9216e-03,  3.6430e-03,
-            3.0532e-03,  2.1169e-03,  2.3657e-03,  2.0313e-03,  8.8282e-04,
-            -1.6314e-04,  2.0697e-05,  9.0119e-04,  1.5815e-03,  2.1719e-03,
-            2.2010e-03,  1.4089e-03, -9.8639e-05, -7.1111e-04, -2.1185e-04,
-            3.3837e-04,  5.2177e-04,  1.0538e-03,  2.2637e-03,  1.9972e-03,
-            1.6396e-03,  1.6282e-03,  1.1689e-03,  2.7550e-04, -4.4859e-04]]).to(torch_device)
-        # fmt: on
-        EXPECTED_QUANT_CODEBOOK_LOSS = 20.5806350708007
-        EXPECTED_CODEC_ERROR = 0.0038341842591762543
-
-        # load model and processor
-        model_id = f"descript/{model_name}"
-        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # load audio sample
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_sample = librispeech_dummy[0]["audio"]["array"]
-
-        # check on processor audio shape
-        inputs = processor(
-            raw_audio=audio_sample,
-            sampling_rate=processor.sampling_rate,
-            return_tensors="pt",
-        ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE)
-
-        with torch.no_grad():
-            # compare encoder loss
-            encoder_outputs = model.encode(inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_ENC_LOSS, encoder_outputs[0].squeeze().item(), rtol=1e-3, atol=1e-3)
-
-            # compare quantizer outputs
-            quantizer_outputs = model.quantizer(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODES, quantizer_outputs[1][..., : EXPECTED_QUANT_CODES.shape[-1]], rtol=1e-6, atol=1e-6
-            )
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODEBOOK_LOSS, quantizer_outputs[4].squeeze().item(), rtol=1e-6, atol=1e-6
-            )
-
-            # compare decoder outputs
-            decoded_outputs = model.decode(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_DEC_OUTPUTS,
-                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS.shape[-1]],
-                rtol=1e-3,
-                atol=1e-3,
-            )
-
-            # compare codec error / lossiness
-            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_CODEC_ERROR, codec_err, rtol=1e-6, atol=1e-6)
-
-            # make sure forward and decode gives same result
-            enc_dec = model(inputs["input_values"])[1]
-            torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
-
-    def test_integration_24khz(self):
-        model_name = "dac_24khz"
-
-        # expected values
-        EXPECTED_PREPROC_SHAPE = torch.tensor([1, 1, 140800])
-        EXPECTED_ENC_LOSS = 28.112096786499023
-        EXPECTED_QUANT_CODES = torch.tensor(
+        ]
+    ).to(torch_device),
+    "dac_24khz": torch.tensor(
             [
                 [
                     [160, 360, 826, 204, 239, 360, 90, 160, 851, 234, 252, 690, 360, 160, 665],
@@ -542,9 +477,38 @@ class DacIntegrationTest(unittest.TestCase):
                     [821, 641, 740, 272, 468, 847, 699, 842, 20, 330, 216, 703, 581, 306, 137],
                 ]
             ]
-        ).to(torch_device)
-        # fmt: off
-        EXPECTED_DEC_OUTPUTS = torch.tensor([[ 4.2660e-04,  4.0129e-04,  1.5403e-04,  5.0874e-05,  2.9436e-04,
+        ).to(torch_device),
+    "dac_44khz": torch.tensor([[[ 332,  315,  105,  315,  616,  105,  494,  698,  315,  481,  330,
+            93,  105,  315,  105],
+         [ 670,  350,  249,   27,  232,  365,  311,  881,  186,  402,  311,
+           521,  527,  778,  254],
+         [ 569,  300,  361,  530, 1002,  419,  285,  501,  456,  471,  180,
+           615,  419,  491,  764],
+         [ 605,  436,  641,  291,  901,  556,  715,  780,  502,  410,  858,
+           125,  562,  174,  746],
+         [ 854,  706,  242,  294,  346,   88,  527,  961,  559,  664,  314,
+           963,  278,   90,  682],
+         [ 175,  152,  706,  884,  986,  457,  567,  176,   49,  535,  851,
+           417,  533,  349,  779],
+         [ 913,  710,  628,  162,  770,  254,  247,    6,  397,  264,  233,
+           704,  577,  111,  916],
+         [ 999,  693,  512,  884,   38,  223,   29,  744,  497,  123,  972,
+           120,   47,  301,   90],
+         [ 490,  163,  368,  507,  253,  283,  745,   65,  295,  935,  811,
+           587,  801,  255,  105]]]).to(torch_device),
+}
+EXPECTED_DEC_OUTPUTS = {
+    "dac_16khz": torch.tensor([[ 7.2661e-05,  5.9626e-04,  1.0609e-03,  1.4515e-03,  1.6704e-03,
+            1.0837e-03,  4.6979e-04, -1.3811e-04, -2.7733e-04,  2.0613e-04,
+            4.0715e-04,  8.4999e-04,  1.7112e-03,  2.7275e-03,  2.5560e-03,
+            1.6202e-03,  1.4603e-03,  1.1447e-03,  7.4274e-04,  7.6758e-04,
+            1.5931e-03,  2.5598e-03,  2.6844e-03,  2.9216e-03,  3.6430e-03,
+            3.0532e-03,  2.1169e-03,  2.3657e-03,  2.0313e-03,  8.8282e-04,
+            -1.6314e-04,  2.0697e-05,  9.0119e-04,  1.5815e-03,  2.1719e-03,
+            2.2010e-03,  1.4089e-03, -9.8639e-05, -7.1111e-04, -2.1185e-04,
+            3.3837e-04,  5.2177e-04,  1.0538e-03,  2.2637e-03,  1.9972e-03,
+            1.6396e-03,  1.6282e-03,  1.1689e-03,  2.7550e-04, -4.4859e-04]]).to(torch_device),
+    "dac_24khz": torch.tensor([[ 4.2660e-04,  4.0129e-04,  1.5403e-04,  5.0874e-05,  2.9436e-04,
             1.0682e-03,  1.9777e-03,  1.9081e-03,  1.5145e-03,  1.2959e-03,
             1.1858e-03,  8.6308e-04,  7.6199e-05, -6.2039e-04, -2.8909e-04,
             7.2902e-04,  9.6803e-04,  3.5680e-04, -1.4637e-04,  7.8926e-05,
@@ -553,265 +517,73 @@ class DacIntegrationTest(unittest.TestCase):
             2.1018e-04,  4.2771e-04,  7.4621e-04,  1.1082e-03,  1.5289e-03,
             1.9526e-03,  2.3434e-03,  2.6424e-03,  2.8369e-03,  2.7632e-03,
             2.3256e-03,  1.8973e-03,  1.8191e-03,  1.9133e-03,  1.7674e-03,
-            1.0398e-03,  2.6915e-04,  1.3725e-04,  2.8598e-04,  2.5875e-04]]).to(torch_device)
-        # fmt: on
-        EXPECTED_QUANT_CODEBOOK_LOSS = 22.581758499145508
-        EXPECTED_CODEC_ERROR = 0.002570481738075614
-
-        # load model and processor
-        model_id = f"descript/{model_name}"
-        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # load audio sample
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_sample = librispeech_dummy[0]["audio"]["array"]
-
-        # check on processor audio shape
-        inputs = processor(
-            raw_audio=audio_sample,
-            sampling_rate=processor.sampling_rate,
-            return_tensors="pt",
-        ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE)
-
-        with torch.no_grad():
-            # compare encoder loss
-            encoder_outputs = model.encode(inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_ENC_LOSS, encoder_outputs[0].squeeze().item(), rtol=1e-3, atol=1e-3)
-
-            # compare quantizer outputs
-            quantizer_outputs = model.quantizer(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODES, quantizer_outputs[1][..., : EXPECTED_QUANT_CODES.shape[-1]], rtol=1e-6, atol=1e-6
-            )
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODEBOOK_LOSS, quantizer_outputs[4].squeeze().item(), rtol=1e-6, atol=1e-6
-            )
-
-            # compare decoder outputs
-            decoded_outputs = model.decode(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_DEC_OUTPUTS,
-                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS.shape[-1]],
-                rtol=1e-3,
-                atol=1e-3,
-            )
-
-            # compare codec error / lossiness
-            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_CODEC_ERROR, codec_err, rtol=1e-6, atol=1e-6)
-
-            # make sure forward and decode gives same result
-            enc_dec = model(inputs["input_values"])[1]
-            torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
-
-    def test_integration_44khz(self):
-        model_name = "dac_44khz"
-
-        # expected values
-        EXPECTED_PREPROC_SHAPE = torch.tensor([1, 1, 258560])
-        EXPECTED_ENC_LOSS = 23.78483772277832
-        EXPECTED_QUANT_CODES = torch.tensor(
+            1.0398e-03,  2.6915e-04,  1.3725e-04,  2.8598e-04,  2.5875e-04]]).to(torch_device),
+    "dac_44khz": torch.tensor([[ 8.3748e-04,  3.7760e-04,  4.7135e-04,  8.2829e-04,  1.3677e-03,
+        1.7487e-03,  1.8883e-03,  1.7437e-03,  1.4828e-03,  1.2284e-03,
+        1.0894e-03,  1.0442e-03,  1.0558e-03,  1.0136e-03,  8.4781e-04,
+        4.8677e-04, -2.0375e-05, -5.2144e-04, -8.6839e-04, -9.8977e-04,
+        -8.0130e-04, -3.6122e-04,  1.8086e-04,  6.4340e-04,  9.1103e-04,
+        9.6243e-04,  8.6814e-04,  7.7186e-04,  7.5613e-04,  8.1264e-04,
+        9.0747e-04,  9.5464e-04,  9.5436e-04,  8.7902e-04,  7.6080e-04,
+        6.2870e-04,  5.5878e-04,  5.7444e-04,  6.6622e-04,  7.9741e-04,
+        8.7610e-04,  8.4571e-04,  6.7909e-04,  4.2059e-04,  1.5131e-04,
+        -7.1465e-05, -1.8646e-04, -1.8300e-04, -1.2542e-04, -7.1933e-05]]).to(torch_device),
+}
+EXPECTED_QUANT_CODEBOOK_LOSS = {
+    "dac_16khz": 20.5806350708007,
+    "dac_24khz": 22.581758499145508,
+    "dac_44khz": 16.2640438079834,
+}
+EXPECTED_CODEC_ERROR = {
+    "dac_16khz": 0.0038341842591762543,
+    "dac_24khz": 0.002570481738075614,
+    "dac_44khz": 0.0007429996621794999,
+}
+# -- test_batch
+EXPECTED_PREPROC_SHAPE_BATCH = {
+    "dac_16khz": torch.tensor([2, 1, 113920]),
+    "dac_24khz": torch.tensor([2, 1, 170880]),
+    "dac_44khz": torch.tensor([2, 1, 313856]),
+}
+EXPECTED_ENC_LOSS_BATCH = {
+    "dac_16khz": 20.370271682739258,
+    "dac_24khz": 24.505210876464844,
+    "dac_44khz": 19.557754516601562,
+}
+EXPECTED_QUANT_CODES_BATCH = {
+    "dac_16khz": torch.tensor(
+        [
             [
-                [
-                    [332, 315, 105, 315, 616, 105, 494, 698, 315, 481, 330, 93, 105, 315, 105],
-                    [670, 350, 249, 27, 232, 365, 311, 881, 186, 402, 311, 521, 527, 778, 254],
-                    [569, 300, 361, 530, 1002, 419, 285, 501, 456, 471, 180, 615, 419, 491, 764],
-                    [605, 436, 641, 291, 901, 556, 715, 780, 502, 410, 858, 125, 562, 174, 746],
-                    [854, 706, 242, 294, 346, 88, 527, 961, 559, 664, 314, 963, 278, 90, 682],
-                    [175, 152, 706, 884, 986, 457, 567, 176, 49, 535, 851, 417, 533, 349, 779],
-                    [913, 710, 628, 162, 770, 254, 247, 6, 397, 264, 233, 704, 577, 111, 916],
-                    [999, 693, 512, 884, 38, 223, 29, 744, 497, 123, 972, 120, 47, 301, 90],
-                    [490, 163, 368, 507, 253, 283, 745, 65, 295, 935, 811, 587, 801, 255, 105],
-                ]
-            ]
-        ).to(torch_device)
-        # fmt: off
-        EXPECTED_DEC_OUTPUTS = torch.tensor([[ 8.3748e-04,  3.7760e-04,  4.7135e-04,  8.2829e-04,  1.3677e-03,
-            1.7487e-03,  1.8883e-03,  1.7437e-03,  1.4828e-03,  1.2284e-03,
-            1.0894e-03,  1.0442e-03,  1.0558e-03,  1.0136e-03,  8.4781e-04,
-            4.8677e-04, -2.0375e-05, -5.2144e-04, -8.6839e-04, -9.8977e-04,
-            -8.0130e-04, -3.6122e-04,  1.8086e-04,  6.4340e-04,  9.1103e-04,
-            9.6243e-04,  8.6814e-04,  7.7186e-04,  7.5613e-04,  8.1264e-04,
-            9.0747e-04,  9.5464e-04,  9.5436e-04,  8.7902e-04,  7.6080e-04,
-            6.2870e-04,  5.5878e-04,  5.7444e-04,  6.6622e-04,  7.9741e-04,
-            8.7610e-04,  8.4571e-04,  6.7909e-04,  4.2059e-04,  1.5131e-04,
-            -7.1465e-05, -1.8646e-04, -1.8300e-04, -1.2542e-04, -7.1933e-05]]).to(torch_device)
-        # fmt: on
-        EXPECTED_QUANT_CODEBOOK_LOSS = 16.2640438079834
-        EXPECTED_CODEC_ERROR = 0.0007429996621794999
-
-        # load model and processor
-        model_id = f"descript/{model_name}"
-        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # load audio sample
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_sample = librispeech_dummy[0]["audio"]["array"]
-
-        # check on processor audio shape
-        inputs = processor(
-            raw_audio=audio_sample,
-            sampling_rate=processor.sampling_rate,
-            return_tensors="pt",
-        ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE)
-
-        with torch.no_grad():
-            # compare encoder loss
-            encoder_outputs = model.encode(inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_ENC_LOSS, encoder_outputs[0].squeeze().item(), rtol=1e-3, atol=1e-3)
-
-            # compare quantizer outputs
-            quantizer_outputs = model.quantizer(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODES, quantizer_outputs[1][..., : EXPECTED_QUANT_CODES.shape[-1]], rtol=1e-6, atol=1e-6
-            )
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODEBOOK_LOSS, quantizer_outputs[4].squeeze().item(), rtol=1e-6, atol=1e-6
-            )
-
-            # compare decoder outputs
-            decoded_outputs = model.decode(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_DEC_OUTPUTS,
-                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS.shape[-1]],
-                rtol=1e-3,
-                atol=1e-3,
-            )
-
-            # compare codec error / lossiness
-            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_CODEC_ERROR, codec_err, rtol=1e-6, atol=1e-6)
-
-            # make sure forward and decode gives same result
-            enc_dec = model(inputs["input_values"])[1]
-            torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
-
-    def test_integration_batch_16khz(self):
-        model_name = "dac_16khz"
-
-        # expected values
-        EXPECTED_PREPROC_SHAPE = torch.tensor([2, 1, 113920])
-        EXPECTED_ENC_LOSS = 20.370271682739258
-        EXPECTED_QUANT_CODES = torch.tensor(
+                [490, 664, 726, 166, 55, 379, 367, 664, 661, 726, 592, 301, 130, 198, 129],
+                [1020, 734, 23, 53, 134, 648, 549, 589, 790, 1000, 449, 271, 1021, 740, 36],
+                [701, 344, 955, 19, 927, 212, 212, 667, 212, 627, 453, 954, 777, 706, 496],
+                [526, 805, 444, 474, 870, 920, 394, 823, 814, 1021, 763, 677, 251, 485, 1021],
+                [721, 134, 280, 439, 287, 77, 175, 902, 973, 412, 739, 953, 130, 75, 543],
+                [675, 316, 285, 341, 783, 850, 131, 487, 701, 150, 749, 730, 900, 481, 498],
+                [377, 37, 237, 489, 55, 246, 427, 456, 755, 1011, 712, 631, 695, 576, 804],
+                [601, 557, 681, 52, 10, 299, 284, 216, 869, 276, 424, 364, 955, 41, 497],
+                [465, 553, 697, 59, 701, 195, 335, 225, 896, 804, 776, 928, 392, 192, 332],
+                [807, 306, 977, 801, 77, 172, 760, 747, 445, 38, 731, 31, 924, 724, 835],
+                [903, 561, 205, 421, 231, 873, 931, 361, 679, 854, 471, 884, 1011, 857, 248],
+                [490, 993, 122, 787, 178, 307, 141, 468, 652, 786, 879, 885, 226, 343, 501],
+            ],
             [
-                [
-                    [490, 664, 726, 166, 55, 379, 367, 664, 661, 726, 592, 301, 130, 198, 129],
-                    [1020, 734, 23, 53, 134, 648, 549, 589, 790, 1000, 449, 271, 1021, 740, 36],
-                    [701, 344, 955, 19, 927, 212, 212, 667, 212, 627, 453, 954, 777, 706, 496],
-                    [526, 805, 444, 474, 870, 920, 394, 823, 814, 1021, 763, 677, 251, 485, 1021],
-                    [721, 134, 280, 439, 287, 77, 175, 902, 973, 412, 739, 953, 130, 75, 543],
-                    [675, 316, 285, 341, 783, 850, 131, 487, 701, 150, 749, 730, 900, 481, 498],
-                    [377, 37, 237, 489, 55, 246, 427, 456, 755, 1011, 712, 631, 695, 576, 804],
-                    [601, 557, 681, 52, 10, 299, 284, 216, 869, 276, 424, 364, 955, 41, 497],
-                    [465, 553, 697, 59, 701, 195, 335, 225, 896, 804, 776, 928, 392, 192, 332],
-                    [807, 306, 977, 801, 77, 172, 760, 747, 445, 38, 731, 31, 924, 724, 835],
-                    [903, 561, 205, 421, 231, 873, 931, 361, 679, 854, 471, 884, 1011, 857, 248],
-                    [490, 993, 122, 787, 178, 307, 141, 468, 652, 786, 879, 885, 226, 343, 501],
-                ],
-                [
-                    [140, 320, 210, 489, 444, 388, 210, 73, 821, 1004, 388, 686, 405, 563, 407],
-                    [725, 449, 802, 85, 36, 532, 620, 28, 620, 418, 146, 532, 418, 453, 565],
-                    [695, 725, 600, 371, 829, 237, 911, 927, 181, 707, 306, 337, 254, 577, 289],
-                    [51, 648, 186, 129, 781, 570, 737, 563, 400, 839, 674, 689, 544, 767, 577],
-                    [1007, 234, 145, 966, 734, 748, 68, 272, 473, 973, 414, 586, 618, 6, 909],
-                    [410, 566, 507, 756, 943, 736, 269, 349, 549, 320, 303, 729, 507, 741, 76],
-                    [172, 102, 548, 714, 225, 723, 149, 423, 307, 527, 844, 102, 747, 76, 586],
-                    [656, 144, 407, 245, 140, 409, 48, 197, 126, 418, 112, 674, 582, 916, 223],
-                    [776, 971, 291, 781, 833, 296, 817, 261, 937, 467, 352, 463, 530, 804, 683],
-                    [1009, 284, 427, 907, 900, 630, 279, 285, 878, 315, 734, 751, 337, 699, 966],
-                    [389, 748, 203, 585, 609, 474, 555, 64, 154, 443, 16, 139, 905, 172, 86],
-                    [884, 34, 477, 1013, 335, 306, 724, 202, 356, 199, 728, 552, 755, 223, 371],
-                ],
-            ]
-        ).to(torch_device)
-        # fmt: off
-        EXPECTED_DEC_OUTPUTS = torch.tensor([[-1.9181e-04,  1.9380e-04,  3.1524e-04,  2.0670e-04, -2.8026e-05,
-            -3.3014e-04, -4.6584e-04, -4.3935e-04, -2.8362e-04,  2.7245e-04,
-            8.8112e-04,  1.1195e-03,  1.6224e-03,  1.9368e-03,  1.7803e-03,
-            5.9601e-04, -4.4178e-04, -1.3736e-03, -1.9979e-03, -2.0477e-03,
-            -1.5583e-03, -4.1277e-04,  6.2742e-04,  1.2409e-03,  1.3380e-03,
-            1.2884e-03,  6.0346e-04,  8.9812e-05, -6.1626e-04, -1.3760e-03,
-            -1.4970e-03, -9.8225e-04, -3.9102e-04,  5.3190e-04,  1.8696e-03,
-            2.3731e-03,  2.1139e-03,  1.4220e-03,  7.3644e-04, -2.4944e-04,
-            -9.8294e-04, -1.3858e-03, -1.6684e-03, -1.0482e-03, -6.1834e-04,
-            -5.3312e-04, -2.1345e-04,  4.1917e-04,  7.7653e-04,  8.0206e-04],
-            [ 3.1081e-05,  4.7076e-04, -1.5066e-03, -1.7006e-05, -3.3131e-04,
-            -1.1786e-03,  8.2880e-04, -1.2492e-03,  4.6135e-04, -8.7780e-04,
-            -8.5493e-04,  3.2979e-04,  1.1218e-03, -1.8018e-03,  2.2795e-04,
-            2.4981e-04, -3.1100e-03,  1.0356e-03,  1.1427e-03,  2.1378e-03,
-            -7.0038e-04,  1.6522e-03, -3.3599e-04, -2.3893e-03, -5.2286e-04,
-            2.9462e-04,  1.2429e-03, -1.8078e-03,  3.3687e-03,  1.3336e-03,
-            -1.5815e-03, -1.5836e-04, -5.4054e-04, -7.2660e-04, -2.2980e-03,
-            -5.3254e-04,  1.4890e-03, -1.0853e-03,  1.0333e-03,  8.1283e-04,
-            -1.6996e-03,  6.0168e-05, -2.6916e-03,  3.7072e-04, -1.0729e-03,
-            2.7891e-04,  3.3514e-03, -1.8029e-03,  5.5011e-04, -1.1905e-03]]).to(torch_device)
-            # fmt: on
-        EXPECTED_QUANT_CODEBOOK_LOSS = 20.61562156677246
-        EXPECTED_CODEC_ERROR = 0.001973195234313607
-
-        # load model and processor
-        model_id = f"descript/{model_name}"
-        model = DacModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # load audio samples
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
-
-        # check on processor audio shape
-        inputs = processor(
-            raw_audio=audio_samples,
-            sampling_rate=processor.sampling_rate,
-            truncation=False,
-            return_tensors="pt",
-        ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE)
-
-        with torch.no_grad():
-            # compare encoder loss
-            encoder_outputs = model.encode(inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_ENC_LOSS, encoder_outputs[0].mean().item(), rtol=1e-3, atol=1e-3)
-
-            # compare quantizer outputs
-            quantizer_outputs = model.quantizer(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODES, quantizer_outputs[1][..., : EXPECTED_QUANT_CODES.shape[-1]], rtol=1e-6, atol=1e-6
-            )
-            torch.testing.assert_close(
-                EXPECTED_QUANT_CODEBOOK_LOSS, quantizer_outputs[4].mean().item(), rtol=1e-6, atol=1e-6
-            )
-
-            # compare decoder outputs
-            decoded_outputs = model.decode(encoder_outputs[1])
-            torch.testing.assert_close(
-                EXPECTED_DEC_OUTPUTS,
-                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS.shape[-1]],
-                rtol=1e-3,
-                atol=1e-3,
-            )
-
-            # compare codec error / lossiness
-            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_CODEC_ERROR, codec_err, rtol=1e-6, atol=1e-6)
-
-            # make sure forward and decode gives same result
-            enc_dec = model(inputs["input_values"])[1]
-            torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
-
-    def test_integration_batch_24khz(self):
-        model_name = "dac_24khz"
-
-        # expected values
-        EXPECTED_PREPROC_SHAPE = torch.tensor([2, 1, 170880])
-        EXPECTED_ENC_LOSS = 24.505210876464844
-        EXPECTED_QUANT_CODES = torch.tensor(
+                [140, 320, 210, 489, 444, 388, 210, 73, 821, 1004, 388, 686, 405, 563, 407],
+                [725, 449, 802, 85, 36, 532, 620, 28, 620, 418, 146, 532, 418, 453, 565],
+                [695, 725, 600, 371, 829, 237, 911, 927, 181, 707, 306, 337, 254, 577, 289],
+                [51, 648, 186, 129, 781, 570, 737, 563, 400, 839, 674, 689, 544, 767, 577],
+                [1007, 234, 145, 966, 734, 748, 68, 272, 473, 973, 414, 586, 618, 6, 909],
+                [410, 566, 507, 756, 943, 736, 269, 349, 549, 320, 303, 729, 507, 741, 76],
+                [172, 102, 548, 714, 225, 723, 149, 423, 307, 527, 844, 102, 747, 76, 586],
+                [656, 144, 407, 245, 140, 409, 48, 197, 126, 418, 112, 674, 582, 916, 223],
+                [776, 971, 291, 781, 833, 296, 817, 261, 937, 467, 352, 463, 530, 804, 683],
+                [1009, 284, 427, 907, 900, 630, 279, 285, 878, 315, 734, 751, 337, 699, 966],
+                [389, 748, 203, 585, 609, 474, 555, 64, 154, 443, 16, 139, 905, 172, 86],
+                [884, 34, 477, 1013, 335, 306, 724, 202, 356, 199, 728, 552, 755, 223, 371],
+            ],
+        ]
+    ).to(torch_device),
+    "dac_24khz": torch.tensor(
             [
                 [
                     [234, 826, 826, 360, 204, 716, 766, 766, 360, 252, 919, 999, 360, 772, 668],
@@ -882,9 +654,56 @@ class DacIntegrationTest(unittest.TestCase):
                     [588, 398, 945, 404, 804, 494, 572, 124, 47, 809, 775, 266, 9, 596, 435],
                 ],
             ]
-        ).to(torch_device)
-        # fmt: off
-        EXPECTED_DEC_OUTPUTS = torch.tensor([[ 2.9611e-04,  5.0039e-05, -5.4961e-04, -7.9769e-04, -6.9696e-04,
+        ).to(torch_device),
+    "dac_44khz": torch.tensor(
+        [
+            [
+                [330, 315, 315, 619, 481, 315, 197, 315, 315, 105, 481, 481, 481, 481, 481],
+                [718, 1007, 309, 6, 906, 35, 402, 750, 396, 854, 962, 115, 609, 224, 329],
+                [417, 266, 150, 335, 300, 812, 325, 780, 1022, 605, 480, 342, 939, 150, 456],
+                [813, 811, 897, 334, 200, 852, 723, 497, 678, 922, 396, 333, 918, 548, 285],
+                [832, 315, 165, 106, 902, 326, 32, 572, 610, 170, 395, 223, 193, 807, 585],
+                [91, 941, 81, 684, 34, 340, 362, 946, 157, 640, 888, 215, 577, 483, 371],
+                [676, 859, 446, 664, 473, 815, 860, 640, 514, 385, 73, 201, 701, 78, 825],
+                [326, 426, 347, 970, 605, 997, 534, 111, 559, 538, 526, 208, 372, 709, 167],
+                [776, 315, 179, 232, 140, 456, 318, 155, 191, 674, 105, 992, 721, 406, 267],
+            ],
+            [
+                [578, 592, 330, 330, 330, 330, 330, 801, 330, 330, 330, 698, 330, 330, 330],
+                [501, 204, 514, 215, 615, 580, 567, 684, 478, 905, 208, 32, 495, 84, 1000],
+                [141, 458, 489, 125, 691, 471, 522, 60, 978, 30, 125, 480, 424, 67, 1],
+                [908, 192, 865, 878, 137, 698, 965, 969, 565, 216, 535, 488, 441, 503, 181],
+                [850, 635, 993, 391, 500, 122, 365, 850, 905, 449, 586, 451, 840, 811, 797],
+                [307, 408, 497, 294, 24, 396, 417, 922, 161, 268, 100, 753, 778, 1014, 259],
+                [178, 918, 568, 28, 187, 375, 301, 889, 834, 406, 665, 7, 889, 909, 387],
+                [935, 566, 315, 13, 490, 37, 436, 801, 484, 62, 476, 551, 557, 232, 533],
+                [1017, 89, 585, 401, 13, 238, 744, 1017, 774, 872, 850, 468, 640, 833, 854],
+            ],
+        ]
+    ).to(torch_device),
+}
+EXPECTED_DEC_OUTPUTS_BATCH = {
+    "dac_16khz": torch.tensor([[-1.9181e-04,  1.9380e-04,  3.1524e-04,  2.0670e-04, -2.8026e-05,
+            -3.3014e-04, -4.6584e-04, -4.3935e-04, -2.8362e-04,  2.7245e-04,
+            8.8112e-04,  1.1195e-03,  1.6224e-03,  1.9368e-03,  1.7803e-03,
+            5.9601e-04, -4.4178e-04, -1.3736e-03, -1.9979e-03, -2.0477e-03,
+            -1.5583e-03, -4.1277e-04,  6.2742e-04,  1.2409e-03,  1.3380e-03,
+            1.2884e-03,  6.0346e-04,  8.9812e-05, -6.1626e-04, -1.3760e-03,
+            -1.4970e-03, -9.8225e-04, -3.9102e-04,  5.3190e-04,  1.8696e-03,
+            2.3731e-03,  2.1139e-03,  1.4220e-03,  7.3644e-04, -2.4944e-04,
+            -9.8294e-04, -1.3858e-03, -1.6684e-03, -1.0482e-03, -6.1834e-04,
+            -5.3312e-04, -2.1345e-04,  4.1917e-04,  7.7653e-04,  8.0206e-04],
+            [ 3.1081e-05,  4.7076e-04, -1.5066e-03, -1.7006e-05, -3.3131e-04,
+            -1.1786e-03,  8.2880e-04, -1.2492e-03,  4.6135e-04, -8.7780e-04,
+            -8.5493e-04,  3.2979e-04,  1.1218e-03, -1.8018e-03,  2.2795e-04,
+            2.4981e-04, -3.1100e-03,  1.0356e-03,  1.1427e-03,  2.1378e-03,
+            -7.0038e-04,  1.6522e-03, -3.3599e-04, -2.3893e-03, -5.2286e-04,
+            2.9462e-04,  1.2429e-03, -1.8078e-03,  3.3687e-03,  1.3336e-03,
+            -1.5815e-03, -1.5836e-04, -5.4054e-04, -7.2660e-04, -2.2980e-03,
+            -5.3254e-04,  1.4890e-03, -1.0853e-03,  1.0333e-03,  8.1283e-04,
+            -1.6996e-03,  6.0168e-05, -2.6916e-03,  3.7072e-04, -1.0729e-03,
+            2.7891e-04,  3.3514e-03, -1.8029e-03,  5.5011e-04, -1.1905e-03]]).to(torch_device),
+    "dac_24khz": torch.tensor([[ 2.9611e-04,  5.0039e-05, -5.4961e-04, -7.9769e-04, -6.9696e-04,
             -5.6013e-04, -4.7665e-04, -3.8039e-04, -6.8090e-05,  6.5704e-05,
             1.3205e-05,  1.3519e-04,  1.4002e-04,  4.3348e-05,  2.9029e-04,
             5.1533e-04,  1.4072e-04, -1.8430e-04,  6.3313e-05,  4.6729e-04,
@@ -903,118 +722,102 @@ class DacIntegrationTest(unittest.TestCase):
             2.3006e-04, -2.8686e-03,  1.2978e-03,  5.9192e-03,  7.3619e-04,
             -3.9734e-03, -2.6965e-04,  1.3701e-03, -1.7230e-03, -9.4332e-04,
             4.2128e-04, -2.6123e-03, -1.8240e-03,  3.3554e-03,  1.7732e-03,
-            -3.2838e-03, -8.2577e-04,  3.1959e-03,  1.1458e-03, -2.4608e-04]]).to(torch_device)
-        # fmt: on
-        EXPECTED_QUANT_CODEBOOK_LOSS = 23.9102783203125
-        EXPECTED_CODEC_ERROR = 0.0012980918399989605
+            -3.2838e-03, -8.2577e-04,  3.1959e-03,  1.1458e-03, -2.4608e-04]]).to(torch_device),
+    "dac_44khz": torch.tensor([[-3.7834e-04, -1.0849e-04,  1.1856e-04,  2.6852e-04,  3.7313e-04,
+        5.0301e-04,  6.4261e-04,  8.0797e-04,  9.0969e-04,  9.9720e-04,
+        1.0807e-03,  1.1217e-03,  1.1229e-03,  1.1208e-03,  1.0862e-03,
+        9.5098e-04,  7.5477e-04,  5.2319e-04,  2.7449e-04,  2.4389e-05,
+        -1.9138e-04, -3.2046e-04, -4.0629e-04, -4.4804e-04, -5.0271e-04,
+        -5.8324e-04, -6.6573e-04, -6.9545e-04, -6.8046e-04, -6.1640e-04,
+        -5.3542e-04, -4.2302e-04, -3.0829e-04, -1.8475e-04, -3.9555e-05,
+        9.0104e-05,  1.9291e-04,  2.7445e-04,  3.6738e-04,  4.7454e-04,
+        6.0626e-04,  7.5514e-04,  8.5390e-04,  8.8749e-04,  8.5473e-04,
+        7.5550e-04,  6.2329e-04,  4.9771e-04,  3.8809e-04,  3.0741e-04],
+        [ 1.1130e-04,  4.6536e-04,  1.0524e-04, -6.1460e-04, -1.1777e-03,
+        -1.0661e-03, -3.7962e-04,  5.3627e-04,  1.0481e-03,  8.7734e-04,
+        1.3513e-04, -6.6297e-04, -9.5284e-04, -4.6333e-04,  5.5780e-04,
+        1.4526e-03,  1.6264e-03,  1.0852e-03,  3.3766e-04,  1.0960e-04,
+        7.7973e-04,  2.0579e-03,  3.0206e-03,  2.9674e-03,  1.8141e-03,
+        3.1059e-04, -5.7140e-04, -3.4386e-04,  4.8406e-04,  8.6931e-04,
+        2.1745e-05, -1.7647e-03, -3.2787e-03, -3.3368e-03, -1.7466e-03,
+        4.3745e-04,  1.6595e-03,  1.1171e-03, -6.3018e-04, -2.0979e-03,
+        -2.1286e-03, -6.8752e-04,  1.1514e-03,  2.1590e-03,  1.9204e-03,
+        1.0659e-03,  5.3295e-04,  6.6817e-04,  9.2716e-04,  5.3240e-04]]).to(torch_device),
+}
+EXPECTED_QUANT_CODEBOOK_LOSS_BATCH = {
+    "dac_16khz": 20.61562156677246,
+    "dac_24khz": 23.9102783203125,
+    "dac_44khz": 16.177066802978516,
+}
+EXPECTED_CODEC_ERROR_BATCH = {
+    "dac_16khz": 0.001973195234313607,
+    "dac_24khz": 0.0012980918399989605,
+    "dac_44khz": 0.00037737112143076956,
+}
+# fmt: on
 
+
+@slow
+@require_torch
+class DacIntegrationTest(unittest.TestCase):
+    @parameterized.expand([(model_name,) for model_name in EXPECTED_PREPROC_SHAPE.keys()])
+    def test_integration(self, model_name):
         # load model and processor
         model_id = f"descript/{model_name}"
-        model = DacModel.from_pretrained(model_id).to(torch_device)
+        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
-        # load audio samples
+        # load audio sample
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
-        audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
+        audio_sample = librispeech_dummy[0]["audio"]["array"]
 
         # check on processor audio shape
         inputs = processor(
-            raw_audio=audio_samples,
+            raw_audio=audio_sample,
             sampling_rate=processor.sampling_rate,
-            truncation=False,
             return_tensors="pt",
         ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE)
+        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE[model_name])
 
         with torch.no_grad():
             # compare encoder loss
             encoder_outputs = model.encode(inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_ENC_LOSS, encoder_outputs[0].mean().item(), rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                EXPECTED_ENC_LOSS[model_name], encoder_outputs[0].squeeze().item(), rtol=1e-3, atol=1e-3
+            )
 
             # compare quantizer outputs
             quantizer_outputs = model.quantizer(encoder_outputs[1])
             torch.testing.assert_close(
-                EXPECTED_QUANT_CODES, quantizer_outputs[1][..., : EXPECTED_QUANT_CODES.shape[-1]], rtol=1e-6, atol=1e-6
+                EXPECTED_QUANT_CODES[model_name],
+                quantizer_outputs[1][..., : EXPECTED_QUANT_CODES[model_name].shape[-1]],
+                rtol=1e-6,
+                atol=1e-6,
             )
             torch.testing.assert_close(
-                EXPECTED_QUANT_CODEBOOK_LOSS, quantizer_outputs[4].mean().item(), rtol=1e-6, atol=1e-6
+                EXPECTED_QUANT_CODEBOOK_LOSS[model_name], quantizer_outputs[4].squeeze().item(), rtol=1e-6, atol=1e-6
             )
 
             # compare decoder outputs
             decoded_outputs = model.decode(encoder_outputs[1])
             torch.testing.assert_close(
-                EXPECTED_DEC_OUTPUTS,
-                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS.shape[-1]],
+                EXPECTED_DEC_OUTPUTS[model_name],
+                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS[model_name].shape[-1]],
                 rtol=1e-3,
                 atol=1e-3,
             )
 
             # compare codec error / lossiness
             codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_CODEC_ERROR, codec_err, rtol=1e-6, atol=1e-6)
+            torch.testing.assert_close(EXPECTED_CODEC_ERROR[model_name], codec_err, rtol=1e-6, atol=1e-6)
 
             # make sure forward and decode gives same result
             enc_dec = model(inputs["input_values"])[1]
             torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
 
-    def test_integration_batch_44khz(self):
-        model_name = "dac_44khz"
-
-        # expected values
-        EXPECTED_PREPROC_SHAPE = torch.tensor([2, 1, 313856])
-        EXPECTED_ENC_LOSS = 19.557754516601562
-        EXPECTED_QUANT_CODES = torch.tensor(
-            [
-                [
-                    [330, 315, 315, 619, 481, 315, 197, 315, 315, 105, 481, 481, 481, 481, 481],
-                    [718, 1007, 309, 6, 906, 35, 402, 750, 396, 854, 962, 115, 609, 224, 329],
-                    [417, 266, 150, 335, 300, 812, 325, 780, 1022, 605, 480, 342, 939, 150, 456],
-                    [813, 811, 897, 334, 200, 852, 723, 497, 678, 922, 396, 333, 918, 548, 285],
-                    [832, 315, 165, 106, 902, 326, 32, 572, 610, 170, 395, 223, 193, 807, 585],
-                    [91, 941, 81, 684, 34, 340, 362, 946, 157, 640, 888, 215, 577, 483, 371],
-                    [676, 859, 446, 664, 473, 815, 860, 640, 514, 385, 73, 201, 701, 78, 825],
-                    [326, 426, 347, 970, 605, 997, 534, 111, 559, 538, 526, 208, 372, 709, 167],
-                    [776, 315, 179, 232, 140, 456, 318, 155, 191, 674, 105, 992, 721, 406, 267],
-                ],
-                [
-                    [578, 592, 330, 330, 330, 330, 330, 801, 330, 330, 330, 698, 330, 330, 330],
-                    [501, 204, 514, 215, 615, 580, 567, 684, 478, 905, 208, 32, 495, 84, 1000],
-                    [141, 458, 489, 125, 691, 471, 522, 60, 978, 30, 125, 480, 424, 67, 1],
-                    [908, 192, 865, 878, 137, 698, 965, 969, 565, 216, 535, 488, 441, 503, 181],
-                    [850, 635, 993, 391, 500, 122, 365, 850, 905, 449, 586, 451, 840, 811, 797],
-                    [307, 408, 497, 294, 24, 396, 417, 922, 161, 268, 100, 753, 778, 1014, 259],
-                    [178, 918, 568, 28, 187, 375, 301, 889, 834, 406, 665, 7, 889, 909, 387],
-                    [935, 566, 315, 13, 490, 37, 436, 801, 484, 62, 476, 551, 557, 232, 533],
-                    [1017, 89, 585, 401, 13, 238, 744, 1017, 774, 872, 850, 468, 640, 833, 854],
-                ],
-            ]
-        ).to(torch_device)
-        # fmt: off
-        EXPECTED_DEC_OUTPUTS = torch.tensor([[-3.7834e-04, -1.0849e-04,  1.1856e-04,  2.6852e-04,  3.7313e-04,
-            5.0301e-04,  6.4261e-04,  8.0797e-04,  9.0969e-04,  9.9720e-04,
-            1.0807e-03,  1.1217e-03,  1.1229e-03,  1.1208e-03,  1.0862e-03,
-            9.5098e-04,  7.5477e-04,  5.2319e-04,  2.7449e-04,  2.4389e-05,
-            -1.9138e-04, -3.2046e-04, -4.0629e-04, -4.4804e-04, -5.0271e-04,
-            -5.8324e-04, -6.6573e-04, -6.9545e-04, -6.8046e-04, -6.1640e-04,
-            -5.3542e-04, -4.2302e-04, -3.0829e-04, -1.8475e-04, -3.9555e-05,
-            9.0104e-05,  1.9291e-04,  2.7445e-04,  3.6738e-04,  4.7454e-04,
-            6.0626e-04,  7.5514e-04,  8.5390e-04,  8.8749e-04,  8.5473e-04,
-            7.5550e-04,  6.2329e-04,  4.9771e-04,  3.8809e-04,  3.0741e-04],
-            [ 1.1130e-04,  4.6536e-04,  1.0524e-04, -6.1460e-04, -1.1777e-03,
-            -1.0661e-03, -3.7962e-04,  5.3627e-04,  1.0481e-03,  8.7734e-04,
-            1.3513e-04, -6.6297e-04, -9.5284e-04, -4.6333e-04,  5.5780e-04,
-            1.4526e-03,  1.6264e-03,  1.0852e-03,  3.3766e-04,  1.0960e-04,
-            7.7973e-04,  2.0579e-03,  3.0206e-03,  2.9674e-03,  1.8141e-03,
-            3.1059e-04, -5.7140e-04, -3.4386e-04,  4.8406e-04,  8.6931e-04,
-            2.1745e-05, -1.7647e-03, -3.2787e-03, -3.3368e-03, -1.7466e-03,
-            4.3745e-04,  1.6595e-03,  1.1171e-03, -6.3018e-04, -2.0979e-03,
-            -2.1286e-03, -6.8752e-04,  1.1514e-03,  2.1590e-03,  1.9204e-03,
-            1.0659e-03,  5.3295e-04,  6.6817e-04,  9.2716e-04,  5.3240e-04]]).to(torch_device)
-        # fmt: on
-        EXPECTED_QUANT_CODEBOOK_LOSS = 16.177066802978516
-        EXPECTED_CODEC_ERROR = 0.00037737112143076956
-
+    @parameterized.expand([(model_name,) for model_name in EXPECTED_PREPROC_SHAPE_BATCH.keys()])
+    def test_integration_batch(self, model_name):
         # load model and processor
         model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
@@ -1032,34 +835,42 @@ class DacIntegrationTest(unittest.TestCase):
             truncation=False,
             return_tensors="pt",
         ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE)
+        torch.equal(torch.tensor(inputs["input_values"].shape), EXPECTED_PREPROC_SHAPE_BATCH[model_name])
 
         with torch.no_grad():
             # compare encoder loss
             encoder_outputs = model.encode(inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_ENC_LOSS, encoder_outputs[0].mean().item(), rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                EXPECTED_ENC_LOSS_BATCH[model_name], encoder_outputs[0].mean().item(), rtol=1e-3, atol=1e-3
+            )
 
             # compare quantizer outputs
             quantizer_outputs = model.quantizer(encoder_outputs[1])
             torch.testing.assert_close(
-                EXPECTED_QUANT_CODES, quantizer_outputs[1][..., : EXPECTED_QUANT_CODES.shape[-1]], rtol=1e-6, atol=1e-6
+                EXPECTED_QUANT_CODES_BATCH[model_name],
+                quantizer_outputs[1][..., : EXPECTED_QUANT_CODES_BATCH[model_name].shape[-1]],
+                rtol=1e-6,
+                atol=1e-6,
             )
             torch.testing.assert_close(
-                EXPECTED_QUANT_CODEBOOK_LOSS, quantizer_outputs[4].mean().item(), rtol=1e-6, atol=1e-6
+                EXPECTED_QUANT_CODEBOOK_LOSS_BATCH[model_name],
+                quantizer_outputs[4].mean().item(),
+                rtol=1e-6,
+                atol=1e-6,
             )
 
             # compare decoder outputs
             decoded_outputs = model.decode(encoder_outputs[1])
             torch.testing.assert_close(
-                EXPECTED_DEC_OUTPUTS,
-                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS.shape[-1]],
+                EXPECTED_DEC_OUTPUTS_BATCH[model_name],
+                decoded_outputs["audio_values"][..., : EXPECTED_DEC_OUTPUTS_BATCH[model_name].shape[-1]],
                 rtol=1e-3,
                 atol=1e-3,
             )
 
             # compare codec error / lossiness
             codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
-            torch.testing.assert_close(EXPECTED_CODEC_ERROR, codec_err, rtol=1e-6, atol=1e-6)
+            torch.testing.assert_close(EXPECTED_CODEC_ERROR_BATCH[model_name], codec_err, rtol=1e-6, atol=1e-6)
 
             # make sure forward and decode gives same result
             enc_dec = model(inputs["input_values"])[1]
