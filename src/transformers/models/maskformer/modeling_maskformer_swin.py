@@ -734,7 +734,7 @@ class MaskFormerSwinEncoder(nn.Module):
 
 @auto_docstring
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
-    config_class = MaskFormerSwinConfig
+    config: MaskFormerSwinConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

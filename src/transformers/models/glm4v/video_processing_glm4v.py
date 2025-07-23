@@ -53,8 +53,6 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
-import torch.nn.functional as F
-
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     max_image_size: dict[str, int] = None
@@ -152,7 +150,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         videos: list[torch.Tensor],
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: SizeDict = None,
+        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -181,8 +179,10 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     max_pixels=size["longest_edge"],
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
-                stacked_videos = F.interpolate(
-                    stacked_videos, size=(resized_height, resized_width), mode="bicubic", align_corners=False
+                stacked_videos = self.resize(
+                    stacked_videos,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
                 )
                 stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos

@@ -39,12 +39,12 @@ class Glm4vImagesKwargs(ImagesKwargs):
 
 
 class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Glm4vImagesKwargs
+    videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {"padding": False},
         "videos_kwargs": {"return_metadata": True},
     }
-    images_kwargs: Glm4vImagesKwargs
-    videos_kwargs: Glm4vVideosProcessorKwargs
 
 
 class Glm4vProcessor(ProcessorMixin):
