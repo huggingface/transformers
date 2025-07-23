@@ -974,8 +974,6 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
     return AdafactorSchedule(optimizer, initial_lr)
 
 
-
-
 # Muon optimizer wrapper functions
 def _check_muon_available():
     if importlib.util.find_spec("muon") is None:

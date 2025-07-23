@@ -1423,7 +1423,7 @@ class Trainer:
                     "You need to install `muon` in order to use muon optimizers. "
                     "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
                 )
-            from .optimization import Muon
+            from muon import Muon
 
             optimizer_cls = Muon
             optimizer_kwargs.update({"momentum": 0.95})
