@@ -11,103 +11,91 @@
 
 # OPT
 
-[OPT](https://huggingface.co/papers/2205.01068) is a suite of open-source decoder-only pre-trained transformers whose parameters range from 125M to 175B. Developed by Meta AI, OPT models are designed for casual language modeling and aim to enable responsible and reproducible research at scale, with the OPT-175B model being comparable in performance to GPT-3 while using only 1/7th the carbon footprint
+[OPT](https://huggingface.co/papers/2205.01068) is a suite of open-source decoder-only pre-trained transformers whose parameters range from 125M to 175B. OPT models are designed for casual language modeling and aim to enable responsible and reproducible research at scale. OPT-175B is comparable in performance to GPT-3 with only 1/7th the carbon footprint.
 
-You can find all the original [OPT] checkpoints under the [OPT](https://huggingface.co/models?search=opt) collection on the Hugging Face Hub.
+You can find all the original [OPT] checkpoints under the [OPT](https://huggingface.co/collections/facebook/opt-66ed00e15599f02966818844) collection.
 
 > [!TIP]
-> This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [Younes Belkada](https://huggingface.co/ybelkada), and [Patrick Von Platen](https://huggingface.co/patrickvonplaten).
+> This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ), [ybelkada](https://huggingface.co/ybelkada), and [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 >
-> Click on the [OPT](https://huggingface.co/models?search=opt) models in the right sidebar for more examples of how to apply OPT to different text generation, classification, and question answering tasks.
+> Click on the OPT models in the right sidebar for more examples of how to apply OPT to different language tasks.
 
-The example below demonstrates how to perform text generation with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
   
 ```py  
-from transformers import pipeline, set_seed
+import torch
+from transformers import pipeline
 
-generator = pipeline('text-generation', model='facebook/opt-125m')
-set_seed(42)
-print(generator("Once upon a time, in a land far, far away,", max_length=50, num_return_sequences=1))
+pipeline = pipeline(task="text-generation", model="facebook/opt-125m", torch_dtype=torch.float16, device=0)
+pipeline("Once upon a time, in a land far, far away,", max_length=50, num_return_sequences=1)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
+device = "cuda"
 
-prompt = "Once upon a time, in a land far, far away,"
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16, attn_implementation="sdpa")
+tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
-outputs = model.generate(
-    tokenizer(prompt, return_tensors="pt").input_ids,
-    max_new_tokens=50,
-    do_sample=True,
-    top_p=0.95,
-    temperature=0.8,
-    repetition_penalty=1.2,
-    pad_token_id=tokenizer.eos_token_id
-)
+prompt = ("Once upon a time, in a land far, far away, ")
 
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+model_inputs = tokenizer([prompt], return_tensors="pt").to(device)
+model.to(device)
+
+generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)
+tokenizer.batch_decode(generated_ids)[0]
 ```
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```py
-python -c "from transformers import pipeline; gen = pipeline('text-generation', model='facebook/opt-125m'); print(gen('Once upon a time, in a land far, far away,', max_length=50))"
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model facebook/opt-125m --device 0
 ```
 </hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses 8-bit dynamic quantization with pytorch to quantize the Linear layers' weights to 8-bit integers.
+The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize the weights to 8-bits.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from torch.quantization import quantize_dynamic
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+device = "cuda"
 
-quantized_model = quantize_dynamic(
-    model, {torch.nn.Linear}, dtype=torch.qint8
-)
+bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", torch_dtype=torch.float16, attn_implementation="sdpa", quantization_config=bnb_config)
+tokenizer = AutoTokenizer.from_pretrained("facebook/opt-13b")
 
-device = torch.device("cpu")
-quantized_model.to(device)
+prompt = ("Once upon a time, in a land far, far away, ")
 
-prompt = "The quick brown fox"
-inputs = tokenizer(prompt, return_tensors="pt", padding=True)
-input_ids = inputs["input_ids"]
-attention_mask = inputs["attention_mask"]
+model_inputs = tokenizer([prompt], return_tensors="pt").to(device)
+model.to(device)
 
-outputs = quantized_model.generate(
-    input_ids=input_ids,
-    attention_mask=attention_mask,
-    max_new_tokens=100,
-    do_sample=True,
-    top_p=0.95,
-    temperature=0.8,
-    repetition_penalty=1.2,
-    pad_token_id=tokenizer.eos_token_id
-)
-
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)
+tokenizer.batch_decode(generated_ids)[0]
 ```
 
 ## Notes
 
-- OPT uses the GPT-2 byte-level Byte-Pair Encoding (BPE) tokenizer with a vocabulary size of 50,272. It splits text into Unicode subword tokens that include spaces, which enables reversible encoding of any UTF-8 text. Since GPT-style tokenizers insert spaces as part of tokenization, tokens always begin with a space, which is why the decoded string correctly reconstructs spacing and punctuation.
+- OPT adds an `EOS` token `</s>` to the beginning of every prompt.
+
+- The `head_mask` argument is ignored if the attention implementation isn't `"eager"`. Set `attn_implementation="eager"` to enable the `head_mask`.
+
+## Resources
+
+- Refer to this [notebook](https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing) for an example of fine-tuning OPT with PEFT, bitsandbytes, and Transformers.
+- The [How 🤗 Accelerate runs very large models thanks to PyTorch](https://huggingface.co/blog/accelerate-large-models) blog post demonstrates how to run OPT for inference.
 
 ## OPTConfig
 
