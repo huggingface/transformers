@@ -394,7 +394,9 @@ class OpenAIMoeConverter(TikTokenConverter):
             kwargs["chat_template"] = chat_template
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
+            bos_token="<|startoftext|>",
             eos_token="<|return|>" if chat_template else "<|endoftext|>",
+            pad_token="<|endoftext|>",
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=model_max_length,
             **kwargs,
