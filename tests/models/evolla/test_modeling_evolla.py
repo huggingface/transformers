@@ -345,7 +345,7 @@ class EvollaModelIntegrationTest(TestCasePlus):
     def _prepare_for_inputs(self):
         aa_seq = "MLLEETLKSCPIVKRGKYHYFIHPISDGVPLVEPKLLREVATRIIKIGNFEGVNKIVTAEAMGIPLVTTLSLYTDIPYVIMRKREYKLPGEVPVFQSTGYSKGQLYLNGIEKGDKVIIIDDVISTGGTMIAIINALERAGAEIKDIICVIERGDGKKIVEEKTGYKIKTLVKIDVVDGEVVIL"
         foldseek = "dvvvvqqqpfawdddppdtdgcgclapvpdpddpvvlvvllvlcvvpadpvqaqeeeeeddscpsnvvsncvvpvhyydywylddppdppkdwqwf######gitidpdqaaaheyeyeeaeqdqlrvvlsvvvrcvvrnyhhrayeyaeyhycnqvvccvvpvghyhynwywdqdpsgidtd"
-        question = "What is the catalytic activity of this protein?"
+        question = "What is the function of this protein?"
 
         protein_information = {
             "aa_seq": aa_seq,
@@ -380,7 +380,7 @@ class EvollaModelIntegrationTest(TestCasePlus):
             quantization_config=quantization_config,
             device_map="auto",
         )
-        generated_ids = model.generate(**inputs, max_length=100)
+        generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # keep for debugging
@@ -388,4 +388,6 @@ class EvollaModelIntegrationTest(TestCasePlus):
             t = bytes(t, "utf-8").decode("unicode_escape")
             print(f"{i}:\n{t}\n")
 
-        self.assertIn("This protein", generated_text)
+        self.assertIn("This protein", generated_text[0])
+
+        self.assertIn("purine", generated_text[0])
