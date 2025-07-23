@@ -323,10 +323,6 @@ class Ernie4_5_Attention(nn.Module):
             freq_allocation=self.freq_allocation,
         )
         self.config = config
-        if self.config.use_flash_attention:
-            self.attn_func = self._flash_attention_wrapper
-        else:
-            self.attn_func = self.core_attn
 
     def forward(
         self,
@@ -385,132 +381,6 @@ class Ernie4_5_Attention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-    def repeat_kv(self, hidden_states, n_rep):
-        """
-        This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-        num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-        """
-        batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-        if n_rep == 1:
-            return hidden_states
-        hidden_states = hidden_states[:, :, None, :, :].expand(
-            batch, num_key_value_heads, n_rep, slen, head_dim
-        )
-        return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-    def _flash_attention_wrapper(
-        self,
-        q,
-        k,
-        v,
-        attention_mask=None,
-        attn_mask_start_row_indices=None,
-        seq_length=None,
-    ):
-        """Wrapper for flash attention implementation.
-        Args:
-            q (torch.Tensor): Query tensor
-            k (torch.Tensor): Key tensor
-            v (torch.Tensor): Value tensor
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length indices
-            seq_length (Optional[int]): Sequence length
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Attention output and weights
-        """
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            out = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=None,
-                dropout_p=self.config.attention_probs_dropout_prob,
-                is_causal=q.shape[-2] == k.shape[-2],
-                scale=1
-                / (getattr(self.config, "scale_qk_coeff", 1.0) * self.head_dim**0.5),
-                enable_gqa=self.is_gqa,
-            )
-        out = out.transpose(1, 2)
-        out = out.contiguous().view(out.size(0), out.size(1), -1)
-
-        return out, None
-
-    def core_attn(
-        self,
-        q,
-        k,
-        v,
-        attention_mask=None,
-        attn_mask_start_row_indices=None,
-        seq_length=None,
-    ):
-        """Standard self-attention implementation.
-
-        Args:
-            q (torch.Tensor): Query tensor
-            k (torch.Tensor): Key tensor
-            v (torch.Tensor): Value tensor
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length indices
-            seq_length (Optional[int]): Sequence length
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Attention output and weights
-        """
-        origin_dtype = q.dtype
-
-        q = q.permute(0, 2, 1, 3)
-        k = k.permute(0, 2, 1, 3)
-        v = v.permute(0, 2, 1, 3)
-
-        scale_qk_coeff = getattr(self.config, "scale_qk_coeff", 1.0) * (
-            self.head_dim**0.5
-        )
-
-        q = q / scale_qk_coeff
-
-        # Handle GQA case - repeat k and v heads to match q heads
-        if self.is_gqa:
-            # [batch, num_key_value_heads, seq_len, head_dim] -> [batch, num_heads, seq_len, head_dim]
-            repeat_factor = self.num_heads // self.num_key_value_heads
-            k = self.repeat_kv(k, repeat_factor)
-            v = self.repeat_kv(v, repeat_factor)
-
-        product = torch.matmul(q, k.transpose(-2, -1))
-
-        product = product.to(torch.float32)
-        if getattr(self.config, "scale_qk_coeff", 1.0) != 1.0:
-            product = product * getattr(self.config, "scale_qk_coeff", 1.0)
-
-        seq_len = product.size(-1)
-        mask = torch.triu(
-            torch.ones((seq_len, seq_len), dtype=torch.bool, device=product.device),
-            diagonal=1,
-        )
-        product = product.masked_fill(mask, float("-inf"))
-        weights = F.softmax(product, dim=-1)
-
-        weights = weights.to(origin_dtype)
-
-        if getattr(self.config, "attention_probs_dropout_prob", 0.0) > 0:
-            weights = F.dropout(
-                weights,
-                self.config.attention_probs_dropout_prob,
-                training=self.training,
-            )
-
-        out = torch.matmul(weights, v)
-
-        # combine heads
-        out = out.permute(0, 2, 1, 3)
-        out = out.contiguous().view(out.size(0), out.size(1), -1)
-
-        return out, weights
 
     def rope_attn(
         self,
@@ -572,16 +442,27 @@ class Ernie4_5_Attention(nn.Module):
         # shape: [2, b, s, kvh, d]
         past_key_value = [key_states, value_states] if use_cache else None
         seq_length = query_states.shape[1]
-        attn_output, attn_weights = self.attn_func(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            attn_mask_start_row_indices,
-            seq_length,
-        )
 
-        return attn_output, attn_weights, past_key_value
+        q = query_states.transpose(1, 2)
+        k = key_states.transpose(1, 2)
+        v = value_states.transpose(1, 2)
+
+        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
+            out = F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=None,
+                dropout_p=self.config.attention_probs_dropout_prob,
+                is_causal=q.shape[-2] == k.shape[-2],
+                scale=1
+                / (getattr(self.config, "scale_qk_coeff", 1.0) * self.head_dim**0.5),
+                enable_gqa=self.is_gqa,
+            )
+        out = out.transpose(1, 2)
+        out = out.contiguous().view(out.size(0), out.size(1), -1)
+
+        return out, None, past_key_value
 
 
 # Copy LlamaRMSNorm
