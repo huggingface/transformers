@@ -385,7 +385,7 @@ def _replace_with_mxfp4_linear(
             continue
         # if isinstance(module, nn.Linear):
         #     raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
-        if module.__class__.__name__ == "OpenAIMoeExperts":
+        if module.__class__.__name__ == "OpenAIMoeExperts" and not quantization_config.dequantize:
             with init_empty_weights():
                 # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                 _forward_pre_hooks = module._forward_pre_hooks

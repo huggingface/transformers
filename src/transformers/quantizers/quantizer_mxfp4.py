@@ -290,6 +290,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
         
         return model
 
+
+    def update_expected_keys(self, model: "PreTrainedModel", expected_keys: List[str]):
+        from ..integrations import Mxfp4OpenAIMoeExperts
+        for name, module in model.named_modules():
+            if isinstance(module, Mxfp4OpenAIMoeExperts):
+                expected_keys.append(name)
+        return expected_keys
+
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
