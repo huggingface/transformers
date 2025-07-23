@@ -31,7 +31,6 @@ from typing import Generator, Iterable, Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
-from openai.types.chat import ChatCompletionMessageParam
 from PIL import Image
 
 import transformers
@@ -82,6 +81,7 @@ if serve_dependencies_available:
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
+    from openai.types.chat import ChatCompletionMessageParam
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         Choice,
