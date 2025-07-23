@@ -16,7 +16,7 @@
 
 r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
-python src/transformers/models/gemma3/convert_gemma3_weights_orbax_to_hf.py \
+python src/transformers/models/gemma3/convert_gemma3_weights.py \
     --variant='gemma3_4b' \
     --tokenizer_path="$HOME/gemma3/tokenizer/gemma3_cleaned_262144_v2.spiece.model" \
     --checkpoint_path="$HOME/gemma3/gemma3_4b_pt_orbax/" \
