@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="KWwzcmG98Ds"/>
 
-Clasificación de audio - al igual que con texto — asigna una etiqueta de clase como salida desde las entradas de datos. La diferencia única es en vez de entrada de texto, tiene formas de onda de audio. Algunas aplicaciones prácticas de clasificación incluye identificar intención del hablante, identificación del idioma, y la clasificación de animales por sus sonidos.
+Clasificación de audio - al igual que con texto — asigna una etiqueta de clase como salida desde las entradas de datos. La diferencia única es en vez de entrada de texto, tiene formas de onda de audio. Algunas aplicaciones prácticas de clasificación incluye identificar la intención del hablante, identificación del idioma, y la clasificación de animales por sus sonidos.
 
 En esta guía te mostraremos como: 
 
@@ -40,7 +40,7 @@ Antes de comenzar, asegúrate de haber instalado todas las librerías necesarias
 pip install transformers datasets evaluate
 ```
 
-Te aconsejamos iniciar sesión con tu cuenta de Hugging Face para que puedes subir tu modelo y compartir tu modelo con la comunidad. Cuando se te solicite, ingresa tu token para iniciar sesión:
+Te aconsejamos iniciar sesión con tu cuenta de Hugging Face para que puedas subir tu modelo y compartirlo con la comunidad. Cuando se te solicite, ingresa tu token para iniciar sesión:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -58,7 +58,7 @@ Comencemos cargando el dataset MInDS-14 con la biblioteca de 🤗 Datasets:
 >>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Divide el conjunto de `train` (entrenamiento) en un conjunto de entrenamiento y prueba mas pequeño con el método [`~datasets.Dataset.train_test_split`]. De esta forma, tendrás la oportunidad para experimentar y asegúrate de que todo función antes de invertir más tiempo entrenando con el dataset entero.
+Divide el conjunto de `train` (entrenamiento) en un conjunto de entrenamiento y prueba mas pequeño con el método [`~datasets.Dataset.train_test_split`]. De esta forma, tendrás la oportunidad para experimentar y asegúrate de que todo funcióne antes de invertir más tiempo entrenando con el dataset entero.
 
 ```py
 >>> minds = minds.train_test_split(test_size=0.2)
@@ -80,7 +80,7 @@ DatasetDict({
 })
 ```
 
-Aunque el dataset contiene mucha información útil, como los campos `land_id` (identificador del lenguaje) y `english_transcription` (transcripción al inglés), en esta guía nosfocaremos en los campos `audio` y `intent_class` (clase de intención). Puedes quitar las otras columnas con cel método [`~datasets.Dataset.remove_columns`]:
+Aunque el dataset contiene mucha información útil, como los campos `land_id` (identificador del lenguaje) y `english_transcription` (transcripción al inglés), en esta guía nos enfocaremos en los campos `audio` y `intent_class` (clase de intención). Puedes quitar las otras columnas con cel método [`~datasets.Dataset.remove_columns`]:
 
 ```py
 >>> minds = minds.remove_columns(["path", "transcription", "english_transcription", "lang_id"])
@@ -99,10 +99,10 @@ Aquí está un ejemplo:
 
 Hay dos campos:
 
-- `audio`: un `array` (arreglo) unidimensional de la señal de habla que debe ser invocado para cargar y re-muestrear el archivo de audio.
+- `audio`: un `array` (arreglo) unidimensional de la señal de voz que se obtiene al cargar y volver a muestrear el archivo de audio.
 - `intent_class`: representa el identificador de la clase de la intención del hablante.
 
-Crea un diccionario que asigne el nombre de etiqueta a un número entero y viceversa para facilitar la obtención del nombre de la etiqueta a partir de su identificador.
+Crea un diccionario que asigne el nombre de la etiqueta a un número entero y viceversa para facilitar la obtención del nombre de la etiqueta a partir de su identificador.
 
 ```py
 >>> labels = minds["train"].features["intent_class"].names
@@ -112,7 +112,7 @@ Crea un diccionario que asigne el nombre de etiqueta a un número entero y vicev
 ...     id2label[str(i)] = label
 ```
 
-Ahora puedes convertir el identificador de etiqueta a un nombre de etiqueta:
+Ahora puedes convertir el identificador de la etiqueta a un nombre de etiqueta:
 
 ```py
 >>> id2label[str(2)]
@@ -121,7 +121,7 @@ Ahora puedes convertir el identificador de etiqueta a un nombre de etiqueta:
 
 ## Preprocesamiento
 
-Seguidamente carga el feature extractor (función de extracción de características) de Wav2Vec para procesar el señal de audio:
+Seguidamente carga el feature extractor (función de extracción de características) de Wav2Vec para procesar la señal de audio:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -129,7 +129,7 @@ Seguidamente carga el feature extractor (función de extracción de característ
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-El dataset MInDS-14 tiene una tasa de muestreo de 8_000 kHz (puedes encontrar esta información en su [tarjeta de dataset](https://huggingface.co/datasets/PolyAI/minds14)), lo que significa que tendrás re-muestrear el dataset a 16_000 kHZ para poder usar el modelo Wav2Vec2 pre-entranado:
+El dataset MInDS-14 tiene una tasa de muestreo de 8kHz (puedes encontrar esta información en su [tarjeta de dataset](https://huggingface.co/datasets/PolyAI/minds14)), lo que significa que tendrás que volver a muestrear el dataset a 16kHZ para poder usar el modelo Wav2Vec2 preentranado:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -141,11 +141,11 @@ El dataset MInDS-14 tiene una tasa de muestreo de 8_000 kHz (puedes encontrar es
  'intent_class': 2}
 ```
 
-Ahora vamos a crear un función de preprocesamiento:
+Ahora vamos a crear una función de preprocesamiento:
 
-1. Invoque la columna `audio` para cargar, y si es necesario, re-muestrear al archivo de audio.
-2. Comprueba si la tasa de muestreo del archivo de datos es la misma tasa de muestreo del archivo de datos que el modelo fue entrenado. Puedes encontrar esta información en la [tarjeta de modelo](https://huggingface.co/facebook/wav2vec2-base) de Wav2Vec2.
-3. Establece una longitud máxima de entrada para *batch* (agrupar en lotes varias) entradas largas sin truncarlas.
+1. Invoque la columna `audio` para cargar, y si es necesario, volver a muestrear al archivo de audio.
+2. Comprueba si la frecuencia de muestreo del archivo de audio coincide con la frecuencia de muestreo de los datos de audio con los que se entrenó previamente el modelo. Puedes encontrar esta información en la [tarjeta de modelo](https://huggingface.co/facebook/wav2vec2-base) de Wav2Vec2.
+3. Establece una longitud de entrada máxima para agrupar entradas más largas sin truncarlas.
 
 ```py
 >>> def preprocess_function(examples):
@@ -209,7 +209,7 @@ Ahora tu función `compute_metrics` (computar métricas) está lista y podrás u
 Al llegar a este punto, solo quedan tres pasos:
 
 1. Define tus hiperparámetros de entrenamiento en [`TrainingArguments`]. El único parámetro obligatorio es `output_dir` (carpeta de salida), el cual especifica dónde guardar tu modelo. Puedes subir este modelo al Hub haciendo `push_to_hub=True` (debes haber iniciado sesión en Hugging Face para subir tu modelo). Al final de cada época, el [`Trainer`] evaluará la exactitud y guardará el punto de control del entrenamiento.
-2. Pásale los argumentos del entrenamiento al [`Trainer`] junto con el modelo, el dataset, el tokenizer, el collator de datos y la función `compute_metrics`.
+2. Pásale los argumentos del entrenamiento al [`Trainer`] junto con el modelo, el dataset, el tokenizer, el data collator y la función `compute_metrics`.
 3. Llama el método [`~Trainer.train`] para hacerle fine-tuning a tu modelo.
 
 ```py
@@ -259,7 +259,7 @@ Para ver un ejemplo más detallado de comó hacerle fine-tuning a un modelo para
 
 ¡Genial, ahora que le has hecho *fine-tuned* a un modelo, puedes usarlo para hacer inferencia!
 
-Carga el archivo de audio para hacer inferencia. Recuerda re-muestrear la tasa de muestreo del archivo de audio para que sea la misma del modelo si es necesario.
+Carga el archivo de audio para hacer inferencia. Recuerda volver a muestrear la tasa de muestreo del archivo de audio para que sea la misma del modelo si es necesario.
 
 ```py
 >>> from datasets import load_dataset, Audio
