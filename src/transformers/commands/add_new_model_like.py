@@ -27,8 +27,12 @@ from typing import Any, Callable, Optional, Union
 
 import yaml
 
-from ..models import auto as auto_module
-from ..models.auto.configuration_auto import model_type_to_module_name
+from ..models.auto import modeling_auto
+from ..models.auto.configuration_auto import model_type_to_module_name, CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
 
@@ -37,73 +41,73 @@ CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
+COPYRIGHT = f"""
+# coding=utf-8
+# Copyright {CURRENT_YEAR} the HuggingFace team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""".strip()
 
-@dataclass
-class ModelPatterns:
+
+def get_cased_name(lowercase_name: str) -> str:
+    """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
+    alt_lowercase_name = lowercase_name.replace("_", "-")
+    if lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
+    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
+    else:
+        return "".join(x.title() for x in lowercase_name.split("_"))
+
+
+class ModelInfos(object):
     """
-    Holds the basic information about a new model for the add-new-model-like command.
-
-    Args:
-        model_name (`str`): The model name.
-        checkpoint (`str`): The checkpoint to use for doc examples.
-        model_type (`str`, *optional*):
-            The model type, the identifier used internally in the library like `bert` or `xlm-roberta`. Will default to
-            `model_name` lowercased with spaces replaced with minuses (-).
-        model_lower_cased (`str`, *optional*):
-            The lowercased version of the model name, to use for the module name or function names. Will default to
-            `model_name` lowercased with spaces and minuses replaced with underscores.
-        model_camel_cased (`str`, *optional*):
-            The camel-cased version of the model name, to use for the class names. Will default to `model_name`
-            camel-cased (with spaces and minuses both considered as word separators.
-        model_upper_cased (`str`, *optional*):
-            The uppercased version of the model name, to use for the constant names. Will default to `model_name`
-            uppercased with spaces and minuses replaced with underscores.
-        config_class (`str`, *optional*):
-            The tokenizer class associated with this model. Will default to `"{model_camel_cased}Config"`.
-        tokenizer_class (`str`, *optional*):
-            The tokenizer class associated with this model (leave to `None` for models that don't use a tokenizer).
-        image_processor_class (`str`, *optional*):
-            The image processor class associated with this model (leave to `None` for models that don't use an image
-            processor).
-        image_processor_fast_class (`str`, *optional*):
-            The fast image processor class associated with this model (leave to `None` for models that don't use a fast
-            image processor).
-        feature_extractor_class (`str`, *optional*):
-            The feature extractor class associated with this model (leave to `None` for models that don't use a feature
-            extractor).
-        processor_class (`str`, *optional*):
-            The processor class associated with this model (leave to `None` for models that don't use a processor).
+    Retrieve the basic informations about an existing model classes.
     """
 
-    model_name: str
-    checkpoint: str
-    model_type: Optional[str] = None
-    model_lower_cased: Optional[str] = None
-    model_camel_cased: Optional[str] = None
-    model_upper_cased: Optional[str] = None
-    config_class: Optional[str] = None
-    tokenizer_class: Optional[str] = None
-    image_processor_class: Optional[str] = None
-    image_processor_fast_class: Optional[str] = None
-    feature_extractor_class: Optional[str] = None
-    processor_class: Optional[str] = None
+    def __init__(self, lowercase_name: str):
+        # Just to make sure it's indeed lowercase
+        self.lowercase_name = lowercase_name.lower().replace(" ", "_").replace("-", "_")
+        if self.lowercase_name not in CONFIG_MAPPING_NAMES:
+            self.lowercase_name.replace("_", "-")
+        if self.lowercase_name not in CONFIG_MAPPING_NAMES:
+            raise ValueError(f"{lowercase_name} is not a valid model name")
 
-    def __post_init__(self):
-        if self.model_type is None:
-            self.model_type = self.model_name.lower().replace(" ", "-")
-        if self.model_lower_cased is None:
-            self.model_lower_cased = self.model_name.lower().replace(" ", "_").replace("-", "_")
-        if self.model_camel_cased is None:
-            # Split the model name on - and space
-            words = self.model_name.split(" ")
-            words = list(chain(*[w.split("-") for w in words]))
-            # Make sure each word is capitalized
-            words = [w[0].upper() + w[1:] for w in words]
-            self.model_camel_cased = "".join(words)
-        if self.model_upper_cased is None:
-            self.model_upper_cased = self.model_name.upper().replace(" ", "_").replace("-", "_")
-        if self.config_class is None:
-            self.config_class = f"{self.model_camel_cased}Config"
+        self.paper_name = MODEL_NAMES_MAPPING[self.lowercase_name]
+        self.config_class = CONFIG_MAPPING_NAMES[self.lowercase_name]
+        self.camelcase_name = self.config_class.replace("Config", "")
+
+        # Get tokenizer class
+        if self.lowercase_name in TOKENIZER_MAPPING_NAMES:
+            self.tokenizer_class, self.fast_tokenizer_class = TOKENIZER_MAPPING_NAMES[model_type]
+            self.fast_tokenizer_class = None if self.fast_tokenizer_class == "PreTrainedTokenizerFast" else self.fast_tokenizer_class
+        else:
+            self.tokenizer_class, self.fast_tokenizer_class = None, None
+
+        # Get image processor classes
+        image_processor_classes = IMAGE_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
+        if isinstance(image_processor_classes, tuple):
+            if len(image_processor_classes) == 1:
+                self.image_processor_class, self.fast_image_processor_class = image_processor_classes[0], None
+            else:
+                self.image_processor_class, self.fast_image_processor_class = image_processor_classes
+        else:
+            self.image_processor_class, self.fast_image_processor_class = image_processor_classes, None
+        
+        # Feature extractor and processor
+        self.feature_extractor_class = FEATURE_EXTRACTOR_MAPPING_NAMES.get(self.lowercase_name, None)
+        self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
+
 
 
 ATTRIBUTE_TO_PLACEHOLDER = {
@@ -554,19 +558,6 @@ def duplicate_module(
         f.write(content)
 
 
-def filter_pytorch_files(files: list[Union[str, os.PathLike]]) -> list[Union[str, os.PathLike]]:
-    """
-    Filter a list of files to only keep the ones corresponding to pytorch.
-
-    Args:
-        files (`list[Union[str, os.PathLike]]`): The list of files to filter.
-
-    Returns:
-        `list[Union[str, os.PathLike]]`: The list of filtered files.
-    """
-    return [f for f in files if not re.search(r"_(?:tf|flax)", Path(f).stem)]
-
-
 def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
     """
     Retrieves all the files associated to a model.
@@ -584,7 +575,7 @@ def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
 
     model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
-    model_files = filter_pytorch_files(model_files)
+    model_files = [f for f in model_files if not re.search(r"_(?:tf|flax)", Path(f).stem)]
 
     doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.md"
 
@@ -596,7 +587,6 @@ def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
         f"test_feature_extraction_{module_name}.py",
         f"test_processor_{module_name}.py",
     ]
-    test_files = filter_pytorch_files(test_files)
     # Add the test directory
     test_files = [REPO_PATH / "tests" / "models" / module_name / f for f in test_files]
     # Filter by existing files
@@ -656,12 +646,10 @@ def retrieve_model_classes(model_type: str) -> list[str]:
     Returns:
         `list[str]`: A list of model classes associated to the model.
     """
-    module = auto_module.modeling_auto
-
     new_model_classes = []
-    model_mappings = [attr for attr in dir(module) if _re_model_mapping.search(attr) is not None]
+    model_mappings = [attr for attr in dir(modeling_auto) if _re_model_mapping.search(attr) is not None]
     for model_mapping_name in model_mappings:
-        model_mapping = getattr(module, model_mapping_name)
+        model_mapping = getattr(modeling_auto, model_mapping_name)
         if model_type in model_mapping:
             new_model_classes.append(model_mapping[model_type])
 
@@ -671,65 +659,6 @@ def retrieve_model_classes(model_type: str) -> list[str]:
 
     return model_classes
 
-
-def retrieve_info_for_model(model_type):
-    """
-    Retrieves all the information from a given model_type.
-
-    Args:
-        model_type (`str`): A valid model type (like "bert" or "gpt2")
-
-    Returns:
-        `Dict`: A dictionary with the following keys:
-        - **model_classes** (`list[str]`): The model classes implemented for that model type.
-        - **model_files** (`dict[str, Union[Path, list[Path]]]`): The files associated with that model type.
-        - **model_patterns** (`ModelPatterns`): The various patterns for the model.
-    """
-    if model_type not in auto_module.MODEL_NAMES_MAPPING:
-        raise ValueError(f"{model_type} is not a valid model type.")
-
-    model_name = auto_module.MODEL_NAMES_MAPPING[model_type]
-    config_class = auto_module.configuration_auto.CONFIG_MAPPING_NAMES[model_type]
-    if model_type in auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES:
-        tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
-        tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
-    else:
-        tokenizer_class = None
-    image_processor_classes = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
-    if isinstance(image_processor_classes, tuple):
-        image_processor_class, image_processor_fast_class = image_processor_classes
-    else:
-        image_processor_class = image_processor_classes
-        image_processor_fast_class = None
-    feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
-    processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
-
-    model_files = get_model_files(model_type)
-    model_camel_cased = config_class.replace("Config", "")
-
-    model_classes = retrieve_model_classes(model_type)
-
-    model_upper_cased = model_camel_cased.upper()
-    model_patterns = ModelPatterns(
-        model_name,
-        checkpoint=find_base_model_checkpoint(model_type, model_files=model_files),
-        model_type=model_type,
-        model_camel_cased=model_camel_cased,
-        model_lower_cased=model_files["module_name"],
-        model_upper_cased=model_upper_cased,
-        config_class=config_class,
-        tokenizer_class=tokenizer_class,
-        image_processor_class=image_processor_class,
-        image_processor_fast_class=image_processor_fast_class,
-        feature_extractor_class=feature_extractor_class,
-        processor_class=processor_class,
-    )
-
-    return {
-        "model_classes": model_classes,
-        "model_files": model_files,
-        "model_patterns": model_patterns,
-    }
 
 
 def clean_init(init_file: Union[str, os.PathLike], keep_processing: bool = True):
@@ -797,68 +726,6 @@ def clean_init(init_file: Union[str, os.PathLike], keep_processing: bool = True)
     with open(init_file, "w", encoding="utf-8") as f:
         f.write("\n".join(new_lines))
 
-
-def add_model_to_main_init(
-    old_model_patterns: ModelPatterns,
-    new_model_patterns: ModelPatterns,
-    with_processing: bool = True,
-):
-    """
-    Add a model to the main init of Transformers.
-
-    Args:
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        with_processing (`bool`, *optional*, defaults to `True`):
-            Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
-    """
-    with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
-        content = f.read()
-
-    lines = content.split("\n")
-    idx = 0
-    new_lines = []
-    while idx < len(lines):
-        if re.search(rf'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
-            block = [lines[idx]]
-            indent = find_indent(lines[idx])
-            idx += 1
-            while find_indent(lines[idx]) > indent:
-                block.append(lines[idx])
-                idx += 1
-            if lines[idx].strip() in [")", "]", "],"]:
-                block.append(lines[idx])
-                idx += 1
-            block = "\n".join(block)
-            new_lines.append(block)
-
-            add_block = True
-            if not with_processing:
-                processing_classes = [
-                    old_model_patterns.tokenizer_class,
-                    old_model_patterns.image_processor_class,
-                    old_model_patterns.image_processor_fast_class,
-                    old_model_patterns.feature_extractor_class,
-                    old_model_patterns.processor_class,
-                ]
-                # Only keep the ones that are not None
-                processing_classes = [c for c in processing_classes if c is not None]
-                for processing_class in processing_classes:
-                    block = block.replace(f' "{processing_class}",', "")
-                    block = block.replace(f', "{processing_class}"', "")
-                    block = block.replace(f" {processing_class},", "")
-                    block = block.replace(f", {processing_class}", "")
-
-                    if processing_class in block:
-                        add_block = False
-            if add_block:
-                new_lines.append(replace_model_patterns(block, old_model_patterns, new_model_patterns)[0])
-        else:
-            new_lines.append(lines[idx])
-            idx += 1
-
-    with open(TRANSFORMERS_PATH / "__init__.py", "w", encoding="utf-8") as f:
-        f.write("\n".join(new_lines))
 
 
 def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns):
@@ -1153,56 +1020,44 @@ def insert_model_in_doc_toc(old_model_patterns, new_model_patterns):
         f.write(yaml.dump(content, allow_unicode=True))
 
 
+def create_modular_file(
+    old_model_infos: ModelInfos,
+    new_model_lowercase: str,
+    add_tokenizer: bool,
+    add_fast_tokenizer: bool,
+    add_image_processor: bool,
+    add_fast_image_processor: bool,
+    add_feature_extractor: bool,
+    add_processor: bool,
+) -> str:
+    old_model_files = get_model_files(old_model_infos.lowercase_name)
+    old_model_classes = retrieve_model_classes(old_model_infos.lowercase_name)
+
+
 def create_new_model_like(
-    model_type: str,
-    new_model_patterns: ModelPatterns,
-    add_copied_from: bool = True,
-    old_checkpoint: Optional[str] = None,
-    create_fast_image_processor: bool = False,
+    old_model_infos: ModelInfos,
+    new_model_lowercase: str,
+    new_model_paper_name: str,
+    add_tokenizer: bool,
+    add_fast_tokenizer: bool,
+    add_image_processor: bool,
+    add_fast_image_processor: bool,
+    add_feature_extractor: bool,
+    add_processor: bool,
+    create_fast_image_processor: bool,
 ):
     """
     Creates a new model module like a given model of the Transformers library.
 
     Args:
-        model_type (`str`): The model type to duplicate (like "bert" or "gpt2")
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        add_copied_from (`bool`, *optional*, defaults to `True`):
-            Whether or not to add "Copied from" statements to all classes in the new model modeling files.
-        old_checkpoint (`str`, *optional*):
-            The name of the base checkpoint for the old model. Should be passed along when it can't be automatically
-            recovered from the `model_type`.
-        create_fast_image_processor (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a fast image processor to the new model, if the old model had only a slow one.
+        FILL
     """
-    # Retrieve all the old model info.
-    model_info = retrieve_info_for_model(model_type)
-    model_files = model_info["model_files"]
-    old_model_patterns = model_info["model_patterns"]
-    if old_checkpoint is not None:
-        old_model_patterns.checkpoint = old_checkpoint
-    if len(old_model_patterns.checkpoint) == 0:
-        raise ValueError(
-            "The old model checkpoint could not be recovered from the model type. Please pass it to the "
-            "`old_checkpoint` argument."
-        )
+    old_model_files = get_model_files(old_model_infos.lowercase_name)
+    old_model_classes = retrieve_model_classes(old_model_infos.lowercase_name)
 
-    keep_old_processing = True
-    for processing_attr in [
-        "image_processor_class",
-        "image_processor_fast_class",
-        "feature_extractor_class",
-        "processor_class",
-        "tokenizer_class",
-    ]:
-        if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
-            keep_old_processing = False
-
-    model_classes = model_info["model_classes"]
-
-    # 1. We create the module for our new model.
-    old_module_name = model_files["module_name"]
-    module_folder = TRANSFORMERS_PATH / "models" / new_model_patterns.model_lower_cased
-    os.makedirs(module_folder, exist_ok=True)
+    # 1. We create the module for our new model
+    new_module_folder = TRANSFORMERS_PATH / "models" / new_model_lowercase
+    os.makedirs(new_module_folder, exist_ok=True)
 
     files_to_adapt = model_files["model_files"]
     if keep_old_processing:
@@ -1226,7 +1081,6 @@ def create_new_model_like(
             old_model_patterns,
             new_model_patterns,
             dest_file=dest_file,
-            add_copied_from=add_copied_from and "modeling" in new_module_name,
         )
 
     clean_init(module_folder / "__init__.py", keep_processing=not keep_old_processing)
@@ -1238,7 +1092,6 @@ def create_new_model_like(
         add_after=f"    {old_module_name},",
         exact_match=True,
     )
-    add_model_to_main_init(old_model_patterns, new_model_patterns, with_processing=not keep_old_processing)
 
     # 3. Add test files
     files_to_adapt = model_files["test_files"]
@@ -1251,16 +1104,6 @@ def create_new_model_like(
             and "feature_extraction" not in str(f)
             and "image_processing" not in str(f)
         ]
-
-    def disable_fx_test(filename: Path) -> bool:
-        with open(filename) as fp:
-            content = fp.read()
-        new_content = re.sub(r"fx_compatible\s*=\s*True", "fx_compatible = False", content)
-        with open(filename, "w") as fp:
-            fp.write(new_content)
-        return content != new_content
-
-    disabled_fx_test = False
 
     tests_folder = REPO_PATH / "tests" / "models" / new_model_patterns.model_lower_cased
     os.makedirs(tests_folder, exist_ok=True)
@@ -1277,15 +1120,7 @@ def create_new_model_like(
             old_model_patterns,
             new_model_patterns,
             dest_file=dest_file,
-            add_copied_from=False,
             attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
-        )
-        disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
-
-    if disabled_fx_test:
-        print(
-            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works"
-            " for your new model."
         )
 
     # 4. Add model to auto classes
@@ -1345,27 +1180,21 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         add_new_model_like_parser = parser.add_parser("add-new-model-like")
         add_new_model_like_parser.add_argument(
-            "--config_file", type=str, help="A file with all the information for this model creation."
-        )
-        add_new_model_like_parser.add_argument(
             "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
         )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
     def __init__(self, config_file=None, path_to_repo=None, *args):
-        if config_file is not None:
-            with open(config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            self.old_model_type = config["old_model_type"]
-            self.model_patterns = ModelPatterns(**config["new_model_patterns"])
-            self.add_copied_from = config.get("add_copied_from", True)
-            self.old_checkpoint = config.get("old_checkpoint", None)
-        else:
             (
-                self.old_model_type,
-                self.model_patterns,
-                self.add_copied_from,
-                self.old_checkpoint,
+                self.old_model_infos,
+                self.new_model_lowercase,
+                self.new_model_paper_name,
+                self.add_tokenizer,
+                self.add_fast_tokenizer,
+                self.add_image_processor,
+                self.add_fast_image_processor,
+                self.add_feature_extractor,
+                self.add_processor,
                 self.create_fast_image_processor,
             ) = get_user_input()
 
@@ -1381,10 +1210,15 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
 
         create_new_model_like(
-            model_type=self.old_model_type,
-            new_model_patterns=self.model_patterns,
-            add_copied_from=self.add_copied_from,
-            old_checkpoint=self.old_checkpoint,
+            old_model_info=self.old_model_infos,
+            new_model_lowercase=self.new_model_lowercase,
+            new_model_paper_name=self.new_model_paper_name,
+            add_tokenizer=self.add_tokenizer,
+            add_fast_tokenizer=self.add_fast_tokenizer,
+            add_image_processor=self.add_image_processor,
+            add_fast_image_processor=self.add_fast_image_processor,
+            add_feature_extractor=self.add_feature_extractor,
+            add_processor=self.add_processor,
             create_fast_image_processor=self.create_fast_image_processor,
         )
 
@@ -1456,13 +1290,13 @@ def get_user_input():
     """
     Ask the user for the necessary inputs to add the new model.
     """
-    model_types = list(auto_module.configuration_auto.MODEL_NAMES_MAPPING.keys())
+    model_types = list(MODEL_NAMES_MAPPING.keys())
 
     # Get old model type
     valid_model_type = False
     while not valid_model_type:
         old_model_type = input(
-            "What is the model you would like to duplicate? Please provide the lowercase `model_type` (e.g. roberta): "
+            "What is the model you would like to duplicate? Please provide the lowercase `model_name` (e.g. llama): "
         )
         if old_model_type in model_types:
             valid_model_type = True
@@ -1474,138 +1308,79 @@ def get_user_input():
                     near_choices = " or ".join(near_choices)
                 print(f"Did you mean {near_choices}?")
 
-    old_model_info = retrieve_info_for_model(old_model_type)
-    old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
-    old_image_processor_class = old_model_info["model_patterns"].image_processor_class
-    old_image_processor_fast_class = old_model_info["model_patterns"].image_processor_fast_class
-    old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
-    old_processor_class = old_model_info["model_patterns"].processor_class
+    old_model_info = ModelInfos(old_model_type)
 
-    old_checkpoint = None
-    if len(old_model_info["model_patterns"].checkpoint) == 0:
-        old_checkpoint = get_user_field(
-            "We couldn't find the name of the base checkpoint for that model, please enter it here."
-        )
-
-    model_name = get_user_field(
-        "What is the name (with no special casing) for your new model in the paper (e.g. RoBERTa)? "
-    )
-    default_patterns = ModelPatterns(model_name, model_name)
-
-    model_type = get_user_field(
-        "What identifier would you like to use for the `model_type` of this model? ",
-        default_value=default_patterns.model_type,
-    )
-    model_lower_cased = get_user_field(
-        "What lowercase name would you like to use for the module (folder) of this model? ",
-        default_value=default_patterns.model_lower_cased,
-    )
-    model_camel_cased = get_user_field(
-        "What prefix (camel-cased) would you like to use for the model classes of this model (e.g. Roberta)? ",
-        default_value=default_patterns.model_camel_cased,
-    )
-    model_upper_cased = get_user_field(
-        "What prefix (upper-cased) would you like to use for the constants relative to this model? ",
-        default_value=default_patterns.model_upper_cased,
-    )
-    config_class = get_user_field(
-        "What will be the name of the config class for this model? ", default_value=f"{model_camel_cased}Config"
-    )
-    checkpoint = get_user_field(
-        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/FacebookAI/roberta-base): "
+    # Ask for the new model name
+    new_model_lowercase = get_user_field("What is the snake case name of the new model (e.g. `new_model`)? ")
+    new_model_paper_name = get_user_field(
+        "What is the full name (with no special casing) for your new model in the paper (e.g. `LlaMa`)? ",
+        default_value="".join(x.title() for x in new_model_paper_name.split("_")
     )
 
-    old_processing_classes = [
-        c if not isinstance(c, tuple) else c[0]
-        for c in [
-            old_image_processor_class,
-            old_image_processor_fast_class,
-            old_feature_extractor_class,
-            old_tokenizer_class,
-            old_processor_class,
-        ]
-        if c is not None
-    ]
-    old_processing_classes = ", ".join(old_processing_classes)
-    keep_processing = get_user_field(
-        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes}) (yes/no)? ",
+    # Ask if we want to add individual processor classes as well
+    add_tokenizer = False
+    add_fast_tokenizer = False
+    add_image_processor = False
+    add_fast_image_processor = False
+    add_feature_extractor = False
+    add_processor = False
+    if old_model_info.tokenizer_class is not None:
+        add_tokenizer = not get_user_field(
+        f"Will your new model use the same tokenizer class as {old_model_type} (yes/no)? ",
         convert_to=convert_to_bool,
         fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
     )
-    if keep_processing:
-        image_processor_class = old_image_processor_class
-        image_processor_fast_class = old_image_processor_fast_class
-        feature_extractor_class = old_feature_extractor_class
-        processor_class = old_processor_class
-        tokenizer_class = old_tokenizer_class
-        create_fast_image_processor = False
-    else:
-        if old_tokenizer_class is not None:
-            tokenizer_class = get_user_field(
-                "What will be the name of the tokenizer class for this model? ",
-                default_value=f"{model_camel_cased}Tokenizer",
-            )
-        else:
-            tokenizer_class = None
-        if old_image_processor_class is not None:
-            image_processor_class = get_user_field(
-                "What will be the name of the image processor class for this model? ",
-                default_value=f"{model_camel_cased}ImageProcessor",
-            )
-        else:
-            image_processor_class = None
-        if old_image_processor_fast_class is not None:
-            image_processor_fast_class = get_user_field(
-                "What will be the name of the fast image processor class for this model? ",
-                default_value=f"{model_camel_cased}ImageProcessorFast",
-            )
-        else:
-            image_processor_fast_class = None
-        if old_feature_extractor_class is not None:
-            feature_extractor_class = get_user_field(
-                "What will be the name of the feature extractor class for this model? ",
-                default_value=f"{model_camel_cased}FeatureExtractor",
-            )
-        else:
-            feature_extractor_class = None
-        if old_processor_class is not None:
-            processor_class = get_user_field(
-                "What will be the name of the processor class for this model? ",
-                default_value=f"{model_camel_cased}Processor",
-            )
-        else:
-            processor_class = None
-        if old_image_processor_class is not None and old_image_processor_fast_class is None:
-            create_fast_image_processor = get_user_field(
+    if old_model_info.fast_tokenizer_class is not None:
+        add_fast_tokenizer = not get_user_field(
+        f"Will your new model use the same fast tokenizer class as {old_model_type} (yes/no)? ",
+        convert_to=convert_to_bool,
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+    )
+    if old_model_info.image_processor_class is not None:
+        add_image_processor = not get_user_field(
+        f"Will your new model use the same image processor class as {old_model_type} (yes/no)? ",
+        convert_to=convert_to_bool,
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+    )
+    if old_model_info.fast_image_processor_class is not None:
+        add_fast_image_processor = not get_user_field(
+        f"Will your new model use the same fast image processor class as {old_model_type} (yes/no)? ",
+        convert_to=convert_to_bool,
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+    )
+    if old_model_info.feature_extractor_class is not None:
+        add_feature_extractor = not get_user_field(
+        f"Will your new model use the same feature extractor class as {old_model_type} (yes/no)? ",
+        convert_to=convert_to_bool,
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+    )
+    if old_model_info.processor_class is not None:
+        add_processor = not get_user_field(
+        f"Will your new model use the same processor class as {old_model_type} (yes/no)? ",
+        convert_to=convert_to_bool,
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+    )
+
+    create_fast_image_processor = False
+    if add_image_processor and not add_fast_image_processor:
+        create_fast_image_processor = get_user_field(
                 "A fast image processor can be created from the slow one, but modifications might be needed. "
-                "Should we add a fast image processor class for this model (recommended, yes/no)? ",
+                "Should we add a fast image processor class for this model (recommended) (yes/no)? ",
                 convert_to=convert_to_bool,
                 default_value="yes",
                 fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
             )
-        else:
-            create_fast_image_processor = False
 
-    model_patterns = ModelPatterns(
-        model_name,
-        checkpoint,
-        model_type=model_type,
-        model_lower_cased=model_lower_cased,
-        model_camel_cased=model_camel_cased,
-        model_upper_cased=model_upper_cased,
-        config_class=config_class,
-        tokenizer_class=tokenizer_class,
-        image_processor_class=image_processor_class,
-        image_processor_fast_class=image_processor_fast_class,
-        feature_extractor_class=feature_extractor_class,
-        processor_class=processor_class,
+
+    return (
+        old_model_info,
+        new_model_lowercase,
+        new_model_paper_name,
+        add_tokenizer,
+        add_fast_tokenizer,
+        add_image_processor,
+        add_fast_image_processor,
+        add_feature_extractor,
+        add_processor,
+        create_fast_image_processor,
     )
-
-    add_copied_from = get_user_field(
-        "Should we add # Copied from statements when creating the new modeling file (yes/no)? ",
-        convert_to=convert_to_bool,
-        default_value="yes",
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
-    )
-
-    return (old_model_type, model_patterns, add_copied_from, old_checkpoint, create_fast_image_processor)
