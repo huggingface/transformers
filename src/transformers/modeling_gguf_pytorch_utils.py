@@ -428,8 +428,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         if isinstance(value, str) and architecture in value:
             value = value.replace(architecture, updated_architecture)
 
-        for parameter in GGUF_TO_TRANSFORMERS_MAPPING:
-            parameter_renames = GGUF_TO_TRANSFORMERS_MAPPING[parameter]
+        for parameter, parameter_renames in GGUF_TO_TRANSFORMERS_MAPPING.items():
             if prefix in parameter_renames and config_key in parameter_renames[prefix]:
                 renamed_config_key = parameter_renames[prefix][config_key]
                 if renamed_config_key == -1:
