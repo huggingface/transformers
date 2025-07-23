@@ -4115,17 +4115,15 @@ class Trainer:
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 
-        # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
-        # we don't do to allow resuming.
         save_total_limit = self.args.save_total_limit
         best_model_checkpoint = self.state.best_model_checkpoint
-
         preserve_best = getattr(self.args, "preserve_best_model", True)
-        if preserve_best and best_model_checkpoint is not None:
-            checkpoints_sorted = [ckpt for ckpt in checkpoints_sorted if ckpt != best_model_checkpoint]
 
         number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
+        if preserve_best and best_model_checkpoint is not None:
+            checkpoints_to_be_deleted = [ckpt for ckpt in checkpoints_to_be_deleted if ckpt != best_model_checkpoint]
+
         for checkpoint in checkpoints_to_be_deleted:
             logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
             shutil.rmtree(checkpoint, ignore_errors=True)
