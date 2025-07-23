@@ -14,6 +14,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`HunYuanDenseV1Config`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the HunYuan-7B.
+    Hunyuan-7B-Instruct-0124 [tencent/Hunyuan-7B-Instruct-0124](https://huggingface.co/tencent/Hunyuan-7B-Instruct-0124).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -23,8 +24,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 290943):
             Vocabulary size of the HunYuan model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`HunYuanDenseV1Config`]
-        org_vocab_size (`int`, *optional*, defaults to 290943):
-            Original vocabulary size of the pre-trained model before any modification.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -63,24 +62,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         eod_token_id (int, *optional*, defaults to 3):
             Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
             Example: In multi-document processing, this token helps the model distinguish between separate documents.
-        im_start_id (int, *optional*, defaults to 4):
-            Token ID marking the start of an "instruction message" (e.g., system prompt or command input).
-            Typically used in conversational models to delineate meta-instructions from user/content text.
-        im_end_id (int, *optional*, defaults to 5):
-            Token ID marking the end of an instruction message. Paired with `im_start_id` to encapsulate
-            non-content segments like system directives or role definitions (e.g., "assistant:").
-        text_start_id (int, *optional*, defaults to 6):
-            Token ID indicating the beginning of actual content text. Helps the model separate metadata
-            (like instructions) from the primary textual content to be processed or generated.
-        text_end_id (int, *optional*, defaults to 7):
-            Token ID signaling the end of content text. Often used with `text_start_id` to define clear
-            boundaries for the model's text processing scope.
-        im_newline_id (int, *optional*, defaults to 11):
-            Special token ID for newline characters within instruction blocks. Differentiates from regular
-            newlines to handle formatting in structured prompts (e.g., bullet points in system messages).
-        mask_init_id (int, *optional*, defaults to 12):
-            Initial token ID for masking operations. Used in tasks like masked language modeling (MLM)
-            or sequence masking, where this value may serve as a base offset for dynamic mask generation.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -100,8 +81,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj and down_proj layers in the MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
@@ -138,7 +117,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
     def __init__(
         self,
         vocab_size=290943,
-        org_vocab_size=290943,
         hidden_size=4096,
         intermediate_size: int = 11008,
         num_hidden_layers=32,
@@ -154,18 +132,11 @@ class HunYuanDenseV1Config(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         eod_token_id=3,
-        im_start_id=4,
-        im_end_id=5,
-        text_start_id=6,
-        text_end_id=7,
-        im_newline_id=11,
-        mask_init_id=12,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
-        mlp_bias=False,
         attention_dropout=0.0,
         use_qk_norm=False,
         use_rotary_pos_emb=True,
@@ -180,7 +151,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.org_vocab_size = org_vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -206,7 +176,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.rope_scaling = rope_scaling
         # self._rope_scaling_validation()   # TODO: Need validation?
         self.attention_bias = attention_bias
-        self.mlp_bias = mlp_bias
         self.attention_dropout = attention_dropout
         self.use_qk_norm = use_qk_norm
         self.use_rotary_pos_emb = use_rotary_pos_emb
@@ -221,15 +190,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
 
         if self.class_num is not None:
             self.dense_list = [self.hidden_size, self.class_num]
-
-        # token id
-        self.eod_token_id = eod_token_id
-        self.im_start_id = im_start_id
-        self.im_end_id = im_end_id
-        self.text_start_id = text_start_id
-        self.text_end_id = text_end_id
-        self.im_newline_id = im_newline_id
-        self.mask_init_id = mask_init_id
 
         super().__init__(
             pad_token_id=pad_token_id,

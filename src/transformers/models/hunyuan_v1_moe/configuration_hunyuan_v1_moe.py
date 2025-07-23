@@ -2,7 +2,7 @@
 # Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
 """HunYuan model configuration"""
 
-from typing import Optional, Union
+from typing import Union
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -16,6 +16,7 @@ class HunYuanMoeV1Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`HunYuanModel`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the HunYuan-7B.
+    Hunyuan-A13B-Instruct [tencent/Hunyuan-A13B-Instruct](https://huggingface.co/tencent/Hunyuan-A13B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -25,14 +26,10 @@ class HunYuanMoeV1Config(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 290943):
             Vocabulary size of the HunYuan model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`HunYuanModel`]
-        org_vocab_size (`int`, *optional*, defaults to 290943):
-            Original vocabulary size of the pre-trained model before any modification.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations or shared MLP representations.
-        moe_intermediate_size (`int` or `List`, *optional*, defaults to 11008):
-            Dimension of the MLP representations in MoE. Use a list if you want a different size per layer.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -69,30 +66,6 @@ class HunYuanMoeV1Config(PretrainedConfig):
             Example: In multi-document processing, this token helps the model distinguish between separate documents.
         sep_token_id (`int`, *optional*, defaults to 4):
             Token ID representing the separator token (`[SEP]`), used to demarcate boundaries between different text segments.
-        im_start_id (int, *optional*, defaults to 5):
-            Token ID marking the start of an "instruction message" (e.g., system prompt or command input).
-            Typically used in conversational models to delineate meta-instructions from user/content text.
-        im_end_id (int, *optional*, defaults to 6):
-            Token ID marking the end of an instruction message. Paired with `im_start_id` to encapsulate
-            non-content segments like system directives or role definitions (e.g., "assistant:").
-        text_start_id (int, *optional*, defaults to 7):
-            Token ID indicating the beginning of actual content text. Helps the model separate metadata
-            (like instructions) from the primary textual content to be processed or generated.
-        text_end_id (int, *optional*, defaults to 8):
-            Token ID signaling the end of content text. Often used with `text_start_id` to define clear
-            boundaries for the model's text processing scope.
-        image_token_id (`int`, *optional*, defaults to 9):
-            Token ID for image embeddings in multimodal models. Marks the start of visual feature inputs (e.g., CLIP embeddings or ViT patch tokens).
-        video_start_id (`int`, *optional*, defaults to 10):
-            Token ID indicating the beginning of video sequence inputs. Used to encapsulate frame-level features or temporal embeddings in video-language tasks.
-        video_end_id (`int`, *optional*, defaults to 11):
-            Token ID signaling the end of video sequences. Paired with `video_start_id` to delineate temporal boundaries in video processing pipelines.
-        im_newline_id (int, *optional*, defaults to 12):
-            Special token ID for newline characters within instruction blocks. Differentiates from regular
-            newlines to handle formatting in structured prompts (e.g., bullet points in system messages).
-        mask_init_id (int, *optional*, defaults to 13):
-            Initial token ID for masking operations. Used in tasks like masked language modeling (MLM)
-            or sequence masking, where this value may serve as a base offset for dynamic mask generation.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
@@ -112,8 +85,6 @@ class HunYuanMoeV1Config(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj and down_proj layers in the MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
@@ -131,72 +102,12 @@ class HunYuanMoeV1Config(PretrainedConfig):
             The number of experts for moe. If it is a list, it will be used as the number of experts for each layer.
         use_mixed_mlp_moe (bool, *optional*, defaults to `False`):
             Whether to mix MLP and MoE layers. If True, alternates between dense MLP and sparse MoE layers.
-        num_shared_expert (int or List, *optional*, defaults to 1):
-            Number of shared experts that process all tokens regardless of routing. List form allows per-layer configuration.
         moe_topk (int or List, *optional*, defaults to 1):
             Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
         moe_drop_tokens (bool, *optional*, defaults to `False`):
             Whether to drop tokens exceeding expert capacity instead of padding.
         moe_random_routing_dropped_token (bool, *optional*, defaults to `False`):
             If True, randomly routes dropped tokens to available experts.
-        use_mla (bool, *optional*, defaults to `False`):
-            Enables Multi-Level Attention mechanism for hierarchical routing.
-        kv_lora_rank (int, *optional*, defaults to 512):
-            LoRA rank for key/value projections in attention.
-        q_lora_rank (int, *optional*, defaults to 1536):
-            LoRA rank for query projections.
-        qk_rope_head_dim (int, *optional*, defaults to 64):
-            Head dimension for rotary position embeddings in Q/K.
-        v_head_dim (int, *optional*, defaults to 128):
-            Head dimension for value projections.
-        qk_nope_head_dim (int, *optional*, defaults to 128):
-            Head dimension for Q/K without positional encoding.
-        moe_layer_num_skipped (int, *optional*, defaults to 0):
-            Number of initial layers using standard FFN instead of MoE.
-        norm_topk_prob (bool, *optional*, defaults to `True`):
-            Whether to normalize Top-K expert probabilities.
-        routed_scaling_factor (float, *optional*, defaults to 1.0):
-            Scaling factor for routed expert outputs.
-        group_limited_greedy (bool, *optional*, defaults to `False`):
-            Limits expert selection within predefined groups.
-        n_group (int, *optional*):
-            Number of expert groups for constrained routing.
-        topk_group (int, *optional*):
-            Number of groups to select per token.
-        vit_path (str, *optional*):
-            Path to pretrained ViT weights for multimodal tasks.
-        num_media_embeds (int, *optional*, defaults to 257):
-            Maximum media embeddings for multimodal inputs.
-        vit_type (str, *optional*, defaults to `"AnyResVit"`):
-            ViT architecture variant.
-        vit_input_resolution (int, *optional*, defaults to 224):
-            Input image resolution for ViT.
-        vit_token (int, *optional*, defaults to 64):
-            Number of visual tokens per image.
-        vit_patch (int, *optional*, defaults to 1):
-            Patch size for ViT embedding.
-        vit_mapping_type (str, *optional*, defaults to `"simple_conv_mlp"`):
-            Visual feature mapping method.
-        vit_norm_type (str, *optional*, defaults to `"fused"`):
-            Normalization type in ViT.
-        vit_used_rms_norm (bool, *optional*, defaults to `True`):
-            Whether ViT uses RMSNorm.
-        vit_remove_prenorm (bool, *optional*, defaults to `True`):
-            Removes pre-normalization in ViT blocks.
-        vit_add_patchemb_bias (bool, *optional*, defaults to `True`):
-            Adds bias to patch embeddings.
-        anyres_vit_max_image_size (int, *optional*, defaults to 2048):
-            Maximum resolution for AnyResViT.
-        anyres_pooling_size (int, *optional*, defaults to 2):
-            Pooling size for adaptive resolution.
-        anyres_vit_two_views (bool, *optional*, defaults to `False`):
-            Processes both original and downsampled views.
-        skip_cls_token (bool, *optional*, defaults to `False`):
-            Omits [CLS] token in ViT outputs.
-        position_embedding_xdrope (bool, *optional*, defaults to `False`):
-            Enables cross-dimensional RoPE.
-        xdrope_section (int, *optional*):
-            Section size for cross-dimensional RoPE.
         add_classification_head (bool, *optional*, defaults to `False`):
             Whether to add a task-specific classification head on top of the model.
             If True, requires `class_num` to be set to a positive value.
@@ -220,10 +131,8 @@ class HunYuanMoeV1Config(PretrainedConfig):
     def __init__(
         self,
         vocab_size=290943,
-        org_vocab_size=290943,
         hidden_size=4096,
         intermediate_size: int = 11008,
-        moe_intermediate_size: Optional[Union[int, list]] = None,
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
@@ -238,21 +147,11 @@ class HunYuanMoeV1Config(PretrainedConfig):
         eos_token_id=2,
         eod_token_id=3,
         sep_token_id=4,
-        im_start_id=5,
-        im_end_id=6,
-        text_start_id=7,
-        text_end_id=8,
-        image_token_id=9,
-        video_start_id=10,
-        video_end_id=11,
-        im_newline_id=12,
-        mask_init_id=13,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
-        mlp_bias=False,
         attention_dropout=0.0,
         use_qk_norm=False,
         use_rotary_pos_emb=True,
@@ -261,40 +160,10 @@ class HunYuanMoeV1Config(PretrainedConfig):
         norm_type="hf_rms",
         num_experts: Union[int, list] = 1,
         use_mixed_mlp_moe=False,
-        num_shared_expert: Union[int, list] = 1,
         moe_topk: Union[int, list] = 1,
         # capacity_factor: Union[int, List]=1.0,
         moe_drop_tokens=False,
         moe_random_routing_dropped_token=False,
-        use_mla=False,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        moe_layer_num_skipped=0,
-        norm_topk_prob=True,
-        routed_scaling_factor=1.0,
-        group_limited_greedy=False,
-        n_group=None,
-        topk_group=None,
-        vit_path=None,
-        num_media_embeds=257,
-        vit_type="AnyResVit",
-        vit_input_resolution=224,
-        vit_token=64,
-        vit_patch=1,
-        vit_mapping_type="simple_conv_mlp",
-        vit_norm_type="fused",
-        vit_used_rms_norm=True,
-        vit_remove_prenorm=True,
-        vit_add_patchemb_bias=True,
-        anyres_vit_max_image_size=2048,
-        anyres_pooling_size=2,
-        anyres_vit_two_views=False,
-        skip_cls_token=False,
-        position_embedding_xdrope=False,
-        xdrope_section=None,
         add_classification_head=False,
         class_num=0,
         pool_type="last",
@@ -303,16 +172,13 @@ class HunYuanMoeV1Config(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.org_vocab_size = org_vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.moe_intermediate_size = moe_intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_experts = num_experts
         self.use_mixed_mlp_moe = use_mixed_mlp_moe
-        self.num_shared_expert = num_shared_expert
         self.moe_topk = moe_topk
         # self.capacity_factor = capacity_factor
         self.moe_drop_tokens = moe_drop_tokens
@@ -337,28 +203,14 @@ class HunYuanMoeV1Config(PretrainedConfig):
         self.rope_scaling = rope_scaling
         # self._rope_scaling_validation()   # TODO: Need validation?
         self.attention_bias = attention_bias
-        self.mlp_bias = mlp_bias
         self.attention_dropout = attention_dropout
         self.use_qk_norm = use_qk_norm
         self.use_rotary_pos_emb = use_rotary_pos_emb
         self.use_cla = use_cla
         self.cla_share_factor = cla_share_factor
         self.norm_type = norm_type
-        # MLA args
-        self.use_mla = use_mla
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.v_head_dim = v_head_dim
 
         # DeepSeek related args
-        self.moe_layer_num_skipped = moe_layer_num_skipped
-        self.norm_topk_prob = norm_topk_prob
-        self.routed_scaling_factor = routed_scaling_factor
-        self.group_limited_greedy = group_limited_greedy
-        self.n_group = n_group
-        self.topk_group = topk_group
         self.add_classification_head = add_classification_head
         self.class_num = class_num
         self.pool_type = pool_type
@@ -366,37 +218,6 @@ class HunYuanMoeV1Config(PretrainedConfig):
 
         if self.class_num is not None:
             self.dense_list = [self.hidden_size, self.class_num]
-
-        # Vit args
-        self.vit_path = vit_path
-        self.num_media_embeds = num_media_embeds
-        self.vit_type = vit_type
-        self.vit_input_resolution = vit_input_resolution
-        self.vit_token = vit_token
-        self.vit_patch = vit_patch
-        self.vit_mapping_type = vit_mapping_type
-        self.vit_norm_type = vit_norm_type
-        self.vit_used_rms_norm = vit_used_rms_norm
-        self.vit_remove_prenorm = vit_remove_prenorm
-        self.vit_add_patchemb_bias = vit_add_patchemb_bias
-        self.anyres_vit_max_image_size = anyres_vit_max_image_size
-        self.anyres_pooling_size = anyres_pooling_size
-        self.anyres_vit_two_views = anyres_vit_two_views
-        self.skip_cls_token = skip_cls_token
-        self.position_embedding_xdrope = position_embedding_xdrope
-        self.xdrope_section = xdrope_section
-
-        # token id
-        self.eod_token_id = eod_token_id
-        self.im_start_id = im_start_id
-        self.im_end_id = im_end_id
-        self.text_start_id = text_start_id
-        self.text_end_id = text_end_id
-        self.image_token_id = image_token_id
-        self.video_start_id = video_start_id
-        self.video_end_id = video_end_id
-        self.im_newline_id = im_newline_id
-        self.mask_init_id = mask_init_id
 
         super().__init__(
             pad_token_id=pad_token_id,

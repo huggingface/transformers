@@ -50,7 +50,6 @@ def _load_tiktoken_bpe(tiktoken_bpe_file: str) -> dict[bytes, int]:
 
 
 # NOTE: Please use the code line to check `SPECIAL_START_ID` right, this will affect the SPECIAL_START_ID
-# _load_tiktoken_bpe('/apdcephfs/share_1502809/shaneshu/tokenizer_exp/other_tokenizer_vocab/hy/' + VOCAB_FILES_NAMES['vocab_file'])
 # print(SPECIAL_START_ID)
 
 SPECIAL_TOKENS = tuple(
@@ -282,15 +281,4 @@ class HYTokenizer(PreTrainedTokenizer):
         return self.tokenizer.decode(token_ids, errors=errors or self.errors)
 
 
-# tests
-if __name__ == "__main__":
-    tokenizer = HYTokenizer.from_pretrained("/apdcephfs/share_1502809/shaneshu/tokenizer_exp/other_tokenizer_vocab/hy")
-    text = "你好，世界"
-    tokens = tokenizer.tokenize(text)
-    print(tokens)
-    ids = tokenizer.convert_tokens_to_ids(tokens)
-    print(ids)
-    text2 = tokenizer.convert_tokens_to_string(tokens)
-    print(text2)
-    ids2 = tokenizer.convert_tokens_to_ids(tokens)
 __all__ = ["HYTokenizer"]
