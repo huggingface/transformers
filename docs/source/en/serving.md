@@ -45,7 +45,14 @@ The simplest way to interact with the server is through our `transformers chat` 
 transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B
 ```
 
-or by sending an HTTP request with `cURL`, e.g.
+or by sending an HTTP request, like we'll see below.
+
+## Chat Completions - text-based
+
+See below for examples for text-based requests. Both LLMs and VLMs should handle 
+
+<hfoptions id="chat-completion-http">
+<hfoption id="curl">
 
 ```shell
 curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
@@ -60,6 +67,148 @@ data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, 
 
 (...)
 ```
+
+</hfoption>
+<hfoption id="python - huggingface_hub">
+
+```python
+import asyncio
+from huggingface_hub import AsyncInferenceClient
+
+messages = [{"role": "user", "content": "What is the Transformers library known for?"}]
+client = AsyncInferenceClient("http://localhost:8000")
+
+async def responses_api_test_async():
+    async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256, stream=True)):
+        token = chunk.choices[0].delta.content
+        if token:
+            print(token, end='')
+
+asyncio.run(responses_api_test_async())
+asyncio.run(client.close())
+```
+
+From which you should get an iterative string printed:
+
+```shell
+The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+```
+
+</hfoption>
+<hfoption id="python - openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {
+            "role": "user",
+            "content": "What is the Transformers library known for?"
+        }
+    ],
+    stream=True
+)
+
+for chunk in completion:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end='')
+```
+
+From which you should get an iterative string printed:
+
+```shell
+The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+```
+
+</hfoption>
+</hfoptions>
+
+## Chat Completions - VLMs
+
+The Chat Completion API also supports images; see below for examples for text-and-image-based requests.
+
+<hfoptions id="chat-completion-http-images">
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
+```
+
+from which you'll receive multiple chunks in the Completions API format
+
+```shell
+data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
+
+data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
+
+(...)
+```
+
+</hfoption>
+<hfoption id="python - huggingface_hub">
+
+```python
+import asyncio
+from huggingface_hub import AsyncInferenceClient
+
+messages = [{"role": "user", "content": "What is the Transformers library known for?"}]
+client = AsyncInferenceClient("http://localhost:8000")
+
+async def responses_api_test_async():
+    async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256, stream=True)):
+        token = chunk.choices[0].delta.content
+        if token:
+            print(token, end='')
+
+asyncio.run(responses_api_test_async())
+asyncio.run(client.close())
+```
+
+From which you should get an iterative string printed:
+
+```shell
+The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+```
+
+</hfoption>
+<hfoption id="python - openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {
+            "role": "user",
+            "content": "What is the Transformers library known for?"
+        }
+    ],
+    stream=True
+)
+
+for chunk in completion:
+    token = chunk.choices[0].delta.content
+    if token:
+        print(token, end='')
+```
+
+From which you should get an iterative string printed:
+
+```shell
+The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+```
+
+</hfoption>
+</hfoptions>
+
 
 The server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
 
