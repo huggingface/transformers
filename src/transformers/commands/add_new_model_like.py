@@ -1064,7 +1064,8 @@ def duplicate_doc_file(
             blocks.append("\n".join(current_block))
             current_block = [line]
         else:
-            current_block.append(line)
+            if not re.search(r"</*(?:pt|tf|jax)>", line):
+                current_block.append(line)
     blocks.append("\n".join(current_block))
 
     new_blocks = []
@@ -1084,7 +1085,6 @@ def duplicate_doc_file(
             new_blocks.append(new_block)
         # In classes
         elif in_classes:
-            in_classes = True
             block_title = block.split("\n")[0]
             block_class = re.search(r"^#+\s+(\S.*)$", block_title).groups()[0]
             new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
@@ -1110,7 +1110,8 @@ def duplicate_doc_file(
                 if old_model_patterns.processor_class != new_model_patterns.processor_class:
                     new_blocks.append(new_block)
             elif len(block_class.split(" ")) == 1:
-                new_blocks.append(new_block)
+                if not block_class.startswith("TF") and not block_class.startswith("Flax"):
+                    new_blocks.append(new_block)
             else:
                 new_blocks.append(new_block)
 
