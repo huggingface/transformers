@@ -212,6 +212,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
         ("emu3", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("ernie4_5", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        ("ernie4_5_moe", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
         ("esm", ("EsmTokenizer", None)),
         ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
@@ -269,6 +271,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("glm4_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4v", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
         ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -656,6 +659,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("vits", ("VitsTokenizer", None)),
+        (
+            "voxtral",
+            (
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            ),
+        ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-bert", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),

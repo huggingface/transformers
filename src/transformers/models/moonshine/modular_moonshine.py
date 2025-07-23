@@ -333,8 +333,8 @@ class MoonshineAttention(GlmAttention):
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = past_key_value.layers[self.layer_idx].keys
+            value_states = past_key_value.layers[self.layer_idx].values
         else:
             key_states = (
                 self.k_proj(current_states)
@@ -497,23 +497,8 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     # TODO arthur, how do we separate when it cross / self coming from different layer?
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.GroupNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """

@@ -434,7 +434,7 @@ class BloomPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BloomBlock"]
     _skip_keys_device_placement = "past_key_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -758,9 +758,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
