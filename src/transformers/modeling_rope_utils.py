@@ -27,6 +27,19 @@ if is_torch_available():
     import torch
 
 
+def extract_rope_type_from_config(config, is_global: Optional[bool] = True):
+    "Helper to extract the rope type from config, while handling BC and local/global keys"
+    # BC: "rope_type" was originally "type"
+    rope_scaling_dict = (
+        getattr(config, "rope_scaling", None) if is_global else getattr(config, "local_rope_scaling", None)
+    )
+    if rope_scaling_dict is not None and isinstance(config.rope_scaling, dict):
+        rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type"))
+    else:
+        rope_type = "default"
+    return rope_type
+
+
 def dynamic_rope_update(rope_forward):
     """
     Decorator function to update the RoPE parameters in the forward pass, if the model is using a dynamic RoPE

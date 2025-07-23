@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_type_from_config
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
@@ -167,14 +167,7 @@ class Qwen2MoeRMSNorm(nn.Module):
 class Qwen2MoeRotaryEmbedding(nn.Module):
     def __init__(self, config: Qwen2MoeConfig, device=None, is_global=True):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        rope_scaling_dict = (
-            getattr(config, "rope_scaling", None) if is_global else getattr(config, "local_rope_scaling", None)
-        )
-        if rope_scaling_dict is not None and isinstance(config.rope_scaling, dict):
-            self.rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type"))
-        else:
-            self.rope_type = "default"
+        self.rope_type = extract_rope_type_from_config(config, is_global=is_global)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
