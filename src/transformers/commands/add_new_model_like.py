@@ -460,16 +460,6 @@ def get_module_from_file(module_file: Union[str, os.PathLike]) -> str:
     return ".".join(module_parts[idx:])
 
 
-SPECIAL_PATTERNS = {
-    "_CHECKPOINT_FOR_DOC =": "checkpoint",
-    "_CONFIG_FOR_DOC =": "config_class",
-    "_TOKENIZER_FOR_DOC =": "tokenizer_class",
-    "_IMAGE_PROCESSOR_FOR_DOC =": "image_processor_class",
-    "_FEAT_EXTRACTOR_FOR_DOC =": "feature_extractor_class",
-    "_PROCESSOR_FOR_DOC =": "processor_class",
-}
-
-
 _re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
 
 
@@ -546,17 +536,6 @@ def duplicate_module(
     # Loop and treat all objects
     new_objects = []
     for obj in objects:
-        special_pattern = False
-        for pattern, attr in SPECIAL_PATTERNS.items():
-            if pattern in obj:
-                obj = obj.replace(getattr(old_model_patterns, attr), getattr(new_model_patterns, attr))
-                new_objects.append(obj)
-                special_pattern = True
-                break
-
-        if special_pattern:
-            continue
-
         # Regular classes functions
         old_obj = obj
         obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
@@ -584,47 +563,25 @@ def duplicate_module(
         f.write(content)
 
 
-def filter_framework_files(
-    files: list[Union[str, os.PathLike]], frameworks: Optional[list[str]] = None
-) -> list[Union[str, os.PathLike]]:
+def filter_pytorch_files(files: list[Union[str, os.PathLike]]) -> list[Union[str, os.PathLike]]:
     """
-    Filter a list of files to only keep the ones corresponding to a list of frameworks.
+    Filter a list of files to only keep the ones corresponding to pytorch.
 
     Args:
         files (`list[Union[str, os.PathLike]]`): The list of files to filter.
-        frameworks (`list[str]`, *optional*): The list of allowed frameworks.
 
     Returns:
         `list[Union[str, os.PathLike]]`: The list of filtered files.
     """
-    if frameworks is None:
-        frameworks = get_default_frameworks()
-
-    framework_to_file = {}
-    others = []
-    for f in files:
-        parts = Path(f).name.split("_")
-        if "modeling" not in parts:
-            others.append(f)
-            continue
-        if "tf" in parts:
-            framework_to_file["tf"] = f
-        elif "flax" in parts:
-            framework_to_file["flax"] = f
-        else:
-            framework_to_file["pt"] = f
-
-    return [framework_to_file[f] for f in frameworks if f in framework_to_file] + others
+    return [f for f in files if not re.search(r"_(?:tf|flax)", Path(f).stem)]
 
 
-def get_model_files(model_type: str, frameworks: Optional[list[str]] = None) -> dict[str, Union[Path, list[Path]]]:
+def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
     """
     Retrieves all the files associated to a model.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`list[str]`, *optional*):
-            If passed, will only keep the model files corresponding to the passed frameworks.
 
     Returns:
         `dict[str, Union[Path, list[Path]]]`: A dictionary with the following keys:
@@ -636,21 +593,19 @@ def get_model_files(model_type: str, frameworks: Optional[list[str]] = None) -> 
 
     model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
-    model_files = filter_framework_files(model_files, frameworks=frameworks)
+    model_files = filter_pytorch_files(model_files)
 
     doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.md"
 
     # Basic pattern for test files
     test_files = [
         f"test_modeling_{module_name}.py",
-        f"test_modeling_tf_{module_name}.py",
-        f"test_modeling_flax_{module_name}.py",
         f"test_tokenization_{module_name}.py",
         f"test_image_processing_{module_name}.py",
         f"test_feature_extraction_{module_name}.py",
         f"test_processor_{module_name}.py",
     ]
-    test_files = filter_framework_files(test_files, frameworks=frameworks)
+    test_files = filter_pytorch_files(test_files)
     # Add the test directory
     test_files = [REPO_PATH / "tests" / "models" / module_name / f for f in test_files]
     # Filter by existing files
@@ -697,77 +652,45 @@ def find_base_model_checkpoint(
     return ""
 
 
-def get_default_frameworks():
-    """
-    Returns the list of frameworks (PyTorch, TensorFlow, Flax) that are installed in the environment.
-    """
-    frameworks = []
-    if is_torch_available():
-        frameworks.append("pt")
-    if is_tf_available():
-        frameworks.append("tf")
-    if is_flax_available():
-        frameworks.append("flax")
-    return frameworks
-
-
 _re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
 
 
-def retrieve_model_classes(model_type: str, frameworks: Optional[list[str]] = None) -> dict[str, list[str]]:
+def retrieve_model_classes(model_type: str) -> list[str]:
     """
     Retrieve the model classes associated to a given model.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`list[str]`, *optional*):
-            The frameworks to look for. Will default to `["pt", "tf", "flax"]`, passing a smaller list will restrict
-            the classes returned.
 
     Returns:
-        `dict[str, list[str]]`: A dictionary with one key per framework and the list of model classes associated to
-        that framework as values.
+        `list[str]`: A list of model classes associated to the model.
     """
-    if frameworks is None:
-        frameworks = get_default_frameworks()
+    module = auto_module.modeling_auto
 
-    modules = {
-        "pt": auto_module.modeling_auto if is_torch_available() else None,
-        "tf": auto_module.modeling_tf_auto if is_tf_available() else None,
-        "flax": auto_module.modeling_flax_auto if is_flax_available() else None,
-    }
+    new_model_classes = []
+    model_mappings = [attr for attr in dir(module) if _re_model_mapping.search(attr) is not None]
+    for model_mapping_name in model_mappings:
+        model_mapping = getattr(module, model_mapping_name)
+        if model_type in model_mapping:
+            new_model_classes.append(model_mapping[model_type])
 
-    model_classes = {}
-    for framework in frameworks:
-        new_model_classes = []
-        if modules[framework] is None:
-            raise ValueError(f"You selected {framework} in the frameworks, but it is not installed.")
-        model_mappings = [attr for attr in dir(modules[framework]) if _re_model_mapping.search(attr) is not None]
-        for model_mapping_name in model_mappings:
-            model_mapping = getattr(modules[framework], model_mapping_name)
-            if model_type in model_mapping:
-                new_model_classes.append(model_mapping[model_type])
-
-        if len(new_model_classes) > 0:
-            # Remove duplicates
-            model_classes[framework] = list(set(new_model_classes))
+    if len(new_model_classes) > 0:
+        # Remove duplicates
+        model_classes = list(set(new_model_classes))
 
     return model_classes
 
 
-def retrieve_info_for_model(model_type, frameworks: Optional[list[str]] = None):
+def retrieve_info_for_model(model_type):
     """
     Retrieves all the information from a given model_type.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`list[str]`, *optional*):
-            If passed, will only keep the info corresponding to the passed frameworks.
 
     Returns:
         `Dict`: A dictionary with the following keys:
-        - **frameworks** (`list[str]`): The list of frameworks that back this model type.
-        - **model_classes** (`dict[str, list[str]]`): The model classes implemented for that model type.
+        - **model_classes** (`list[str]`): The model classes implemented for that model type.
         - **model_files** (`dict[str, Union[Path, list[Path]]]`): The files associated with that model type.
         - **model_patterns** (`ModelPatterns`): The various patterns for the model.
     """
@@ -790,24 +713,10 @@ def retrieve_info_for_model(model_type, frameworks: Optional[list[str]] = None):
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
-    model_files = get_model_files(model_type, frameworks=frameworks)
+    model_files = get_model_files(model_type)
     model_camel_cased = config_class.replace("Config", "")
 
-    available_frameworks = []
-    for fname in model_files["model_files"]:
-        if "modeling_tf" in str(fname):
-            available_frameworks.append("tf")
-        elif "modeling_flax" in str(fname):
-            available_frameworks.append("flax")
-        elif "modeling" in str(fname):
-            available_frameworks.append("pt")
-
-    if frameworks is None:
-        frameworks = get_default_frameworks()
-
-    frameworks = [f for f in frameworks if f in available_frameworks]
-
-    model_classes = retrieve_model_classes(model_type, frameworks=frameworks)
+    model_classes = retrieve_model_classes(model_type)
 
     model_upper_cased = model_camel_cased.upper()
     model_patterns = ModelPatterns(
@@ -826,39 +735,25 @@ def retrieve_info_for_model(model_type, frameworks: Optional[list[str]] = None):
     )
 
     return {
-        "frameworks": frameworks,
         "model_classes": model_classes,
         "model_files": model_files,
         "model_patterns": model_patterns,
     }
 
 
-def clean_frameworks_in_init(
-    init_file: Union[str, os.PathLike], frameworks: Optional[list[str]] = None, keep_processing: bool = True
-):
+def clean_init(init_file: Union[str, os.PathLike], keep_processing: bool = True):
     """
-    Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers/feature
-    extractors/image processors/processors in an init.
+    Removes all the import lines that don't concern tokenizers/feature extractors/image processors/processors in an init.
 
     Args:
         init_file (`str` or `os.PathLike`): The path to the init to treat.
-        frameworks (`list[str]`, *optional*):
-           If passed, this will remove all imports that are subject to a framework not in frameworks
         keep_processing (`bool`, *optional*, defaults to `True`):
             Whether or not to keep the preprocessing (tokenizer, feature extractor, image processor, processor) imports
             in the init.
     """
-    if frameworks is None:
-        frameworks = get_default_frameworks()
-
-    names = {"pt": "torch"}
-    to_remove = [names.get(f, f) for f in ["pt", "tf", "flax"] if f not in frameworks]
+    to_remove = ["tf", "flax"]
     if not keep_processing:
         to_remove.extend(["sentencepiece", "tokenizers", "vision"])
-
-    if len(to_remove) == 0:
-        # Nothing to do
-        return
 
     remove_pattern = "|".join(to_remove)
     re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
@@ -915,7 +810,6 @@ def clean_frameworks_in_init(
 def add_model_to_main_init(
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
-    frameworks: Optional[list[str]] = None,
     with_processing: bool = True,
 ):
     """
@@ -924,8 +818,6 @@ def add_model_to_main_init(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        frameworks (`list[str]`, *optional*):
-            If specified, only the models implemented in those frameworks will be added.
         with_processing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
@@ -935,32 +827,8 @@ def add_model_to_main_init(
     lines = content.split("\n")
     idx = 0
     new_lines = []
-    framework = None
     while idx < len(lines):
-        new_framework = False
-        if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
-            framework = None
-        elif lines[idx].lstrip().startswith("if not is_torch_available"):
-            framework = "pt"
-            new_framework = True
-        elif lines[idx].lstrip().startswith("if not is_tf_available"):
-            framework = "tf"
-            new_framework = True
-        elif lines[idx].lstrip().startswith("if not is_flax_available"):
-            framework = "flax"
-            new_framework = True
-
-        if new_framework:
-            # For a new framework, we need to skip until the else: block to get where the imports are.
-            while lines[idx].strip() != "else:":
-                new_lines.append(lines[idx])
-                idx += 1
-
-        # Skip if we are in a framework not wanted.
-        if framework is not None and frameworks is not None and framework not in frameworks:
-            new_lines.append(lines[idx])
-            idx += 1
-        elif re.search(rf'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
+        if re.search(rf'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
             block = [lines[idx]]
             indent = find_indent(lines[idx])
             idx += 1
@@ -1069,7 +937,7 @@ AUTO_CLASSES_PATTERNS = {
 
 
 def add_model_to_auto_classes(
-    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: dict[str, list[str]]
+    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: list[str]
 ):
     """
     Add a model to the relevant mappings in the auto module.
@@ -1077,21 +945,19 @@ def add_model_to_auto_classes(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        model_classes (`dict[str, list[str]]`): A dictionary framework to list of model classes implemented.
+        model_classes (`list[str]`): A list of model classes implemented.
     """
     for filename, patterns in AUTO_CLASSES_PATTERNS.items():
         # Extend patterns with all model classes if necessary
         new_patterns = []
         for pattern in patterns:
             if re.search("any_([a-z]*)_class", pattern) is not None:
-                framework = re.search("any_([a-z]*)_class", pattern).groups()[0]
-                if framework in model_classes:
-                    new_patterns.extend(
-                        [
-                            pattern.replace("{" + f"any_{framework}_class" + "}", cls)
-                            for cls in model_classes[framework]
-                        ]
-                    )
+                new_patterns.extend(
+                    [
+                        pattern.replace("{" + f"any_pt_class" + "}", cls)
+                        for cls in model_classes
+                    ]
+                )
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
             elif "{image_processor_classes}" in pattern:
@@ -1170,7 +1036,6 @@ def duplicate_doc_file(
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     dest_file: Optional[Union[str, os.PathLike]] = None,
-    frameworks: Optional[list[str]] = None,
 ):
     """
     Duplicate a documentation file and adapts it for a new model.
@@ -1181,15 +1046,11 @@ def duplicate_doc_file(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
             Will default to the a file named `{new_model_patterns.model_type}.md` in the same folder as `module_file`.
-        frameworks (`list[str]`, *optional*):
-            If passed, will only keep the model classes corresponding to this list of frameworks in the new doc file.
     """
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
     content = re.sub(r"<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
-    if frameworks is None:
-        frameworks = get_default_frameworks()
     if dest_file is None:
         dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.md"
 
@@ -1248,18 +1109,8 @@ def duplicate_doc_file(
                 # We only add the processor if necessary
                 if old_model_patterns.processor_class != new_model_patterns.processor_class:
                     new_blocks.append(new_block)
-            elif block_class.startswith("Flax"):
-                # We only add Flax models if in the selected frameworks
-                if "flax" in frameworks:
-                    new_blocks.append(new_block)
-            elif block_class.startswith("TF"):
-                # We only add TF models if in the selected frameworks
-                if "tf" in frameworks:
-                    new_blocks.append(new_block)
             elif len(block_class.split(" ")) == 1:
-                # We only add PyTorch models if in the selected frameworks
-                if "pt" in frameworks:
-                    new_blocks.append(new_block)
+                new_blocks.append(new_block)
             else:
                 new_blocks.append(new_block)
 
@@ -1321,7 +1172,6 @@ def create_new_model_like(
     model_type: str,
     new_model_patterns: ModelPatterns,
     add_copied_from: bool = True,
-    frameworks: Optional[list[str]] = None,
     old_checkpoint: Optional[str] = None,
     create_fast_image_processor: bool = False,
 ):
@@ -1333,8 +1183,6 @@ def create_new_model_like(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         add_copied_from (`bool`, *optional*, defaults to `True`):
             Whether or not to add "Copied from" statements to all classes in the new model modeling files.
-        frameworks (`list[str]`, *optional*):
-            If passed, will limit the duplicate to the frameworks specified.
         old_checkpoint (`str`, *optional*):
             The name of the base checkpoint for the old model. Should be passed along when it can't be automatically
             recovered from the `model_type`.
@@ -1342,7 +1190,7 @@ def create_new_model_like(
             Whether or not to add a fast image processor to the new model, if the old model had only a slow one.
     """
     # Retrieve all the old model info.
-    model_info = retrieve_info_for_model(model_type, frameworks=frameworks)
+    model_info = retrieve_info_for_model(model_type)
     model_files = model_info["model_files"]
     old_model_patterns = model_info["model_patterns"]
     if old_checkpoint is not None:
@@ -1396,8 +1244,8 @@ def create_new_model_like(
             add_copied_from=add_copied_from and "modeling" in new_module_name,
         )
 
-    clean_frameworks_in_init(
-        module_folder / "__init__.py", frameworks=frameworks, keep_processing=not keep_old_processing
+    clean_init(
+        module_folder / "__init__.py", keep_processing=not keep_old_processing
     )
 
     # 2. We add our new model to the models init and the main init
@@ -1408,7 +1256,7 @@ def create_new_model_like(
         exact_match=True,
     )
     add_model_to_main_init(
-        old_model_patterns, new_model_patterns, frameworks=frameworks, with_processing=not keep_old_processing
+        old_model_patterns, new_model_patterns, with_processing=not keep_old_processing
     )
 
     # 3. Add test files
@@ -1464,7 +1312,7 @@ def create_new_model_like(
 
     # 5. Add doc file
     doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.md"
-    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
+    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns)
     insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
 
     # 6. Add fast image processor if necessary
@@ -1530,14 +1378,12 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.old_model_type = config["old_model_type"]
             self.model_patterns = ModelPatterns(**config["new_model_patterns"])
             self.add_copied_from = config.get("add_copied_from", True)
-            self.frameworks = config.get("frameworks", get_default_frameworks())
             self.old_checkpoint = config.get("old_checkpoint", None)
         else:
             (
                 self.old_model_type,
                 self.model_patterns,
                 self.add_copied_from,
-                self.frameworks,
                 self.old_checkpoint,
                 self.create_fast_image_processor,
             ) = get_user_input()
@@ -1557,7 +1403,6 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             model_type=self.old_model_type,
             new_model_patterns=self.model_patterns,
             add_copied_from=self.add_copied_from,
-            frameworks=self.frameworks,
             old_checkpoint=self.old_checkpoint,
             create_fast_image_processor=self.create_fast_image_processor,
         )
@@ -1654,7 +1499,6 @@ def get_user_input():
     old_image_processor_fast_class = old_model_info["model_patterns"].image_processor_fast_class
     old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
     old_processor_class = old_model_info["model_patterns"].processor_class
-    old_frameworks = old_model_info["frameworks"]
 
     old_checkpoint = None
     if len(old_model_info["model_patterns"].checkpoint) == 0:
@@ -1783,21 +1627,4 @@ def get_user_input():
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
     )
 
-    all_frameworks = get_user_field(
-        "Should we add a version of your new model in all the frameworks implemented by"
-        f" {old_model_type} ({old_frameworks}) (yes/no)? ",
-        convert_to=convert_to_bool,
-        default_value="yes",
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
-    )
-
-    if all_frameworks:
-        frameworks = None
-    else:
-        frameworks = get_user_field(
-            "Please enter the list of frameworks you want (pt, tf, flax) separated by spaces",
-            is_valid_answer=lambda x: all(p in ["pt", "tf", "flax"] for p in x.split(" ")),
-        )
-        frameworks = list(set(frameworks.split(" ")))
-
-    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint, create_fast_image_processor)
+    return (old_model_type, model_patterns, add_copied_from, old_checkpoint, create_fast_image_processor)
