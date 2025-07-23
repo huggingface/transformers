@@ -579,7 +579,7 @@ def read_video_torchcodec(
     )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
-    video = decoder.get_frames_at(indices=indices).data.contiguous()
+    video = decoder.get_frames_at(indices=indices.tolist()).data.contiguous()
     metadata.frames_indices = indices
     return video, metadata
 

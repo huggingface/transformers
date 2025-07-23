@@ -18,7 +18,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, concatenate_list
+from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
@@ -216,6 +216,8 @@ class InternVLProcessor(ProcessorMixin):
         video_patch_indices = np.array([0])
         video_num_patches_indices = np.array([0])
         if images is not None:
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
@@ -242,11 +244,9 @@ class InternVLProcessor(ProcessorMixin):
                 video_num_patches_indices,
                 video_patch_indices,
             )
-            num_images = len(images) if isinstance(images, (list, tuple)) else 1
-            num_videos = len(videos) if isinstance(videos, (list, tuple)) else 1
-            if images is not None and image_index != num_images:
+            if images is not None and image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-            if videos is not None and video_index != num_videos:
+            if videos is not None and video_index != len(num_frames_per_video):
                 raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
 
             # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))

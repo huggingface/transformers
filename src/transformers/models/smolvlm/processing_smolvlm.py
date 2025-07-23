@@ -20,7 +20,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import AllKwargsForChatTemplate, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, is_vision_available, logging
@@ -181,6 +181,8 @@ class SmolVLMProcessor(ProcessorMixin):
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
+        images = self.image_processor.fetch_images(images)
+        images = make_nested_list_of_images(images)
         n_images_in_images = [len(sublist) for sublist in images]
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 

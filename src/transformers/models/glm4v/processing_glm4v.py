@@ -42,8 +42,12 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Glm4vImagesKwargs
     videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
-        "text_kwargs": {"padding": False},
-        "videos_kwargs": {"return_metadata": True},
+        "text_kwargs": {
+            "padding": False,
+        },
+        "videos_kwargs": {
+            "return_metadata": True,
+        },
     }
 
 
@@ -66,7 +70,8 @@ class Glm4vProcessor(ProcessorMixin):
 
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
+
+    tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
@@ -139,10 +144,8 @@ class Glm4vProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_metadata = videos_inputs.pop("video_metadata", [])
-            timestamps = [
-                [int(idx / metadata.fps) for idx in metadata.frames_indices][::2] for metadata in video_metadata
-            ]
+            video_metadata = videos_inputs.pop("video_metadata")
+            timestamps = [metadata.timestamps for metadata in video_metadata]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
