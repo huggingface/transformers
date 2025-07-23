@@ -1,12 +1,7 @@
 import re
 
-# TODO Need to clarify what's getting passed around - is "text" a string or a dict of capture groups?
-#      At the root it's a string, but maybe we can make that a dict with a single entry?
-#      A regex can either have one capture group, multiple numbered groups, or multiple named groups
 # TODO Cases to handle:
 #      1) Model has multiple chat templates
-#      2) Alternate RE flags
-#      3) Supporting possessive operators
 
 def recursive_parse(node_content: str | list | dict, node_schema: dict):
     """
@@ -24,38 +19,55 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
     Returns:
         The parsed data structure for the current node.
     """
-    # First, do some basic validation
-    has_regex = hasattr(node_schema, "x-regex") or hasattr(node_schema, "x-regex-iterator")
-    if has_regex and isinstance(node_content, str):
-        raise TypeError("Schema node got a string input, but has no regex for parsing.")
-    elif not has_regex and not isinstance(node_content, str):
-        raise TypeError("Schema node got a non-string input, but has a regex for parsing.")
-
-    # Next, if we have a regex, apply it to parse node_content
-    if node_regex := getattr(node_schema, "x-regex", None) is not None:
-        node_match = re.search(node_regex, node_content)
-        if not node_match:
-            return None  # TODO Is this correct? Should I raise an error?
+    def _parse_re_match(node_match):
         # If the regex has named groups, return a dict of those groups
         if node_match.groupdict():
-            node_content = node_match.groupdict()
-        # If the regex has numbered groups, return a list of those groups
-        # TODO Is there ambiguity between a string match and a list match with a single element?
-        elif node_match.groups():
-            node_content = list(node_match.groups())
+            return node_match.groupdict()
+        # If the regex has unnamed groups, it MUST only have one, and we return that group
+        elif groups := list(node_match.groups()):
+            if len(groups) > 1:
+                raise ValueError(f"Regex has multiple unnamed groups!\n"
+                                 f"Groups: {groups}\n"
+                                 )
+            return groups[0]
         # If no groups, use the whole match
         else:
-            node_content = node_match.group(0)
+            return node_match.group(0)
+    # First, set some vars and do basic validation
+    node_type = node_schema["type"]
+    has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema
+    if not has_regex and isinstance(node_content, str) and node_type == "array":
+        raise TypeError(f"array node got a string input, but has no regex for parsing.\n"
+                        f"Input: {node_content}")
+    if has_regex and not isinstance(node_content, str):
+        raise TypeError("Schema node got a non-string input, but has a regex for parsing.\n"
+                        f"Input: {node_content}\n"
+                        f"Schema: {node_schema}")
 
-    elif node_regex := getattr(node_schema, "x-regex-iterator", None) is not None:
-        # TODO Parse groups in here too
-        node_content = list(re.finditer(node_regex, node_content))
+
+    if node_schema.get("x-regex", None) is not None:
+        node_regex = node_schema["x-regex"]
+        node_match = re.search(node_regex, node_content, flags=re.DOTALL)
+        if not node_match:
+            return None  # TODO Is this correct? Should I raise an error?
+        node_content = _parse_re_match(node_match)
+    elif node_schema.get("x-regex-iterator", None) is not None:
+        node_regex_iterator = node_schema["x-regex-iterator"]
+        node_content = [_parse_re_match(node_match) for node_match in re.finditer(node_regex_iterator, node_content, flags=re.DOTALL)]
+
+        if not node_content:
+            return None  # TODO Is this correct? Should I raise an error?
 
     # Finally, handle parsed content based on schema type and recurse if required
-    if node_type := node_schema["type"] == "object":
-        if not isinstance(node_content, dict):
-            raise TypeError(f"Expected a dict for schema node {node_schema['title']}, got {type(node_content)}")
+    if node_type == "object":
+        if not isinstance(node_content, (dict, str)):
+            raise TypeError(f"Expected a dict or str for schema node with type object, got {node_content}")
         parsed_schema = {}
+        if isinstance(node_content, str):
+            # This means we don't have a regex at this level, so all of our child nodes need to parse the whole
+            # string themselves to extract their value.
+            for key, child_node in node_schema["properties"].items():
+                parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key])
         for key, child_node in node_schema["properties"].items():
             # TODO Error if required keys are not present
             if key in node_content:
@@ -63,10 +75,12 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
             elif "default" in child_node:
                 # TODO Do I want to allow defaults?
                 parsed_schema[key] = child_node["default"]
+            else:
+                pass  # TODO Add an error for required keys not present
         return parsed_schema
     elif node_type == "array":
         if not isinstance(node_content, list):
-            raise TypeError(f"Expected a list for schema node {node_schema['title']}, got {type(node_content)}")
+            raise TypeError(f"Expected a list or regex for schema node with type array, got {node_content}")
         parsed_schema = []
         # TODO Handle tuples/prefixItems?
         for item in node_content:
@@ -74,7 +88,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
         return parsed_schema
     elif node_type in ("string", "integer", "number", "boolean"):
         if not isinstance(node_content, str):
-            raise TypeError(f"Expected a string for schema node {node_schema['title']}, got {type(node_content)}")
+            raise TypeError(f"Expected a string for schema node with type {node_type}, got {node_content}")
         if node_type == "integer":
             return int(node_content)
         elif node_type == "number":
@@ -89,4 +103,4 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
         return node_content
     else:
         # TODO Should we handle null types?
-        raise TypeError(f"Unsupported schema type {node_type} for node {node_schema['title']}")
+        raise TypeError(f"Unsupported schema type {node_type} for node: {node_type}")
