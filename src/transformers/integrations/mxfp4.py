@@ -164,16 +164,10 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         """
         # type check, uint8 means mxfp4
         #TODO: fp8 x mxfp4 on blackwell
-        # print("routing_data", routing_data)
-        # print("gather_idx", gather_idx)
-        # print("scatter_idx", scatter_idx)
         assert hidden_states.dtype == torch.bfloat16
         assert self.gate_up_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
         assert self.down_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
-        # assert self.gate_up_proj_bias.dtype == torch.float32, "expected float32 for gate_up_proj_bias and got " + str(self.gate_up_proj_bias.dtype)
-        # assert self.down_proj_bias.dtype == torch.float32, "expected float32 for down_proj_bias and got " + str(self.down_proj_bias.dtype)
 
-        # Shape check, only check non-mxfp4
         if self.gate_up_proj_blocks.dtype != torch.uint8:
             assert hidden_states.ndim == 2
             assert hidden_states.shape[-1] == self.gate_up_proj_blocks.shape[-2]
@@ -219,20 +213,6 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
             output_states = intermediate_cache3[..., :self.hidden_size].contiguous()
         torch.cuda.synchronize()
         return output_states
-
-def create_expert_indices_for_rank(router_logits, top_k, ep_rank, ep_size, total_experts):
-    """Create expert indices that only select experts belonging to ep_rank"""
-    num_local_experts = total_experts // ep_size
-    router_top_value, router_indices = torch.topk(router_logits, top_k, dim=-1)  # (seq_len, top_k)
-    router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-    router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-
-    router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
-    router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
-    router_indices = router_indices % num_local_experts
-    # Create indices that only point to local experts
-    return router_indices
-
 
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
@@ -337,13 +317,8 @@ def _replace_with_mxfp4_linear(
         if not should_convert_module(current_key_name, modules_to_not_convert):
             current_key_name.pop(-1)
             continue
-        # if isinstance(module, nn.Linear):
-        #     raise NotImplementedError("Mxfp4 linear layer is not implemented yet")
         if module.__class__.__name__ == "OpenAIMoeExperts" and not quantization_config.dequantize:
             with init_empty_weights():
-                # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
-                _forward_pre_hooks = module._forward_pre_hooks
-                _forward_hooks = module._forward_hooks
                 model._modules[name] = Mxfp4OpenAIMoeExperts(config)
                 has_been_replaced=True
         if module.__class__.__name__ == "OpenAIMoeMLP" and not quantization_config.dequantize:
