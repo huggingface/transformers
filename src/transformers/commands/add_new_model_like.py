@@ -13,31 +13,25 @@
 # limitations under the License.
 # 1. Standard library
 import difflib
-import json
 import os
 import re
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from datetime import date
-from itertools import chain
-from pathlib import Path
-from re import Pattern
-import libcst as cst
 import textwrap
-from libcst import ClassDef, CSTVisitor
-import importlib
+from argparse import ArgumentParser, Namespace
+from datetime import date
+from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
-import yaml
+import libcst as cst
+from libcst import CSTVisitor
+from libcst import matchers as m
 
-from ..models.auto import modeling_auto
-from ..models.auto.configuration_auto import model_type_to_module_name, CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from . import BaseTransformersCLICommand
-from .add_fast_image_processor import add_fast_image_processor
+
 
 CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
@@ -61,7 +55,6 @@ COPYRIGHT = f"""
 """.lstrip()
 
 
-
 class ModelInfos(object):
     """
     Retrieve the basic informations about an existing model classes.
@@ -82,7 +75,9 @@ class ModelInfos(object):
         # Get tokenizer class
         if self.lowercase_name in TOKENIZER_MAPPING_NAMES:
             self.tokenizer_class, self.fast_tokenizer_class = TOKENIZER_MAPPING_NAMES[self.lowercase_name]
-            self.fast_tokenizer_class = None if self.fast_tokenizer_class == "PreTrainedTokenizerFast" else self.fast_tokenizer_class
+            self.fast_tokenizer_class = (
+                None if self.fast_tokenizer_class == "PreTrainedTokenizerFast" else self.fast_tokenizer_class
+            )
         else:
             self.tokenizer_class, self.fast_tokenizer_class = None, None
 
@@ -95,15 +90,10 @@ class ModelInfos(object):
                 self.image_processor_class, self.fast_image_processor_class = image_processor_classes
         else:
             self.image_processor_class, self.fast_image_processor_class = image_processor_classes, None
-        
+
         # Feature extractor and processor
         self.feature_extractor_class = FEATURE_EXTRACTOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
-
-
-
-
-
 
 
 def add_content_to_file(
@@ -130,235 +120,6 @@ def add_content_to_file(
         f.write(new_content)
 
 
-def replace_model_patterns(
-    text: str, old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns
-) -> tuple[str, str]:
-    """
-    Replace all patterns present in a given text.
-
-    Args:
-        text (`str`): The text to treat.
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-
-    Returns:
-        `Tuple(str, str)`: A tuple of with the treated text and the replacement actually done in it.
-    """
-    # The order is crucially important as we will check and replace in that order. For instance the config probably
-    # contains the camel-cased named, but will be treated before.
-    attributes_to_check = ["config_class"]
-    # Add relevant preprocessing classes
-    for attr in [
-        "tokenizer_class",
-        "image_processor_class",
-        "image_processor_fast_class",
-        "feature_extractor_class",
-        "processor_class",
-    ]:
-        if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
-            attributes_to_check.append(attr)
-
-    # Special cases for checkpoint and model_type
-    if old_model_patterns.checkpoint not in [old_model_patterns.model_type, old_model_patterns.model_lower_cased]:
-        attributes_to_check.append("checkpoint")
-    if old_model_patterns.model_type != old_model_patterns.model_lower_cased:
-        attributes_to_check.append("model_type")
-    else:
-        text = re.sub(
-            rf'(\s*)model_type = "{old_model_patterns.model_type}"',
-            r'\1model_type = "[MODEL_TYPE]"',
-            text,
-        )
-
-    # Special case when the model camel cased and upper cased names are the same for the old model (like for GPT2) but
-    # not the new one. We can't just do a replace in all the text and will need a special regex
-    if old_model_patterns.model_upper_cased == old_model_patterns.model_camel_cased:
-        old_model_value = old_model_patterns.model_upper_cased
-        if re.search(rf"{old_model_value}_[A-Z_]*[^A-Z_]", text) is not None:
-            text = re.sub(rf"{old_model_value}([A-Z_]*)([^a-zA-Z_])", r"[MODEL_UPPER_CASED]\1\2", text)
-    else:
-        attributes_to_check.append("model_upper_cased")
-
-    attributes_to_check.extend(["model_camel_cased", "model_lower_cased", "model_name"])
-
-    # Now let's replace every other attribute by their placeholder
-    for attr in attributes_to_check:
-        text = text.replace(getattr(old_model_patterns, attr), ATTRIBUTE_TO_PLACEHOLDER[attr])
-
-    # Finally we can replace the placeholder byt the new values.
-    replacements = []
-    for attr, placeholder in ATTRIBUTE_TO_PLACEHOLDER.items():
-        if placeholder in text:
-            replacements.append((getattr(old_model_patterns, attr), getattr(new_model_patterns, attr)))
-            text = text.replace(placeholder, getattr(new_model_patterns, attr))
-
-    # If we have two inconsistent replacements, we don't return anything (ex: GPT2->GPT_NEW and GPT2->GPTNew)
-    old_replacement_values = [old for old, new in replacements]
-    if len(set(old_replacement_values)) != len(old_replacement_values):
-        return text, ""
-
-    replacements = simplify_replacements(replacements)
-    replacements = [f"{old}->{new}" for old, new in replacements]
-    return text, ",".join(replacements)
-
-
-def simplify_replacements(replacements):
-    """
-    Simplify a list of replacement patterns to make sure there are no needless ones.
-
-    For instance in the sequence "Bert->BertNew, BertConfig->BertNewConfig, bert->bert_new", the replacement
-    "BertConfig->BertNewConfig" is implied by "Bert->BertNew" so not needed.
-
-    Args:
-        replacements (`list[tuple[str, str]]`): List of patterns (old, new)
-
-    Returns:
-        `list[tuple[str, str]]`: The list of patterns simplified.
-    """
-    if len(replacements) <= 1:
-        # Nothing to simplify
-        return replacements
-
-    # Next let's sort replacements by length as a replacement can only "imply" another replacement if it's shorter.
-    replacements.sort(key=lambda x: len(x[0]))
-
-    idx = 0
-    while idx < len(replacements):
-        old, new = replacements[idx]
-        # Loop through all replacements after
-        j = idx + 1
-        while j < len(replacements):
-            old_2, new_2 = replacements[j]
-            # If the replacement is implied by the current one, we can drop it.
-            if old_2.replace(old, new) == new_2:
-                replacements.pop(j)
-            else:
-                j += 1
-        idx += 1
-
-    return replacements
-
-
-def get_module_from_file(module_file: Union[str, os.PathLike]) -> str:
-    """
-    Returns the module name corresponding to a module file.
-    """
-    full_module_path = Path(module_file).absolute()
-    module_parts = full_module_path.with_suffix("").parts
-
-    # Find the first part named transformers, starting from the end.
-    idx = len(module_parts) - 1
-    while idx >= 0 and module_parts[idx] != "transformers":
-        idx -= 1
-    if idx < 0:
-        raise ValueError(f"{module_file} is not a transformers module.")
-
-    return ".".join(module_parts[idx:])
-
-
-_re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
-
-
-def remove_attributes(obj, target_attr):
-    """Remove `target_attr` in `obj`."""
-    lines = obj.split(os.linesep)
-
-    target_idx = None
-    for idx, line in enumerate(lines):
-        # search for assignment
-        if line.lstrip().startswith(f"{target_attr} = "):
-            target_idx = idx
-            break
-        # search for function/method definition
-        elif line.lstrip().startswith(f"def {target_attr}("):
-            target_idx = idx
-            break
-
-    # target not found
-    if target_idx is None:
-        return obj
-
-    line = lines[target_idx]
-    indent_level = find_indent(line)
-    # forward pass to find the ending of the block (including empty lines)
-    parsed = extract_block("\n".join(lines[target_idx:]), indent_level)
-    num_lines = len(parsed.split("\n"))
-    for idx in range(num_lines):
-        lines[target_idx + idx] = None
-
-    # backward pass to find comments or decorator
-    for idx in range(target_idx - 1, -1, -1):
-        line = lines[idx]
-        if (line.lstrip().startswith("#") or line.lstrip().startswith("@")) and find_indent(line) == indent_level:
-            lines[idx] = None
-        else:
-            break
-
-    new_obj = os.linesep.join([x for x in lines if x is not None])
-
-    return new_obj
-
-
-def duplicate_module(
-    module_file: Union[str, os.PathLike],
-    old_model_patterns: ModelPatterns,
-    new_model_patterns: ModelPatterns,
-    dest_file: Optional[str] = None,
-    add_copied_from: bool = True,
-    attrs_to_remove: Optional[list[str]] = None,
-):
-    """
-    Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
-
-    Args:
-        module_file (`str` or `os.PathLike`): Path to the module to duplicate.
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        dest_file (`str` or `os.PathLike`, *optional*): Path to the new module.
-        add_copied_from (`bool`, *optional*, defaults to `True`):
-            Whether or not to add `# Copied from` statements in the duplicated module.
-    """
-    if dest_file is None:
-        dest_file = str(module_file).replace(
-            old_model_patterns.model_lower_cased, new_model_patterns.model_lower_cased
-        )
-
-    with open(module_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    content = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
-    objects = parse_module_content(content)
-
-    # Loop and treat all objects
-    new_objects = []
-    for obj in objects:
-        # Regular classes functions
-        old_obj = obj
-        obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
-        has_copied_from = re.search(r"^#\s+Copied from", obj, flags=re.MULTILINE) is not None
-        if add_copied_from and not has_copied_from and _re_class_func.search(obj) is not None and len(replacement) > 0:
-            # Copied from statement must be added just before the class/function definition, which may not be the
-            # first line because of decorators.
-            module_name = get_module_from_file(module_file)
-            old_object_name = _re_class_func.search(old_obj).groups()[0]
-            obj = add_content_to_text(
-                obj, f"# Copied from {module_name}.{old_object_name} with {replacement}", add_before=_re_class_func
-            )
-        # In all cases, we remove Copied from statement with indent on methods.
-        obj = re.sub("\n[ ]+# Copied from [^\n]*\n", "\n", obj)
-
-        new_objects.append(obj)
-
-    content = "\n".join(new_objects)
-    # Remove some attributes that we don't want to copy to the new file(s)
-    if attrs_to_remove is not None:
-        for attr in attrs_to_remove:
-            content = remove_attributes(content, target_attr=attr)
-
-    with open(dest_file, "w", encoding="utf-8") as f:
-        f.write(content)
-
-
 def add_model_to_auto_mappings(
     old_model_infos: ModelInfos, new_model_lowercase, new_model_paper_name, filenames_to_add
 ):
@@ -373,7 +134,9 @@ def add_model_to_auto_mappings(
     new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
     old_model_lowercase = old_model_infos.lowercase_name
     old_cased_name = old_model_infos.camelcase_name
-    filenames_to_add = [(filename.replace(old_model_lowercase, "auto"), to_add) for filename, to_add in filenames_to_add[1:]]
+    filenames_to_add = [
+        (filename.replace(old_model_lowercase, "auto"), to_add) for filename, to_add in filenames_to_add[1:]
+    ]
 
     # Add the config mappings directly as the handling for config is a bit different
     add_content_to_file(
@@ -392,12 +155,16 @@ def add_model_to_auto_mappings(
             with open(TRANSFORMERS_PATH / "models" / "auto" / filename) as f:
                 file = f.read()
             # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
-            matching_lines = re.findall(rf'( {{8,12}}\(\s*"{old_model_lowercase}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL)
+            matching_lines = re.findall(
+                rf'( {{8,12}}\(\s*"{old_model_lowercase}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
+            )
             for match in matching_lines:
                 add_content_to_file(
                     TRANSFORMERS_PATH / "models" / "auto" / filename,
-                    new_content=match.replace(old_model_lowercase, new_model_lowercase).replace(old_cased_name, new_cased_name),
-                    add_after=match
+                    new_content=match.replace(old_model_lowercase, new_model_lowercase).replace(
+                        old_cased_name, new_cased_name
+                    ),
+                    add_after=match,
                 )
 
 
@@ -447,7 +214,6 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
     class_doc = "\n\n".join(doc_for_classes)
 
     return copyright_for_markdown + doc_template + class_doc
-    
 
 
 def insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_paper_name):
@@ -464,9 +230,7 @@ def insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_
     old_model_toc = re.search(rf"- local: model_doc/{old_model_lowercase}\n {{8}}title: \w+\n", content).group(0)
     new_toc = f"      - local: model_doc/{new_model_lowercase}\n        title: {new_model_paper_name}\n"
     add_content_to_file(
-        REPO_PATH / "docs" / "source" / "en" / "_toctree.yml",
-        new_content=new_toc,
-        add_after=old_model_toc
+        REPO_PATH / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
     )
 
 
@@ -474,7 +238,10 @@ def create_init_file(old_lowercase_name: str, new_lowercase_name: str, filenames
     """
     TO FILL
     """
-    filenames_to_add = [(filename.replace(old_lowercase_name, new_lowercase_name).replace(".py", ""), to_add) for filename, to_add in filenames_to_add]
+    filenames_to_add = [
+        (filename.replace(old_lowercase_name, new_lowercase_name).replace(".py", ""), to_add)
+        for filename, to_add in filenames_to_add
+    ]
     imports = "\n            ".join(f"from .{file} import *" for file, to_add in filenames_to_add if to_add)
     init_file = COPYRIGHT + textwrap.dedent(
         f"""
@@ -536,13 +303,16 @@ def find_all_classes_from_file(file: str) -> set:
     return visitor.classes, visitor.public_classes
 
 
-def find_modular_structure(module_name: str, old_model_infos: ModelInfos, new_cased_name: str) -> tuple[str, str, list]:
-
+def find_modular_structure(
+    module_name: str, old_model_infos: ModelInfos, new_cased_name: str
+) -> tuple[str, str, list]:
     all_classes, public_classes = find_all_classes_from_file(module_name)
     import_location = ".".join(module_name.split(os.sep)[-2:]).replace(".py", "")
     old_cased_name = old_model_infos.camelcase_name
     imports = f"from ..{import_location} import {', '.join(class_ for class_ in all_classes)}"
-    modular_classes = "\n\n".join(f"class {class_.replace(old_cased_name, new_cased_name)}({class_})\n    pass" for class_ in all_classes)
+    modular_classes = "\n\n".join(
+        f"class {class_.replace(old_cased_name, new_cased_name)}({class_})\n    pass" for class_ in all_classes
+    )
     return imports, modular_classes, public_classes
 
 
@@ -561,7 +331,9 @@ def create_modular_file(
     all_public_classes = []
     for filename, to_add in filenames_to_add:
         if to_add:
-            imports, body, public_classes = find_modular_structure(old_folder_root / filename, old_model_infos, new_cased_name)
+            imports, body, public_classes = find_modular_structure(
+                old_folder_root / filename, old_model_infos, new_cased_name
+            )
             all_imports += f"\n{imports}"
             all_bodies += f"\n\n{body}"
             all_public_classes.extend(public_classes)
@@ -577,8 +349,40 @@ def create_modular_file(
     # Create the whole modular file
     modular_file = COPYRIGHT + all_imports + all_bodies + all_statement
     # Remove outer explicit quotes "" around the public class names before returning them
-    all_public_classes = [public_class.replace("\"", "") for public_class in all_public_classes]
+    all_public_classes = [public_class.replace('"', "") for public_class in all_public_classes]
     return modular_file, all_public_classes
+
+
+def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filenames_to_add: list[tuple[str, bool]]):
+    """
+    TO_FILL
+    """
+    new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
+    old_model_lowercase = old_model_infos.lowercase_name
+    old_cased_name = old_model_infos.camelcase_name
+
+    test_tokenization = filenames_to_add[2][1] or filenames_to_add[3][1]
+    test_image_processing = filenames_to_add[4][1] or filenames_to_add[5][1]
+    test_feature_extractor = filenames_to_add[6][1]
+    test_processor = filenames_to_add[7][1]
+
+    filenames_to_add = (
+        (f"test_modeling_{new_model_lowercase}.py", True),
+        (f"test_tokenization_{new_model_lowercase}.py", test_tokenization),
+        (f"test_image_processing_{new_model_lowercase}.py", test_image_processing),
+        (f"test_feature_extraction_{new_model_lowercase}.py", test_feature_extractor),
+        (f"test_processor_{new_model_lowercase}.py", test_processor),
+    )
+
+    test_files = {}
+    for new_file, to_add in filenames_to_add:
+        if to_add:
+            original_test_file = new_file.replace(new_model_lowercase, old_model_lowercase)
+            with open(TRANSFORMERS_PATH / "models" / old_model_lowercase / original_test_file, "r") as f:
+                test_code = f.read()
+            test_files[new_file] = test_code.replace(old_cased_name, new_cased_name)
+
+    return test_files
 
 
 def create_new_model_like(
@@ -623,14 +427,14 @@ def create_new_model_like(
 
     # 3. Create and add the __init__.py
     init_file = create_init_file(old_model_lowercase, new_model_lowercase, filenames_to_add)
-    with open(new_module_folder / f"__init__.py", "w") as f:
+    with open(new_module_folder / "__init__.py", "w") as f:
         f.write(init_file)
 
     # 4. Add new model to the models init
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "__init__.py",
         new_content=f"    from .{new_model_lowercase} import *\n",
-        add_after=f"if TYPE_CHECKING:\n",
+        add_after="if TYPE_CHECKING:\n",
     )
 
     # 5. Add model to auto mappings
@@ -642,19 +446,10 @@ def create_new_model_like(
     # Add empty __init__.py
     with open(tests_folder / "__init__.py", "w"):
         pass
-
-    for test_file in files_to_adapt:
-        new_test_file_name = test_file.name.replace(
-            old_model_patterns.model_lower_cased, new_model_patterns.model_lower_cased
-        )
-        dest_file = test_file.parent.parent / new_model_patterns.model_lower_cased / new_test_file_name
-        duplicate_module(
-            test_file,
-            old_model_patterns,
-            new_model_patterns,
-            dest_file=dest_file,
-            attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
-        )
+    test_files = create_test_files(old_model_infos, new_model_lowercase, filenames_to_add)
+    for filename, content in test_files.items():
+        with open(tests_folder / filename, "w") as f:
+            f.write(content)
 
     # 7. Add doc file
     doc_file = create_doc_file(new_model_paper_name, public_classes)
@@ -810,7 +605,7 @@ def get_user_input():
     new_model_lowercase = get_user_field("What is the snake case name of the new model (e.g. `new_model`)? ")
     new_model_paper_name = get_user_field(
         "What is the full name (with no special casing) for your new model in the paper (e.g. `LlaMa`)? ",
-        default_value="".join(x.title() for x in new_model_paper_name.split("_"))
+        default_value="".join(x.title() for x in new_model_lowercase.split("_")),
     )
 
     # Ask if we want to add individual processor classes as well
@@ -822,51 +617,50 @@ def get_user_input():
     add_processor = False
     if old_model_info.tokenizer_class is not None:
         add_tokenizer = not get_user_field(
-        f"Will your new model use the same tokenizer class as {old_model_type} (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
+            f"Will your new model use the same tokenizer class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
     if old_model_info.fast_tokenizer_class is not None:
         add_fast_tokenizer = not get_user_field(
-        f"Will your new model use the same fast tokenizer class as {old_model_type} (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
+            f"Will your new model use the same fast tokenizer class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
     if old_model_info.image_processor_class is not None:
         add_image_processor = not get_user_field(
-        f"Will your new model use the same image processor class as {old_model_type} (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
+            f"Will your new model use the same image processor class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
     if old_model_info.fast_image_processor_class is not None:
         add_fast_image_processor = not get_user_field(
-        f"Will your new model use the same fast image processor class as {old_model_type} (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
+            f"Will your new model use the same fast image processor class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
     if old_model_info.feature_extractor_class is not None:
         add_feature_extractor = not get_user_field(
-        f"Will your new model use the same feature extractor class as {old_model_type} (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
+            f"Will your new model use the same feature extractor class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
     if old_model_info.processor_class is not None:
         add_processor = not get_user_field(
-        f"Will your new model use the same processor class as {old_model_type} (yes/no)? ",
-        convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    )
+            f"Will your new model use the same processor class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
 
     create_fast_image_processor = False
     if add_image_processor and not add_fast_image_processor:
         create_fast_image_processor = get_user_field(
-                "A fast image processor can be created from the slow one, but modifications might be needed. "
-                "Should we add a fast image processor class for this model (recommended) (yes/no)? ",
-                convert_to=convert_to_bool,
-                default_value="yes",
-                fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
-            )
-
+            "A fast image processor can be created from the slow one, but modifications might be needed. "
+            "Should we add a fast image processor class for this model (recommended) (yes/no)? ",
+            convert_to=convert_to_bool,
+            default_value="yes",
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+        )
 
     return (
         old_model_info,
