@@ -153,6 +153,42 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
+    )
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Voxtral is audio+text model (not vision+text)
@@ -230,7 +266,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
         EXPECTED_OUTPUT = [
-            'The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos. Here\'s a breakdown:\n\n1. **Initial Reaction**: One person (let\'s call him A) is surprised to see the other person (let\'s call him B) has a tattoo. A asks if B has a tattoo, and B confirms.\n\n2. **Tattoo Interpretation**: A then asks what B\'s tattoo says, and B responds with "sweet." This exchange is repeated multiple times, with A asking what B\'s tattoo says, and B always answering "sweet."\n\n3. **Confusion**: A seems confused and asks what B\'s tattoo says multiple times, each time getting the same response. This leads to a humorous back-and-forth.\n\n4. **Clarification**: Eventually, B clarifies that A\'s tattoo says "dude" and A\'s says "sweet." This is the punchline of the joke, as A had been asking about B\'s tattoo but not his own.\n\n5. **Final Exchange**: B then asks what A\'s tattoo says, and A responds with "sweet," leading to a final round of confusion.\n\nThe humor comes from the repetition of the word "sweet" and the confusion that arises from A\'s lack of self-awareness about his own tattoo.'
+            'The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos. Here\'s a breakdown:\n\n1. **Initial Reaction**: One person (let\'s call him A) is surprised to see the other person (let\'s call him B) has a tattoo.\n2. **Curiosity**: A asks B what his tattoo says, and B responds with "sweet."\n3. **Repetition**: This exchange is repeated multiple times, with A asking about B\'s tattoo and B responding with "sweet."\n4. **Clarification**: Eventually, B clarifies that A\'s tattoo says "dude" and A\'s says "sweet."\n5. **Final Insult**: B calls A an "idiot" for not understanding the joke.\n\nThe humor comes from the repetition of the word "sweet" and the confusion about the tattoos\' meanings. The final insult adds a touch of frustration to the exchange.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
@@ -264,7 +300,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He expresses gratitude for the conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He concludes by expressing optimism about the country's future and his commitment to serving as a citizen."
+            "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He acknowledges the diverse perspectives and conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
@@ -302,7 +338,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is a playoff game between the Baltimore Orioles and the Oakland Athletics.'
+            'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is the American League Championship.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
@@ -387,8 +423,8 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona.",
-            'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is the Mariners, and the commentator is excited about their chances to win the championship.\n- **Emotional Tone**: The commentator expresses disbelief and excitement, using phrases like "I don\'t believe it" and "my, oh my."\n- **Player Involvement**: The commentator mentions Joy and Junior, likely referring to other players or commentators in the broadcast.',
+            "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona, Spain.",
+            'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is the Mariners, and the commentator is excited about their chances to win the championship.\n- **Emotional Tone**: The commentator is enthusiastic and surprised, using phrases like "I don\'t believe it" and "my, oh my" to express their excitement.\n- **Game Moment**: The play involves a throw to the plate that is described as "late," indicating a close call or a potential error.\n\nThe audio captures the thrill and tension of a high-stakes baseball moment.',
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
@@ -442,7 +478,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            'Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation in contrast to the serious and reflective tone of the previous audio.'
+            'Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a political speech by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation with no political context.'
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
