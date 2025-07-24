@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-텍스트 음성 변환(TTS)은 다양한 언어와 다양한 화자의 목소리로 텍스트에서 자연스러운 음성으로 변환하는 기술입니다. 현재 🤗 Transformers에는 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits), 그리고 [SpeechT5](../model_doc/speecht5) 등 다양항 TTS 모델이 포함되어 있습니다.
+텍스트 음성 변환(TTS)은 다양한 언어와 다양한 화자의 목소리로 텍스트에서 자연스러운 음성으로 변환하는 기술입니다. 현재 🤗 Transformers에는 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits), 그리고 [SpeechT5](../model_doc/speecht5) 등 다양한 TTS 모델이 포함되어 있습니다.
 
 `"text-to-audio"` 또는 `"text-to-speech"`파이프라인을 사용하여 손쉽게 오디오를 생성할 수 있습니다. Bark와 같은 일부 모델은 웃음, 한숨, 울음과 같은 비언어적 표현이나 심지어 음악까지도 조건에 따라 추가할 수 있습니다. Bark를 통해 아래와 같이 `"text-to-speech"` 파이프라인을 사용할 수 있습니다:
 
