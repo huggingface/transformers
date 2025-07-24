@@ -690,7 +690,6 @@ class ServeCommand(BaseTransformersCLICommand):
             "HuggingFaceTB/SmolVLM-Instruct",
             "ibm-granite/granite-vision-3.2-2b",
             "Qwen/Qwen2.5-VL-7B-Instruct",
-            "OpenGVLab/InternVL3-1B",
         ]
 
         if HF_HUB_OFFLINE:
@@ -838,13 +837,18 @@ class ServeCommand(BaseTransformersCLICommand):
                         if content["type"] == "text":
                             parsed_message["content"].append(content)
                         elif content["type"] == "image_url":
-                            image_data = re.sub("^data:image/.+;base64,", "", content["image_url"]["url"])
-                            image = Image.open(BytesIO(base64.b64decode(image_data)))
+                            if "base64" in content["image_url"]["url"]:
+                                image_data = re.sub("^data:image/.+;base64,", "", content["image_url"]["url"])
+                                image = Image.open(BytesIO(base64.b64decode(image_data)))
 
-                            file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                            image.save(file.name)
+                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                                url = file.name
 
-                            parsed_message["content"].append({"type": "image", "url": file.name})
+                                image.save(file.name)
+                            else:
+                                url = content["image_url"]["url"]
+
+                            parsed_message["content"].append({"type": "image", "url": url})
             processor_inputs.append(parsed_message)
         return processor_inputs
 

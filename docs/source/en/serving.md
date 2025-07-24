@@ -136,17 +136,41 @@ The Chat Completion API also supports images; see below for examples for text-an
 <hfoption id="curl">
 
 ```shell
-curl -X POST http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "system", "content": "hello"}], "temperature": 0.9, "max_tokens": 1000, "stream": true, "model": "Qwen/Qwen2.5-0.5B-Instruct"}'
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What is in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 300
+  }'
+
 ```
 
 from which you'll receive multiple chunks in the Completions API format
 
 ```shell
-data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
+data: {"id":"req_0","choices":[{"delta":{"role":"assistant"},"index":0}],"created":1753366665,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
 
-data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, "model": "Qwen/Qwen2.5-0.5B-Instruct", "system_fingerprint": "", "choices": [{"delta": {"role": "assistant", "content": "", "tool_call_id": null, "tool_calls": null}, "index": 0, "finish_reason": null, "logprobs": null}]}
+data: {"id":"req_0","choices":[{"delta":{"content":"The "},"index":0}],"created":1753366701,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
 
-(...)
+data: {"id":"req_0","choices":[{"delta":{"content":"image "},"index":0}],"created":1753366701,"model":"Qwen/Qwen2.5-VL-7B-Instruct@main","object":"chat.completion.chunk","system_fingerprint":""}
 ```
 
 </hfoption>
@@ -156,11 +180,24 @@ data: {"object": "chat.completion.chunk", "id": "req_0", "created": 1751377863, 
 import asyncio
 from huggingface_hub import AsyncInferenceClient
 
-messages = [{"role": "user", "content": "What is the Transformers library known for?"}]
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What's in this image?"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+                }
+            },
+        ],
+    }
+]
 client = AsyncInferenceClient("http://localhost:8000")
 
 async def responses_api_test_async():
-    async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256, stream=True)):
+    async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-VL-7B-Instruct", max_tokens=256, stream=True)):
         token = chunk.choices[0].delta.content
         if token:
             print(token, end='')
@@ -172,7 +209,7 @@ asyncio.run(client.close())
 From which you should get an iterative string printed:
 
 ```shell
-The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
 ```
 
 </hfoption>
@@ -184,11 +221,19 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 
 completion = client.chat.completions.create(
-    model="Qwen/Qwen2.5-0.5B-Instruct",
+    model="Qwen/Qwen2.5-VL-7B-Instruct",
     messages=[
         {
             "role": "user",
-            "content": "What is the Transformers library known for?"
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+                    }
+                },
+            ],
         }
     ],
     stream=True
@@ -203,7 +248,7 @@ for chunk in completion:
 From which you should get an iterative string printed:
 
 ```shell
-The Transformers library is primarily known for its ability to create and manipulate large-scale language models [...]
+The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
 ```
 
 </hfoption>
