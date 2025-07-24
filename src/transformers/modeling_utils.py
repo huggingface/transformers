@@ -765,8 +765,8 @@ def _load_state_dict_into_meta_model(
     if device_map is not None:
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
         tensor_device = next(iter(device_map.values()))
-        if isinstance(tensor_device, torch.device) and tensor_device not in ("cpu", torch.device("cpu")):
-            tensor_device = tensor_device.index
+        if isinstance(tensor_device, torch.device):
+            tensor_device = tensor_device.type if tensor_device.type in {"cpu", "disk"} else tensor_device.index
 
     is_quantized = hf_quantizer is not None
     is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
