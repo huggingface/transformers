@@ -141,12 +141,12 @@ def add_model_to_auto_mappings(
     # Add the config mappings directly as the handling for config is a bit different
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_model_lowercase}", "{new_cased_name}Config"),',
+        new_content=f'        ("{new_model_lowercase}", "{new_cased_name}Config"),\n',
         add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
     )
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_model_lowercase}", "{new_model_paper_name}"),',
+        new_content=f'        ("{new_model_lowercase}", "{new_model_paper_name}"),\n',
         add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
     )
 
@@ -201,6 +201,7 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
         ## Usage examples
 
         <INSERT SOME NICE EXAMPLES HERE>
+
         """
     )
 
@@ -210,6 +211,7 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
         doc = f"## {class_}\n\n[[autodoc]] {class_}"
         if "Model" in class_:
             doc += "\n    - forward"
+        doc_for_classes.append(doc)
 
     class_doc = "\n\n".join(doc_for_classes)
 
@@ -258,7 +260,6 @@ def create_init_file(old_lowercase_name: str, new_lowercase_name: str, filenames
 
             _file = globals()["__file__"]
             sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
-            )
         """
     )
     return init_file
@@ -307,7 +308,7 @@ def find_modular_structure(
     module_name: str, old_model_infos: ModelInfos, new_cased_name: str
 ) -> tuple[str, str, list]:
     all_classes, public_classes = find_all_classes_from_file(module_name)
-    import_location = ".".join(module_name.split(os.sep)[-2:]).replace(".py", "")
+    import_location = ".".join(module_name.parts[-2:]).replace(".py", "")
     old_cased_name = old_model_infos.camelcase_name
     imports = f"from ..{import_location} import {', '.join(class_ for class_ in all_classes)}"
     modular_classes = "\n\n".join(
@@ -341,6 +342,7 @@ def create_modular_file(
     # Create the __all__ assignment
     all_statement = textwrap.dedent(
         f"""
+
         __all__ = [
             {"\n            ".join(public_class for public_class in all_public_classes)}
         ]
@@ -378,7 +380,7 @@ def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filename
     for new_file, to_add in filenames_to_add:
         if to_add:
             original_test_file = new_file.replace(new_model_lowercase, old_model_lowercase)
-            with open(TRANSFORMERS_PATH / "models" / old_model_lowercase / original_test_file, "r") as f:
+            with open(REPO_PATH / "tests" / "models" / old_model_lowercase / original_test_file, "r") as f:
                 test_code = f.read()
             test_files[new_file] = test_code.replace(old_cased_name, new_cased_name)
 
@@ -438,7 +440,7 @@ def create_new_model_like(
     )
 
     # 5. Add model to auto mappings
-    add_model_to_auto_mappings(old_model_lowercase, new_model_lowercase, new_model_paper_name, filenames_to_add)
+    add_model_to_auto_mappings(old_model_infos, new_model_lowercase, new_model_paper_name, filenames_to_add)
 
     # 6. Add test files
     tests_folder = REPO_PATH / "tests" / "models" / new_model_lowercase
@@ -463,7 +465,7 @@ def create_new_model_like(
 
 
 def add_new_model_like_command_factory(args: Namespace):
-    return AddNewModelLikeCommand(config_file=args.config_file, path_to_repo=args.path_to_repo)
+    return AddNewModelLikeCommand(path_to_repo=args.path_to_repo)
 
 
 class AddNewModelLikeCommand(BaseTransformersCLICommand):
@@ -475,7 +477,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
-    def __init__(self, config_file=None, path_to_repo=None, *args):
+    def __init__(self, path_to_repo=None, *args):
         (
             self.old_model_infos,
             self.new_model_lowercase,
@@ -501,7 +503,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
 
         create_new_model_like(
-            old_model_info=self.old_model_infos,
+            old_model_infos=self.old_model_infos,
             new_model_lowercase=self.new_model_lowercase,
             new_model_paper_name=self.new_model_paper_name,
             add_tokenizer=self.add_tokenizer,
