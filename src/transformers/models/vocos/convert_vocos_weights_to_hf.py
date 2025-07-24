@@ -21,7 +21,6 @@ from transformers import (
     VocosConfig,
     VocosFeatureExtractor,
     VocosModel,
-    logging,
 )
 
 
@@ -30,6 +29,8 @@ def convert_old_keys_to_new_keys(original_state_dict) -> dict[str, torch.Tensor]
     for key, value in original_state_dict.items():
         if key.startswith("feature_extractor."):
             continue
+        if key == "head.istft.window":
+            key = "head.window"
         key = key.replace("head.out.", "head.out_proj.")
         key = key.replace("backbone.convnext.", "backbone.layers.")
         key = key.replace(".gamma", ".layer_scale_parameter")
@@ -74,7 +75,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     if push_to_hub:
         model.push_to_hub(push_to_hub)
         feature_extractor.push_to_hub(push_to_hub)
-        logging.info(f"Pushed model to {push_to_hub}")
+        print(f"Pushed model to {push_to_hub}")
 
 
 if __name__ == "__main__":
