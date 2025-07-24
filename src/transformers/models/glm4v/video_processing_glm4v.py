@@ -143,7 +143,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return uniq
+        return np.array(uniq)
 
     def _preprocess(
         self,

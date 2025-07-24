@@ -1564,9 +1564,8 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     images_kwargs: Glm4vImagesKwargs
     videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False},
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -1648,7 +1647,8 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            timestamps = videos_inputs.pop("timestamps")
+            video_metadata = videos_inputs.pop("video_metadata")
+            timestamps = [metadata.timestamps for metadata in video_metadata]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
