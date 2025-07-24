@@ -18,7 +18,7 @@ import math
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
@@ -241,12 +241,12 @@ class Ernie4_5_VLTextAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[Tuple[torch.Tensor]] = None,
+        position_ids: Optional[tuple[torch.Tensor]] = None,
         use_cache: bool = False,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         assert position_ids is not None, "rope3d requires pos-id"
 
         input_shape = hidden_states.shape[:-1]
@@ -554,7 +554,7 @@ class Top2Gate(nn.Module):
         token_type_ids: torch.Tensor = None,
         transform_weight: bool = True,
         correction_bias: torch.Tensor = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass through the gate.
 
@@ -848,7 +848,7 @@ class TopKGate(Top2Gate):
         token_type_ids=None,
         transform_weight=True,
         is_multimodel=True,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for fused gate.
 
@@ -888,7 +888,7 @@ def get_gate(
     config: Ernie4_5_MoEConfig,
     expert: nn.Module,
     layer_idx: int,
-) -> Tuple[nn.Module, nn.ModuleList]:
+) -> tuple[nn.Module, nn.ModuleList]:
     """Initialize and distribute MoE (Mixture of Experts) components.
 
     Creates gate layer and distributed expert network for MoE architecture.
@@ -1068,9 +1068,9 @@ class MOELayer(nn.Module):
     def __init__(
         self,
         gate: nn.Module,
-        experts: List[nn.Module],
+        experts: list[nn.Module],
         layer_idx: int,
-        shared_experts: Optional[List[nn.Module]] = None,
+        shared_experts: Optional[list[nn.Module]] = None,
         group=None,
         recompute: bool = False,
         k: int = 2,
@@ -1195,7 +1195,7 @@ class MOELayer(nn.Module):
         gate_logits: torch.Tensor,  # [S, E]   float32
         k: int,
         capacity: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """dispatch input to experts based on gate logits"""
 
         S, H = x.shape
@@ -1333,7 +1333,7 @@ class MOELayer(nn.Module):
         input: torch.Tensor,
         token_type_ids=None,
         is_multimodel=True,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass through MoE layer.
 
@@ -1397,9 +1397,9 @@ class MOEAllGatherLayerV2(MOELayer):
     def __init__(
         self,
         gate: nn.Module,
-        experts: List[nn.Module],
+        experts: list[nn.Module],
         layer_idx,
-        shared_experts: Optional[List[nn.Module]] = None,
+        shared_experts: Optional[list[nn.Module]] = None,
         group=None,
         recompute=False,
         k=2,
@@ -1448,7 +1448,7 @@ class MOEAllGatherLayerV2(MOELayer):
         input: torch.Tensor,
         token_type_ids=None,
         use_dense_expert=False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Implements forward pass for Mixture-of-Experts (MoE) layer with distributed communication.
 
         Core Functionality:
@@ -2223,10 +2223,10 @@ class Ernie4_5_DecoderLayer(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_gate_logits=True,  # PP model should not output gate logits,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, torch.Tensor]]]:
         """Forward pass through the decoder layer.
 
         Args:
@@ -3307,7 +3307,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
         input_ids: torch.Tensor,
         position_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.Tensor]] = None,
+        past_key_values: Optional[list[torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -3478,13 +3478,13 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     2. Maintains all existing functionality from the parent class
     """
 
-    last_hidden_state: Optional[Tuple[torch.Tensor]] = None
-    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
-    hidden_states: Optional[Tuple[torch.Tensor]] = None
-    attentions: Optional[Tuple[torch.Tensor]] = None
-    cross_attentions: Optional[Tuple[torch.Tensor]] = None
+    last_hidden_state: Optional[tuple[torch.Tensor]] = None
+    past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None
+    hidden_states: Optional[tuple[torch.Tensor]] = None
+    attentions: Optional[tuple[torch.Tensor]] = None
+    cross_attentions: Optional[tuple[torch.Tensor]] = None
     router_loss: Optional[torch.Tensor] = None
-    gate_logits: Optional[Tuple[torch.Tensor]] = None
+    gate_logits: Optional[tuple[torch.Tensor]] = None
 
 
 @dataclass
@@ -3518,10 +3518,10 @@ class CausalLMOutputWithCrossAttentions(ModelOutput):
 
     loss: Optional[torch.Tensor] = None
     logits: torch.Tensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None
-    hidden_states: Optional[Tuple[torch.Tensor]] = None
-    attentions: Optional[Tuple[torch.Tensor]] = None
-    router_loss: Optional[Tuple[torch.Tensor]] = None
+    past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None
+    hidden_states: Optional[tuple[torch.Tensor]] = None
+    attentions: Optional[tuple[torch.Tensor]] = None
+    router_loss: Optional[tuple[torch.Tensor]] = None
 
 
 __all__ = [

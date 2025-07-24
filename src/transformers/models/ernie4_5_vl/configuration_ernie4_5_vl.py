@@ -14,7 +14,7 @@
 
 """Ernie model configuration"""
 import copy
-from typing import List, Optional, Tuple, Union
+from typing import Union
 
 from transformers import PretrainedConfig
 
