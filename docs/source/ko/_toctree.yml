@@ -290,9 +290,10 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
-    - local: main_classes/executore
+    - local: main_classes/executorch
       title: ExecuTorch
     - local: main_classes/feature_extractor
+      title: 특성 추출기
     - local: in_translation
       title: (번역중) Image Processor
     title: (번역중) 메인 클래스
