@@ -466,9 +466,15 @@ def create_new_model_like(
 
     # 9. Run linters
     model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
-    subprocess.run(["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"], cwd=REPO_PATH)
-    subprocess.run(["ruff", "format", new_module_folder, tests_folder, model_init_file], cwd=REPO_PATH)
-    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH)
+    subprocess.run(
+        ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],
+        cwd=REPO_PATH,
+        stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["ruff", "format", new_module_folder, tests_folder, model_init_file], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+    )
+    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
 
 
 def add_new_model_like_command_factory(args: Namespace):
