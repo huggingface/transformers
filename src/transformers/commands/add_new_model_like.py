@@ -83,20 +83,9 @@ class ModelInfos(object):
         else:
             self.tokenizer_class, self.fast_tokenizer_class = None, None
 
-        # Get image processor classes
-        image_processor_classes = IMAGE_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
-        if isinstance(image_processor_classes, tuple):
-            if len(image_processor_classes) == 1:
-                if "Fast" in image_processor_classes[0]:
-                    self.image_processor_class, self.fast_image_processor_class = None, image_processor_classes[0]
-                else:
-                    self.image_processor_class, self.fast_image_processor_class = image_processor_classes[0], None
-            else:
-                self.image_processor_class, self.fast_image_processor_class = image_processor_classes
-        else:
-            self.image_processor_class, self.fast_image_processor_class = image_processor_classes, None
-
-        # Video, feature extractor and processor
+        self.image_processor_class, self.fast_image_processor_class = IMAGE_PROCESSOR_MAPPING_NAMES.get(
+            self.lowercase_name, (None, None)
+        )
         self.video_processor_class = VIDEO_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.feature_extractor_class = FEATURE_EXTRACTOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
