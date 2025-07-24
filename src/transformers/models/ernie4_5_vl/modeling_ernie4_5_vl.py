@@ -26,12 +26,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from transformers.activations import ACT2FN
-from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import ModelOutput
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.utils import logging
-
+from ...activations import ACT2FN
+from ...generation import GenerationMixin
+from ...modeling_outputs import ModelOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...utils import logging
 from .configuration_ernie4_5_vl import (
     DFNRopeVisionTransformerConfig,
     Ernie4_5_MoEConfig,
@@ -73,32 +73,7 @@ class UniqueNameGuard:
 
 
 class RopeEmbedding(nn.Module):
-    """
-    Rotary Position Embedding (RoPE) implementation for transformer models.
-
-    RoPE encodes absolute positional information with rotation matrices and
-    naturally incorporates relative position information in self-attention.
-
-    Args:
-        head_dim (int): Dimension size of each attention head
-        compression_ratio (float, optional): Sequence length compression ratio. Defaults to 1.0.
-        base (int, optional): Base value for frequency calculation. Defaults to 10000.
-
-    Attributes:
-        head_dim (int): Dimension size of each attention head
-        compression_ratio (float): Sequence length compression factor
-        base (int): Base value for frequency calculation
-    """
-
     def __init__(self, head_dim, compression_ratio=1.0, base=10000, freq_allocation=0):
-        """
-        Initialize RoPE embedding layer.
-
-        Args:
-            head_dim: Dimension of each attention head
-            compression_ratio: Scaling factor for position indices
-            base: Base value for frequency calculation
-        """
         super().__init__()
         self.head_dim = head_dim
         self.inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(dtype=torch.float) / head_dim))
@@ -108,52 +83,34 @@ class RopeEmbedding(nn.Module):
         self.split_sizes = hw_dim // 2, hw_dim // 2, t_dim
 
         self.inv_freq_2 = torch.empty_like(self.inv_freq)
-        self.inv_freq_2[ : hw_dim // 2] = self.inv_freq[: -t_dim][0::2]
-        self.inv_freq_2[hw_dim // 2 : hw_dim] = self.inv_freq[: -t_dim][1::2]
+        self.inv_freq_2[ : hw_dim] = torch.cat([self.inv_freq[: -t_dim][0::2], self.inv_freq[: -t_dim][1::2]])
         self.inv_freq_2[-t_dim :] = self.inv_freq[-t_dim :]
 
         self.freq_allocation = freq_allocation
 
-    #"""
-    def forward(self, seq_length, position_ids=None):
-        indices = self.inv_freq
-        if position_ids is None:
-            position_ids = torch.arange(
-                0, seq_length, 1, dtype=torch.float32
-            ).unsqueeze(1)
-            sinusoid_inp = position_ids * indices.unsqueeze(0)
-        else:
-            seq_length = position_ids.shape[-1]
-            sinusoid_inp = position_ids.unsqueeze(-1).to(
-                torch.float32
-            ) * indices.unsqueeze(0)
-        pos_emb = torch.cat([torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)], dim=-1)
-        pos_emb = pos_emb.view(-1, 1, seq_length, self.head_dim)
-        pos_emb = pos_emb.detach()
-        return pos_emb#"""
-
-    def apply_rotary_3d(self, rp, q, k, position_ids):
-        """
-        rope 3d rotary
-        """
-        assert position_ids.shape[:1] == q.shape[:1]
-
+    def forward(self, position_ids):
         inv_freq_expanded_2 = self.inv_freq_2[None, None, :, None].float().expand(3, position_ids.shape[0], -1, 1).to(position_ids.device)
         position_ids_expanded = position_ids.permute(2, 0, 1)[:, :, None, :].float()  # shape (3, bs, 1, positions)
         freqs_2 = (inv_freq_expanded_2.float() @ position_ids_expanded.float()).transpose(2, 3)
         cos_3 = freqs_2.cos()
         sin_3 = freqs_2.sin()
 
-        sin_3_h, sin_3_w, sin_3_t = (m[(i+1) % 3].unsqueeze(-2) for i, m in enumerate(sin_3.split([*self.split_sizes], dim=-1)))
+        sin_3_h, sin_3_w, sin_3_t = (m[(i+1) % 3] for i, m in enumerate(sin_3.split([*self.split_sizes], dim=-1)))
         sin_3_hw = torch.stack([sin_3_h, sin_3_w], dim=-1).flatten(-2)
         sin_3_thw = torch.cat([sin_3_hw, sin_3_t], dim=-1)
         sin_real = sin_3_thw.repeat_interleave(2, dim=-1)
 
-        cos_3_h, cos_3_w, cos_3_t = (m[(i+1) % 3].unsqueeze(-2) for i, m in enumerate(cos_3.split([*self.split_sizes], dim=-1)))
+        cos_3_h, cos_3_w, cos_3_t = (m[(i+1) % 3] for i, m in enumerate(cos_3.split([*self.split_sizes], dim=-1)))
         cos_3_hw = torch.stack([cos_3_h, cos_3_w], dim=-1).flatten(-2)
         cos_3_thw = torch.cat([cos_3_hw, cos_3_t], dim=-1)
         cos_real = cos_3_thw.repeat_interleave(2, dim=-1)
 
+        return cos_real, sin_real
+
+    def apply_rotary_3d(self, q, k, cos, sin):
+        """
+        rope 3d rotary
+        """
         # copy glm rotate
         def rotate_half(x):
             """Rotates half the hidden dims of the input."""
@@ -161,70 +118,16 @@ class RopeEmbedding(nn.Module):
             x2 = x[..., 1::2]
             return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
-        #"""
-        sin, cos = torch.chunk(rp, 2, axis=-1)
-        batch_indices = torch.arange(end=position_ids.shape[0])
-        batch_indices = batch_indices[..., None]
-        sin = sin.tile(position_ids.shape[0], 1, 1, 1).to(device=position_ids.device)
-        cos = cos.tile(position_ids.shape[0], 1, 1, 1).to(device=position_ids.device)
-
-        sin_t = sin[batch_indices, position_ids[..., 0], :, -self.freq_allocation :]
-        sin_h = sin[
-            batch_indices,
-            position_ids[..., 1],
-            :,
-            : self.head_dim // 2 - self.freq_allocation : 2,
-        ]
-        sin_w = sin[
-            batch_indices,
-            position_ids[..., 2],
-            :,
-            1 : self.head_dim // 2 - self.freq_allocation : 2,
-        ]
-
-        cos_t = cos[batch_indices, position_ids[..., 0], :, -self.freq_allocation :]
-        cos_h = cos[
-            batch_indices,
-            position_ids[..., 1],
-            :,
-            : self.head_dim // 2 - self.freq_allocation : 2,
-        ]
-        cos_w = cos[
-            batch_indices,
-            position_ids[..., 2],
-            :,
-            1 : self.head_dim // 2 - self.freq_allocation : 2,
-        ]
-
-        sin_hw = torch.stack([sin_h, sin_w], dim=-1).reshape(
-            sin_h.shape[:-1] + (sin_h.shape[-1] * 2,)
-        )
-        sin_thw = torch.cat([sin_hw, sin_t], dim=-1)
-        sin_pos = sin_thw.repeat_interleave(2, dim=-1)
-
-        # cos [θ0,θ1,θ2......θd/2-1] -> cos_pos [θ0,θ0,θ1,θ1,θ2,θ2......θd/2-1,θd/2-1]
-        cos_hw = torch.stack([cos_h, cos_w], dim=-1).reshape(
-            cos_h.shape[:-1] + (cos_h.shape[-1] * 2,)
-        )
-        cos_thw = torch.cat([cos_hw, cos_t], dim=-1)
-        cos_pos = cos_thw.repeat_interleave(2, dim=-1)
-
-        print(torch.allclose(sin_pos, sin_real))
-        print(torch.allclose(cos_pos, cos_real))
-        print()
-        #"""
-
         # copy apply
-        #cos_real = cos.unsqueeze(-2)
-        #sin_real = sin.unsqueeze(-2)
+        original_dtype = q.dtype
 
-        query = (q.to(torch.float32) * cos_real) + (rotate_half(q) * sin_real)
-        key = (k.to(torch.float32) * cos_real) + (rotate_half(k) * sin_real)
+        cos = cos.unsqueeze(-2)
+        sin = sin.unsqueeze(-2)
 
-        #query = (q.to(torch.float32) * cos_pos) + (rotate_half(q) * sin_pos)
-        #key = (k.to(torch.float32) * cos_pos) + (rotate_half(k) * sin_pos)
+        q_embed = (q.float() * cos) + (rotate_half(q).float() * sin)
+        k_embed = (k.float() * cos) + (rotate_half(k).float() * sin)
 
-        return query, key
+        return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
 # copy Llama
@@ -321,22 +224,11 @@ class Ernie4_5_Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         # rope
-        query_states_dtype = query_states.dtype
-        kv_seq_len = position_ids.max() + 1
-        offset = 0
         if past_key_value is not None:
-            offset = position_ids.max()
-            kv_seq_len = position_ids.max() + 1
             position_ids = position_ids[:, -1:, :]
 
-        cos_sin = self.rotary_emb(kv_seq_len).permute([0, 2, 1, 3])
-        if offset > 0 and position_ids is None:
-            cos_sin = cos_sin[:, offset:]
-        query_states, key_states = self.rotary_emb.apply_rotary_3d(
-            cos_sin, query_states, key_states, position_ids
-        )
-        query_states = query_states.to(query_states_dtype)
-        key_states = key_states.to(query_states_dtype)
+        cos, sin = self.rotary_emb(position_ids)
+        query_states, key_states = self.rotary_emb.apply_rotary_3d(query_states, key_states, cos, sin)
 
         # cache
         if past_key_value is not None:
