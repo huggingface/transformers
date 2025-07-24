@@ -797,7 +797,8 @@ def _load_state_dict_into_meta_model(
             hf_quantizer,
         )
 
-        if device_mesh is not None and (
+        if device_mesh is not None:
+            if (
                 not is_quantized
                 or (not hf_quantizer.requires_parameters_quantization)
                 or (
@@ -810,27 +811,27 @@ def _load_state_dict_into_meta_model(
                     )
                 )
             ):  # In this case, the param is already on the correct device!
-            shard_and_distribute_module(
-                model,
-                param,
-                empty_param,
-                param_name,
-                casting_dtype,
-                to_contiguous,
-                device_mesh.get_local_rank(),
-                device_mesh,
-            )
-        elif device_mesh is not None: # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
-            sharding_kwargs = {
-                "empty_param": empty_param,
-                "casting_dtype": casting_dtype,
-                "to_contiguous": to_contiguous,
-                "rank": device_mesh.get_local_rank(),
-                "device_mesh": device_mesh
-            }
-            hf_quantizer.create_quantized_param(
-                    model, param, param_name, device_mesh.get_local_rank(), state_dict, unexpected_keys, **sharding_kwargs
-            )
+                shard_and_distribute_module(
+                    model,
+                    param,
+                    empty_param,
+                    param_name,
+                    casting_dtype,
+                    to_contiguous,
+                    device_mesh.get_local_rank(),
+                    device_mesh,
+                )
+            else: # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+                sharding_kwargs = {
+                    "empty_param": empty_param,
+                    "casting_dtype": casting_dtype,
+                    "to_contiguous": to_contiguous,
+                    "rank": device_mesh.get_local_rank(),
+                    "device_mesh": device_mesh
+                }
+                hf_quantizer.create_quantized_param(
+                        model, param, param_name, device_mesh.get_local_rank(), state_dict, unexpected_keys, **sharding_kwargs
+                )
         else:
             param = param[...]
             if casting_dtype is not None:
