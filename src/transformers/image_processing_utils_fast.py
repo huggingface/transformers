@@ -465,7 +465,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        # Check for `str` in case of URL/local path and optionally load
+        # Checks for `str` in case of URL/local path and optionally loads images
         images = self.fetch_images(images)
         return make_flat_list_of_images(images, expected_ndims=expected_ndims)
 

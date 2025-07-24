@@ -95,8 +95,8 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray:
+                Indices to sample video frames.
         """
         num_frames = num_frames if num_frames is not None else self.num_frames
         initial_shift = initial_shift if initial_shift is not None else self.initial_shift

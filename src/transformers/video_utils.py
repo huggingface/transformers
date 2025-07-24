@@ -202,6 +202,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "str
 
 def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
     if video_metadata is None:
+        # Create default metadata with 24fps
         video_metadata = [
             {
                 "total_num_frames": len(video),

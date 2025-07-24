@@ -47,7 +47,6 @@ from .utils import (
     is_torchcodec_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .utils.import_utils import requires
@@ -63,9 +62,6 @@ from .video_utils import (
     to_channel_dimension_format,
 )
 
-
-if is_vision_available():
-    pass
 
 if is_torch_available():
     import torch
@@ -172,6 +168,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     do_sample_frames = None
     fps = None
     num_frames = None
+    video_metadata = None
     return_metadata = False
     valid_kwargs = VideosKwargs
     model_input_names = ["pixel_values_videos"]
@@ -248,8 +245,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         and `fps` are mutually exclusive.
 
         Args:
-            video (`torch.Tensor`):
-                Video that need to be sampled.
             metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
@@ -258,8 +253,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray:
+                Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError(
@@ -298,12 +293,12 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         sample_indices_fn: Optional[Callable] = None,
     ) -> list["torch.Tensor"]:
         """
-        Decode the input videos and sample frames if needed.
+        Decode input videos and sample frames if needed.
         """
         videos = make_batched_videos(videos)
         video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
 
-        # Apply only frame sampling when an array video is passed, otherwise first decode -> then sample
+        # Only sample frames if an array video is passed, otherwise first decode -> then sample
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
             for video, metadata in zip(videos, video_metadata):
@@ -347,15 +342,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
     @add_start_docstrings(
         BASE_VIDEO_PROCESSOR_DOCSTRING,
-        """
-        video_metadata (`List[Union[VideoMetadata, dict]]`, *optional*):
-            Metadata of the video containing information about total duration, fps and total number of frames.
-        """,
     )
     def preprocess(
         self,
         videos: VideoInput,
-        video_metadata: Optional[list[Union[VideoMetadata, dict]]] = None,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
         validate_kwargs(
@@ -370,6 +360,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         input_data_format = kwargs.pop("input_data_format")
         do_sample_frames = kwargs.pop("do_sample_frames")
         device = kwargs.pop("device")
+        video_metadata = kwargs.pop("video_metadata")
 
         if do_sample_frames:
             sample_indices_fn = partial(self.sample_frames, **kwargs)

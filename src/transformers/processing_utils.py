@@ -36,6 +36,7 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
+from .video_utils import VideoMetadata
 
 
 if is_vision_available():
@@ -247,6 +248,8 @@ class VideosKwargs(TypedDict, total=False):
             Whether to center crop the video.
         do_sample_frames (`bool`, *optional*):
             Whether to sample frames from the video before processing or to process the whole video.
+        video_metadata (`Union[VideoMetadata, dict]`, *optional*):
+            Metadata of the video containing information about total duration, fps and total number of frames.
         num_frames (`int`, *optional*):
             Maximum number of frames to sample when `do_sample_frames=True`.
         fps (`int` or `float`, *optional*):
@@ -257,6 +260,8 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
+        return_metadata (`ChannelDimension` or `str`, *optional*):
+            Whether to return video metadata or not.
     """
 
     do_convert_rgb: Optional[bool]
@@ -277,6 +282,7 @@ class VideosKwargs(TypedDict, total=False):
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional[str]
     do_sample_frames: Optional[bool]
+    video_metadata: Optional[Union[VideoMetadata, dict]]
     fps: Optional[Union[int, float]]
     num_frames: Optional[int]
     return_metadata: Optional[bool]
@@ -1402,7 +1408,7 @@ class ProcessorMixin(PushToHubMixin):
     @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
     @deprecate_kwarg(
         "video_load_backend",
-        version="4.58",
+        version="4.59",
         additional_message=". This function will use `torchcodec` by default, or `torchvision` if `torchcodec` is not installed.",
     )
     def apply_chat_template(
@@ -1511,47 +1517,45 @@ class ProcessorMixin(PushToHubMixin):
         return_dict = processed_kwargs["template_kwargs"].pop("return_dict", False)
         mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
 
-        def get_modality_fname(content_field, modality):
-            content_type = content_field.get("type")
-            if content_type == modality:
-                for key in ["url", "path", "base64", modality]:
-                    if key in content_field:
-                        return content_field[key]
-
         if tokenize:
             batch_images, batch_videos = [], []
             batch_audios = []
             for conversation in conversations:
-                image_fnames, video_fnames = [], []
-                audio_fnames = []
                 for message in conversation:
-                    for content in message["content"]:
-                        content_type = content.get("type")
-                        for key in ["url", "path", "base64", "image", "video", "audio"]:
-                            if key in content:
-                                if content_type == "image":
-                                    image_fnames.append(get_modality_fname(content, "image"))
-                                elif content_type == "video":
-                                    video_fnames.append(get_modality_fname(content, "video"))
-                                elif content_type == "audio":
-                                    audio_fnames.append(get_modality_fname(content, "audio"))
+                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    audio_fnames = [
+                        content[key]
+                        for content in message["content"]
+                        for key in ["audio", "url", "path"]
+                        if key in content and content["type"] == "audio"
+                    ]
+                    image_fnames = [
+                        vision_info[key]
+                        for vision_info in visuals
+                        for key in ["image", "url", "path", "base64"]
+                        if key in vision_info and vision_info["type"] == "image"
+                    ]
+                    video_fnames = [
+                        vision_info[key]
+                        for vision_info in visuals
+                        for key in ["video", "url", "path"]
+                        if key in vision_info and vision_info["type"] == "video"
+                    ]
 
-                # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                if not mm_load_kwargs["load_audio_from_video"]:
-                    for fname in audio_fnames:
-                        batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
-                else:
-                    for fname in video_fnames:
-                        batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                    # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
+                    if not mm_load_kwargs["load_audio_from_video"]:
+                        for fname in audio_fnames:
+                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                    else:
+                        for fname in video_fnames:
+                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
 
-                # Currently all processors can accept nested list of batches, but not flat list of visuals
-                # So we'll make a batched list of images and let the processor handle it
-                if image_fnames:
-                    batch_images.append(image_fnames)
-                    image_fnames = []
-                if video_fnames:
-                    batch_videos.append(video_fnames)
-                    video_fnames = []
+                    # Currently all processors can accept nested list of batches, but not flat list of visuals
+                    # So we'll make a batched list of images and let the processor handle it
+                    if image_fnames:
+                        batch_images.append(image_fnames)
+                    if video_fnames:
+                        batch_videos.append(video_fnames)
 
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,

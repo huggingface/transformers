@@ -32,13 +32,8 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_vision_available,
     logging,
 )
-
-
-if is_vision_available():
-    pass
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")

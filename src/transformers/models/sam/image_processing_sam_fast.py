@@ -186,7 +186,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         kwargs["pad_size"] = pad_size
         kwargs["mask_size"] = mask_size
         kwargs["mask_pad_size"] = mask_pad_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format

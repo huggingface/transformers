@@ -135,7 +135,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         and `fps` are mutually exclusive.
 
         Args:
-        metadata (`VideoMetadata`):
+            metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             temporal_patch_size (`int`, *optional*):
                 The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
@@ -149,8 +149,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray:
+                Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")

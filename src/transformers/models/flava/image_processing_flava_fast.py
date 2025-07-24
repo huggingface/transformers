@@ -337,7 +337,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["crop_size"] = crop_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["codebook_size"] = codebook_size
