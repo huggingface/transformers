@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 # 1. Standard library
 import difflib
 import json
@@ -40,14 +39,13 @@ from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
 
-
 CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
 COPYRIGHT = f"""
 # coding=utf-8
-# Copyright {CURRENT_YEAR} the HuggingFace team. All rights reserved.
+# Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,6 +59,7 @@ COPYRIGHT = f"""
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """.lstrip()
+
 
 
 class ModelInfos(object):
@@ -82,7 +81,7 @@ class ModelInfos(object):
 
         # Get tokenizer class
         if self.lowercase_name in TOKENIZER_MAPPING_NAMES:
-            self.tokenizer_class, self.fast_tokenizer_class = TOKENIZER_MAPPING_NAMES[model_type]
+            self.tokenizer_class, self.fast_tokenizer_class = TOKENIZER_MAPPING_NAMES[self.lowercase_name]
             self.fast_tokenizer_class = None if self.fast_tokenizer_class == "PreTrainedTokenizerFast" else self.fast_tokenizer_class
         else:
             self.tokenizer_class, self.fast_tokenizer_class = None, None
@@ -103,193 +102,14 @@ class ModelInfos(object):
 
 
 
-ATTRIBUTE_TO_PLACEHOLDER = {
-    "config_class": "[CONFIG_CLASS]",
-    "tokenizer_class": "[TOKENIZER_CLASS]",
-    "image_processor_class": "[IMAGE_PROCESSOR_CLASS]",
-    "image_processor_fast_class": "[IMAGE_PROCESSOR_FAST_CLASS]",
-    "feature_extractor_class": "[FEATURE_EXTRACTOR_CLASS]",
-    "processor_class": "[PROCESSOR_CLASS]",
-    "checkpoint": "[CHECKPOINT]",
-    "model_type": "[MODEL_TYPE]",
-    "model_upper_cased": "[MODEL_UPPER_CASED]",
-    "model_camel_cased": "[MODEL_CAMELCASED]",
-    "model_lower_cased": "[MODEL_LOWER_CASED]",
-    "model_name": "[MODEL_NAME]",
-}
 
 
-def is_empty_line(line: str) -> bool:
-    """
-    Determines whether a line is empty or not.
-    """
-    return len(line) == 0 or line.isspace()
-
-
-def find_indent(line: str) -> int:
-    """
-    Returns the number of spaces that start a line indent.
-    """
-    search = re.search(r"^(\s*)(?:\S|$)", line)
-    if search is None:
-        return 0
-    return len(search.groups()[0])
-
-
-def parse_module_content(content: str) -> list[str]:
-    """
-    Parse the content of a module in the list of objects it defines.
-
-    Args:
-        content (`str`): The content to parse
-
-    Returns:
-        `list[str]`: The list of objects defined in the module.
-    """
-    objects = []
-    current_object = []
-    lines = content.split("\n")
-    # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
-    end_markers = [")", "]", "}", '"""']
-
-    for line in lines:
-        # End of an object
-        is_valid_object = len(current_object) > 0
-        if is_valid_object and len(current_object) == 1:
-            is_valid_object = not current_object[0].startswith("# Copied from")
-        if not is_empty_line(line) and find_indent(line) == 0 and is_valid_object:
-            # Closing parts should be included in current object
-            if line in end_markers:
-                current_object.append(line)
-                objects.append("\n".join(current_object))
-                current_object = []
-            else:
-                objects.append("\n".join(current_object))
-                current_object = [line]
-        else:
-            current_object.append(line)
-
-    # Add last object
-    if len(current_object) > 0:
-        objects.append("\n".join(current_object))
-
-    return objects
-
-
-def extract_block(content: str, indent_level: int = 0) -> str:
-    """Return the first block in `content` with the indent level `indent_level`.
-
-    The first line in `content` should be indented at `indent_level` level, otherwise an error will be thrown.
-
-    This method will immediately stop the search when a (non-empty) line with indent level less than `indent_level` is
-    encountered.
-
-    Args:
-        content (`str`): The content to parse
-        indent_level (`int`, *optional*, default to 0): The indent level of the blocks to search for
-
-    Returns:
-        `str`: The first block in `content` with the indent level `indent_level`.
-    """
-    current_object = []
-    lines = content.split("\n")
-    # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
-    end_markers = [")", "]", "}", '"""']
-
-    for idx, line in enumerate(lines):
-        if idx == 0 and indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
-            raise ValueError(
-                f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got "
-                f"{find_indent(line)} instead."
-            )
-
-        if find_indent(line) < indent_level and not is_empty_line(line):
-            break
-
-        # End of an object
-        is_valid_object = len(current_object) > 0
-        if (
-            not is_empty_line(line)
-            and not line.endswith(":")
-            and find_indent(line) == indent_level
-            and is_valid_object
-        ):
-            # Closing parts should be included in current object
-            if line.lstrip() in end_markers:
-                current_object.append(line)
-            return "\n".join(current_object)
-        else:
-            current_object.append(line)
-
-    # Add last object
-    if len(current_object) > 0:
-        return "\n".join(current_object)
-
-
-def add_content_to_text(
-    text: str,
-    content: str,
-    add_after: Optional[Union[str, Pattern]] = None,
-    add_before: Optional[Union[str, Pattern]] = None,
-    exact_match: bool = False,
-) -> str:
-    """
-    A utility to add some content inside a given text.
-
-    Args:
-       text (`str`): The text in which we want to insert some content.
-       content (`str`): The content to add.
-       add_after (`str` or `Pattern`):
-           The pattern to test on a line of `text`, the new content is added after the first instance matching it.
-       add_before (`str` or `Pattern`):
-           The pattern to test on a line of `text`, the new content is added before the first instance matching it.
-       exact_match (`bool`, *optional*, defaults to `False`):
-           A line is considered a match with `add_after` or `add_before` if it matches exactly when `exact_match=True`,
-           otherwise, if `add_after`/`add_before` is present in the line.
-
-    <Tip warning={true}>
-
-    The arguments `add_after` and `add_before` are mutually exclusive, and one exactly needs to be provided.
-
-    </Tip>
-
-    Returns:
-        `str`: The text with the new content added if a match was found.
-    """
-    if add_after is None and add_before is None:
-        raise ValueError("You need to pass either `add_after` or `add_before`")
-    if add_after is not None and add_before is not None:
-        raise ValueError("You can't pass both `add_after` or `add_before`")
-    pattern = add_after if add_before is None else add_before
-
-    def this_is_the_line(line):
-        if isinstance(pattern, Pattern):
-            return pattern.search(line) is not None
-        elif exact_match:
-            return pattern == line
-        else:
-            return pattern in line
-
-    new_lines = []
-    for line in text.split("\n"):
-        if this_is_the_line(line):
-            if add_before is not None:
-                new_lines.append(content)
-            new_lines.append(line)
-            if add_after is not None:
-                new_lines.append(content)
-        else:
-            new_lines.append(line)
-
-    return "\n".join(new_lines)
 
 
 def add_content_to_file(
     file_name: Union[str, os.PathLike],
-    content: str,
-    add_after: Optional[Union[str, Pattern]] = None,
-    add_before: Optional[Union[str, Pattern]] = None,
-    exact_match: bool = False,
+    new_content: str,
+    add_after: str,
 ):
     """
     A utility to add some content inside a given file.
@@ -299,24 +119,12 @@ def add_content_to_file(
        content (`str`): The content to add.
        add_after (`str` or `Pattern`):
            The pattern to test on a line of `text`, the new content is added after the first instance matching it.
-       add_before (`str` or `Pattern`):
-           The pattern to test on a line of `text`, the new content is added before the first instance matching it.
-       exact_match (`bool`, *optional*, defaults to `False`):
-           A line is considered a match with `add_after` or `add_before` if it matches exactly when `exact_match=True`,
-           otherwise, if `add_after`/`add_before` is present in the line.
-
-    <Tip warning={true}>
-
-    The arguments `add_after` and `add_before` are mutually exclusive, and one exactly needs to be provided.
-
-    </Tip>
     """
     with open(file_name, "r", encoding="utf-8") as f:
         old_content = f.read()
 
-    new_content = add_content_to_text(
-        old_content, content, add_after=add_after, add_before=add_before, exact_match=exact_match
-    )
+    before, after = old_content.split(add_after, 1)
+    new_content = before + add_after + new_content + after
 
     with open(file_name, "w", encoding="utf-8") as f:
         f.write(new_content)
@@ -551,253 +359,8 @@ def duplicate_module(
         f.write(content)
 
 
-# All the potential file types to create
-ALL_FILE_TYPE_PATTERNS = (
-    "modeling",
-    "configuration",
-    "tokenization",
-    "processing",
-    "image_processing",
-    "video_processing",
-    "feature_extraction",
-)
-
-def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
-    """
-    Retrieves all the files associated to a model.
-
-    Args:
-        model_type (`str`): A valid model type (like "bert" or "gpt2")
-
-    Returns:
-        `dict[str, Union[Path, list[Path]]]`: A dictionary with the following keys:
-        - **doc_file** -- The documentation file for the model.
-        - **model_files** -- All the files in the model module.
-        - **test_files** -- The test files for the model.
-    """
-    module_name = model_type_to_module_name(model_type)
-
-    model_module = TRANSFORMERS_PATH / "models" / module_name
-    model_files = list(model_module.glob("*.py"))
-    model_files = [f for f in model_files if not re.search(r"_(?:tf|flax|_init__)", Path(f).stem)]
-
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.md"
-
-    # Basic pattern for test files
-    test_files = [
-        f"test_modeling_{module_name}.py",
-        f"test_tokenization_{module_name}.py",
-        f"test_image_processing_{module_name}.py",
-        f"test_feature_extraction_{module_name}.py",
-        f"test_processor_{module_name}.py",
-    ]
-    # Add the test directory
-    test_files = [REPO_PATH / "tests" / "models" / module_name / f for f in test_files]
-    # Filter by existing files
-    test_files = [f for f in test_files if f.exists()]
-
-    return {"doc_file": doc_file, "model_files": model_files, "module_name": module_name, "test_files": test_files}
-
-
-_re_checkpoint_in_config = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
-
-
-def find_base_model_checkpoint(
-    model_type: str, model_files: Optional[dict[str, Union[Path, list[Path]]]] = None
-) -> str:
-    """
-    Finds the model checkpoint used in the docstrings for a given model.
-
-    Args:
-        model_type (`str`): A valid model type (like "bert" or "gpt2")
-        model_files (`dict[str, Union[Path, list[Path]]`, *optional*):
-            The files associated to `model_type`. Can be passed to speed up the function, otherwise will be computed.
-
-    Returns:
-        `str`: The checkpoint used.
-    """
-    if model_files is None:
-        model_files = get_model_files(model_type)
-    module_files = model_files["model_files"]
-    for fname in module_files:
-        # After the @auto_docstring refactor, we expect the checkpoint to be in the configuration file's docstring
-        if "configuration" not in str(fname):
-            continue
-
-        with open(fname, "r", encoding="utf-8") as f:
-            content = f.read()
-            if _re_checkpoint_in_config.search(content) is not None:
-                checkpoint = _re_checkpoint_in_config.search(content).groups()[0]
-                # Remove quotes
-                checkpoint = checkpoint.replace('"', "")
-                checkpoint = checkpoint.replace("'", "")
-                return checkpoint
-
-    # TODO: Find some kind of fallback if there is no _CHECKPOINT_FOR_DOC in any of the modeling file.
-    return ""
-
-
-_re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
-
-
-def retrieve_model_classes(model_type: str) -> list[str]:
-    """
-    Retrieve the model classes associated to a given model.
-
-    Args:
-        model_type (`str`): A valid model type (like "bert" or "gpt2")
-
-    Returns:
-        `list[str]`: A list of model classes associated to the model.
-    """
-    new_model_classes = []
-    model_mappings = [attr for attr in dir(modeling_auto) if _re_model_mapping.search(attr) is not None]
-    for model_mapping_name in model_mappings:
-        model_mapping = getattr(modeling_auto, model_mapping_name)
-        if model_type in model_mapping:
-            new_model_classes.append(model_mapping[model_type])
-
-    if len(new_model_classes) > 0:
-        # Remove duplicates
-        model_classes = list(set(new_model_classes))
-
-    return model_classes
-
-
-
-def clean_init(init_file: Union[str, os.PathLike], keep_processing: bool = True):
-    """
-    Removes all the import lines that don't concern tokenizers/feature extractors/image processors/processors in an init.
-
-    Args:
-        init_file (`str` or `os.PathLike`): The path to the init to treat.
-        keep_processing (`bool`, *optional*, defaults to `True`):
-            Whether or not to keep the preprocessing (tokenizer, feature extractor, image processor, processor) imports
-            in the init.
-    """
-    to_remove = ["tf", "flax"]
-    if not keep_processing:
-        to_remove.extend(["sentencepiece", "tokenizers", "vision"])
-
-    remove_pattern = "|".join(to_remove)
-    re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
-    re_try = re.compile(r"\s*try:")
-    re_else = re.compile(r"\s*else:")
-    re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
-
-    with open(init_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    lines = content.split("\n")
-    new_lines = []
-    idx = 0
-    while idx < len(lines):
-        # Conditional imports in try-except-else blocks
-        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
-            # Remove the preceding `try:`
-            new_lines.pop()
-            idx += 1
-            # Iterate until `else:`
-            while is_empty_line(lines[idx]) or re_else.search(lines[idx]) is None:
-                idx += 1
-            idx += 1
-            indent = find_indent(lines[idx])
-            while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
-                idx += 1
-        # Remove the import from utils
-        elif re_is_xxx_available.search(lines[idx]) is not None:
-            line = lines[idx]
-            for framework in to_remove:
-                line = line.replace(f", is_{framework}_available", "")
-                line = line.replace(f"is_{framework}_available, ", "")
-                line = line.replace(f"is_{framework}_available,", "")
-                line = line.replace(f"is_{framework}_available", "")
-
-            if len(line.strip()) > 0:
-                new_lines.append(line)
-            idx += 1
-        # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
-        elif keep_processing or (
-            re.search(r'^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
-            and re.search(r"^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
-            is None
-        ):
-            new_lines.append(lines[idx])
-            idx += 1
-        else:
-            idx += 1
-
-    with open(init_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(new_lines))
-
-
-
-def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns):
-    """
-    Add a tokenizer to the relevant mappings in the auto module.
-
-    Args:
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-    """
-    if old_model_patterns.tokenizer_class is None or new_model_patterns.tokenizer_class is None:
-        return
-
-    with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
-        content = f.read()
-
-    pattern_tokenizer = re.compile(r"^\s*TOKENIZER_MAPPING_NAMES\s*=\s*OrderedDict\b")
-    lines = content.split("\n")
-    idx = 0
-    # First we get to the TOKENIZER_MAPPING_NAMES block.
-    while not pattern_tokenizer.search(lines[idx]):
-        idx += 1
-    idx += 1
-
-    # That block will end at this prompt:
-    while not lines[idx].startswith("TOKENIZER_MAPPING = _LazyAutoMapping"):
-        # Either all the tokenizer block is defined on one line, in which case, it ends with "),"
-        if lines[idx].endswith(","):
-            block = lines[idx]
-        # Otherwise it takes several lines until we get to a "),"
-        else:
-            block = []
-            # should change to "        )," instead of "            ),"
-            while not lines[idx].startswith("        ),"):
-                block.append(lines[idx])
-                idx += 1
-            # if the lines[idx] does start with "        )," we still need it in our block
-            block.append(lines[idx])
-            block = "\n".join(block)
-        idx += 1
-
-        # If we find the model type and tokenizer class in that block, we have the old model tokenizer block
-        if f'"{old_model_patterns.model_type}"' in block and old_model_patterns.tokenizer_class in block:
-            break
-
-    new_block = block.replace(old_model_patterns.model_type, new_model_patterns.model_type)
-    new_block = new_block.replace(old_model_patterns.tokenizer_class, new_model_patterns.tokenizer_class)
-
-    new_lines = lines[:idx] + [new_block] + lines[idx:]
-    with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "w", encoding="utf-8") as f:
-        f.write("\n".join(new_lines))
-
-
-AUTO_CLASSES_PATTERNS = {
-    "configuration_auto.py": [
-        '        ("{model_type}", "{model_name}"),',
-        '        ("{model_type}", "{config_class}"),',
-        '        ("{model_type}", "{pretrained_archive_map}"),',
-    ],
-    "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
-    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_classes}"),'],
-    "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
-    "processing_auto.py": ['        ("{model_type}", "{processor_class}"),'],
-}
-
-
-def add_model_to_auto_classes(
-    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: list[str]
+def add_model_to_auto_mappings(
+    old_model_infos: ModelInfos, new_model_lowercase, new_model_paper_name, filenames_to_add
 ):
     """
     Add a model to the relevant mappings in the auto module.
@@ -807,221 +370,131 @@ def add_model_to_auto_classes(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         model_classes (`list[str]`): A list of model classes implemented.
     """
-    for filename, patterns in AUTO_CLASSES_PATTERNS.items():
-        # Extend patterns with all model classes if necessary
-        new_patterns = []
-        for pattern in patterns:
-            if re.search("any_([a-z]*)_class", pattern) is not None:
-                new_patterns.extend([pattern.replace("{" + "any_pt_class" + "}", cls) for cls in model_classes])
-            elif "{config_class}" in pattern:
-                new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
-            elif "{image_processor_classes}" in pattern:
-                if (
-                    old_model_patterns.image_processor_class is not None
-                    and new_model_patterns.image_processor_class is not None
-                ):
-                    if (
-                        old_model_patterns.image_processor_fast_class is not None
-                        and new_model_patterns.image_processor_fast_class is not None
-                    ):
-                        new_patterns.append(
-                            pattern.replace(
-                                '"{image_processor_classes}"',
-                                f'("{old_model_patterns.image_processor_class}", "{old_model_patterns.image_processor_fast_class}")',
-                            )
-                        )
-                    else:
-                        new_patterns.append(
-                            pattern.replace(
-                                '"{image_processor_classes}"', f'("{old_model_patterns.image_processor_class}",)'
-                            )
-                        )
-            elif "{feature_extractor_class}" in pattern:
-                if (
-                    old_model_patterns.feature_extractor_class is not None
-                    and new_model_patterns.feature_extractor_class is not None
-                ):
-                    new_patterns.append(
-                        pattern.replace("{feature_extractor_class}", old_model_patterns.feature_extractor_class)
-                    )
-            elif "{processor_class}" in pattern:
-                if old_model_patterns.processor_class is not None and new_model_patterns.processor_class is not None:
-                    new_patterns.append(pattern.replace("{processor_class}", old_model_patterns.processor_class))
-            else:
-                new_patterns.append(pattern)
+    new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
+    old_model_lowercase = old_model_infos.lowercase_name
+    old_cased_name = old_model_infos.camelcase_name
+    filenames_to_add = [(filename.replace(old_model_lowercase, "auto"), to_add) for filename, to_add in filenames_to_add[1:]]
 
-        # Loop through all patterns.
-        for pattern in new_patterns:
-            full_name = TRANSFORMERS_PATH / "models" / "auto" / filename
-            old_model_line = pattern
-            new_model_line = pattern
-            for attr in ["model_type", "model_name"]:
-                old_model_line = old_model_line.replace("{" + attr + "}", getattr(old_model_patterns, attr))
-                new_model_line = new_model_line.replace("{" + attr + "}", getattr(new_model_patterns, attr))
-            new_model_line = new_model_line.replace(
-                old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
-            )
-            add_content_to_file(full_name, new_model_line, add_after=old_model_line)
+    # Add the config mappings directly as the handling for config is a bit different
+    add_content_to_file(
+        TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
+        new_content=f'        ("{new_model_lowercase}", "{new_cased_name}Config"),',
+        add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
+    )
+    add_content_to_file(
+        TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
+        new_content=f'        ("{new_model_lowercase}", "{new_model_paper_name}"),',
+        add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
+    )
 
-    # Tokenizers require special handling
-    insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns)
+    for filename, to_add in filenames_to_add:
+        if to_add:
+            with open(TRANSFORMERS_PATH / "models" / "auto" / filename) as f:
+                file = f.read()
+            # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
+            matching_lines = re.findall(rf'( {{8,12}}\(\s*"{old_model_lowercase}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL)
+            for match in matching_lines:
+                add_content_to_file(
+                    TRANSFORMERS_PATH / "models" / "auto" / filename,
+                    new_content=match.replace(old_model_lowercase, new_model_lowercase).replace(old_cased_name, new_cased_name),
+                    add_after=match
+                )
 
 
-DOC_OVERVIEW_TEMPLATE = """## Overview
-
-The {model_name} model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
-
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
-"""
-
-
-def duplicate_doc_file(
-    doc_file: Union[str, os.PathLike],
-    old_model_patterns: ModelPatterns,
-    new_model_patterns: ModelPatterns,
-    dest_file: Optional[Union[str, os.PathLike]] = None,
-):
+def create_doc_file(new_paper_name: str, public_classes: list[str]):
     """
-    Duplicate a documentation file and adapts it for a new model.
-
-    Args:
-        module_file (`str` or `os.PathLike`): Path to the doc file to duplicate.
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
-            Will default to the a file named `{new_model_patterns.model_type}.md` in the same folder as `module_file`.
+    TO FILL
     """
-    with open(doc_file, "r", encoding="utf-8") as f:
-        content = f.read()
+    added_note = (
+        "\n\n⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that "
+        "may not be rendered properly in your Markdown viewer.\n\n-->\n\n"
+    )
+    copyright_for_markdown = COPYRIGHT.replace("# ", "").replace("coding=utf-8\n", "<!--") + added_note
 
-    content = re.sub(r"<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
-    if dest_file is None:
-        dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.md"
+    doc_template = textwrap.dedent(
+        f"""
+        # {new_paper_name}
 
-    # Parse the doc file in blocks. One block per section/header
-    lines = content.split("\n")
-    blocks = []
-    current_block = []
+        ## Overview
 
-    for line in lines:
-        if line.startswith("#"):
-            blocks.append("\n".join(current_block))
-            current_block = [line]
-        else:
-            if not re.search(r"</*(?:pt|tf|jax)>", line):
-                current_block.append(line)
-    blocks.append("\n".join(current_block))
+        The {new_paper_name} model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+        <INSERT SHORT SUMMARY HERE>
 
-    new_blocks = []
-    in_classes = False
-    for block in blocks:
-        # Copyright
-        if not block.startswith("#"):
-            new_blocks.append(block)
-        # Main title
-        elif re.search(r"^#\s+\S+", block) is not None:
-            new_blocks.append(f"# {new_model_patterns.model_name}\n")
-        # The config starts the part of the doc with the classes.
-        elif not in_classes and old_model_patterns.config_class in block.split("\n")[0]:
-            in_classes = True
-            new_blocks.append(DOC_OVERVIEW_TEMPLATE.format(model_name=new_model_patterns.model_name))
-            new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
-            new_blocks.append(new_block)
-        # In classes
-        elif in_classes:
-            block_title = block.split("\n")[0]
-            block_class = re.search(r"^#+\s+(\S.*)$", block_title).groups()[0]
-            new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
+        The abstract from the paper is the following:
 
-            if "Tokenizer" in block_class:
-                # We only add the tokenizer if necessary
-                if old_model_patterns.tokenizer_class != new_model_patterns.tokenizer_class:
-                    new_blocks.append(new_block)
-            elif "ImageProcessor" in block_class:
-                # We only add the image processor if necessary
-                if old_model_patterns.image_processor_class != new_model_patterns.image_processor_class:
-                    new_blocks.append(new_block)
-            elif "ImageProcessorFast" in block_class:
-                # We only add the image processor if necessary
-                if old_model_patterns.image_processor_fast_class != new_model_patterns.image_processor_fast_class:
-                    new_blocks.append(new_block)
-            elif "FeatureExtractor" in block_class:
-                # We only add the feature extractor if necessary
-                if old_model_patterns.feature_extractor_class != new_model_patterns.feature_extractor_class:
-                    new_blocks.append(new_block)
-            elif "Processor" in block_class:
-                # We only add the processor if necessary
-                if old_model_patterns.processor_class != new_model_patterns.processor_class:
-                    new_blocks.append(new_block)
-            elif len(block_class.split(" ")) == 1:
-                if not block_class.startswith("TF") and not block_class.startswith("Flax"):
-                    new_blocks.append(new_block)
-            else:
-                new_blocks.append(new_block)
+        <INSERT PAPER ABSTRACT HERE>
 
-    with open(dest_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(new_blocks))
+        Tips:
+
+        <INSERT TIPS ABOUT MODEL HERE>
+
+        This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+        The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+
+        ## Usage examples
+
+        <INSERT SOME NICE EXAMPLES HERE>
+        """
+    )
+
+    # Add public classes doc
+    doc_for_classes = []
+    for class_ in public_classes:
+        doc = f"## {class_}\n\n[[autodoc]] {class_}"
+        if "Model" in class_:
+            doc += "\n    - forward"
+
+    class_doc = "\n\n".join(doc_for_classes)
+
+    return copyright_for_markdown + doc_template + class_doc
+    
 
 
-def insert_model_in_doc_toc(old_model_patterns, new_model_patterns):
+def insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_paper_name):
     """
     Insert the new model in the doc TOC, in the same section as the old model.
 
     Args:
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+        TO FILL
     """
     toc_file = REPO_PATH / "docs" / "source" / "en" / "_toctree.yml"
-    with open(toc_file, "r", encoding="utf8") as f:
-        content = yaml.safe_load(f)
+    with open(toc_file, "r") as f:
+        content = f.read()
 
-    # Get to the model API doc
-    api_idx = 0
-    while content[api_idx]["title"] != "API":
-        api_idx += 1
-    api_doc = content[api_idx]["sections"]
+    old_model_toc = re.search(rf"- local: model_doc/{old_model_lowercase}\n {{8}}title: \w+\n", content).group(0)
+    new_toc = f"      - local: model_doc/{new_model_lowercase}\n        title: {new_model_paper_name}\n"
+    add_content_to_file(
+        REPO_PATH / "docs" / "source" / "en" / "_toctree.yml",
+        new_content=new_toc,
+        add_after=old_model_toc
+    )
 
-    model_idx = 0
-    while api_doc[model_idx]["title"] != "Models":
-        model_idx += 1
-    model_doc = api_doc[model_idx]["sections"]
 
-    # Find the base model in the Toc
-    old_model_type = old_model_patterns.model_type
-    section_idx = 0
-    while section_idx < len(model_doc):
-        sections = [entry["local"] for entry in model_doc[section_idx]["sections"]]
-        if f"model_doc/{old_model_type}" in sections:
-            break
+def create_init_file(old_lowercase_name: str, new_lowercase_name: str, filenames_to_add: list[tuple[str, bool]]):
+    """
+    TO FILL
+    """
+    filenames_to_add = [(filename.replace(old_lowercase_name, new_lowercase_name).replace(".py", ""), to_add) for filename, to_add in filenames_to_add]
+    imports = "\n            ".join(f"from .{file} import *" for file, to_add in filenames_to_add if to_add)
+    init_file = COPYRIGHT + textwrap.dedent(
+        f"""
+        from typing import TYPE_CHECKING
 
-        section_idx += 1
+        from ...utils import _LazyModule
+        from ...utils.import_utils import define_import_structure
 
-    if section_idx == len(model_doc):
-        old_model = old_model_patterns.model_name
-        new_model = new_model_patterns.model_name
-        print(f"Did not find {old_model} in the table of content, so you will need to add {new_model} manually.")
-        return
 
-    # Add the new model in the same toc
-    toc_entry = {"local": f"model_doc/{new_model_patterns.model_type}", "title": new_model_patterns.model_name}
-    model_doc[section_idx]["sections"].append(toc_entry)
-    model_doc[section_idx]["sections"] = sorted(model_doc[section_idx]["sections"], key=lambda s: s["title"].lower())
-    api_doc[model_idx]["sections"] = model_doc
-    content[api_idx]["sections"] = api_doc
+        if TYPE_CHECKING:
+            {imports}
+        else:
+            import sys
 
-    with open(toc_file, "w", encoding="utf-8") as f:
-        f.write(yaml.dump(content, allow_unicode=True))
+            _file = globals()["__file__"]
+            sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+            )
+        """
+    )
+    return init_file
 
 
 class ClassFinder(CSTVisitor):
@@ -1068,35 +541,19 @@ def find_modular_structure(module_name: str, old_model_infos: ModelInfos, new_ca
     all_classes, public_classes = find_all_classes_from_file(module_name)
     import_location = ".".join(module_name.split(os.sep)[-2:]).replace(".py", "")
     old_cased_name = old_model_infos.camelcase_name
-    imports = f"from ..{import_location} import {', '.join(class_ for class_ in classes)}"
-    modular_classes = "\n\n".join(f"class {class_.replace(old_cased_name, new_cased_name)}({class_})\n    pass" for class_ in classes)
+    imports = f"from ..{import_location} import {', '.join(class_ for class_ in all_classes)}"
+    modular_classes = "\n\n".join(f"class {class_.replace(old_cased_name, new_cased_name)}({class_})\n    pass" for class_ in all_classes)
     return imports, modular_classes, public_classes
 
 
 def create_modular_file(
     old_model_infos: ModelInfos,
     new_model_lowercase: str,
-    add_tokenizer: bool,
-    add_fast_tokenizer: bool,
-    add_image_processor: bool,
-    add_fast_image_processor: bool,
-    add_feature_extractor: bool,
-    add_processor: bool,
+    filenames_to_add: list[tuple[str, bool]],
 ) -> str:
     new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
     old_model_lowercase = old_model_infos.lowercase_name
     old_folder_root = TRANSFORMERS_PATH / "models" / old_model_lowercase
-
-    filenames_to_add = (
-        (f"configuration_{old_model_lowercase}.py", True),
-        (f"modeling_{old_model_lowercase}.py", True),
-        (f"tokenization_{old_model_lowercase}.py", add_tokenizer),
-        (f"tokenization_{old_model_lowercase}_fast.py", add_fast_tokenizer),
-        (f"image_processing_{old_model_lowercase}.py", add_image_processor),
-        (f"image_processing_{old_model_lowercase}_fast.py", add_fast_image_processor),
-        (f"feature_extraction_{old_model_lowercase}.py", add_feature_extractor),
-        (f"processing_{old_model_lowercase}.py", add_processor),
-    )
 
     # Construct the modular file from the original (old) model, by subclassing each class
     all_imports = ""
@@ -1113,13 +570,15 @@ def create_modular_file(
     all_statement = textwrap.dedent(
         f"""
         __all__ = [
-            {"\n            ".join(public_class) for public_class in all_public_classes}
+            {"\n            ".join(public_class for public_class in all_public_classes)}
         ]
         """
     )
     # Create the whole modular file
     modular_file = COPYRIGHT + all_imports + all_bodies + all_statement
-    return modular_file
+    # Remove outer explicit quotes "" around the public class names before returning them
+    all_public_classes = [public_class.replace("\"", "") for public_class in all_public_classes]
+    return modular_file, all_public_classes
 
 
 def create_new_model_like(
@@ -1140,46 +599,47 @@ def create_new_model_like(
     Args:
         FILL
     """
-    old_model_files = get_model_files(old_model_infos.lowercase_name)
-    old_model_classes = retrieve_model_classes(old_model_infos.lowercase_name)
+    old_model_lowercase = old_model_infos.lowercase_name
+    # A list of the old filenames, along whether we should copy them or not
+    filenames_to_add = (
+        (f"configuration_{old_model_lowercase}.py", True),
+        (f"modeling_{old_model_lowercase}.py", True),
+        (f"tokenization_{old_model_lowercase}.py", add_tokenizer),
+        (f"tokenization_{old_model_lowercase}_fast.py", add_fast_tokenizer),
+        (f"image_processing_{old_model_lowercase}.py", add_image_processor),
+        (f"image_processing_{old_model_lowercase}_fast.py", add_fast_image_processor),
+        (f"feature_extraction_{old_model_lowercase}.py", add_feature_extractor),
+        (f"processing_{old_model_lowercase}.py", add_processor),
+    )
 
     # 1. We create the folder for our new model
     new_module_folder = TRANSFORMERS_PATH / "models" / new_model_lowercase
     os.makedirs(new_module_folder, exist_ok=True)
 
     # 2. Create and add the modular file
-    modular_file = create_modular_file(old_model_infos, new_model_lowercase, add_tokenizer, add_fast_tokenizer, add_image_processor, add_fast_image_processor, add_feature_extractor, add_processor)
+    modular_file, public_classes = create_modular_file(old_model_infos, new_model_lowercase, filenames_to_add)
     with open(new_module_folder / f"modular_{new_model_lowercase}.py", "w") as f:
         f.write(modular_file)
 
-    # 3. Add the __init__.py
-    
-    
+    # 3. Create and add the __init__.py
+    init_file = create_init_file(old_model_lowercase, new_model_lowercase, filenames_to_add)
+    with open(new_module_folder / f"__init__.py", "w") as f:
+        f.write(init_file)
 
-    clean_init(module_folder / "__init__.py", keep_processing=not keep_old_processing)
-
-    # 2. We add our new model to the models init and the main init
+    # 4. Add new model to the models init
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "__init__.py",
-        f"    {new_model_patterns.model_lower_cased},",
-        add_after=f"    {old_module_name},",
-        exact_match=True,
+        new_content=f"    from .{new_model_lowercase} import *\n",
+        add_after=f"if TYPE_CHECKING:\n",
     )
 
-    # 3. Add test files
-    files_to_adapt = model_files["test_files"]
-    if keep_old_processing:
-        files_to_adapt = [
-            f
-            for f in files_to_adapt
-            if "tokenization" not in str(f)
-            and "processor" not in str(f)
-            and "feature_extraction" not in str(f)
-            and "image_processing" not in str(f)
-        ]
+    # 5. Add model to auto mappings
+    add_model_to_auto_mappings(old_model_lowercase, new_model_lowercase, new_model_paper_name, filenames_to_add)
 
-    tests_folder = REPO_PATH / "tests" / "models" / new_model_patterns.model_lower_cased
+    # 6. Add test files
+    tests_folder = REPO_PATH / "tests" / "models" / new_model_lowercase
     os.makedirs(tests_folder, exist_ok=True)
+    # Add empty __init__.py
     with open(tests_folder / "__init__.py", "w"):
         pass
 
@@ -1196,52 +656,15 @@ def create_new_model_like(
             attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
         )
 
-    # 4. Add model to auto classes
-    add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
+    # 7. Add doc file
+    doc_file = create_doc_file(new_model_paper_name, public_classes)
+    with open(REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{new_model_lowercase}.md", "w") as f:
+        f.write(doc_file)
+    insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_paper_name)
 
-    # 5. Add doc file
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.md"
-    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns)
-    insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
-
-    # 6. Add fast image processor if necessary
+    # 8. Add additional fast image processor if necessary
     if create_fast_image_processor:
-        add_fast_image_processor(model_name=new_model_patterns.model_lower_cased)
-
-    # 7. Warn the user for duplicate patterns
-    if old_model_patterns.model_type == old_model_patterns.checkpoint:
-        print(
-            "The model you picked has the same name for the model type and the checkpoint name "
-            f"({old_model_patterns.model_type}). As a result, it's possible some places where the new checkpoint "
-            f"should be, you have {new_model_patterns.model_type} instead. You should search for all instances of "
-            f"{new_model_patterns.model_type} in the new files and check they're not badly used as checkpoints."
-        )
-    elif old_model_patterns.model_lower_cased == old_model_patterns.checkpoint:
-        print(
-            "The model you picked has the same name for the model type and the checkpoint name "
-            f"({old_model_patterns.model_lower_cased}). As a result, it's possible some places where the new "
-            f"checkpoint should be, you have {new_model_patterns.model_lower_cased} instead. You should search for "
-            f"all instances of {new_model_patterns.model_lower_cased} in the new files and check they're not badly "
-            "used as checkpoints."
-        )
-    if (
-        old_model_patterns.model_type == old_model_patterns.model_lower_cased
-        and new_model_patterns.model_type != new_model_patterns.model_lower_cased
-    ):
-        print(
-            "The model you picked has the same name for the model type and the lowercased model name "
-            f"({old_model_patterns.model_lower_cased}). As a result, it's possible some places where the new "
-            f"model type should be, you have {new_model_patterns.model_lower_cased} instead. You should search for "
-            f"all instances of {new_model_patterns.model_lower_cased} in the new files and check they're not badly "
-            "used as the model type."
-        )
-
-    if not keep_old_processing and old_model_patterns.tokenizer_class is not None:
-        print(
-            "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
-            "model has a tokenizer fast, you will also need to manually add the converter in the "
-            "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
-        )
+        add_fast_image_processor(model_name=new_model_lowercase)
 
 
 def add_new_model_like_command_factory(args: Namespace):
@@ -1258,18 +681,18 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
     def __init__(self, config_file=None, path_to_repo=None, *args):
-            (
-                self.old_model_infos,
-                self.new_model_lowercase,
-                self.new_model_paper_name,
-                self.add_tokenizer,
-                self.add_fast_tokenizer,
-                self.add_image_processor,
-                self.add_fast_image_processor,
-                self.add_feature_extractor,
-                self.add_processor,
-                self.create_fast_image_processor,
-            ) = get_user_input()
+        (
+            self.old_model_infos,
+            self.new_model_lowercase,
+            self.new_model_paper_name,
+            self.add_tokenizer,
+            self.add_fast_tokenizer,
+            self.add_image_processor,
+            self.add_fast_image_processor,
+            self.add_feature_extractor,
+            self.add_processor,
+            self.create_fast_image_processor,
+        ) = get_user_input()
 
         self.path_to_repo = path_to_repo
 
@@ -1387,7 +810,7 @@ def get_user_input():
     new_model_lowercase = get_user_field("What is the snake case name of the new model (e.g. `new_model`)? ")
     new_model_paper_name = get_user_field(
         "What is the full name (with no special casing) for your new model in the paper (e.g. `LlaMa`)? ",
-        default_value="".join(x.title() for x in new_model_paper_name.split("_")
+        default_value="".join(x.title() for x in new_model_paper_name.split("_"))
     )
 
     # Ask if we want to add individual processor classes as well
