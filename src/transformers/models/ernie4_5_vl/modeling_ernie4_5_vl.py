@@ -161,14 +161,7 @@ class RopeEmbedding(nn.Module):
             x2 = x[..., 1::2]
             return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
-        # copy apply
-        #cos_real = cos.unsqueeze(-2)
-        #sin_real = sin.unsqueeze(-2)
-
-        query = (q.to(torch.float32) * cos_real) + (rotate_half(q) * sin_real)
-        key = (k.to(torch.float32) * cos_real) + (rotate_half(k) * sin_real)
-
-        """
+        #"""
         sin, cos = torch.chunk(rp, 2, axis=-1)
         batch_indices = torch.arange(end=position_ids.shape[0])
         batch_indices = batch_indices[..., None]
@@ -215,7 +208,21 @@ class RopeEmbedding(nn.Module):
         )
         cos_thw = torch.cat([cos_hw, cos_t], dim=-1)
         cos_pos = cos_thw.repeat_interleave(2, dim=-1)
+
+        print(torch.allclose(sin_pos, sin_real))
+        print(torch.allclose(cos_pos, cos_real))
+        print()
         #"""
+
+        # copy apply
+        #cos_real = cos.unsqueeze(-2)
+        #sin_real = sin.unsqueeze(-2)
+
+        query = (q.to(torch.float32) * cos_real) + (rotate_half(q) * sin_real)
+        key = (k.to(torch.float32) * cos_real) + (rotate_half(k) * sin_real)
+
+        #query = (q.to(torch.float32) * cos_pos) + (rotate_half(q) * sin_pos)
+        #key = (k.to(torch.float32) * cos_pos) + (rotate_half(k) * sin_pos)
 
         return query, key
 
