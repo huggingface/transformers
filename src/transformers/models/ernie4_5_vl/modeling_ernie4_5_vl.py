@@ -73,39 +73,60 @@ class UniqueNameGuard:
 
 
 class RopeEmbedding(nn.Module):
-    def __init__(self, head_dim, compression_ratio=1.0, base=10000, freq_allocation=0):
+    def __init__(self, config, device=None, freq_allocation=0):
         super().__init__()
-        self.head_dim = head_dim
-        self.inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(dtype=torch.float) / head_dim))
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-        t_dim = freq_allocation
-        hw_dim = self.inv_freq.shape[-1] - t_dim
-        self.split_sizes = hw_dim // 2, hw_dim // 2, t_dim
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        self.inv_freq_2 = torch.empty_like(self.inv_freq)
-        self.inv_freq_2[ : hw_dim] = torch.cat([self.inv_freq[: -t_dim][0::2], self.inv_freq[: -t_dim][1::2]])
-        self.inv_freq_2[-t_dim :] = self.inv_freq[-t_dim :]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
-        self.freq_allocation = freq_allocation
+        # TODO: move into new rope init?
+        # divide frequency allocation based on `freq_allocation`
+        # and apply necessary (pre-)rotations
+        t_dim = freq_allocation  # time dimension
+        hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension
+        self.split_sizes = hw_dim // 2, hw_dim // 2, t_dim  # for 3d recomposition
 
-    def forward(self, position_ids):
-        inv_freq_expanded_2 = self.inv_freq_2[None, None, :, None].float().expand(3, position_ids.shape[0], -1, 1).to(position_ids.device)
+        inv_freq_3d = torch.empty_like(inv_freq)
+        # (pre-)rotate to avoid another rotation during the forward
+        inv_freq_3d[ : hw_dim] = torch.cat(
+            [inv_freq[: -t_dim][0::2], inv_freq[: -t_dim][1::2]]
+        )
+        inv_freq_3d[-t_dim :] = inv_freq[-t_dim :]
+
+        self.register_buffer("inv_freq", inv_freq_3d, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids.permute(2, 0, 1)[:, :, None, :].float()  # shape (3, bs, 1, positions)
-        freqs_2 = (inv_freq_expanded_2.float() @ position_ids_expanded.float()).transpose(2, 3)
-        cos_3 = freqs_2.cos()
-        sin_3 = freqs_2.sin()
 
-        sin_3_h, sin_3_w, sin_3_t = (m[(i+1) % 3] for i, m in enumerate(sin_3.split([*self.split_sizes], dim=-1)))
-        sin_3_hw = torch.stack([sin_3_h, sin_3_w], dim=-1).flatten(-2)
-        sin_3_thw = torch.cat([sin_3_hw, sin_3_t], dim=-1)
-        sin_real = sin_3_thw.repeat_interleave(2, dim=-1)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        cos_3_h, cos_3_w, cos_3_t = (m[(i+1) % 3] for i, m in enumerate(cos_3.split([*self.split_sizes], dim=-1)))
-        cos_3_hw = torch.stack([cos_3_h, cos_3_w], dim=-1).flatten(-2)
-        cos_3_thw = torch.cat([cos_3_hw, cos_3_t], dim=-1)
-        cos_real = cos_3_thw.repeat_interleave(2, dim=-1)
+        sin = self.recomposition_to_3d(sin)
+        cos = self.recomposition_to_3d(cos)
 
-        return cos_real, sin_real
+        return cos, sin
+
+    def recomposition_to_3d(self, freq):
+        freq_h, freq_w, freq_t = (m[(i+1) % 3] for i, m in enumerate(freq.split([*self.split_sizes], dim=-1)))
+        freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
+        freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
+        return freq_hwt.repeat_interleave(2, dim=-1)
 
     def apply_rotary_3d(self, q, k, cos, sin):
         """
@@ -199,9 +220,7 @@ class Ernie4_5_Attention(nn.Module):
         # TODO: rope to be moved outside
         self.freq_allocation = getattr(config, "freq_allocation", 0)
         self.rotary_emb = RopeEmbedding(
-            self.head_dim,
-            compression_ratio=config.compression_ratio,
-            base=config.rope_theta,
+            config=config,
             freq_allocation=self.freq_allocation,
         )
 
@@ -227,7 +246,7 @@ class Ernie4_5_Attention(nn.Module):
         if past_key_value is not None:
             position_ids = position_ids[:, -1:, :]
 
-        cos, sin = self.rotary_emb(position_ids)
+        cos, sin = self.rotary_emb(query_states, position_ids)
         query_states, key_states = self.rotary_emb.apply_rotary_3d(query_states, key_states, cos, sin)
 
         # cache
