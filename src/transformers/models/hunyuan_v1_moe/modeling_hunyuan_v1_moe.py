@@ -499,7 +499,8 @@ class HunYuanMLP(nn.Module):
         self.hidden_size = config.hidden_size
         self.hidden_act = config.hidden_act
         self.intermediate_size = config.intermediate_size
-        assert self.hidden_act == "silu", "We support SwiGLU only."
+        if self.hidden_act != "silu":
+            warnings.warn("We support SwiGLU only.", category=UserWarning)
 
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
