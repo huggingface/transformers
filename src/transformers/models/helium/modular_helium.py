@@ -130,24 +130,15 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 __all__ = [

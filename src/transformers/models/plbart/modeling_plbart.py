@@ -80,17 +80,6 @@ class PLBartPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
@@ -424,8 +413,8 @@ class PLBartAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)

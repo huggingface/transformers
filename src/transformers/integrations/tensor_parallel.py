@@ -487,7 +487,7 @@ class ReplicateParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
@@ -556,7 +556,7 @@ class ColwiseParallel(TensorParallelLayer):
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         # back to local tensor
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
 
 class PackedColwiseParallel(ColwiseParallel):
@@ -650,7 +650,7 @@ class RowwiseParallel(TensorParallelLayer):
         if hasattr(mod, "_bias"):
             outputs += mod._bias
         # back to local tensor if use_local_output is True
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
