@@ -50,7 +50,7 @@ class OpenAIMoeConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "local_rowwise",
-        "layers.*.mlp": "gather",
+        "layers.*.mlp.experts": "gather",
         "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
@@ -75,9 +75,6 @@ class OpenAIMoeConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         max_position_embeddings=131072,
         rms_norm_eps: float = 1e-5,
-        pad_token_id: int = 0,
-        bos_token_id: int = 1,
-        eos_token_id: int = 2,
         rope_scaling={"rope_type": "yarn", "factor": 32.0, "beta_fast": 32.0, "beta_slow": 1.0, "truncate": False},
         attention_dropout: float = 0.0,
         num_experts_per_tok=4,
@@ -127,9 +124,6 @@ class OpenAIMoeConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
