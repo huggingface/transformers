@@ -185,10 +185,6 @@ def make_list_of_audio(
     if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
         return audio
 
-    # If it's a torch tensor with more than one dimension, convert it to a list of tensors
-    if is_torch_tensor(audio) and len(audio.shape) > 1:
-        return list(audio)
-
     # If it's a single audio, convert it to a list of
     if is_valid_audio(audio):
         return [audio]
