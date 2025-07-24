@@ -111,8 +111,6 @@
 - sections:
   - local: fast_tokenizers
     title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-  - local: feature_extractor
-    title: 특징 추출기 이해하기
   - local: multilingual
     title: 다국어 모델 추론하기
   - local: create_a_model
@@ -292,10 +290,9 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
-    - local: main_classes/executorch
+    - local: main_classes/executore
       title: ExecuTorch
-    - local: feature_extractors
-      title: 특성 추출기
+    - local: main_classes/feature_extractor
     - local: in_translation
       title: (번역중) Image Processor
     title: (번역중) 메인 클래스
