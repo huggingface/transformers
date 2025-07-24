@@ -867,7 +867,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         import torch
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -913,7 +913,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         import torch
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support flash_attention_2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1460,7 +1460,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         self._load_dataset()
         ds = self._dataset
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
     @slow

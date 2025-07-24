@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import itertools
 from typing import Callable, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -35,7 +35,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
@@ -525,25 +525,9 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
-    def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Glm4vRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
-    config_class = Glm4vVisionConfig
+    config: Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -603,25 +587,6 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if self.config._attn_implementation == "flash_attention_2":
-            return None
-
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
-
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -651,14 +616,12 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
-        attention_mask = self._prepare_attention_mask(hidden_states, cu_seqlens=cu_seqlens)
 
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
             )
 
         hidden_states = self.post_layernorm(hidden_states)
@@ -859,6 +822,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = self.post_self_attn_layernorm(hidden_states)
@@ -880,9 +844,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             outputs += (present_key_value,)
 
         return outputs
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
@@ -1004,7 +965,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
 
 class Glm4vModel(Qwen2_5_VLModel):
-    _checkpoint_conversion_mapping = None
+    _checkpoint_conversion_mapping = {}
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
@@ -1088,6 +1049,7 @@ class Glm4vModel(Qwen2_5_VLModel):
                 device=input_ids.device,
             )
             image_index, video_index = 0, 0
+            video_group_index = 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
@@ -1117,7 +1079,6 @@ class Glm4vModel(Qwen2_5_VLModel):
 
                 llm_pos_ids_list = []
                 video_frame_num = 1
-
                 for modality_type, start_idx, end_idx in input_type_group:
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
 
@@ -1161,7 +1122,11 @@ class Glm4vModel(Qwen2_5_VLModel):
                             w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
                             llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
-                        video_index += 1
+                        video_group_index += 1
+
+                        if video_group_index >= video_grid_thw[video_index][0]:
+                            video_index += 1
+                            video_group_index = 0
 
                         video_frame_num += 1
 
@@ -1197,6 +1162,30 @@ class Glm4vModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
+    def get_video_features(
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+    ):
+        """
+        Encodes videos into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+        """
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
+        temp_frames_hw = []
+        for t, h, w in video_grid_thw:
+            repeated_row = torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
+            temp_frames_hw.append(repeated_row)
+        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        video_embeds = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(video_embeds, split_sizes)
+        return video_embeds
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1215,13 +1204,9 @@ class Glm4vModel(Qwen2_5_VLModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
-            [`Glm4vImageProcessor`] for processing videos.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1293,8 +1278,10 @@ class Glm4vModel(Qwen2_5_VLModel):
             )
             if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
                 attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
-                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
-                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
+                # Only apply conversion for floating point tensors (inverted masks)
+                if attention_mask_tensor.dtype.is_floating_point:
+                    attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
+                    attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
             # Calculate RoPE index once per generation in the pre-fill stage only.
             # When compiling, we can't check tensor values thus we check only input length
@@ -1359,7 +1346,7 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = None
+    _checkpoint_conversion_mapping = {}
 
     def forward(
         self,
@@ -1379,17 +1366,14 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
-            [`Glm4vImageProcessor`] for processing videos.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1451,7 +1435,10 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1580,6 +1567,7 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
     }
 
@@ -1688,36 +1676,48 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_frames = len(video_grid_thw)
+                    num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
                     if hasattr(timestamps, "tolist"):
                         timestamps_list = timestamps.tolist()[0]
                     else:
                         timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+
                     unique_timestamps = []
                     for idx in range(0, len(timestamps_list)):
                         unique_timestamps.append(timestamps_list[idx])
+
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
                         selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
+
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
                         frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
                         video_structure += frame_structure
+
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
+                    num_image_tokens = (
+                        video_grid_thw[video_index].prod() // merge_length // video_grid_thw[video_index][0]
+                    )
+                    for frame_idx in range(num_frames):
+                        if self.image_token in text[i]:
+                            text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+
                     video_index += 1
 
-                for frame_idx in range(len(video_grid_thw)):
-                    if self.image_token in text[i]:
-                        num_image_tokens = video_grid_thw[frame_idx].prod() // merge_length
-                        text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 

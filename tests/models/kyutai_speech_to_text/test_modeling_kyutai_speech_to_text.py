@@ -548,11 +548,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         max_new_tokens = 30
         support_flag = {
             "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_2": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
-            if not getattr(model_class, support_flag[attn_implementation]):
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -713,7 +713,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
     def _load_datasamples(self, num_samples):
         self._load_dataset()
         ds = self._dataset
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
     @slow

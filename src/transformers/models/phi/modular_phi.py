@@ -5,14 +5,13 @@ import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import TransformersKwargs, logging
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -20,7 +19,6 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
-    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
@@ -170,22 +168,6 @@ class PhiRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class PhiPreTrainedModel(LlamaPreTrainedModel):
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
-
 class PhiModel(LlamaModel):
     def __init__(self, config: PhiConfig):
         super().__init__(config)
@@ -207,7 +189,7 @@ class PhiModel(LlamaModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -271,7 +253,7 @@ class PhiModel(LlamaModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -308,7 +290,7 @@ class PhiForTokenClassification(LlamaForTokenClassification):
 
 
 __all__ = [
-    "PhiPreTrainedModel",
+    "PhiPreTrainedModel",  # noqa: F822
     "PhiModel",
     "PhiForCausalLM",
     "PhiForSequenceClassification",

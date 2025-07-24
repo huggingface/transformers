@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .aimv2 import *
     from .albert import *
     from .align import *
     from .altclip import *
@@ -81,6 +82,7 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_v2 import *
     from .deepseek_v3 import *
     from .deformable_detr import *
     from .deit import *
@@ -100,6 +102,7 @@ if TYPE_CHECKING:
     from .dots1 import *
     from .dpr import *
     from .dpt import *
+    from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
     from .emu3 import *
@@ -166,6 +169,7 @@ if TYPE_CHECKING:
     from .layoutxlm import *
     from .led import *
     from .levit import *
+    from .lfm2 import *
     from .lightglue import *
     from .lilt import *
     from .llama import *
@@ -204,6 +208,7 @@ if TYPE_CHECKING:
     from .mobilevit import *
     from .mobilevitv2 import *
     from .modernbert import *
+    from .modernbert_decoder import *
     from .moonshine import *
     from .moshi import *
     from .mpnet import *
@@ -234,6 +239,7 @@ if TYPE_CHECKING:
     from .pegasus import *
     from .pegasus_x import *
     from .perceiver import *
+    from .perception_lm import *
     from .persimmon import *
     from .phi import *
     from .phi3 import *
@@ -330,6 +336,7 @@ if TYPE_CHECKING:
     from .vits import *
     from .vivit import *
     from .vjepa2 import *
+    from .voxtral import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *
