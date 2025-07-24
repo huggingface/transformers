@@ -15,6 +15,7 @@
 import difflib
 import os
 import re
+import subprocess
 import textwrap
 from argparse import ArgumentParser, Namespace
 from datetime import date
@@ -312,7 +313,7 @@ def find_modular_structure(
     old_cased_name = old_model_infos.camelcase_name
     imports = f"from ..{import_location} import {', '.join(class_ for class_ in all_classes)}"
     modular_classes = "\n\n".join(
-        f"class {class_.replace(old_cased_name, new_cased_name)}({class_})\n    pass" for class_ in all_classes
+        f"class {class_.replace(old_cased_name, new_cased_name)}({class_}):\n    pass" for class_ in all_classes
     )
     return imports, modular_classes, public_classes
 
@@ -344,7 +345,7 @@ def create_modular_file(
         f"""
 
         __all__ = [
-            {"\n            ".join(public_class for public_class in all_public_classes)}
+            {"\n            ".join(f"{public_class}," for public_class in all_public_classes)}
         ]
         """
     )
@@ -462,6 +463,12 @@ def create_new_model_like(
     # 8. Add additional fast image processor if necessary
     if create_fast_image_processor:
         add_fast_image_processor(model_name=new_model_lowercase)
+
+    # 9. Run linters
+    model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
+    subprocess.run(["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"], cwd=REPO_PATH)
+    subprocess.run(["ruff", "format", new_module_folder, tests_folder, model_init_file], cwd=REPO_PATH)
+    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH)
 
 
 def add_new_model_like_command_factory(args: Namespace):
