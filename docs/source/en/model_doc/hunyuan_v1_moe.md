@@ -33,9 +33,9 @@ To be released with the official model launch.
 
 [[autodoc]] HunYuanMoeV1Config
 
-## HunYuanModel
+## HunYuanMoEV1Model
 
-[[autodoc]] HunYuanModel
+[[autodoc]] HunYuanMoEV1Model
     - forward
 
 ## HunYuanMoEV1ForCausalLM
@@ -43,8 +43,8 @@ To be released with the official model launch.
 [[autodoc]] HunYuanMoEV1ForCausalLM
     - forward
 
-## HunYuanForSequenceClassification
+## HunYuanMoEV1ForSequenceClassification
 
-[[autodoc]] HunYuanForSequenceClassification
+[[autodoc]] HunYuanMoEV1ForSequenceClassification
     - forward
 

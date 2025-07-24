@@ -1021,7 +1021,7 @@ class HunYuanSdpaAttention(HunYuanAttention):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             logger.warning_once(
-                "HunYuanModel is using HunYuanSdpaAttention,"
+                "HunYuanMoEV1Model is using HunYuanSdpaAttention,"
                 "but `torch.nn.functional.scaled_dot_product_attention`"
                 "does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
@@ -1218,7 +1218,7 @@ HUNYUAN_START_DOCSTRING = r"""
     "The bare HunYuan Model outputting raw hidden-states without any specific head on top.",
     HUNYUAN_START_DOCSTRING,
 )
-class HunYuanPreTrainedModel(PreTrainedModel):
+class HunYuanMoEPreTrainedModel(PreTrainedModel):
     config_class = HunYuanMoeV1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1314,7 +1314,7 @@ HUNYUAN_INPUTS_DOCSTRING = r"""
     "The bare HunYuan Model outputting raw hidden-states without any specific head on top.",
     HUNYUAN_START_DOCSTRING,
 )
-class HunYuanModel(HunYuanPreTrainedModel):
+class HunYuanMoEV1Model(HunYuanMoEPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`HunYuanDecoderLayer`]
 
@@ -1493,13 +1493,13 @@ class HunYuanModel(HunYuanPreTrainedModel):
         )
 
 
-class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
+class HunYuanMoEV1ForCausalLM(HunYuanMoEPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: HunYuanMoeV1Config):
         super().__init__(config)
         self.config = config
-        self.model = HunYuanModel(config)
+        self.model = HunYuanMoEV1Model(config)
         self.add_classification_head = config.add_classification_head
         self.pad_id = config.pad_id
         self.vocab_size = config.vocab_size
@@ -1716,7 +1716,7 @@ class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
     """
     The HunYuan Model transformer with a sequence classification head on top (linear layer).
 
-    [`HunYuanForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`HunYuanMoEV1ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1727,11 +1727,11 @@ class HunYuanMoEV1ForCausalLM(HunYuanPreTrainedModel, GenerationMixin):
     """,
     HUNYUAN_START_DOCSTRING,
 )
-class HunYuanForSequenceClassification(HunYuanPreTrainedModel):
+class HunYuanMoEV1ForSequenceClassification(HunYuanMoEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = HunYuanModel(config)
+        self.model = HunYuanMoEV1Model(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1836,7 +1836,7 @@ class HunYuanForSequenceClassification(HunYuanPreTrainedModel):
 
 __all__ = [
     "HunYuanMoEV1ForCausalLM",
-    "HunYuanModel",
-    "HunYuanPreTrainedModel",
-    "HunYuanForSequenceClassification",
+    "HunYuanMoEV1Model",
+    "HunYuanMoEPreTrainedModel",
+    "HunYuanMoEV1ForSequenceClassification",
 ]

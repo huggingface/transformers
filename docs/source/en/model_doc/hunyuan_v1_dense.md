@@ -37,9 +37,9 @@ To be released with the official model launch.
 
 [[autodoc]] HYTokenizer
 
-## HunYuanModel
+## HunYuanDenseV1Model
 
-[[autodoc]] HunYuanModel
+[[autodoc]] HunYuanDenseV1Model
     - forward
 
 ## HunYuanDenseV1ForCausalLM
@@ -47,8 +47,8 @@ To be released with the official model launch.
 [[autodoc]] HunYuanDenseV1ForCausalLM
     - forward
 
-## HunYuanForSequenceClassification
+## HunYuanDenseV1ForSequenceClassification
 
-[[autodoc]] HunYuanForSequenceClassification
+[[autodoc]] HunYuanDenseV1ForSequenceClassification
     - forward
 

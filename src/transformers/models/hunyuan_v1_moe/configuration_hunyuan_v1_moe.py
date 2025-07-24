@@ -13,7 +13,7 @@ logger = logging.get_logger(__name__)
 
 class HunYuanMoeV1Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HunYuanModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`HunYuanMoEV1Model`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the HunYuan-7B.
     Hunyuan-A13B-Instruct [tencent/Hunyuan-A13B-Instruct](https://huggingface.co/tencent/Hunyuan-A13B-Instruct).
@@ -25,7 +25,7 @@ class HunYuanMoeV1Config(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 290943):
             Vocabulary size of the HunYuan model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`HunYuanModel`]
+            `inputs_ids` passed when calling [`HunYuanMoEV1Model`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
