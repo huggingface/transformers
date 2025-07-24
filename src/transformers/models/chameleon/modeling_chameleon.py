@@ -831,7 +831,11 @@ class ChameleonPreTrainedModel(PreTrainedModel):
 )
 class ChameleonVQVAE(ChameleonPreTrainedModel):
     config: ChameleonVQVAEConfig
-    _no_split_modules = ["ChameleonVQVAEVectorQuantizer", "ChameleonVQVAEEncoderAttnBlock", "ChameleonVQVAEEncoderResnetBlock"]
+    _no_split_modules = [
+        "ChameleonVQVAEVectorQuantizer",
+        "ChameleonVQVAEEncoderAttnBlock",
+        "ChameleonVQVAEEncoderResnetBlock",
+    ]
 
     def __init__(self, config: ChameleonVQVAEConfig):
         super().__init__(config)
