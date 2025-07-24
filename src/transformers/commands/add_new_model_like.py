@@ -152,7 +152,7 @@ def add_model_to_auto_mappings(
     )
 
     for filename, to_add in filenames_to_add:
-        if to_add:
+        if to_add and "fast" not in filename:
             with open(TRANSFORMERS_PATH / "models" / "auto" / filename) as f:
                 file = f.read()
             # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
