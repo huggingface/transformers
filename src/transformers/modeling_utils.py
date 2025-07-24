@@ -4745,7 +4745,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `device_map` pointing to the correct device
         if tp_plan is not None:
             if device_mesh is None:
-                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
                 if "tp" not in device_mesh.mesh_dim_names:
                     raise ValueError(
