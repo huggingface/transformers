@@ -494,60 +494,6 @@ def create_new_model_like(
     )
 
 
-def add_new_model_like_command_factory(args: Namespace):
-    return AddNewModelLikeCommand(path_to_repo=args.path_to_repo)
-
-
-class AddNewModelLikeCommand(BaseTransformersCLICommand):
-    @staticmethod
-    def register_subcommand(parser: ArgumentParser):
-        add_new_model_like_parser = parser.add_parser("add-new-model-like")
-        add_new_model_like_parser.add_argument(
-            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
-        )
-        add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
-
-    def __init__(self, path_to_repo=None, *args):
-        (
-            self.old_model_infos,
-            self.new_model_lowercase,
-            self.new_model_paper_name,
-            self.add_tokenizer,
-            self.add_fast_tokenizer,
-            self.add_image_processor,
-            self.add_fast_image_processor,
-            self.add_video_processor,
-            self.add_feature_extractor,
-            self.add_processor,
-            self.create_fast_image_processor,
-        ) = get_user_input()
-
-        self.path_to_repo = path_to_repo
-
-    def run(self):
-        if self.path_to_repo is not None:
-            # Adapt constants
-            global TRANSFORMERS_PATH
-            global REPO_PATH
-
-            REPO_PATH = Path(self.path_to_repo)
-            TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
-
-        create_new_model_like(
-            old_model_infos=self.old_model_infos,
-            new_model_lowercase=self.new_model_lowercase,
-            new_model_paper_name=self.new_model_paper_name,
-            add_tokenizer=self.add_tokenizer,
-            add_fast_tokenizer=self.add_fast_tokenizer,
-            add_image_processor=self.add_image_processor,
-            add_fast_image_processor=self.add_fast_image_processor,
-            add_video_processor=self.add_video_processor,
-            add_feature_extractor=self.add_feature_extractor,
-            add_processor=self.add_processor,
-            create_fast_image_processor=self.create_fast_image_processor,
-        )
-
-
 def get_user_field(
     question: str,
     default_value: Optional[str] = None,
@@ -716,3 +662,57 @@ def get_user_input():
         add_processor,
         create_fast_image_processor,
     )
+
+
+def add_new_model_like_command_factory(args: Namespace):
+    return AddNewModelLikeCommand(path_to_repo=args.path_to_repo)
+
+
+class AddNewModelLikeCommand(BaseTransformersCLICommand):
+    @staticmethod
+    def register_subcommand(parser: ArgumentParser):
+        add_new_model_like_parser = parser.add_parser("add-new-model-like")
+        add_new_model_like_parser.add_argument(
+            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
+        )
+        add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
+
+    def __init__(self, path_to_repo=None, *args):
+        (
+            self.old_model_infos,
+            self.new_model_lowercase,
+            self.new_model_paper_name,
+            self.add_tokenizer,
+            self.add_fast_tokenizer,
+            self.add_image_processor,
+            self.add_fast_image_processor,
+            self.add_video_processor,
+            self.add_feature_extractor,
+            self.add_processor,
+            self.create_fast_image_processor,
+        ) = get_user_input()
+
+        self.path_to_repo = path_to_repo
+
+    def run(self):
+        if self.path_to_repo is not None:
+            # Adapt constants
+            global TRANSFORMERS_PATH
+            global REPO_PATH
+
+            REPO_PATH = Path(self.path_to_repo)
+            TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
+
+        create_new_model_like(
+            old_model_infos=self.old_model_infos,
+            new_model_lowercase=self.new_model_lowercase,
+            new_model_paper_name=self.new_model_paper_name,
+            add_tokenizer=self.add_tokenizer,
+            add_fast_tokenizer=self.add_fast_tokenizer,
+            add_image_processor=self.add_image_processor,
+            add_fast_image_processor=self.add_fast_image_processor,
+            add_video_processor=self.add_video_processor,
+            add_feature_extractor=self.add_feature_extractor,
+            add_processor=self.add_processor,
+            create_fast_image_processor=self.create_fast_image_processor,
+        )
