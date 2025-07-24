@@ -23,6 +23,10 @@ from datetime import date
 from itertools import chain
 from pathlib import Path
 from re import Pattern
+import libcst as cst
+import textwrap
+from libcst import ClassDef, CSTVisitor
+import importlib
 from typing import Any, Callable, Optional, Union
 
 import yaml
@@ -56,18 +60,7 @@ COPYRIGHT = f"""
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""".strip()
-
-
-def get_cased_name(lowercase_name: str) -> str:
-    """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
-    alt_lowercase_name = lowercase_name.replace("_", "-")
-    if lowercase_name in CONFIG_MAPPING_NAMES:
-        return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
-    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
-        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
-    else:
-        return "".join(x.title() for x in lowercase_name.split("_"))
+""".lstrip()
 
 
 class ModelInfos(object):
@@ -558,6 +551,17 @@ def duplicate_module(
         f.write(content)
 
 
+# All the potential file types to create
+ALL_FILE_TYPE_PATTERNS = (
+    "modeling",
+    "configuration",
+    "tokenization",
+    "processing",
+    "image_processing",
+    "video_processing",
+    "feature_extraction",
+)
+
 def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
     """
     Retrieves all the files associated to a model.
@@ -575,7 +579,7 @@ def get_model_files(model_type: str) -> dict[str, Union[Path, list[Path]]]:
 
     model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
-    model_files = [f for f in model_files if not re.search(r"_(?:tf|flax)", Path(f).stem)]
+    model_files = [f for f in model_files if not re.search(r"_(?:tf|flax|_init__)", Path(f).stem)]
 
     doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.md"
 
@@ -1020,6 +1024,55 @@ def insert_model_in_doc_toc(old_model_patterns, new_model_patterns):
         f.write(yaml.dump(content, allow_unicode=True))
 
 
+class ClassFinder(CSTVisitor):
+    def __init__(self, python_module: cst.Module):
+        self.python_module: cst.Module = python_module
+        self.classes: list = []
+        self.public_classes: list = []
+        self.is_in_class = False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
+        """Record class names. We assume classes always only appear at top-level (i.e. no class definition in function or similar)"""
+        self.classes.append(node.name.value)
+        self.is_in_class = True
+
+    def leave_ClassDef(self, node: cst.ClassDef):
+        self.is_in_class = False
+
+    def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine):
+        """Record all public classes inside the `__all__` assignment."""
+        simple_top_level_assign_structure = m.SimpleStatementLine(
+            body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
+        )
+        if not self.is_in_class and m.matches(node, simple_top_level_assign_structure):
+            assigned_variable = node.body[0].targets[0].target.value
+            if assigned_variable == "__all__":
+                elements = node.body[0].value.elements
+                self.public_classes = [element.value.value for element in elements]
+
+
+def find_all_classes_from_file(file: str) -> set:
+    """
+    Find the name of all classes defined in `file`.
+    """
+    with open(file, "r", encoding="utf-8") as file:
+        source_code = file.read()
+    module = cst.parse_module(source_code)
+    visitor = ClassFinder(source_code)
+    module.visit(visitor)
+    return visitor.classes, visitor.public_classes
+
+
+def find_modular_structure(module_name: str, old_model_infos: ModelInfos, new_cased_name: str) -> tuple[str, str, list]:
+
+    all_classes, public_classes = find_all_classes_from_file(module_name)
+    import_location = ".".join(module_name.split(os.sep)[-2:]).replace(".py", "")
+    old_cased_name = old_model_infos.camelcase_name
+    imports = f"from ..{import_location} import {', '.join(class_ for class_ in classes)}"
+    modular_classes = "\n\n".join(f"class {class_.replace(old_cased_name, new_cased_name)}({class_})\n    pass" for class_ in classes)
+    return imports, modular_classes, public_classes
+
+
 def create_modular_file(
     old_model_infos: ModelInfos,
     new_model_lowercase: str,
@@ -1030,8 +1083,43 @@ def create_modular_file(
     add_feature_extractor: bool,
     add_processor: bool,
 ) -> str:
-    old_model_files = get_model_files(old_model_infos.lowercase_name)
-    old_model_classes = retrieve_model_classes(old_model_infos.lowercase_name)
+    new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
+    old_model_lowercase = old_model_infos.lowercase_name
+    old_folder_root = TRANSFORMERS_PATH / "models" / old_model_lowercase
+
+    filenames_to_add = (
+        (f"configuration_{old_model_lowercase}.py", True),
+        (f"modeling_{old_model_lowercase}.py", True),
+        (f"tokenization_{old_model_lowercase}.py", add_tokenizer),
+        (f"tokenization_{old_model_lowercase}_fast.py", add_fast_tokenizer),
+        (f"image_processing_{old_model_lowercase}.py", add_image_processor),
+        (f"image_processing_{old_model_lowercase}_fast.py", add_fast_image_processor),
+        (f"feature_extraction_{old_model_lowercase}.py", add_feature_extractor),
+        (f"processing_{old_model_lowercase}.py", add_processor),
+    )
+
+    # Construct the modular file from the original (old) model, by subclassing each class
+    all_imports = ""
+    all_bodies = ""
+    all_public_classes = []
+    for filename, to_add in filenames_to_add:
+        if to_add:
+            imports, body, public_classes = find_modular_structure(old_folder_root / filename, old_model_infos, new_cased_name)
+            all_imports += f"\n{imports}"
+            all_bodies += f"\n\n{body}"
+            all_public_classes.extend(public_classes)
+
+    # Create the __all__ assignment
+    all_statement = textwrap.dedent(
+        f"""
+        __all__ = [
+            {"\n            ".join(public_class) for public_class in all_public_classes}
+        ]
+        """
+    )
+    # Create the whole modular file
+    modular_file = COPYRIGHT + all_imports + all_bodies + all_statement
+    return modular_file
 
 
 def create_new_model_like(
@@ -1055,33 +1143,18 @@ def create_new_model_like(
     old_model_files = get_model_files(old_model_infos.lowercase_name)
     old_model_classes = retrieve_model_classes(old_model_infos.lowercase_name)
 
-    # 1. We create the module for our new model
+    # 1. We create the folder for our new model
     new_module_folder = TRANSFORMERS_PATH / "models" / new_model_lowercase
     os.makedirs(new_module_folder, exist_ok=True)
 
-    files_to_adapt = model_files["model_files"]
-    if keep_old_processing:
-        files_to_adapt = [
-            f
-            for f in files_to_adapt
-            if "tokenization" not in str(f)
-            and "processing" not in str(f)
-            and "feature_extraction" not in str(f)
-            and "image_processing" not in str(f)
-        ]
+    # 2. Create and add the modular file
+    modular_file = create_modular_file(old_model_infos, new_model_lowercase, add_tokenizer, add_fast_tokenizer, add_image_processor, add_fast_image_processor, add_feature_extractor, add_processor)
+    with open(new_module_folder / f"modular_{new_model_lowercase}.py", "w") as f:
+        f.write(modular_file)
 
-    os.makedirs(module_folder, exist_ok=True)
-    for module_file in files_to_adapt:
-        new_module_name = module_file.name.replace(
-            old_model_patterns.model_lower_cased, new_model_patterns.model_lower_cased
-        )
-        dest_file = module_folder / new_module_name
-        duplicate_module(
-            module_file,
-            old_model_patterns,
-            new_model_patterns,
-            dest_file=dest_file,
-        )
+    # 3. Add the __init__.py
+    
+    
 
     clean_init(module_folder / "__init__.py", keep_processing=not keep_old_processing)
 
