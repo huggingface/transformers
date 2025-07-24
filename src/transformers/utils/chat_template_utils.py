@@ -20,7 +20,16 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
-from typing import Any, Callable, Optional, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from packaging import version
 
@@ -75,7 +84,7 @@ class DocstringParsingException(Exception):
     pass
 
 
-def _get_json_schema_type(param_type: str) -> dict[str, str]:
+def _get_json_schema_type(param_type: type) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -118,6 +127,9 @@ def _parse_type_hint(hint: str) -> dict:
         if type(None) in args:
             return_dict["nullable"] = True
         return return_dict
+
+    elif origin is Literal and len(args) > 0:
+        return {"enum": list(args)}
 
     elif origin is list:
         if not args:
