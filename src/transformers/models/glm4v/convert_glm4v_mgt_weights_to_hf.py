@@ -232,7 +232,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
         shard_filename = f"model-{i + 1:05d}-of-{len(shards):05d}.safetensors"
         shard_path = os.path.join(output_path, shard_filename)
 
-        for param_name in shard.keys():
+        for param_name in shard:
             index_dict["weight_map"][param_name] = shard_filename
 
         save_file(shard, shard_path, metadata={"format": "pt"})

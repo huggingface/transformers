@@ -315,7 +315,7 @@ def get_gguf_hf_weights_map(
     # hf => gguf and gguf => hf mappings are reversed
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
-    for hf_name in state_dict.keys():
+    for hf_name in state_dict:
         # An exception for qwen2moe model, where the expert layers are packed
         if model_type == "qwen2moe" and "mlp.experts." in hf_name:
             hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)

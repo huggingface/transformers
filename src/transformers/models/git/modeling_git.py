@@ -1451,7 +1451,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": kwargs.get("pixel_values", None),
+            "pixel_values": kwargs.get("pixel_values"),
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }

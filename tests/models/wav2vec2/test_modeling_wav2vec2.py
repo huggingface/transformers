@@ -1982,7 +1982,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "en": "joe keton disapproved of films and buster also had reservations about the media",
         }
 
-        for lang in LANG_MAP.keys():
+        for lang in LANG_MAP:
             assert run_model(lang) == TRANSCRIPTIONS[lang]
 
     @require_flash_attn

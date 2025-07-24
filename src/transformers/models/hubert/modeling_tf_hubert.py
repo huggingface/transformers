@@ -1276,7 +1276,7 @@ class TFHubertMainLayer(keras.layers.Layer):
 
         hidden_states = self.feature_projection(hidden_states, training=training)
 
-        mask_time_indices = kwargs.get("mask_time_indices", None)
+        mask_time_indices = kwargs.get("mask_time_indices")
         if training:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 

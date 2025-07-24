@@ -100,7 +100,7 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -119,10 +119,10 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         encoded_tokens = tokenizer(input_str, return_token_type_ids=False)
         encoded_tokens_qformer = qformer_tokenizer(input_str, return_token_type_ids=False)
 
-        for key in encoded_tokens.keys():
+        for key in encoded_tokens:
             self.assertListEqual(encoded_tokens[key], encoded_processor[key])
 
-        for key in encoded_tokens_qformer.keys():
+        for key in encoded_tokens_qformer:
             self.assertListEqual(encoded_tokens_qformer[key], encoded_processor["qformer_" + key])
 
     def test_processor(self):

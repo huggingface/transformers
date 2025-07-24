@@ -71,7 +71,7 @@ class ClvpProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech=raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer with Whisper->Clvp
@@ -87,7 +87,7 @@ class ClvpProcessorTest(unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     # Copied from transformers.tests.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer_decode with Whisper->Clvp

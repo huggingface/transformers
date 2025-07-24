@@ -421,7 +421,7 @@ class DiaGenerationMixin(GenerationMixin):
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         # We expect the initial input ids to be the complete mask (delayed input)
-        delay_mask = kwargs.get("decoder_input_ids", None)
+        delay_mask = kwargs.get("decoder_input_ids")
         if delay_mask is not None:
             delay_mask = delay_mask.clone()
 

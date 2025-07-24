@@ -647,7 +647,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # Skip the check for the backbone
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "DFineConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
                     break
 
             for name, param in model.named_parameters():

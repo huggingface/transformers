@@ -607,7 +607,7 @@ class FuyuProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            size = kwargs.get("size", None) or self.image_processor.size
+            size = kwargs.get("size") or self.image_processor.size
             padded_height, padded_width = size["height"], size["width"]
 
             num_image_tokens = []

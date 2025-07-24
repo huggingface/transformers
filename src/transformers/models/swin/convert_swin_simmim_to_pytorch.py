@@ -83,7 +83,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "attn_mask" in key:

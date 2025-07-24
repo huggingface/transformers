@@ -860,14 +860,14 @@ def _group_images_by_shape(nested_images, is_nested: bool = False):
 def _reconstruct_nested_structure(indices, processed_images):
     """Helper function to reconstruct a single level nested structure."""
     # Find the maximum outer index
-    max_outer_idx = max(idx[0] for idx in indices.keys())
+    max_outer_idx = max(idx[0] for idx in indices)
 
     # Create the outer list
     result = [None] * (max_outer_idx + 1)
 
     # Group indices by outer index
     nested_indices = defaultdict(list)
-    for i, j in indices.keys():
+    for i, j in indices:
         nested_indices[i].append(j)
 
     for i in range(max_outer_idx + 1):

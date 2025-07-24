@@ -130,7 +130,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
-            config = kwargs.get("config", None)
+            config = kwargs.get("config")
             cache_path = config._name_or_path
 
             if not os.path.exists(cache_path):

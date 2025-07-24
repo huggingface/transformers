@@ -318,7 +318,7 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
         if model_class == VisualBertForMultipleChoice:
-            for key in inputs_dict.keys():
+            for key in inputs_dict:
                 value = inputs_dict[key]
                 if isinstance(value, torch.Tensor) and value.ndim > 1:
                     if key != "visual_embeds":

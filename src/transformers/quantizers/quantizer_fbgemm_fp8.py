@@ -71,7 +71,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
@@ -231,7 +231,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, FbgemmFp8Linear) or isinstance(module, FbgemmFp8Llama4TextExperts):
+            if isinstance(module, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")

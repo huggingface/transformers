@@ -149,10 +149,10 @@ def expand_inputs_for_generation(
 ):
     expanded_return_idx = tf.reshape(tf.repeat(tf.range(tf.shape(input_ids)[0]), expand_size), [-1])
     input_ids = tf.gather(input_ids, expanded_return_idx)
-    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
-    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
-    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
-    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values")
+    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings")
+    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings")
+    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask")
 
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]
@@ -208,15 +208,15 @@ def update_model_kwargs_for_generation(outputs, model_kwargs):
 
 
 def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
-    token_type_ids = kwargs.get("token_type_ids", None)
+    token_type_ids = kwargs.get("token_type_ids")
     # only last token for inputs_ids if past is defined in kwargs
     if past_key_values is not None:
         input_ids = input_ids[:, -1:]
         if token_type_ids is not None:
             token_type_ids = token_type_ids[:, -1:]
 
-    attention_mask = kwargs.get("attention_mask", None)
-    position_ids = kwargs.get("position_ids", None)
+    attention_mask = kwargs.get("attention_mask")
+    position_ids = kwargs.get("position_ids")
 
     if attention_mask is not None and position_ids is None:
         # create position_ids on the fly for batch generation
@@ -225,10 +225,10 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
         if past_key_values is not None:
             position_ids = position_ids[:, -1:]
 
-    pixel_values = kwargs.get("pixel_values", None)
-    image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
-    perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
-    image_attention_mask = kwargs.get("image_attention_mask", None)
+    pixel_values = kwargs.get("pixel_values")
+    image_encoder_embeddings = kwargs.get("image_encoder_embeddings")
+    perceiver_embeddings = kwargs.get("perceiver_embeddings")
+    image_attention_mask = kwargs.get("image_attention_mask")
     interpolate_pos_encoding = kwargs.get("interpolate_pos_encoding", False)
 
     return {

@@ -78,7 +78,7 @@ class HqqHfQuantizer(HfQuantizer):
                 self.torch_dtype = torch.float32
                 logger.info("Setting torch_dtype to torch.float32 as the default value since it was not specified.")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if isinstance(device_map, dict):
             if "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
@@ -171,7 +171,7 @@ class HqqHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            return (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear)) and tensor_name != "weight"
+            return (isinstance(module, (torch.nn.Linear, HQQLinear))) and tensor_name != "weight"
         else:
             return (
                 isinstance(module, torch.nn.Linear)

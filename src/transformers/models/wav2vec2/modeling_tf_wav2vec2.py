@@ -1300,7 +1300,7 @@ class TFWav2Vec2MainLayer(keras.layers.Layer):
 
         hidden_states, extract_features = self.feature_projection(extract_features, training=training)
 
-        mask_time_indices = kwargs.get("mask_time_indices", None)
+        mask_time_indices = kwargs.get("mask_time_indices")
         if training:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 

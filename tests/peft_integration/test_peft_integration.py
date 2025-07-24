@@ -115,7 +115,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 state_dict = peft_model.get_adapter_state_dict()
 
-                for key in state_dict.keys():
+                for key in state_dict:
                     self.assertTrue("lora" in key)
 
     def test_peft_save_pretrained(self):
@@ -242,7 +242,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(_has_modules_to_save_wrapper)
                 state_dict = model.get_adapter_state_dict()
 
-                self.assertTrue("lm_head.weight" in state_dict.keys())
+                self.assertTrue("lm_head.weight" in state_dict)
 
                 logits = model(dummy_input).logits
                 loss = logits.mean()

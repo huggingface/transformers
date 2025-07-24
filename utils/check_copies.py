@@ -731,8 +731,8 @@ def is_copy_consistent(
 
         # Below, we change some names in `theoretical_code_blocks` and `observed_code_blocks`. These mappings map the
         # original names to the modified names: this is used to restore the original order of the code blocks.
-        name_mappings_1 = {k: k for k in theoretical_code_blocks.keys()}
-        name_mappings_2 = {k: k for k in observed_code_blocks.keys()}
+        name_mappings_1 = {k: k for k in theoretical_code_blocks}
+        name_mappings_2 = {k: k for k in observed_code_blocks}
 
         # Update code blocks' name and content:
         #   If `"# Ignore copy"` is found in a block of the observed code:

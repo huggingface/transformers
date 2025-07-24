@@ -335,7 +335,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     read_in_q_k_v(state_dict)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
             val = state_dict.pop(key)
             state_dict[prefix + key] = val

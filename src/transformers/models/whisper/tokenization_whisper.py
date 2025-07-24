@@ -1007,7 +1007,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                 text = tokenizer.decode([token])
                 # Removing outer shell <|XX|>
                 text = text[2:-2]
-                language = LANGUAGES.get(text, None)
+                language = LANGUAGES.get(text)
                 if language is not None:
                     # 1/ Indeed some language
                     # TODO Handle when language is different from the previous

@@ -270,7 +270,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_image_proc = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, text="dummy", return_tensors="np")
 
-        for key in input_image_proc.keys():
+        for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):

@@ -94,7 +94,7 @@ def convert_bit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # load state_dict of original model
     state_dict = timm_model.state_dict()
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val.squeeze() if "head" in key else val
 

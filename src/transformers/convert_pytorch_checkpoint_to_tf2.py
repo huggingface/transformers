@@ -267,7 +267,7 @@ def convert_pt_checkpoint_to_tf(
     tf_model = model_class(config)
 
     # Load weights from tf checkpoint
-    if pytorch_checkpoint_path in aws_config_map.keys():
+    if pytorch_checkpoint_path in aws_config_map:
         pytorch_checkpoint_path = cached_file(
             pytorch_checkpoint_path, WEIGHTS_NAME, force_download=not use_cached_models
         )

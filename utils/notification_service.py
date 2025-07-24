@@ -1199,7 +1199,7 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    for matrix_name in matrix_job_results.keys():
+    for matrix_name in matrix_job_results:
         for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
@@ -1323,10 +1323,10 @@ if __name__ == "__main__":
             "failures": {},
             "job_link": {},
         }
-        for key in additional_files.keys()
+        for key in additional_files
     }
 
-    for key in additional_results.keys():
+    for key in additional_results:
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True

@@ -300,7 +300,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
             # if the token is "Ġ" we replace it with "[SPACE]" (if "[SPACE]" is present in the vocab), otherwise we keep the "Ġ".
             bpe_tokens.extend(
-                "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token
+                "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder else bpe_token
                 for bpe_token in self.bpe(token).split(" ")
             )
 

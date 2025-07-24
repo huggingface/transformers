@@ -79,7 +79,7 @@ class EetqHfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an EETQ model on CPU and have a CUDA device available, make sure to set "

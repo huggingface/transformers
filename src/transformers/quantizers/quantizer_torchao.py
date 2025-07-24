@@ -98,7 +98,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             raise ImportError("Loading an torchao quantized model requires torchao library (`pip install torchao`)")
 
         self.offload = False
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if isinstance(device_map, dict):
             if "cpu" in device_map.values() or "disk" in device_map.values():
                 if self.pre_quantized:
@@ -109,7 +109,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 else:
                     self.offload = True
         if self.pre_quantized:
-            weights_only = kwargs.get("weights_only", None)
+            weights_only = kwargs.get("weights_only")
             if weights_only:
                 torch_version = version.parse(importlib.metadata.version("torch"))
                 if torch_version < version.parse("2.5.0"):

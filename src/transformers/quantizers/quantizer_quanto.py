@@ -117,8 +117,8 @@ class QuantoHfQuantizer(HfQuantizer):
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 
-        device_map = kwargs.get("device_map", None)
-        param_device = kwargs.get("param_device", None)
+        device_map = kwargs.get("device_map")
+        param_device = kwargs.get("param_device")
         # we don't quantize the model if the module is going to be offloaded to the cpu
         if device_map is not None and param_device is not None:
             device_map_values = set(device_map.values())

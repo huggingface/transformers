@@ -404,7 +404,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         max_patches = max_patches if max_patches is not None else self.max_patches
         is_vqa = self.is_vqa
 
-        if kwargs.get("data_format", None) is not None:
+        if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
         images = make_list_of_images(images)
