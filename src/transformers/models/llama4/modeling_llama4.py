@@ -136,8 +136,8 @@ class Llama4Router(nn.Linear):
     def forward(self, hidden_states):
         router_logits = super().forward(hidden_states)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
-        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+        router_scores = torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value)
+        router_scores = torch.nn.functional.sigmoid(router_scores.float()).to(router_scores.dtype)
         return router_scores, router_indices
 
 
