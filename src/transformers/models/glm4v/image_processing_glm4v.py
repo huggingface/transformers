@@ -454,11 +454,11 @@ class Glm4vImageProcessor(BaseImageProcessor):
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            t=self.temporal_patch_size,
+            num_frames=self.temporal_patch_size,
             height=height,
             width=width,
             factor=factor,
-            t_factor=self.temporal_patch_size,
+            temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
