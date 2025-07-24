@@ -1,317 +1,321 @@
 - sections:
   - local: index
-    title: 🤗 Transformers
+    title: Transformers
   - local: installation
-    title: 설치방법
+    title: Installation
   - local: quicktour
-    title: 둘러보기
-  title: 시작하기
+    title: Quickstart
+  title: Get started
 - isExpanded: false
   sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Loading models
+    - local: models
+      title: Loading models
     - local: custom_models
-      title: 사용자 정의 모델 공유하기
-    - local: in_translation
-      title: (번역중) Customizing model components
+      title: Customizing models
+    - local: how_to_hack_models
+      title: Customizing model components
     - local: model_sharing
-      title: 만든 모델 공유하기
+      title: Sharing
     - local: modular_transformers
-      title: transformers에서의 모듈성
+      title: Contributing a new model to Transformers
     - local: add_new_model
-      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
-    - local: in_translation
-      title: (번역중) Documenting a model
-    - local: in_translation
-      title: (번역중) Customizing attention function
-    title: 모델
+      title: Legacy model contribution
+    - local: auto_docstring
+      title: Documenting a model
+    - local: attention_interface
+      title: Customizing attention function
+    title: Models
   - sections:
     - local: fast_tokenizers
-      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-    - local: in_translation
-      title: (번역중) Image processors
-    - local: in_translation
-      title: (번역중) Video processors
-    - local: in_translation
-      title: (번역중) Backbones
-    - local: in_translation
-      title: (번역중) Feature extractors
-    - local: in_translation
-      title: (번역중) Processors
+      title: Tokenizers
+    - local: image_processors
+      title: Image processors
+    - local: video_processors
+      title: Video processors
+    - local: backbones
+      title: Backbones
+    - local: feature_extractors
+      title: Feature extractors
+    - local: processors
+      title: Processors
     - local: tokenizer_summary
-      title: 토크나이저 요약
+      title: Summary of the tokenizers
     - local: pad_truncation
-      title: 패딩과 잘라내기
-    title: 전처리기(Preprocessors)
+      title: Padding and truncation
+    title: Preprocessors
   title: Base classes
 - isExpanded: false
   sections:
   - sections:
     - local: pipeline_tutorial
-      title: Pipeline으로 추론하기
-    - local: in_translation
-      title: (번역중) Machine learning apps
+      title: Pipeline
+    - local: pipeline_gradio
+      title: Machine learning apps
     - local: pipeline_webserver
-      title: 추론 웹 서버를 위한 파이프라인
+      title: Web server inference
     - local: add_new_pipeline
-      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
-    title: 파이프라인 API
+      title: Adding a new pipeline
+    title: Pipeline API
   - sections:
     - local: llm_tutorial
-      title: 대규모 언어 모델로 생성하기
+      title: Text generation
     - local: generation_strategies
-      title: 텍스트 생성 전략 사용자 정의
-    - local: in_translation
-      title: (번역중) Generation features
+      title: Generation strategies
+    - local: generation_features
+      title: Generation features
     - local: tasks/prompting
-      title: 대규모 언어 모델 프롬프팅 가이드
+      title: Prompt engineering
     - local: llm_optims
-      title: LLM 추론 최적화
-    - local: in_translation
-      title: (번역중) Caching
-    - local: in_translation
-      title: (번역중) KV cache strategies
-    - local: serving
-      title: 모델 서빙하기
+      title: Optimizing inference
+    - local: cache_explanation
+      title: Caching
+    - local: kv_cache
+      title: KV cache strategies
     - local: llm_tutorial_optimization
-      title: LLM을 최대한 활용하기
+      title: Getting the most out of LLMs
     - local: perplexity
-      title: 고정 길이 모델의 펄플렉서티(Perplexity)
-    title: 거대 언어 모델(LLMs)
+      title: Perplexity of fixed-length models
+    title: LLMs
   - sections:
     - local: conversations
-      title: Transformers로 채팅하기
+      title: Chat basics
     - local: chat_templating
-      title: 챗봇 템플릿 익히기
-    - local: in_translation
-      title: (번역중) Multimodal templates
-    - local: in_translation
-      title: (번역중) Template writing
-    - local: in_translation
-      title: (번역중) Tools and RAG
-    title: 모델을 사용해 대화하기
+      title: Templates
+    - local: chat_templating_multimodal
+      title: Multimodal templates
+    - local: chat_templating_writing
+      title: Template writing
+    - local: chat_extras
+      title: Tools and RAG
+    title: Chat with models
   - sections:
-    - local: in_translation
-      title: (번역중) torch.compile
+    - local: perf_torch_compile
+      title: torch.compile
     - local: perf_infer_gpu_one
-      title: 하나의 GPU를 활용한 추론
-    - local: in_translation
-      title: (번역중) Distributed inference
+      title: GPU
+    - local: perf_infer_gpu_multi
+      title: Distributed inference
     - local: perf_infer_cpu
-      title: CPU로 추론하기
-    title: 최적화(Optimization)
-  - local: in_translation
-    title: (번역중) Agents
-  - local: in_translation
-    title: (번역중) Tools
-  title: 추론(Inference)
+      title: CPU
+    title: Optimization
+  - local: agents
+    title: Agents
+  - local: tools
+    title: Tools
+  - local: serving
+    title: Serving
+  - local: transformers_as_backend
+    title: Inference server backends
+  title: Inference
 - isExpanded: false
   sections:
   - sections:
     - local: trainer
-      title: 트레이너(Trainer)
+      title: Trainer
     - local: training
-      title: 사전 학습된 모델 미세 조정하기
-    - local: in_translation
-      title: (번역중) Optimizers
+      title: Fine-tuning
+    - local: optimizers
+      title: Optimizers
     - local: hpo_train
-      title: Trainer API를 사용한 하이퍼파라미터 탐색
+      title: Hyperparameter search
     title: Trainer API
   - sections:
-    - local: in_translation
-      title: (번역중) Accelerator selection
+    - local: accelerator_selection
+      title: Accelerator selection
     - local: accelerate
-      title: 🤗 Accelerate로 분산 학습 구성하기
+      title: Accelerate
     - local: fsdp
-      title: 완전 분할 데이터 병렬 처리
+      title: FullyShardedDataParallel
     - local: deepspeed
       title: DeepSpeed
     - local: debugging
-      title: 디버깅
+      title: Multi-GPU debugging
     - local: perf_train_cpu_many
-      title: 다중 CPU에서 학습하기
+      title: Distributed CPUs
     - local: perf_train_gpu_many
-      title: 다중 GPU에서 학습 진행하기
-    title: 분산 학습(Distributed training)
+      title: Parallelism methods
+    title: Distributed training
   - sections:
-    - local: in_translation
-      title: (번역중) GPU
+    - local: perf_train_gpu_one
+      title: GPU
     - local: perf_train_cpu
-      title: CPU에서 훈련
+      title: CPU
     - local: perf_train_special
-      title: Apple 실리콘에서 PyTorch 학습
-    - local: in_translation
-      title: (번역중) Intel Gaudi
+      title: Apple Silicon
+    - local: perf_train_gaudi
+      title: Intel Gaudi
     - local: perf_hardware
-      title: 훈련용 사용자 맞춤형 하드웨어
-    title: 하드웨어
+      title: Build your own machine
+    title: Hardware
   - local: peft
-    title: 🤗 PEFT로 어댑터 로드 및 학습하기
+    title: PEFT
   - local: model_memory_anatomy
-    title: 모델 학습 해부하기
-  title: 학습(Training)
+    title: Model training anatomy
+  title: Training
 - isExpanded: false
   sections:
-  - local: in_translation
-    title: (번역중) Overview
-  - local: in_translation
-    title: (번역중) Selecting a quantization method
-  - local: in_translation
-    title: (번역중) Quantization concepts
-  - local: in_translation
-    title: (번역중) AQLM
-  - local: in_translation
-    title: (번역중) AutoRound
+  - local: quantization/overview
+    title: Overview
+  - local: quantization/selecting
+    title: Selecting a quantization method
+  - local: quantization/concept_guide
+    title: Quantization concepts
+  - local: quantization/aqlm
+    title: AQLM
+  - local: quantization/auto_round
+    title: AutoRound
   - local: quantization/awq
     title: AWQ
-  - local: in_translation
-    title: (번역중) BitNet
+  - local: quantization/bitnet
+    title: BitNet
   - local: quantization/bitsandbytes
     title: bitsandbytes
-  - local: in_translation
-    title: (번역중) compressed-tensors
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
   - local: quantization/eetq
     title: EETQ
-  - local: in_translation
-    title: (번역중) FBGEMM
-  - local: in_translation
-    title: (번역중) Fine-grained FP8
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM
+  - local: quantization/finegrained_fp8
+    title: Fine-grained FP8
+  - local: quantization/fp_quant
+    title: FP-Quant
   - local: gguf
-    title: GGUF 파일들과의 상호 운용성
+    title: GGUF
   - local: quantization/gptq
     title: GPTQ
-  - local: in_translation
-    title: (번역중) HIGGS
-  - local: in_translation
-    title: (번역중) HQQ
-  - local: in_translation
-    title: (번역중) Optimum
+  - local: quantization/higgs
+    title: HIGGS
+  - local: quantization/hqq
+    title: HQQ
+  - local: quantization/optimum
+    title: Optimum
   - local: quantization/quanto
     title: Quanto
   - local: quantization/quark
     title: Quark
-  - local: in_translation
-    title: (번역중) torchao
-  - local: in_translation
-    title: (번역중) SpQR
-  - local: in_translation
-    title: (번역중) VPTQ
-  - local: in_translation
-    title: (번역중) Contribute
-  title: 양자화(Quantization)
+  - local: quantization/torchao
+    title: torchao
+  - local: quantization/spqr
+    title: SpQR
+  - local: quantization/vptq
+    title: VPTQ
+  - local: quantization/contribute
+    title: Contribute
+  title: Quantization
 - isExpanded: false
   sections:
   - local: serialization
-    title: ONNX로 내보내기
+    title: ONNX
   - local: tflite
-    title: TFLite로 내보내기
+    title: LiteRT
   - local: executorch
     title: ExecuTorch
   - local: torchscript
-    title: TorchScript로 내보내기
-  title: 배포환경에 내보내기
+    title: TorchScript
+  title: Export to production
 - isExpanded: false
   sections:
   - sections:
     - sections:
       - local: tasks/sequence_classification
-        title: 텍스트 분류
+        title: Text classification
       - local: tasks/token_classification
-        title: 토큰 분류
+        title: Token classification
       - local: tasks/question_answering
-        title: 질의 응답(Question Answering)
+        title: Question answering
       - local: tasks/language_modeling
-        title: 인과적 언어 모델링(Causal language modeling)
+        title: Causal language modeling
       - local: tasks/masked_language_modeling
-        title: 마스킹된 언어 모델링(Masked language modeling)
+        title: Masked language modeling
       - local: tasks/translation
-        title: 번역
+        title: Translation
       - local: tasks/summarization
-        title: 요약
+        title: Summarization
       - local: tasks/multiple_choice
-        title: 객관식 문제(Multiple Choice)
-      title: 자연어처리
+        title: Multiple choice
+      title: Natural language processing
     - sections:
       - local: tasks/audio_classification
-        title: 오디오 분류
+        title: Audio classification
       - local: tasks/asr
-        title: 자동 음성 인식
-      title: 오디오
+        title: Automatic speech recognition
+      title: Audio
     - sections:
       - local: tasks/image_classification
-        title: 이미지 분류
+        title: Image classification
       - local: tasks/semantic_segmentation
-        title: 이미지 세그멘테이션
+        title: Image segmentation
       - local: tasks/video_classification
-        title: 비디오 분류
+        title: Video classification
       - local: tasks/object_detection
-        title: 객체 탐지(Object detection)
+        title: Object detection
       - local: tasks/zero_shot_object_detection
-        title: 제로샷(zero-shot) 객체 탐지
+        title: Zero-shot object detection
       - local: tasks/zero_shot_image_classification
-        title: 제로샷(zero-shot) 이미지 분류
+        title: Zero-shot image classification
       - local: tasks/monocular_depth_estimation
-        title: 단일 영상 기반 깊이 추정
+        title: Depth estimation
       - local: tasks/image_to_image
         title: Image-to-Image
       - local: tasks/image_feature_extraction
-        title: 이미지 특징 추출
+        title: Image Feature Extraction
       - local: tasks/mask_generation
-        title: 마스크 생성
+        title: Mask Generation
       - local: tasks/keypoint_detection
-        title: 키포인트 탐지
+        title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
-        title: 컴퓨터 비전(이미지 분류)를 위한 지식 증류(knowledge distillation)
-      title: 컴퓨터 비전
+        title: Knowledge Distillation for Computer Vision
+      title: Computer vision
     - sections:
       - local: tasks/image_captioning
-        title: 이미지 캡셔닝
+        title: Image captioning
       - local: tasks/document_question_answering
-        title: 문서 질의 응답(Document Question Answering)
+        title: Document Question Answering
       - local: tasks/visual_question_answering
-        title: 시각적 질의응답 (Visual Question Answering)
+        title: Visual Question Answering
       - local: tasks/text-to-speech
-        title: 텍스트 음성 변환
+        title: Text to speech
       - local: tasks/idefics
-        title: IDEFICS를 이용한 이미지 작업
-      - local: in_translation
-        title: (번역중) Image-text-to-text
-      - local: in_translation
-        title: (번역중) Video-text-to-text
-      - local: in_translation
-        title: (번역중) Visual Document Retrieval
-      title: 멀티모달
-    title: 태스크 레시피
+        title: Image tasks with IDEFICS
+      - local: tasks/image_text_to_text
+        title: Image-text-to-text
+      - local: tasks/video_text_to_text
+        title: Video-text-to-text
+      - local: tasks/visual_document_retrieval
+        title: Visual Document Retrieval
+      title: Multimodal
+    title: Task recipes
   - local: run_scripts
-    title: 스크립트로 학습하기
+    title: Training scripts
   - local: glossary
     title: Glossary
   - local: philosophy
-    title: 이념과 목표
-  - local: in_translation
-    title: (번역중) Notebooks with examples
+    title: Philosophy
+  - local: notebooks
+    title: Notebooks with examples
   - local: community
-    title: 커뮤니티 리소스
+    title: Community resources
   - local: troubleshooting
-    title: 문제 해결
-  title: 리소스
+    title: Troubleshoot
+  title: Resources
 - isExpanded: false
   sections:
   - local: contributing
-    title: 🤗 Transformers에 기여하는 방법
+    title: Contribute to Transformers
   - local: testing
-    title: Transformers 모델 테스트하기
+    title: Transformers model tests
   - local: pr_checks
-    title: Pull request 검사하기
-  title: 기여하기
+    title: Pull request checks
+  title: Contribute
 - isExpanded: false
   sections:
   - sections:
     - local: model_doc/auto
       title: Auto Classes
-    - local: in_translation
-      title: (번역중) Backbones
+    - local: main_classes/backbones
+      title: Backbones
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -325,36 +329,36 @@
     - local: main_classes/model
       title: Models
     - local: main_classes/text_generation
-      title: 텍스트 생성
+      title: Text Generation
     - local: main_classes/onnx
       title: ONNX
-    - local: in_translation
-      title: (번역중) Optimization
+    - local: main_classes/optimizer_schedules
+      title: Optimization
     - local: main_classes/output
-      title: 모델 출력
-    - local: in_translation
-      title: (번역중) PEFT
-    - local: in_translation
-      title: (번역중) Pipelines
-    - local: in_translation
-      title: (번역중) Processors
+      title: Model outputs
+    - local: main_classes/peft
+      title: PEFT
+    - local: main_classes/pipelines
+      title: Pipelines
+    - local: main_classes/processors
+      title: Processors
     - local: main_classes/quantization
-      title: 양자화
-    - local: in_translation
-      title: (번역중) Tokenizer
+      title: Quantization
+    - local: main_classes/tokenizer
+      title: Tokenizer
     - local: main_classes/trainer
       title: Trainer
-    - local: in_translation
-      title: (번역중) DeepSpeed
+    - local: main_classes/deepspeed
+      title: DeepSpeed
     - local: main_classes/executorch
       title: ExecuTorch
     - local: main_classes/feature_extractor
-      title: 피쳐 추출기
-    - local: in_translation
-      title: (번역중) Image Processor
-    - local: in_translation
-      title: (번역중) Video Processor
-    title: 메인 클래스
+      title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
+    - local: main_classes/video_processor
+      title: Video Processor
+    title: Main Classes
   - sections:
     - sections:
       - local: model_doc/albert
@@ -441,6 +445,10 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie4_5
+        title: Ernie4_5
+      - local: model_doc/ernie4_5_moe
+        title: Ernie4_5_MoE
       - local: model_doc/ernie_m
         title: ErnieM
       - local: model_doc/esm
@@ -475,6 +483,8 @@
         title: GLM
       - local: model_doc/glm4
         title: glm4
+      - local: model_doc/glm4_moe
+        title: glm4_moe
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -693,7 +703,7 @@
         title: Zamba
       - local: model_doc/zamba2
         title: Zamba2
-      title: 텍스트 모델
+      title: Text models
     - sections:
       - local: model_doc/aimv2
         title: Aimv2
@@ -741,6 +751,8 @@
         title: DPT
       - local: model_doc/efficientformer
         title: EfficientFormer
+      - local: model_doc/efficientloftr
+        title: EfficientLoFTR
       - local: model_doc/efficientnet
         title: EfficientNet
       - local: model_doc/eomt
@@ -835,7 +847,7 @@
         title: YOLOS
       - local: model_doc/zoedepth
         title: ZoeDepth
-      title: 비전 모델
+      title: Vision models
     - sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
@@ -913,7 +925,7 @@
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
         title: XLSR-Wav2Vec2
-      title: 오디오 모델
+      title: Audio models
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
@@ -923,7 +935,7 @@
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
-      title: 비디오 모델
+      title: Video models
     - sections:
       - local: model_doc/align
         title: ALIGN
@@ -1099,13 +1111,13 @@
         title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
-      title: 멀티모달 모델
+      title: Multimodal models
     - sections:
       - local: model_doc/decision_transformer
         title: Decision Transformer
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
-      title: 강화학습 모델
+      title: Reinforcement learning models
     - sections:
       - local: model_doc/autoformer
         title: Autoformer
@@ -1119,38 +1131,38 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
-      title: 시게열 모델
+      title: Time series models
     - sections:
       - local: model_doc/graphormer
         title: Graphormer
-      title: 그래프 모델
-    title: 모델
+      title: Graph models
+    title: Models
   - sections:
     - local: internal/modeling_utils
-      title: 사용자 정의 레이어 및 유틸리티
-    - local: in_translation
-      title: (번역중) Utilities for Model Debugging
+      title: Custom Layers and Utilities
+    - local: internal/model_debugging_utils
+      title: Utilities for Model Debugging
     - local: internal/pipelines_utils
-      title: 파이프라인을 위한 유틸리티
+      title: Utilities for pipelines
     - local: internal/tokenization_utils
-      title: 토크나이저를 위한 유틸리티
+      title: Utilities for Tokenizers
     - local: internal/trainer_utils
-      title: Trainer를 위한 유틸리티
+      title: Utilities for Trainer
     - local: internal/generation_utils
-      title: 생성을 위한 유틸리티
+      title: Utilities for Generation
     - local: internal/image_processing_utils
-      title: 이미지 프로세서를 위한 유틸리티
+      title: Utilities for Image Processors
     - local: internal/audio_utils
-      title: 오디오 처리를 위한 유틸리티
+      title: Utilities for Audio processing
     - local: internal/file_utils
-      title: 일반 유틸리티
-    - local: in_translation
-      title: (번역중) Importing Utilities
+      title: General Utilities
+    - local: internal/import_utils
+      title: Importing Utilities
     - local: internal/time_series_utils
-      title: 시계열을 위한 유틸리티
-    title: 내부 헬퍼(Internal helpers)
+      title: Utilities for Time Series
+    title: Internal helpers
   - sections:
-    - local: in_translation
-      title: (번역중)Environment Variables
+    - local: reference/environment_variables
+      title: Environment Variables
     title: Reference
   title: API
