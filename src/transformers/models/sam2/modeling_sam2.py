@@ -1347,7 +1347,7 @@ class Sam2PositionEmbeddingSine(nn.Module):
 
     @torch.no_grad()
     def encode_points(self, x, y, labels):
-        (bx, nx), (by, ny), (bl, nl) = x.shape, y.shape, labels.shape
+        (bx, nx), (by, ny) = x.shape, y.shape
         pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
         pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
         pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
