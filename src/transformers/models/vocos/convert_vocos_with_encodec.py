@@ -21,7 +21,6 @@ from transformers import (
     EncodecModel,
     VocosWithEncodecConfig,
     VocosWithEncodecModel,
-    logging,
 )
 from transformers.models.encodec.convert_encodec_checkpoint_to_pytorch import recursively_load_weights
 
@@ -88,7 +87,7 @@ def convert_old_keys_to_new_keys(original_state_dict: dict, model_name: str = "e
         elif old_key.startswith("head.out."):
             converted_checkpoint[_remap_key(old_key, HEAD_MAPPING)] = value
         elif old_key == "head.istft.window":
-            converted_checkpoint[old_key] = value
+            converted_checkpoint["head.window"] = value
 
     return converted_checkpoint
 
@@ -126,7 +125,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     if push_to_hub:
         print("Pushing to the hub...")
         model.push_to_hub(push_to_hub)
-        logging.info(f"Pushed model to {push_to_hub}")
+        print(f"Pushed model to {push_to_hub}")
 
 
 if __name__ == "__main__":
