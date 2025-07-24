@@ -64,7 +64,7 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
+    distribute_model,
     _get_parameter_tp_plan,
     initialize_tensor_parallelism,
     repack_weights,
@@ -2089,7 +2089,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # - `_pp_plan["layers"][PipelineParallel.inputs]`
     # - `_pp_plan["layers"][PipelineParallel.outputs]`
     _pp_plan = None
-    distributed_config = None
+
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
@@ -2257,40 +2257,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
-        self._tp_plan = (
-            self.config.base_model_ep_plan.copy()
-            if self.config.base_model_ep_plan is not None
-            and getattr(self.distributed_config, "enable_expert_parallel", False)
-            or True
-            else self.config.base_model_tp_plan
-        )
-        for name, module in self.named_children():
-            if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-
-        if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-            for v in self._tp_plan.values():
-                if v not in ALL_PARALLEL_STYLES:
-                    raise ValueError(
-                        f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
-                    )
-            # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
-            device_mesh = self.config.device_mesh
-            for name, module in self.named_modules():
-                if not getattr(module, "_is_hooked", False):
-                    from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
-
-                    plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan, is_weight=False)
-                    add_tensor_parallel_hooks_to_module(
-                        model=self,
-                        module=module,
-                        tp_plan=self._tp_plan,
-                        layer_name="",
-                        current_module_plan=plan,
-                        device_mesh=device_mesh,
-                        parameter_name=None,
-                    )
-                module._is_hooked = True
 
     def dequantize(self):
         """
@@ -4697,6 +4663,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
+        distributed_config = kwargs.pop("distributed_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -4717,7 +4684,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             key_mapping = cls._checkpoint_conversion_mapping
 
-        cls.distributed_config: DistributedConfig = kwargs.pop("distributed_config", {})
+        if distributed_config is not None:
+            tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -5055,24 +5023,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         config.name_or_path = pretrained_model_name_or_path
-        if (
-            cls.distributed_config is not None
-            and getattr(cls.distributed_config, "enable_expert_parallel", False)
-            or True
-        ):
-            # TODO: add proper support for ep_plan independently of tp_plan
-            if getattr(config, "base_model_ep_plan", None) is None:
-                raise ValueError("base_model_ep_plan is required when enable_expert_parallel is True")
-            config.base_model_tp_plan = config.base_model_ep_plan  # TODO: hack for now
-
-        config.device_mesh = device_mesh  # Used in post_init
-
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
-
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+
+        if _torch_distributed_available and device_mesh is not None:
+            model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
         # Make sure to tie the weights correctly
         model.tie_weights()
@@ -5162,11 +5120,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
-
-        # record tp degree the model sharded to
-        model._tp_size = tp_size
-        model._device_mesh = device_mesh
-
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 

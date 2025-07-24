@@ -1077,3 +1077,30 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+
+
+def distribute_model(model, distributed_config, device_mesh, tp_size):
+    model._tp_plan = model.config.base_model_tp_plan.copy() if model.config.base_model_tp_plan is not None else None
+    for name, module in model.named_children():
+        if plan := getattr(module, "_tp_plan", None):
+            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+    if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        for v in model._tp_plan.values():
+            if v not in ALL_PARALLEL_STYLES:
+                raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
+        for name, module in model.named_modules():
+            if not getattr(module, "_is_hooked", False):
+                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+
+                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
+                add_tensor_parallel_hooks_to_module(
+                    model=model,
+                    module=module,
+                    tp_plan=model._tp_plan,
+                    layer_name="",
+                    current_module_plan=plan,
+                    device_mesh=device_mesh,
+                )
+            module._is_hooked = True
+    return model
