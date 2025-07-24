@@ -1015,10 +1015,9 @@ def check_model_inputs(func):
                 all_args[k] = v
 
         capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
-        capture_flags["hidden_states"] = [OutputRecorder(self.get_input_embeddings().__class__, index=0)] + [
-            capture_flags.get("hidden_states", [])
-        ]
-        print(capture_flags)
+        capture_flags_hidden_states = capture_flags.get("hidden_states")
+        capture_flags_hidden_states = (capture_flags_hidden_states,) if capture_flags_hidden_states else ()
+        capture_flags["hidden_states"] = (self.get_input_embeddings().__class__,) + capture_flags_hidden_states
         recordable_keys = {
             f"output_{k}": all_args.get(
                 f"output_{k}",
