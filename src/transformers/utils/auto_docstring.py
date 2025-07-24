@@ -965,8 +965,9 @@ class ClassAttrs:
     _supports_flex_attn = r"""
     Whether the model's attention implementation supports FlexAttention.
     """
-    _supports_static_cache = r"""
-    Whether the model supports a `StaticCache` instance as `past_key_values`.
+    _can_compile_fullgraph = r"""
+    Whether the model can `torch.compile` fullgraph without graph breaks. Models will auto-compile if this flag is set to `True`
+    in inference, if a compilable cache is used.
     """
     _supports_attention_backend = r"""
     Whether the model supports attention interface functions. This flag signal that the model can be used as an efficient backend in TGI and vLLM.
@@ -1142,10 +1143,14 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     for placeholder in placeholders:
         # Infer placeholders from the model name and the auto modules
         if placeholder in PLACEHOLDER_TO_AUTO_MODULE:
-            place_holder_value = getattr(
-                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
-                PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
-            ).get(model_name, None)
+            try:
+                place_holder_value = getattr(
+                    getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
+                    PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
+                ).get(model_name, None)
+            except ImportError:
+                # In case a library is not installed, we don't want to fail the docstring generation
+                place_holder_value = None
             if place_holder_value is not None:
                 if isinstance(place_holder_value, (list, tuple)):
                     place_holder_value = place_holder_value[0]
@@ -1170,8 +1175,11 @@ def format_args_docstring(docstring, model_name):
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        docstring = docstring.replace(f"{{{placeholder}}}", value)
-
+        if placeholder is not None:
+            try:
+                docstring = docstring.replace(f"{{{placeholder}}}", value)
+            except Exception:
+                pass
     return docstring
 
 

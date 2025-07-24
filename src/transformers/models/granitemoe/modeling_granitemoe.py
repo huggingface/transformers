@@ -592,20 +592,11 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GraniteMoeRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GraniteMoeParallelExperts):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 

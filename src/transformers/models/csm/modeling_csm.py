@@ -371,7 +371,7 @@ class CsmPreTrainedModel(PreTrainedModel):
     # does not because of Mimi codec model
     # _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": CsmDecoderLayer,
@@ -379,21 +379,11 @@ class CsmPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, CsmCodebooksHead):
+        super()._init_weights(module)
+        if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.data[i].normal_(mean=0.0, std=std)
-        elif isinstance(module, CsmRMSNorm):
-            module.weight.data.fill_(1.0)
+                module.weight.data[i].normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

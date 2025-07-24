@@ -72,8 +72,6 @@
       title: Caching
     - local: kv_cache
       title: KV cache strategies
-    - local: serving
-      title: Serving
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
@@ -105,6 +103,10 @@
     title: Agents
   - local: tools
     title: Tools
+  - local: serving
+    title: Serving
+  - local: transformers_as_backend
+    title: Inference server backends
   title: Inference
 - isExpanded: false
   sections:
@@ -177,6 +179,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fp_quant
+    title: FP-Quant
   - local: gguf
     title: GGUF
   - local: quantization/gptq
@@ -747,6 +751,8 @@
         title: DPT
       - local: model_doc/efficientformer
         title: EfficientFormer
+      - local: model_doc/efficientloftr
+        title: EfficientLoFTR
       - local: model_doc/efficientnet
         title: EfficientNet
       - local: model_doc/eomt
