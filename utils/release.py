@@ -59,8 +59,14 @@ REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
-    "uv_script_release": (re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE), r'#     "transformers\g<1>==VERSION",'),
-    "uv_script_dev": (re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE), r'#     "transformers\g<1> @ git+https://github.com/huggingface/transformers.git",'),
+    "uv_script_release": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1>==VERSION",',
+    ),
+    "uv_script_dev": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1> @ git+https://github.com/huggingface/transformers.git",',
+    ),
 }
 # This maps a type of file to its path in Transformers
 REPLACE_FILES = {
