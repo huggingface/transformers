@@ -65,7 +65,6 @@ class DistributedConfig:
 
             writer.write(json_string)
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_dict
     def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
@@ -91,7 +90,6 @@ class DistributedConfig:
         """
         return json.dumps(self.__dict__, indent=2) + "\n"
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.update
     def update(self, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
