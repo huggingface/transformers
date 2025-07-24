@@ -4107,7 +4107,9 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=torch_dtype)
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(
+            device=torch_device, dtype=torch_dtype
+        )
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -4137,7 +4139,7 @@ class ModelTesterMixin:
         }
 
         for model_class in self.all_generative_model_classes:
-            if not getattr(model_class, support_flag[attn_implementation]):
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4415,7 +4417,7 @@ class ModelTesterMixin:
         set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
+            if not model_class._can_compile_fullgraph:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             set_config_for_less_flaky_test(config)

@@ -96,7 +96,7 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
 
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
 

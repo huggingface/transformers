@@ -477,7 +477,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTNeoBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
-    _supports_static_cache = False  # TODO: needs a HybridCache
+    _can_compile_fullgraph = False  # TODO: needs a HybridCache
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

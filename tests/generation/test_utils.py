@@ -1764,7 +1764,7 @@ class GenerationTesterMixin:
         to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
         """
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
+            if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -1984,7 +1984,7 @@ class GenerationTesterMixin:
         """
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
+            if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -2087,8 +2087,8 @@ class GenerationTesterMixin:
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
-            if not model_class._supports_static_cache:
-                self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
+            if not model_class._can_compile_fullgraph:
+                self.skipTest("This model doesn't support compilation without graph breaks")
 
             # 2. Prepares two sets of inputs
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
@@ -2201,8 +2201,8 @@ class GenerationTesterMixin:
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_static_cache:
-                self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
+            if not model_class._can_compile_fullgraph:
+                self.skipTest("This model doesn't support compilation without graph breaks")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if self.has_attentions:
@@ -2309,7 +2309,7 @@ class GenerationTesterMixin:
 
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
-            if not getattr(model_class, support_flag[attn_implementation]):
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()

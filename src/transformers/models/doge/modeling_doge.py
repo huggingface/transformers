@@ -486,7 +486,7 @@ class DogePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(DogeCDMoE, index=1),

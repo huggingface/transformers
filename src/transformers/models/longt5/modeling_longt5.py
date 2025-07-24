@@ -1250,7 +1250,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LongT5Block"]
 
-    _supports_static_cache = False  # TODO: @raushan more involved due to local/global attn
+    _can_compile_fullgraph = False  # TODO: @raushan more involved due to local/global attn
 
     @property
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs

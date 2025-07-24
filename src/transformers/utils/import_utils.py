@@ -172,6 +172,8 @@ _auto_round_available, _auto_round_version = _is_package_available("auto_round",
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
+_fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
+_qutlass_available = _is_package_available("qutlass")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -1312,6 +1314,14 @@ def is_optimum_quanto_available():
 
 def is_quark_available():
     return _quark_available
+
+
+def is_fp_quant_available():
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
+
+
+def is_qutlass_available():
+    return _qutlass_available
 
 
 def is_compressed_tensors_available():

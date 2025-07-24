@@ -47,7 +47,8 @@ Here is a quick example of how to encode and decode an audio using this model:
 >>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
 
 >>> encoder_outputs = model.encode(inputs["input_values"], inputs["padding_mask"])
->>> audio_values = model.decode(encoder_outputs.audio_codes, encoder_outputs.audio_scales, inputs["padding_mask"])[0]
+>>> # `encoder_outputs.audio_codes` contains discrete codes
+>>> audio_values = model.decode(**encoder_outputs, padding_mask=inputs["padding_mask"])[0]
 >>> # or the equivalent with a forward pass
 >>> audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_values
 ```

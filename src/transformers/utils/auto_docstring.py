@@ -965,8 +965,9 @@ class ClassAttrs:
     _supports_flex_attn = r"""
     Whether the model's attention implementation supports FlexAttention.
     """
-    _supports_static_cache = r"""
-    Whether the model supports a `StaticCache` instance as `past_key_values`.
+    _can_compile_fullgraph = r"""
+    Whether the model can `torch.compile` fullgraph without graph breaks. Models will auto-compile if this flag is set to `True`
+    in inference, if a compilable cache is used.
     """
     _supports_attention_backend = r"""
     Whether the model supports attention interface functions. This flag signal that the model can be used as an efficient backend in TGI and vLLM.

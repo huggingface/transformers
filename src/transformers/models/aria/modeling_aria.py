@@ -654,7 +654,7 @@ class AriaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
