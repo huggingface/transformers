@@ -14,31 +14,31 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DeepSeek-V3
+# DeepSeek-V3[[deepseek-v3]]
 
-## Overview
+## 개요[[overview]]
 
-The DeepSeek-V3 model was proposed in [DeepSeek-V3 Technical Report](https://huggingface.co/papers/2412.19437) by DeepSeek-AI Team.
+DeepSeek-V3 모델은 DeepSeek-AI 팀의 [DeepSeek-V3 기술 보고서](https://huggingface.co/papers/2412.19437)에서 제안되었습니다.
 
-The abstract from the paper is the following:
-We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 671B total parameters with 37B activated for each token. To achieve efficient inference and cost-effective training, DeepSeek-V3 adopts Multi-head Latent Attention (MLA) and DeepSeekMoE architectures, which were thoroughly validated in DeepSeek-V2. Furthermore, DeepSeek-V3 pioneers an auxiliary-loss-free strategy for load balancing and sets a multi-token prediction training objective for stronger performance. We pre-train DeepSeek-V3 on 14.8 trillion diverse and high-quality tokens, followed by Supervised Fine-Tuning and Reinforcement Learning stages to fully harness its capabilities. Comprehensive evaluations reveal that DeepSeek-V3 outperforms other open-source models and achieves performance comparable to leading closed-source models. Despite its excellent performance, DeepSeek-V3 requires only 2.788M H800 GPU hours for its full training. In addition, its training process is remarkably stable. Throughout the entire training process, we did not experience any irrecoverable loss spikes or perform any rollbacks. The model checkpoints are available at https://github.com/deepseek-ai/DeepSeek-V3.
+논문의 초록은 다음과 같습니다:
+저희는 671B개의 총 파라미터를 가지며 토큰당 37B개가 활성화되는 강력한 MoE(Mixture-of-Experts) 언어 모델인 DeepSeek-V3를 소개합니다. 효율적인 추론과 비용 효율적인 훈련을 달성하기 위해, DeepSeek-V3는 DeepSeek-V2에서 철저히 검증된 Multi-head Latent Attention(MLA) 및 DeepSeekMoE 아키텍처를 채택했습니다. 또한, DeepSeek-V3는 로드 밸런싱을 위한 보조 손실 없는(auxiliary-loss-free) 전략을 개척하고 더 강력한 성능을 위해 다중 토큰 예측 훈련 목표를 설정합니다. 저희는 14.8조 개의 다양하고 고품질인 토큰으로 DeepSeek-V3를 사전 훈련했으며, 그 잠재력을 완전히 활용하기 위해 지도 미세 조정(Supervised Fine-Tuning) 및 강화 학습(Reinforcement Learning) 단계를 거쳤습니다. 종합적인 평가는 DeepSeek-V3가 다른 오픈 소스 모델들을 능가하며, 선도적인 비공개 소스 모델들과 비슷한 성능을 달성했음을 보여줍니다. 뛰어난 성능에도 불구하고 DeepSeek-V3는 전체 훈련에 278.8만 H800 GPU 시간만을 필요로 합니다. 또한, 훈련 과정이 매우 안정적입니다. 전체 훈련 과정 동안, 저희는 복구 불가능한 손실 급증(loss spike)을 경험하거나 롤백을 수행한 적이 없습니다. 모델 체크포인트는 https://github.com/deepseek-ai/DeepSeek-V3 에서 확인할 수 있습니다.
 
-## Limitations and call for contribution!
+## 한계 및 기여 요청![[limitations-and-call-for-contribution!]]
 
-We are super happy to make this code community-powered, and would love to see how you can best optimize the following: 
+저희는 이 코드를 커뮤니티 기반으로 만들게 되어 매우 기쁘며, 여러분이 다음 사항들을 어떻게 최적화할 수 있는지 보고 싶습니다:
 
-- current implementation uses the "naive" attention compution (so not really MLA)
-- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `integrations/tensor_parallel`. 
-- current implementation uses the eleuther formula for ROPE, using the original one would be more efficient! (should still follow our API)
-- static cache is not supported (this should be just a generation config issue / config shape issues)
+- 현재 구현은 "순수한(naive)" 어텐션 계산을 사용합니다 (따라서 실제 MLA가 아닙니다).
+- 현재 구현은 전문가(expert)들을 순회하는 루프를 사용합니다. 이는 교체되어야 합니다. `integrations/tensor_parallel`의 `get_packed_weights`를 사용하는 것을 제안합니다.
+- 현재 구현은 ROPE에 eleuther 수식을 사용하는데, 원본 수식을 사용하는 것이 더 효율적일 것입니다! (저희 API는 계속 따라야 합니다)
+- 정적 캐시(static cache)는 지원되지 않습니다 (이는 generation config 문제 또는 config shape 문제일 것입니다).
 
-### Usage tips
-The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. It employs an auxiliary-loss-free strategy for load balancing and multi-token prediction training objective. The model can be used for various language tasks after being pre-trained on 14.8 trillion tokens and going through Supervised Fine-Tuning and Reinforcement Learning stages.
+### 사용 팁[[usage-tips]]
+이 모델은 효율적인 추론과 비용 효율적인 훈련을 위해 Multi-head Latent Attention (MLA) 및 DeepSeekMoE 아키텍처를 사용합니다. 로드 밸런싱을 위한 보조 손실 없는 전략과 다중 토큰 예측 훈련 목표를 사용합니다. 이 모델은 14.8조 개의 토큰으로 사전 훈련되고 지도 미세 조정 및 강화 학습 단계를 거친 후 다양한 언어 작업에 사용될 수 있습니다.
 
-You can run the model in `FP8` automatically, using 2 nodes of 8 H100 should be more than enough! 
+`FP8` 모드로 모델을 자동으로 실행할 수 있으며, 8개의 H100으로 구성된 2개 노드면 충분합니다!
 
 ```python
-# `run_deepseek_v1.py`
+# `run_deepseek_v1.py` 실행
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 torch.manual_seed(30)
@@ -60,45 +60,45 @@ outputs = model.generate(inputs, max_new_tokens=50)
 print(tokenizer.batch_decode(outputs))
 print(time.time()-start)
 ```
-This generated: 
+생성 결과는 다음과 같습니다:
 
 ``````
 <｜Assistant｜><think>
-Okay, the user wants to demonstrate how chat templating works. Let me break down what that means. Chat templating is about structuring the conversation data, especially for models that need specific input formats. Maybe they're referring to something like how messages are formatted with roles (user, assistant, system) in APIs like OpenAI.
+알겠습니다, 사용자는 채팅 템플릿이 어떻게 작동하는지 시연하고 싶어 하는군요. 그게 무슨 의미인지 분석해 보겠습니다. 채팅 템플릿은 대화 데이터를 구조화하는 것, 특히 특정 입력 형식이 필요한 모델을 위한 것입니다. 아마도 OpenAI 같은 API에서 메시지가 역할(user, assistant, system)과 함께 형식화되는 방식을 언급하는 것일 수 있습니다.
 
-First, I should explain what chat templating is. It's the process of formatting conversation data into a structured format that the model can understand. This usually includes roles and content. For example, user messages, assistant responses, and system messages each have their own role tags.
+먼저, 채팅 템플릿이 무엇인지 설명해야겠습니다. 이는 모델이 이해할 수 있는 구조화된 형식으로 대화 데이터를 포맷하는 과정입니다. 여기에는 보통 역할과 콘텐츠가 포함됩니다. 예를 들어, 사용자 메시지, 어시스턴트 응답, 시스템 메시지는 각각 고유한 역할 태그를 가집니다.
 
-They might want an example. Let me think of a simple conversation. The user says "Hello, how are you?" and the assistant responds "I'm doing great. How can I help you today?" Then the user follows up with wanting to show off chat templating. So the example should include the history and the new message.
+사용자는 예시를 원할 수 있습니다. 간단한 대화를 생각해 보죠. 사용자가 "안녕하세요, 잘 지내세요?"라고 말하고 어시스턴트가 "네, 잘 지내요. 오늘 무엇을 도와드릴까요?"라고 답합니다. 그런 다음 사용자가 채팅 템플릿을 보여주고 싶다고 이어갑니다. 따라서 예시에는 대화 기록과 새 메시지가 포함되어야 합니다.
 
-In some frameworks, like Hugging Face's Transformers, chat templates are applied using Jinja2 templates. The template might look something like combining system messages, then looping through user and assistant messages with appropriate tags. For instance, using {% for message in messages %} and assigning roles like <|user|>, <|assistant|>, etc.
+Hugging Face의 Transformers와 같은 프레임워크에서는 Jinja2 템플릿을 사용하여 채팅 템플릿이 적용됩니다. 템플릿은 시스템 메시지를 결합한 다음, 적절한 태그와 함께 사용자와 어시스턴트 메시지를 반복하는 형식일 수 있습니다. 예를 들어, {% for message in messages %}를 사용하고 <|user|>, <|assistant|>와 같은 역할을 할당하는 것입니다.
 
-I should structure the example with the messages array, showing each role and content. Then apply a hypothetical template to convert that into a formatted string the model uses. Also, mention that different models have different templating requirements, like using special tokens or varying role labels.
+메시지 배열 예시를 구성하고, 각 역할과 내용을 보여주어야겠습니다. 그런 다음 가상의 템플릿을 적용하여 모델이 사용하는 형식화된 문자열로 변환하는 과정을 보여줍니다. 또한, 모델마다 특수 토큰을 사용하거나 역할 레이블이 다른 것처럼 템플릿 요구 사항이 다르다는 점도 언급해야 합니다.
 
-Wait, the user mentioned "chat templating" in the context of showing off. Maybe they want a practical example they can present. So providing a code snippet or a structured data example would be helpful. Let me outline a typical messages array and then the templated output.
+잠깐, 사용자가 "채팅 템플릿"을 보여주는 맥락에서 언급했습니다. 아마도 발표할 수 있는 실용적인 예시를 원하는 것일 수 있습니다. 따라서 코드 스니펫이나 구조화된 데이터 예시를 제공하는 것이 도움이 될 것입니다. 일반적인 메시지 배열과 템플릿이 적용된 결과물을 개략적으로 설명해 보겠습니다.
 
-Also, it's important to note that proper templating ensures the model knows the conversation flow, which is crucial for generating coherent responses. Maybe include a note about why it's important, like maintaining context and role-specific processing.
+또한, 적절한 템플릿팅은 모델이 대화 흐름을 이해하도록 보장하며, 이는 일관된 응답을 생성하는 데 중요합니다. 왜 이것이 중요한지에 대한 메모, 예를 들어 컨텍스트 유지 및 역할별 처리의 중요성을 포함할 수도 있겠습니다.
 
-Let me check if there are any common mistakes or things to avoid. For example, not closing tags properly, or mismatching roles. But maybe that's too detailed unless the user asks. Focus on the positive example first.
+흔한 실수나 피해야 할 점이 있는지 확인해 보겠습니다. 예를 들어, 태그를 제대로 닫지 않거나 역할이 일치하지 않는 경우입니다. 하지만 사용자가 묻지 않는 한 너무 자세할 수 있습니다. 먼저 긍정적인 예시에 집중합시다.
 
-Putting it all together, the response should have an example messages array, the applied template, and the final formatted string. Maybe use angle brackets or special tokens as placeholders. Also, mention that this helps in training or fine-tuning models with structured data.
+모든 것을 종합하면, 응답에는 예시 메시지 배열, 적용된 템플릿, 그리고 최종적으로 형식화된 문자열이 포함되어야 합니다. 자리 표시자로 꺾쇠괄호나 특수 토큰을 사용할 수 있습니다. 또한, 이것이 구조화된 데이터로 모델을 훈련하거나 미세 조정하는 데 도움이 된다는 점도 언급해야 합니다.
 
-I think that's a solid approach. Let me structure it step by step to make it clear.
+이것이 확실한 접근 방식인 것 같습니다. 명확하게 만들기 위해 단계별로 구조화해 보겠습니다.
 </think>
 
-Chat templating is a way to structure conversation data (e.g., user/assistant interactions) into a format that language models understand. This is especially important for models trained to handle multi-turn dialogues, where the input must explicitly separate roles (user, assistant, system, etc.) and messages. Let’s break this down with an example!
+채팅 템플릿은 대화 데이터(예: 사용자/어시스턴트 상호작용)를 언어 모델이 이해할 수 있는 형식으로 구조화하는 방법입니다. 이는 특히 입력에서 역할(사용자, 어시스턴트, 시스템 등)과 메시지를 명시적으로 구분해야 하는 다중 턴 대화를 처리하도록 훈련된 모델에 중요합니다. 예시와 함께 자세히 살펴보겠습니다!
 
 ---
 
-### **Step 1: Raw Conversation History**
-Suppose we have this conversation:
-- **User**: "Hello, how are you?"
-- **Assistant**: "I'm doing great. How can I help you today?"
-- **User**: "I'd like to show off how chat templating works!"
+### **1단계: 원본 대화 기록**
+다음과 같은 대화가 있다고 가정해 보겠습니다:
+- **사용자**: "안녕하세요, 잘 지내세요?"
+- **어시스턴트**: "네, 잘 지내요. 오늘 무엇을 도와드릴까요?"
+- **사용자**: "채팅 템플릿이 어떻게 작동하는지 보여주고 싶어요!"
 
 ---
 
-### **Step 2: Structured Messages**
-In frameworks like Hugging Face Transformers or OpenAI, conversations are often formatted as a list of dictionaries with `role` and `content`:
+### **2단계: 구조화된 메시지**
+Hugging Face Transformers나 OpenAI와 같은 프레임워크에서는 대화가 종종 `role`과 `content`를 가진 딕셔너리 리스트로 형식화됩니다:
 ```python
 messages = [
     {"role": "user", "content": "Hello, how are you?"},
@@ -109,8 +109,8 @@ messages = [
 
 ---
 
-### **Step 3: Apply a Chat Template**
-A **chat template** converts this structured data into a single string formatted for the model. For example, using a Jinja-style template (common in Hugging Face):
+### **3단계: 채팅 템플릿 적용**
+**채팅 템플릿**은 이 구조화된 데이터를 모델에 맞는 단일 문자열로 변환합니다. 예를 들어, (Hugging Face에서 흔히 사용되는) Jinja 스타일 템플릿을 사용하면 다음과 같습니다:
 
 ```jinja
 {% for message in messages %}
@@ -125,8 +125,8 @@ A **chat template** converts this structured data into a single string formatted
 
 ---
 
-### **Step 4: Final Templated Output**
-Applying the template to our `messages` list would produce:
+### **4단계: 최종 템플릿 결과물**
+위 템플릿을 `messages` 리스트에 적용하면 다음과 같은 결과가 나옵니다:
 ```text
 <|user|>Hello, how are you?<|end|>
 <|assistant|>I'm doing great. How can I help you today?<|end|>
@@ -134,51 +134,51 @@ Applying the template to our `messages` list would produce:
 <|assistant|>
 ```
 
-This tells the model:  
-1. The conversation history (user/assistant turns).  
-2. The model’s turn to generate a response (`<|assistant|>` at the end).  
+이는 모델에게 다음을 알려줍니다:
+1. 대화 기록 (사용자/어시스턴트 턴).
+2. 모델이 응답을 생성할 차례 (`<|assistant|>`가 끝에 있음).
 
 ---
 
-### **Key Notes**:
-- **Role Separation**: Tags like `<|user|>` and `<|assistant|>` help the model distinguish speakers.
-- **Special Tokens**: Models often use unique tokens (e.g., `<|end|>`) to mark message boundaries.
-- **Flexibility**: Templates vary by model (e.g., OpenAI uses `{"role": "user", "content": "..."}` instead of tags).
+### **주요 참고사항**:
+- **역할 구분**: `<|user|>` 및 `<|assistant|>`와 같은 태그는 모델이 화자를 구별하는 데 도움이 됩니다.
+- **특수 토큰**: 모델은 종종 메시지 경계를 표시하기 위해 `<|end|>`와 같은 고유한 토큰을 사용합니다.
+- **유연성**: 템플릿은 모델마다 다릅니다 (예: OpenAI는 태그 대신 `{"role": "user", "content": "..."}` 형식을 사용합니다).
 
 ---
 
-### **Why This Matters**:
-- **Consistency**: Ensures the model understands dialogue structure.
-- **Context Preservation**: Maintains the flow of multi-turn conversations.
-- **Alignment**: Matches the format the model was trained on for better performance.
+### **이것이 왜 중요한가**:
+- **일관성**: 모델이 대화 구조를 이해하도록 보장합니다.
+- **컨텍스트 보존**: 다중 턴 대화의 흐름을 유지합니다.
+- **정렬**: 더 나은 성능을 위해 모델이 훈련된 형식과 일치시킵니다.
 
-Want to dive deeper or see a specific framework’s implementation (e.g., OpenAI, Llama, Mistral)? Let me know! 😊<｜end▁of▁sentence｜>
+더 자세히 알아보거나 특정 프레임워크(예: OpenAI, Llama, Mistral)의 구현을 보고 싶으신가요? 알려주세요! 😊<｜end of sentence｜>
 ``````
 
-Use the following to run it
+다음 명령어를 사용하여 실행하세요
 ```bash
 torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0|1 --rdzv-id an_id --rdzv-backend c10d --rdzv-endpoint master_addr:master_port run_deepseek_r1.py
 ```
 
-If you have: 
+만약 다음과 같은
 ```bash
 [rank0]: ncclInternalError: Internal check failed.
 [rank0]: Last error:
 [rank0]: Bootstrap : no socket interface found
 ```
-error, it means NCCL was probably not loaded. 
+오류가 발생한다면, 이는 NCCL이 제대로 로드되지 않았음을 의미합니다.
 
 
-## DeepseekV3Config
+## DeepseekV3Config[[deepseekv3config]]
 
 [[autodoc]] DeepseekV3Config
 
-## DeepseekV3Model
+## DeepseekV3Model[[deepseekv3model]]
 
 [[autodoc]] DeepseekV3Model
     - forward
 
-## DeepseekV3ForCausalLM
+## DeepseekV3ForCausalLM[[deepseekv3forcausallm]]
 
 [[autodoc]] DeepseekV3ForCausalLM
     - forward
