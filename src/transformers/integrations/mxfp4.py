@@ -264,7 +264,6 @@ def _replace_with_mxfp4_linear(
     quantization_config=None,
     has_been_replaced=False,
     config=None,
-    tp_plan=None,
 ):
     if current_key_name is None:
         current_key_name = []
@@ -289,7 +288,6 @@ def _replace_with_mxfp4_linear(
                 quantization_config,
                 has_been_replaced=has_been_replaced,
                 config=config,
-                tp_plan=tp_plan,
             )
         current_key_name.pop(-1)
     return model, has_been_replaced
@@ -301,7 +299,6 @@ def replace_with_mxfp4_linear(
     current_key_name=None,
     quantization_config=None,
     config=None,
-    tp_plan=None,
 ):
 
     if quantization_config.dequantize:
@@ -318,7 +315,6 @@ def replace_with_mxfp4_linear(
         current_key_name,
         quantization_config,
         config=config,
-        tp_plan=tp_plan,
     )
     if not has_been_replaced :
         logger.warning(

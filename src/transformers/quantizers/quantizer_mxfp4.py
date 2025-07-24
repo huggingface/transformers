@@ -63,7 +63,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         major, minor = compute_capability
 
         if not is_triton_available("3.4.0") or not is_triton_kernels_availalble():
-            if self.pre_quantized:
+            if self.pre_quantized and not self.quantization_config.dequantize:
                 logger.warning_once(
                     "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed, we will default to dequantizing the model to bf16"
                 )
@@ -74,7 +74,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed"
                 )
 
-        if major < 9:
+        if major < 9 and not self.quantization_config.dequantize:
             raise ValueError(
                 "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
             )
@@ -138,6 +138,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
     ):
         from ..integrations import Mxfp4OpenAIMoeExperts
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
+
+        # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
         if self.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
             module, tensor_name = get_module_from_name(model, param_name[:-len("_blocks")])
         else:
@@ -338,7 +340,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_mxfp4_linear
 
-        tp_plan = model._tp_plan
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
@@ -349,7 +350,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
             config=config,
-            tp_plan=tp_plan,
         )
 
         model.config.quantization_config = self.quantization_config
