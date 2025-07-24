@@ -21,7 +21,7 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
-from .args_doc import (
+from .auto_docstring import (
     ClassAttrs,
     ClassDocstring,
     ImageProcessorArgs,
@@ -158,6 +158,7 @@ from .import_utils import (
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_flute_available,
+    is_fp_quant_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
@@ -204,6 +205,7 @@ from .import_utils import (
     is_pytest_available,
     is_pytorch_quantization_available,
     is_quark_available,
+    is_qutlass_available,
     is_rich_available,
     is_rjieba_available,
     is_rocm_platform,
