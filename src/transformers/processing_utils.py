@@ -1687,6 +1687,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         Returns a single formatted prompt string using the processor's default chat template,
         containing one image (hf logo) and one user text message (Please describe this image.).
+        If available, adds the generation prompt as well.
         Falls back to a minimal `<image>` string if no template is available.
         Args:
             full_output (`bool`, *optional*, defaults to `False`):
