@@ -4107,7 +4107,9 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=torch_dtype)
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(
+            device=torch_device, dtype=torch_dtype
+        )
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -4137,7 +4139,7 @@ class ModelTesterMixin:
         }
 
         for model_class in self.all_generative_model_classes:
-            if not getattr(model_class, support_flag[attn_implementation]):
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
