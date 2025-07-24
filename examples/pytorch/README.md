@@ -65,7 +65,7 @@ examples/pytorch/token-classification/run_ner.py \
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
 ```bash
-examples/pytorch/token-classification/run_ner.py -h
+token-classification/run_ner.py -h
 ```
 
 ## Resuming training
@@ -110,7 +110,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
 torchrun \
-    --nproc_per_node 8 pytorch/text-classification/run_glue.py \
+    --nproc_per_node 8 text-classification/run_glue.py \
     --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \

@@ -500,7 +500,7 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = EfficientFormerConfig
+    config: EfficientFormerConfig
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False

@@ -881,25 +881,26 @@ class AlignTextPooler(nn.Module):
 
 @auto_docstring
 class AlignPreTrainedModel(PreTrainedModel):
-    config_class = AlignConfig
+    config: AlignConfig
     base_model_prefix = "align"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, AlignModel):
             nn.init.xavier_uniform_(module.text_projection.weight)
             module.text_projection.bias.data.zero_()
-            module.text_projection._is_hf_initialized = True
+            module.temperature.data.fill_(self.config.temperature_init_value)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        if isinstance(module, nn.LayerNorm):
+        if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -910,7 +911,7 @@ class AlignPreTrainedModel(PreTrainedModel):
     """
 )
 class AlignTextModel(AlignPreTrainedModel):
-    config_class = AlignTextConfig
+    config: AlignTextConfig
     _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
@@ -1038,7 +1039,7 @@ class AlignTextModel(AlignPreTrainedModel):
     """
 )
 class AlignVisionModel(AlignPreTrainedModel):
-    config_class = AlignVisionConfig
+    config: AlignVisionConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
@@ -1119,7 +1120,7 @@ class AlignVisionModel(AlignPreTrainedModel):
 
 @auto_docstring
 class AlignModel(AlignPreTrainedModel):
-    config_class = AlignConfig
+    config: AlignConfig
 
     def __init__(self, config: AlignConfig):
         super().__init__(config)

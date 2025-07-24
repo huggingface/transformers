@@ -426,7 +426,7 @@ class ChatCommand(BaseTransformersCLICommand):
         # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
         # We also mention in the help message that we only accept lists of ints for now.
 
-        # 3. Join the the result into a comma separated string
+        # 3. Join the result into a comma separated string
         generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
 
         # 4. Add the opening/closing brackets
@@ -471,7 +471,7 @@ class ChatCommand(BaseTransformersCLICommand):
             # This is a chat session, so we have a few non-standard defaults
             # !!!!!!!!!
             generation_config = copy.deepcopy(model_generation_config)
-            generation_config.update({"do_sample": True, "max_new_tokens": 256})
+            generation_config.update(**{"do_sample": True, "max_new_tokens": 256})
 
         # Finally: parse and apply `generate_flags`
         parsed_generate_flags = self.parse_generate_flags(args.generate_flags)

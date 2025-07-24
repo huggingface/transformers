@@ -255,7 +255,7 @@ class EsmEmbeddings(nn.Module):
 
 
 class EsmSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
         self.config = config
 
@@ -285,6 +285,7 @@ class EsmSelfAttention(nn.Module):
             self.rotary_embeddings = RotaryEmbedding(dim=self.attention_head_size)
 
         self.is_decoder = config.is_decoder
+        self.layer_idx = layer_idx
 
     @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
@@ -390,8 +391,8 @@ class EsmFlashAttention2(EsmSelfAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__(config, position_embedding_type=position_embedding_type)
+    def __init__(self, config, position_embedding_type=None, layer_idx=None):
+        super().__init__(config, position_embedding_type=position_embedding_type, layer_idx=layer_idx)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
@@ -504,9 +505,9 @@ ESM_ATTENTION_CLASSES = {
 
 
 class EsmAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.self = ESM_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self = ESM_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.output = EsmSelfOutput(config)
         self.pruned_heads = set()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -539,6 +540,7 @@ class EsmAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        cache_position=None,
     ):
         hidden_states_ln = self.LayerNorm(hidden_states)
         self_outputs = self.self(
@@ -604,6 +606,7 @@ class EsmLayer(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        cache_position=None,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
@@ -676,6 +679,7 @@ class EsmEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        cache_position=None,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -734,12 +738,12 @@ class EsmPooler(nn.Module):
 
 @auto_docstring
 class EsmPreTrainedModel(PreTrainedModel):
-    config_class = EsmConfig
+    config: EsmConfig
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _keys_to_ignore_on_load_unexpected = ["position_embeddings.weight"]
+    _supports_flash_attn = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->EsmLMHead
     def _init_weights(self, module):
@@ -759,6 +763,11 @@ class EsmPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, EsmLMHead):
             module.bias.data.zero_()
+
+    def get_output_embeddings(self):
+        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
+        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
+        return None
 
 
 @auto_docstring

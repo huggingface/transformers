@@ -41,7 +41,6 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
-    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
@@ -253,21 +252,6 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
         hidden_states_mlp = self.mlp(hidden_states)
         hidden_states = residual + hidden_states_attention + hidden_states_mlp
         return hidden_states
-
-
-class CoherePreTrainedModel(LlamaPreTrainedModel):
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, CohereLayerNorm):
-            module.weight.data.fill_(1.0)
 
 
 class CohereModel(LlamaModel):
