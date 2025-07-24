@@ -527,9 +527,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_librosa
     @require_av
-    @unittest.skip(
-        "@raushan: librosa can'r decode this audio in CI runner, fix after adding moviepy or another decoder"
-    )
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
