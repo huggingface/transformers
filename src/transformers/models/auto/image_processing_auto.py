@@ -85,6 +85,7 @@ else:
             ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
             ("dpt", ("DPTImageProcessor", "DPTImageProcessorFast")),
             ("efficientformer", ("EfficientFormerImageProcessor",)),
+            ("efficientloftr", ("EfficientLoFTRImageProcessor",)),
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
@@ -117,8 +118,8 @@ else:
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
-            ("mask2former", ("Mask2FormerImageProcessor",)),
-            ("maskformer", ("MaskFormerImageProcessor",)),
+            ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
+            ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -129,7 +130,7 @@ else:
             ("mobilevitv2", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
             ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("nougat", ("NougatImageProcessor", "NougatImageProcessorFast")),
-            ("oneformer", ("OneFormerImageProcessor",)),
+            ("oneformer", ("OneFormerImageProcessor", "OneFormerImageProcessorFast")),
             ("owlv2", ("Owlv2ImageProcessor",)),
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
@@ -147,8 +148,8 @@ else:
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
-            ("sam", ("SamImageProcessor",)),
-            ("sam_hq", ("SamImageProcessor",)),
+            ("sam", ("SamImageProcessor", "SamImageProcessorFast")),
+            ("sam_hq", ("SamImageProcessor", "SamImageProcessorFast")),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
             ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
@@ -212,7 +213,7 @@ def get_image_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractors in IMAGE_PROCESSOR_MAPPING._extra_content.items():
+    for extractors in IMAGE_PROCESSOR_MAPPING._extra_content.values():
         for extractor in extractors:
             if getattr(extractor, "__name__", None) == class_name:
                 return extractor
@@ -533,7 +534,7 @@ class AutoImageProcessor:
                 )
                 use_fast = False
             if use_fast:
-                for _, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+                for image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.values():
                     if image_processor_type in image_processors:
                         break
                 else:

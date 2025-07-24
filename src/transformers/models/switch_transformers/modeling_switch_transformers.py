@@ -516,8 +516,8 @@ class SwitchTransformersAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
@@ -762,11 +762,11 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
-    config_class = SwitchTransformersConfig
+    config: SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_static_cache = False
+
+    _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
     @property
@@ -886,9 +886,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.device_map = None
         self.gradient_checkpointing = False
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -1478,12 +1475,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def get_encoder(self):
         return self.encoder
 
@@ -1719,38 +1710,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past_key_values
-
-        reordered_decoder_past = ()
-        for layer_past_states in past_key_values:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
-                )
-
-            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
-                raise ValueError(
-                    "expected reordered_layer_past_states to have the same shape than layer_past_states, "
-                    f"but got {reordered_layer_past_states[0].shape} and {layer_past_states[0].shape}"
-                )
-            if len(reordered_layer_past_states) != len(layer_past_states):
-                raise ValueError(
-                    "expected layer_past_states to have the same length as reordered_layer_past_states, "
-                    f"but got {len(layer_past_states)} and {len(reordered_layer_past_states)}"
-                )
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
 
 
 @auto_docstring(

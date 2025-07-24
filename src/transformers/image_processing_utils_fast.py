@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Iterable
+from copy import deepcopy
 from functools import lru_cache, partial
 from typing import Any, Optional, TypedDict, Union
 
@@ -229,7 +230,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             if kwarg is not None:
                 setattr(self, key, kwarg)
             else:
-                setattr(self, key, getattr(self, key, None))
+                setattr(self, key, deepcopy(getattr(self, key, None)))
 
         # get valid kwargs names
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
@@ -452,6 +453,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_images_structure(
         self,
         images: ImageInput,
+        expected_ndims: int = 3,
     ) -> ImageInput:
         """
         Prepare the images structure for processing.
@@ -463,7 +465,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        return make_flat_list_of_images(images)
+        return make_flat_list_of_images(images, expected_ndims=expected_ndims)
 
     def _process_image(
         self,
@@ -485,6 +487,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
             # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
             image = torch.from_numpy(image).contiguous()
 
+        # If the image is 2D, we need to unsqueeze it to add a channel dimension for processing
+        if image.ndim == 2:
+            image = image.unsqueeze(0)
+
         # Infer the channel dimension format if not provided
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
@@ -499,32 +505,35 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         return image
 
-    def _prepare_input_images(
+    def _prepare_image_like_inputs(
         self,
         images: ImageInput,
         do_convert_rgb: Optional[bool] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
+        expected_ndims: int = 3,
     ) -> list["torch.Tensor"]:
         """
-        Prepare the input images for processing.
+        Prepare image-like inputs for processing.
 
         Args:
             images (`ImageInput`):
-                The input images to process.
+                The image-like inputs to process.
             do_convert_rgb (`bool`, *optional*):
                 Whether to convert the images to RGB.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The input data format of the images.
             device (`torch.device`, *optional*):
                 The device to put the processed images on.
+            expected_ndims (`int`, *optional*):
+                The expected number of dimensions for the images. (can be 2 for segmentation maps etc.)
 
         Returns:
             List[`torch.Tensor`]: The processed images.
         """
 
         # Get structured images (potentially nested)
-        images = self._prepare_images_structure(images)
+        images = self._prepare_images_structure(images, expected_ndims=expected_ndims)
 
         process_image_partial = partial(
             self._process_image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
@@ -626,10 +635,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
@@ -651,6 +656,28 @@ class BaseImageProcessorFast(BaseImageProcessor):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
+        return self._preprocess_image_like_inputs(
+            images, *args, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+        )
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        *args,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        To be overriden by subclasses when image-like inputs other than images should be processed.
+        It can be used for segmentation maps, depth maps, etc.
+        """
+        # Prepare input images
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
         return self._preprocess(images, *args, **kwargs)
 
     def _preprocess(
