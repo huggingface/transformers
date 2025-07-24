@@ -16,9 +16,11 @@
 # /// script
 # dependencies = [
 #     "transformers @ git+https://github.com/huggingface/transformers.git",
-#     "torch>=1.5.0",
-#     "torchvision>=0.6.0",
-#     "datasets>=1.8.0",
+#     "datasets[audio]>=1.14.0",
+#     "evaluate",
+#     "librosa",
+#     "torchaudio",
+#     "torch>=1.6",
 # ]
 # ///
 
