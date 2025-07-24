@@ -142,13 +142,7 @@ else:
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
-            (
-                "perception_lm",
-                (
-                    None,
-                    "PerceptionLMImageProcessorFast",
-                ),
-            ),
+            ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
             ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
             ("pix2struct", ("Pix2StructImageProcessor", None)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
