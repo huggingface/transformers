@@ -358,3 +358,26 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         self.assertEqual(encoding_slow.rows, encoding_fast.rows)
         self.assertEqual(encoding_slow.cols, encoding_fast.cols)
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 5)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=500, images_kwargs={"do_image_splitting": False}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=500, images_kwargs={"do_image_splitting": True}
+            )
+            self.assertEqual(num_patches, 5)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300,
+                width=600,
+                images_kwargs={"do_image_splitting": True, "max_image_size": {"longest_edge": 30}},
+            )
+            self.assertEqual(num_patches, 3)
