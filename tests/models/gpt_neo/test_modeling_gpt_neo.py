@@ -478,8 +478,8 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # the last 2 tokens are masked, and should have 0 attn_probs
         self.assertTrue(torch.all(attn_probs[:, :, -mask_tokens:, -mask_tokens:] == 0))
 
-        # in loacal attention each token can only attend to the previous window_size tokens (including itself)
-        # here window_size is 4, so a token at index 5 can only attend to indcies [2, 3, 4, 5]
+        # in local attention each token can only attend to the previous window_size tokens (including itself)
+        # here window_size is 4, so a token at index 5 can only attend to indices [2, 3, 4, 5]
         # and the attn_probs should be 0 for token [0, 1]
         self.assertTrue(torch.all(attn_probs[:, :, 5, 2:6] != 0))
         self.assertTrue(torch.all(attn_probs[:, :, 5, :2] == 0))

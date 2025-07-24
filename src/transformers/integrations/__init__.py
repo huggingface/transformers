@@ -90,6 +90,7 @@ _import_structure = {
         "NeptuneMissingConfiguration",
         "SwanLabCallback",
         "TensorBoardCallback",
+        "TrackioCallback",
         "WandbCallback",
         "get_available_reporting_integrations",
         "get_reporting_integration_callbacks",
@@ -110,6 +111,7 @@ _import_structure = {
         "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
+        "is_trackio_available",
         "is_wandb_available",
         "rewrite_logs",
         "run_hp_search_optuna",
@@ -142,7 +144,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tensor_parallel"] = [
         "shard_and_distribute_module",
-        "SUPPORTED_TP_STYLES",
+        "ALL_PARALLEL_STYLES",
         "translate_to_torch_parallel_style",
     ]
 try:
@@ -224,6 +226,7 @@ if TYPE_CHECKING:
         NeptuneMissingConfiguration,
         SwanLabCallback,
         TensorBoardCallback,
+        TrackioCallback,
         WandbCallback,
         get_available_reporting_integrations,
         get_reporting_integration_callbacks,
@@ -244,6 +247,7 @@ if TYPE_CHECKING:
         is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
+        is_trackio_available,
         is_wandb_available,
         rewrite_logs,
         run_hp_search_optuna,
@@ -271,7 +275,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .tensor_parallel import (
-            SUPPORTED_TP_STYLES,
+            ALL_PARALLEL_STYLES,
             shard_and_distribute_module,
             translate_to_torch_parallel_style,
         )

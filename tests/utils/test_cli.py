@@ -23,7 +23,7 @@ from transformers.testing_utils import CaptureStd, require_torch
 class CLITest(unittest.TestCase):
     @patch("sys.argv", ["fakeprogrampath", "env"])
     def test_cli_env(self):
-        # test transformers-cli env
+        # test transformers env
         import transformers.commands.transformers_cli
 
         with CaptureStd() as cs:

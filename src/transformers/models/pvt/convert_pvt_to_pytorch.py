@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 def create_rename_keys(config):
     rename_keys = []
     for i in range(config.num_encoder_blocks):
-        # Remane embedings' paramters
+        # Rename embeddings' parameters
         rename_keys.append((f"pos_embed{i + 1}", f"pvt.encoder.patch_embeddings.{i}.position_embeddings"))
 
         rename_keys.append((f"patch_embed{i + 1}.proj.weight", f"pvt.encoder.patch_embeddings.{i}.projection.weight"))

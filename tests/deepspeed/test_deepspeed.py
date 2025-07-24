@@ -19,6 +19,7 @@ import os
 import unittest
 from copy import deepcopy
 from functools import partial
+from typing import Optional
 
 import datasets
 from parameterized import parameterized
@@ -1073,10 +1074,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             def _convert_to_features(example_batch):
                 input_encodings = tokenizer.batch_encode_plus(
-                    example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
+                    example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
                 target_encodings = tokenizer.batch_encode_plus(
-                    example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
+                    example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 
                 encodings = {
@@ -1133,10 +1134,12 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     def test_basic_distributed(self, stage, dtype):
         self.run_and_check(stage=stage, dtype=dtype, distributed=True)
 
     @require_torch_fp16
+    @run_first
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
@@ -1149,6 +1152,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @run_first
     def test_fp32_non_distributed(self, stage, dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
@@ -1165,6 +1169,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     def test_fp32_distributed(self, stage, dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
@@ -1180,6 +1185,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @run_first
     def test_resume_train_not_from_ds_checkpoint(self, stage, dtype):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
         # the saved model dir
@@ -1206,6 +1212,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @parameterized.expand(["bf16", "fp16", "fp32"])
     @require_torch_multi_accelerator
+    @run_first
     def test_inference(self, dtype):
         if dtype == "bf16" and not is_torch_bf16_available_on_device(torch_device):
             self.skipTest(reason="test requires bfloat16 hardware support")
@@ -1252,8 +1259,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         quality_checks: bool = True,
         fp32: bool = False,
-        extra_args_str: str = None,
-        remove_args_str: str = None,
+        extra_args_str: Optional[str] = None,
+        remove_args_str: Optional[str] = None,
     ):
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
@@ -1285,8 +1292,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         distributed: bool = True,
         fp32: bool = False,
-        extra_args_str: str = None,
-        remove_args_str: str = None,
+        extra_args_str: Optional[str] = None,
+        remove_args_str: Optional[str] = None,
     ):
         max_len = 32
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
@@ -1360,6 +1367,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         return output_dir
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @run_first
     def test_clm(self, stage, dtype):
         # this test exercises model.resize_token_embeddings() which requires param gathering outside
         # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
@@ -1396,6 +1404,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
     @require_torch_fp16
+    @run_first
     def test_clm_from_config_zero3_fp16(self):
         # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
 

@@ -30,12 +30,13 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -107,6 +108,7 @@ class Idefics2VisionText2TextModelTester:
         image_token_id=99,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -157,6 +159,7 @@ class Idefics2VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.num_images * self.perceiver_config["resampler_n_latents"]
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -407,10 +410,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @pytest.mark.generate
     @require_torch_sdpa
     @slow
@@ -587,7 +586,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
@@ -625,8 +624,15 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        expected_generated_texts = Expectations(
+            {
+                ("xpu", 3): "In this image, we see the Statue of Liberty, the Hudson River,",
+                ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
+                ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
+            }
+        )
+        EXPECTED_GENERATED_TEXT = expected_generated_texts.get_expectation()
+        self.assertEqual(generated_texts[0], EXPECTED_GENERATED_TEXT)
 
     @slow
     @require_bitsandbytes

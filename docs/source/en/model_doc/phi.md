@@ -18,6 +18,7 @@ rendered properly in your Markdown viewer.
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
@@ -65,10 +66,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers-cli run --task text-classification --model microsoft/phi-1.5 --device 0
+echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers run --task text-classification --model microsoft/phi-1.5 --device 0
 ```
 
 </hfoption>
@@ -102,7 +103,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```py
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM
-    
+
     tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
     model = AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-1",
@@ -110,12 +111,12 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
         device_map="auto",
         trust_remote_code=True,
         attn_implementation="sdpa")
-    
+
     input_ids = tokenizer('''def print_prime(n):
        """
        Print all primes between 1 and n
        """''', return_tensors="pt").to("cuda")
-    
+
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```

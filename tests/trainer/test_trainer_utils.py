@@ -464,7 +464,7 @@ class TrainerUtilsTest(unittest.TestCase):
                 raise RuntimeError("CUDA out of memory.")
 
         mock_training_loop_function()
-        self.assertEqual(batch_sizes, [64, 32, 16])
+        self.assertEqual(batch_sizes, [64, 57, 51, 45, 40, 36, 32, 28, 25, 22, 19, 17, 15])
 
     @require_accelerate
     def test_executable_batch_size_no_search(self):

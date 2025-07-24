@@ -14,59 +14,77 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Swin Transformer
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# Swin Transformer
 
-The Swin Transformer was proposed in [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030)
-by Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo.
+[Swin Transformer](https://huggingface.co/papers/2103.14030) is a hierarchical vision transformer. Images are processed in patches and windowed self-attention is used to capture local information. These windows are shifted across the image to allow for cross-window connections, capturing global information more efficiently. This hierarchical approach with shifted windows allows the Swin Transformer to process images effectively at different scales and achieve linear computational complexity relative to image size, making it a versatile backbone for various vision tasks like image classification and object detection.
 
-The abstract from the paper is the following:
+You can find all official Swin Transformer checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=swin) organization.
 
-*This paper presents a new vision Transformer, called Swin Transformer, that capably serves as a general-purpose backbone
-for computer vision. Challenges in adapting Transformer from language to vision arise from differences between the two domains,
-such as large variations in the scale of visual entities and the high resolution of pixels in images compared to words in text.
-To address these differences, we propose a hierarchical Transformer whose representation is computed with \bold{S}hifted
-\bold{win}dows. The shifted windowing scheme brings greater efficiency by limiting self-attention computation to non-overlapping
-local windows while also allowing for cross-window connection. This hierarchical architecture has the flexibility to model at
-various scales and has linear computational complexity with respect to image size. These qualities of Swin Transformer make it
-compatible with a broad range of vision tasks, including image classification (87.3 top-1 accuracy on ImageNet-1K) and dense
-prediction tasks such as object detection (58.7 box AP and 51.1 mask AP on COCO test-dev) and semantic segmentation
-(53.5 mIoU on ADE20K val). Its performance surpasses the previous state-of-the-art by a large margin of +2.7 box AP and
-+2.6 mask AP on COCO, and +3.2 mIoU on ADE20K, demonstrating the potential of Transformer-based models as vision backbones.
-The hierarchical design and the shifted window approach also prove beneficial for all-MLP architectures.*
+> [!TIP]
+> Click on the Swin Transformer models in the right sidebar for more examples of how to apply Swin Transformer to different image tasks.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
-alt="drawing" width="600"/>
+The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-<small> Swin Transformer architecture. Taken from the <a href="https://arxiv.org/abs/2102.03334">original paper</a>.</small>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [novice03](https://huggingface.co/novice03). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts). The original code can be found [here](https://github.com/microsoft/Swin-Transformer).
+```py
+import torch
+from transformers import pipeline
 
-## Usage tips
+pipeline = pipeline(
+    task="image-classification",
+    model="microsoft/swin-tiny-patch4-window7-224",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
+</hfoption>
 
-- Swin pads the inputs supporting any input height and width (if divisible by `32`).
-- Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
+<hfoption id="AutoModel">
 
-## Resources
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoModelForImageClassification, AutoImageProcessor
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Swin Transformer.
+image_processor = AutoImageProcessor.from_pretrained(
+    "microsoft/swin-tiny-patch4-window7-224",
+    use_fast=True,
+)
+model = AutoModelForImageClassification.from_pretrained(
+    "microsoft/swin-tiny-patch4-window7-224",
+    device_map="cuda"
+)
 
-<PipelineTag pipeline="image-classification"/>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(image, return_tensors="pt").to("cuda")
 
-- [`SwinForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+with torch.no_grad():
+  logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
 
-Besides that:
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"The predicted class label is: {predicted_class_label}")
+```
+</hfoption>
+</hfoptions>
 
-- [`SwinForMaskedImageModeling`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+## Notes
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- Swin can pad the inputs for any input height and width divisible by `32`.
+- Swin can be used as a [backbone](../backbones). When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## SwinConfig
 

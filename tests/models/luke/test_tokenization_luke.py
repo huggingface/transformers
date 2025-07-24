@@ -157,7 +157,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
-                # Rust correctly handles the space before the mask while python doesnt
+                # Rust correctly handles the space before the mask while python doesn't
                 self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 
                 self.assertSequenceEqual(

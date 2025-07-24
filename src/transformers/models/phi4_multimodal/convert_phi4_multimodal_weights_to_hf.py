@@ -191,7 +191,7 @@ def convert_and_save_processor(input_dir: str, output_dir: str):
     # Save the processor
     converted_processor.save_pretrained(output_dir)
 
-    # we need to rename a few tokens but tokenizers doesn't allow doing that programatically
+    # we need to rename a few tokens but tokenizers doesn't allow doing that programmatically
     # To avoid consufion and manual renaming, the below part load and re-saved each json file
     vocab = json.load(open(f"{output_dir}/vocab.json", "r"))
     vocab["<|endoftext11|>"] = "<|audio|>"

@@ -24,6 +24,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from ...utils.hub import cached_file
 from ..auto import AutoTokenizer
@@ -39,7 +40,7 @@ class BarkProcessor(ProcessorMixin):
     Args:
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`].
-        speaker_embeddings (`Dict[Dict[str]]`, *optional*):
+        speaker_embeddings (`dict[dict[str]]`, *optional*):
             Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
             `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
             embeddings. The values correspond to the path of the corresponding `np.ndarray`. See
@@ -232,7 +233,7 @@ class BarkProcessor(ProcessorMixin):
         return_attention_mask=True,
         return_token_type_ids=False,
         **kwargs,
-    ):
+    ) -> BatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s). This method forwards the `text` and `kwargs`
         arguments to the AutoTokenizer's [`~AutoTokenizer.__call__`] to encode the text. The method also proposes a
@@ -240,11 +241,11 @@ class BarkProcessor(ProcessorMixin):
         to the tokenizer and to `cached_file` method if `voice_preset` is a valid filename.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            voice_preset (`str`, `Dict[np.ndarray]`):
+            voice_preset (`str`, `dict[np.ndarray]`):
                 The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
                 `"en_speaker_1"`, or directly a dictionary of `np.ndarray` embeddings for each submodel of `Bark`. Or
                 it can be a valid file name of a local `.npz` single voice preset.
@@ -255,8 +256,9 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output of the
-            `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
+            [`BatchEncoding`]: A [`BatchEncoding`] object containing the output of the `tokenizer`.
+            If a voice preset is provided, the returned object will include a `"history_prompt"` key
+            containing a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
         if voice_preset is not None and not isinstance(voice_preset, dict):
             if (
