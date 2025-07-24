@@ -21,7 +21,7 @@ jobs:
       # Temporary pin to work around datasets exception in the docbuilder.Remove after docker images and main have
       # the right dependencies (which **should** be the case by 2025-07-20). See
       # https://github.com/huggingface/transformers/actions/runs/16365952006/job/46243081358?pr=38545
-      pre_command: uv pip install datasets>=2.15.0
+      pre_command: uv pip install --prerelease=allow datasets>=2.15.0
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}
       hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
