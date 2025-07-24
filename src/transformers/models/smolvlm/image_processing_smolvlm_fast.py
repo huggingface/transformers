@@ -510,10 +510,10 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         max_image_size = images_kwargs["max_image_size"] if "max_image_size" in images_kwargs else self.max_image_size
         size = images_kwargs["size"] if "size" in images_kwargs else self.size
 
-        num_patches = 1
+        num_patches = num_rows = num_cols = 1
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
-            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
+            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
             aspect_ratio = width / height
 
             if width >= height:
@@ -532,7 +532,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
                 num_cols = math.ceil(resized_width / max_width)
                 num_patches = num_rows * num_cols + 1
 
-        return num_patches
+        return num_patches, num_rows, num_cols
 
 
 __all__ = ["SmolVLMImageProcessorFast"]

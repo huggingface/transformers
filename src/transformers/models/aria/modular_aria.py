@@ -1294,42 +1294,21 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, AriaTextRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=std)
+        super()._init_weights(module)
+        if isinstance(module, AriaGroupedExpertsGemm):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
     base_model_prefix = ""
-    _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.MultiheadAttention):
-            # This uses torch's original init
-            module._reset_parameters()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, AriaProjector):
-            nn.init.trunc_normal_(module.query, std=std)
+        LlamaPreTrainedModel._init_weights(module)
+        if isinstance(module, AriaProjector):
+            nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
 class AriaTextModel(LlamaModel):

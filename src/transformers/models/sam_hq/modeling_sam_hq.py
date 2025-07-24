@@ -482,20 +482,9 @@ class SamHQPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (SamHQLayerNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, SamHQVisionAttention):
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, SamHQVisionAttention):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()

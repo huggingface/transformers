@@ -880,7 +880,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _supports_flash_attn = True
-    _supports_static_cache = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
+    _can_compile_fullgraph = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
     _supports_attention_backend = True
 
     def _init_weights(self, module):
