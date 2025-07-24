@@ -256,6 +256,120 @@ def should_convert_module(current_key_name, patterns):
         return True
     return False
 
+def dequantize(module,param_name, tp_mode, model, param_value, neutral_param_name, target_device, empty_param, casting_dtype, to_contiguous, rank, device_mesh):
+    from ..integrations.tensor_parallel import shard_and_distribute_module
+
+    if "gate_up_proj" in param_name:
+        if not hasattr(module, "gate_up_proj_blocks") and not hasattr(module, "gate_up_proj_scales"):
+            if tp_mode:
+                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+            return
+        else:
+            if tp_mode:
+                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+
+            dequantized_gate_up_proj = convert_moe_packed_tensors(module.gate_up_proj_blocks, module.gate_up_proj_scales)
+            dequantized_gate_up_proj = dequantized_gate_up_proj.transpose(1,2).to(target_device)
+            module.gate_up_proj = torch.nn.Parameter(dequantized_gate_up_proj, requires_grad=False)
+            del module.gate_up_proj_blocks
+            del module.gate_up_proj_scales
+            return
+    elif "down_proj" in param_name:
+        if not hasattr(module, "down_proj_blocks") and not hasattr(module, "down_proj_scales"):
+            if tp_mode:
+                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+            return
+        else:
+            if tp_mode:
+                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+
+            dequantized_down_proj = convert_moe_packed_tensors(module.down_proj_blocks, module.down_proj_scales)
+            dequantized_down_proj = dequantized_down_proj.transpose(1,2).to(target_device)
+            module.down_proj = torch.nn.Parameter(dequantized_down_proj, requires_grad=False)
+            del module.down_proj_blocks
+            del module.down_proj_scales
+            return
+
+def dequantize_and_quantize(module,param_name, tp_mode, model, param_value, target_device, empty_param, casting_dtype, to_contiguous, rank, device_mesh, swizzle_mx_value, swizzle_mx_scale):
+    from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
+
+    from ..integrations.tensor_parallel import shard_and_distribute_module
+    from ..modeling_utils import _load_parameter_into_model
+
+    if "gate_up_proj" in param_name:
+        if module.gate_up_proj_blocks.device.type == "meta" and module.gate_up_proj_scales.device.type == "meta":
+            if tp_mode:
+                shard_and_distribute_module(model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh)
+            else:
+                _load_parameter_into_model(model, param_name, param_value)
+            return
+        else:
+            # In this case the weights or the scales are already on the correct device, so param_value should be the other missing param
+            if (module.gate_up_proj_blocks.device != "meta" and "scales" in param_name) or (module.gate_up_proj_scales.device != "meta" and "blocks" in param_name):
+                if tp_mode:
+                    shard_and_distribute_module(model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh)
+                else:
+                    _load_parameter_into_model(model, param_name, param_value)
+            else:
+                raise ValueError("Something went horribly wrong mate in gate_up_proj")
+
+            dequantized_gate_up_proj = convert_moe_packed_tensors(module.gate_up_proj_blocks, module.gate_up_proj_scales)
+            dequantized_gate_up_proj = dequantized_gate_up_proj.transpose(1,2).to(target_device)
+
+            module.device_mesh = device_mesh
+            module.rank = rank
+
+            right_pad = module.gate_up_proj_right_pad
+            bottom_pad = module.gate_up_proj_bottom_pad
+            loaded_weight = torch.nn.functional.pad(dequantized_gate_up_proj,
+                                    (0, right_pad, 0, bottom_pad, 0, 0),
+                                    mode="constant",
+                                    value=0)
+            del dequantized_gate_up_proj
+            torch.cuda.empty_cache()
+            with torch.cuda.device(target_device):
+                loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, swizzle_mx_value, swizzle_mx_scale)
+            module.gate_up_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+            module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
+
+    elif "down_proj" in param_name:
+        if module.down_proj_blocks.device.type == "meta" and module.down_proj_scales.device.type == "meta":
+            if tp_mode:
+                shard_and_distribute_module(model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh)
+            else:
+                _load_parameter_into_model(model, param_name, param_value)
+            return
+        else:
+            if (module.down_proj_blocks.device != "meta" and "scales" in param_name) or (module.down_proj_scales.device != "meta" and "blocks" in param_name):
+                if tp_mode:
+                    shard_and_distribute_module(model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh)
+                else:
+                    _load_parameter_into_model(model, param_name, param_value)
+            else:
+                raise ValueError("Something went horribly wrong mate in down_proj")
+
+            dequantized_down_proj = convert_moe_packed_tensors(module.down_proj_blocks, module.down_proj_scales)
+            dequantized_down_proj = dequantized_down_proj.transpose(1,2).to(target_device)
+            module.device_mesh = device_mesh
+            module.rank = rank
+
+            right_pad = module.down_proj_right_pad
+            bottom_pad = module.down_proj_bottom_pad
+            loaded_weight = torch.nn.functional.pad(dequantized_down_proj,
+                                    (0, right_pad, 0, bottom_pad, 0, 0),
+                                    mode="constant",
+                                    value=0)
+            del dequantized_down_proj
+            torch.cuda.empty_cache()
+            with torch.cuda.device(target_device):
+                loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, swizzle_mx_value, swizzle_mx_scale)
+
+            module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+            module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
 
 def _replace_with_mxfp4_linear(
     model,
