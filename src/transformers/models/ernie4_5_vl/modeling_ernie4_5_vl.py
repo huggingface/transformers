@@ -79,6 +79,12 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
+
+        if self.rope_type != "ernie_3d":
+            raise ValueError(
+                f"Ernie 4.5 VL requires the `ernie_3d` rope type, but found {self.rope_type} instead."
+            )
+
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -86,23 +92,13 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-
-        # TODO: move into new rope init?
-        # divide frequency allocation based on `freq_allocation`
-        # and apply necessary (pre-)rotations
-        t_dim = freq_allocation  # time dimension
-        hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension
-        self.split_sizes = hw_dim // 2, hw_dim // 2, t_dim  # for 3d recomposition
-
-        inv_freq_3d = torch.empty_like(inv_freq)
-        # (pre-)rotate to avoid another rotation during the forward
-        inv_freq_3d[ : hw_dim] = torch.cat(
-            [inv_freq[: -t_dim][0::2], inv_freq[: -t_dim][1::2]]
-        )
-        inv_freq_3d[-t_dim :] = inv_freq[-t_dim :]
-
-        self.register_buffer("inv_freq", inv_freq_3d, persistent=False)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
+
+        # for 3d recomposition
+        t_dim = config.rope_scaling["freq_allocation"]  # time dimension
+        hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension
+        self.split_sizes = (hw_dim // 2, hw_dim // 2, t_dim)
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

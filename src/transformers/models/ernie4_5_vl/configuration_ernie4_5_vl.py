@@ -14,10 +14,11 @@
 
 """Ernie model configuration"""
 import copy
-
 from typing import List, Optional, Tuple, Union
 
 from transformers import PretrainedConfig
+
+from ...modeling_rope_utils import rope_config_validation
 
 
 __all__ = [
@@ -607,6 +608,9 @@ class Ernie4_5_VLMoEConfig(Ernie4_5_MoEConfig):
         self.fuse_attn_ffn = fuse_attn_ffn
         self.rope_3d = rope_3d
         self.freq_allocation = freq_allocation
+        # TODO: proper integration
+        self.rope_scaling = {"rope_type": "ernie_3d", "freq_allocation": freq_allocation}
+        rope_config_validation(self)
         self.using_precision_check = using_precision_check
         self.use_recompute_resampler = use_recompute_resampler
         self.resampler_fuse_rms_norm = resampler_fuse_rms_norm

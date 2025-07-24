@@ -378,6 +378,41 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
+def _comput_ernie_3d_parameters(
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+) -> tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies for the Ernie 4.5 VL models.
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin.
+    """
+    # Gets the default RoPE parameters
+    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len)
+
+    # Divide frequency allocation based on `freq_allocation`
+    # and apply necessary (pre-)rotations
+    t_dim = config.rope_scaling["freq_allocation"]  # time dimension
+    hw_dim = inv_freq.shape[-1] - t_dim  # height and width dimension
+
+    inv_freq_3d = torch.empty_like(inv_freq)
+    # (Pre-)Rotate to avoid another rotation during the forward
+    inv_freq_3d[ : hw_dim] = torch.cat(
+        [inv_freq[: -t_dim][0::2], inv_freq[: -t_dim][1::2]]
+    )
+    inv_freq_3d[-t_dim :] = inv_freq[-t_dim :]
+
+    return inv_freq_3d, attention_factor
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
@@ -388,6 +423,7 @@ ROPE_INIT_FUNCTIONS = {
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
+    "ernie_3d": _comput_ernie_3d_parameters,
 }
 
 
@@ -578,6 +614,29 @@ def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[
         )
 
 
+def _validate_ernie_3d_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
+    required_keys = {"rope_type", "freq_allocation"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    dim = int(head_dim * partial_rotary_factor)
+
+    freq_allocation = rope_scaling["freq_allocation"]
+    t_dim = freq_allocation
+    h_dim = (dim - t_dim) // 2
+    reconstructed_dim = t_dim + 2 * h_dim
+    if freq_allocation is None or not isinstance(freq_allocation, int) or reconstructed_dim != dim:
+        logger.warning(
+            "`rope_scaling`'s freq_allocation field must be an int that can evenly be split into three dimensions: "
+            f"`freq_allocation` and 2 * (dim - freq_allocation). However, we found the following splits {t_dim}, {h_dim}, {h_dim};"
+            f"this does not split evenly into the total dim of {dim} vs. {reconstructed_dim}."
+        )
+
+
 # Like `ROPE_INIT_FUNCTIONS`, this validation function mapping can be dynamically updated for custom RoPE types.
 ROPE_VALIDATION_FUNCTIONS = {
     "default": _validate_default_rope_parameters,
@@ -586,6 +645,7 @@ ROPE_VALIDATION_FUNCTIONS = {
     "yarn": _validate_yarn_parameters,
     "longrope": _validate_longrope_parameters,
     "llama3": _validate_llama3_parameters,
+    "ernie_3d": _validate_ernie_3d_parameters,
 }
 
 
