@@ -4682,7 +4682,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             key_mapping = cls._checkpoint_conversion_mapping
 
-        if distributed_config is not None:
+        if distributed_config is not None and torch.distributed.is_initialized():
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
