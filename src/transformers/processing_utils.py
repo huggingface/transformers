@@ -1742,7 +1742,7 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return image_token_run_pattern.sub(replacement_function, decoded_message)
 
-        except ValueError:  # what is raised if there's no chat template
+        except ValueError:
             image_token_string = getattr(
                 self, "image_token", getattr(getattr(self, "tokenizer", None), "image_token", "<image>")
             )
