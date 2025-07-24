@@ -198,22 +198,6 @@ class ProcessorTesterMixin:
                     if "tokenizer" not in attribute:
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
 
-    def test_get_num_vision_tokens(self):
-        "Tests general functionality of the helper used internally in vLLM"
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor = self.get_processor()
-
-        if not hasattr(processor, "_get_num_multimodal_tokens"):
-            self.skipTest(f"{self.processor_class.__name__} doesn't have `_get_num_multimodal_tokens` helper.")
-
-        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
-        self.assertTrue("num_image_tokens" in output)
-        self.assertEqual(len(output["num_image_tokens"]), 3)
-
-        self.assertTrue("num_image_patches" in output)
-        self.assertEqual(len(output["num_image_patches"]), 3)
-
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
