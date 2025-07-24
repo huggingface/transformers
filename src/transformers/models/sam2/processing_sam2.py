@@ -75,18 +75,44 @@ class Sam2Processor(ProcessorMixin):
         self,
         images: ImageInput = None,
         segmentation_maps: ImageInput = None,
-        input_points: Optional[
-            Union[list[float], list[list[float]], list[list[list[float]]], list[list[list[list[float]]]], torch.Tensor]
-        ] = None,
-        input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
+        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
+        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
         original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        """
+        r"""
         This method uses [`Sam2ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
         points and bounding boxes for the model if they are provided.
+
+        Args:
+            images (`ImageInput`, *optional*):
+                The image(s) to process.
+            segmentation_maps (`ImageInput`, *optional*):
+                The segmentation maps to process.
+            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
+                The points to add to the frame.
+            input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
+                The labels for the points.
+            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
+                The bounding boxes to add to the frame.
+            original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
+                The original sizes of the images.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return.
+            **kwargs:
+                Additional keyword arguments to pass to the image processor.
+
+        Returns:
+            A [`BatchEncoding`] with the following fields:
+            - `pixel_values` (`torch.Tensor`): The processed image(s).
+            - `original_sizes` (`list[list[float]]`): The original sizes of the images.
+            - `reshaped_input_sizes` (`torch.Tensor`): The reshaped input sizes of the images.
+            - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
+            - `input_points` (`torch.Tensor`): The processed points.
+            - `input_labels` (`torch.Tensor`): The processed labels.
+            - `input_boxes` (`torch.Tensor`): The processed bounding boxes.
         """
         if images is not None:
             encoding_image_processor = self.image_processor(
@@ -113,20 +139,20 @@ class Sam2Processor(ProcessorMixin):
         # Process input points, labels, and boxes if provided
         if input_points is not None or input_labels is not None or input_boxes is not None:
             # Validate and convert inputs to standardized format
-            processed_points = self._process_single_input(
+            processed_points = self._validate_single_input(
                 input_points,
                 expected_depth=4,
                 input_name="points",
                 expected_format="[image_idx, object_idx, point_idx, point_coords]",
                 expected_coord_size=2,
             )
-            processed_labels = self._process_single_input(
+            processed_labels = self._validate_single_input(
                 input_labels,
                 expected_depth=3,
                 input_name="labels",
                 expected_format="[image_idx, object_idx, point_idx]",
             )
-            processed_boxes = self._process_single_input(
+            processed_boxes = self._validate_single_input(
                 input_boxes,
                 expected_depth=3,
                 input_name="boxes",
@@ -376,18 +402,29 @@ class Sam2Processor(ProcessorMixin):
             return len(input_list.shape)
         return 0
 
-    def _ensure_proper_nesting(self, data, expected_depth):
+    def _validate_single_input(
+        self,
+        data: Union[torch.Tensor, np.ndarray, list],
+        expected_depth: int,
+        input_name: str,
+        expected_format: str,
+        expected_coord_size: Optional[int] = None,
+    ) -> list:
         """
-        Ensure data has the proper nesting level by unsqueezing from the first dimensions if needed.
+                Validate a single input by ensuring proper nesting and raising an error if the input is not valid.
 
-        Args:
-            data (`torch.Tensor`, `np.ndarray`, or `list`):
-                Input data.
-            expected_depth (`int`):
-                Expected nesting depth.
-
-        Returns:
-            The data with proper nesting level.
+                Args:
+                    data (`torch.Tensor`, `np.ndarray`, or `list`):
+                        Input data to process.
+                    expected_depth (`int`):
+                        Expected nesting depth.
+                    input_name (`str`):
+                        Name of the input for error messages.
+                    expected_format (`str`):
+                        The expected format of the input.
+                    expected_coord_size (`int`, *optional*):
+                        Expected coordinate size (2 for points, 4 for boxes, None for labels).
+        .
         """
         if data is None:
             return None
@@ -395,64 +432,25 @@ class Sam2Processor(ProcessorMixin):
         # Handle tensors and numpy arrays first
         if isinstance(data, (torch.Tensor, np.ndarray)):
             # For tensors/arrays, we can directly check the number of dimensions
-            current_depth = len(data.shape)
-            # Unsqueeze from the beginning if needed
-            while current_depth < expected_depth:
-                if isinstance(data, torch.Tensor):  # PyTorch tensor
-                    data = data.unsqueeze(0)
-                else:  # NumPy array
-                    data = np.expand_dims(data, axis=0)
-                current_depth += 1
-            return data
+            if data.ndim != expected_depth:
+                raise ValueError(
+                    f"Input {input_name} must be a tensor/array with {expected_depth} dimensions. The expected format is {expected_format}. Got {data.ndim} dimensions."
+                )
+            elif expected_coord_size is not None:
+                if data.shape[-1] != expected_coord_size:
+                    raise ValueError(
+                        f"Input {input_name} must be a tensor/array with {expected_coord_size} as the last dimension, got {data.shape[-1]}."
+                    )
+            return self._convert_to_nested_list(data, expected_depth)
 
         # Handle nested lists
         if isinstance(data, list):
             current_depth = self._get_nesting_level(data)
-            # Unsqueeze from the beginning if needed
-            while current_depth < expected_depth:
-                data = [data]
-                current_depth += 1
-            return data
-
-        # Handle scalar values (wrap in appropriate nesting)
-        else:
-            # Create the appropriate nesting level
-            result = data
-            for _ in range(expected_depth):
-                result = [result]
-            return result
-
-    def _process_single_input(self, data, expected_depth, input_name, expected_format, expected_coord_size=None):
-        """
-        Process a single input by ensuring proper nesting and converting to nested list format.
-
-        Args:
-            data (`torch.Tensor`, `np.ndarray`, or `list`):
-                Input data to process.
-            expected_depth (`int`):
-                Expected nesting depth.
-            input_name (`str`):
-                Name of the input for error messages.
-            expected_format (`str`):
-                The expected format of the input.
-            expected_coord_size (`int`, *optional*):
-                Expected coordinate size (2 for points, 4 for boxes, None for labels).
-
-        Returns:
-            Processed nested list or `None` if data is `None`.
-        """
-        if data is None:
-            return None
-
-        try:
-            data = self._ensure_proper_nesting(data, expected_depth)
+            if current_depth != expected_depth:
+                raise ValueError(
+                    f"Input {input_name} must be a nested list with {expected_depth} levels. The expected format is {expected_format}. Got {current_depth} levels."
+                )
             return self._convert_to_nested_list(data, expected_depth)
-        except ValueError as e:
-            coord_info = f" Coordinates must be length {expected_coord_size}." if expected_coord_size else ""
-            raise ValueError(
-                f"Input {input_name} must be a nested list with the specified dimensions and format {expected_format}.{coord_info} "
-                f"Missing dimensions are automatically unsqueezed from the beginning. Error: {e}"
-            )
 
     def _normalize_tensor_coordinates(self, tensor, original_sizes, is_bounding_box=False, preserve_padding=False):
         """
@@ -550,11 +548,9 @@ class Sam2Processor(ProcessorMixin):
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: Union[list[int], int],
-        input_points: Optional[
-            Union[list[float], list[list[float]], list[list[list[float]]], list[list[list[list[float]]]], torch.Tensor]
-        ] = None,
-        input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
+        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
+        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
         input_masks: Optional[Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]] = None,
         original_size: Optional[tuple[int, int]] = None,
         clear_old_inputs: bool = True,
@@ -570,11 +566,11 @@ class Sam2Processor(ProcessorMixin):
             obj_ids (`list[int]` or `int`):
                 The object ID(s) to associate with the points or box.
                 These can be any integers and can be reused later on to specify an object.
-            input_points (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
+            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
                 The points to add to the frame.
-            input_labels (`int`, `list[int]`, `list[list[int]]`, `list[list[list[int]]]`, `torch.Tensor`, *optional*):
+            input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
                 The labels for the points.
-            input_boxes (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `torch.Tensor`, *optional*):
+            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
                 The bounding boxes to add to the frame.
             input_masks (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, or `list[torch.Tensor]`, *optional*):
                 The mask(s) to add to the frame.
@@ -614,11 +610,9 @@ class Sam2Processor(ProcessorMixin):
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: Union[list[int], int],
-        input_points: Optional[
-            Union[list[float], list[list[float]], list[list[list[float]]], list[list[list[list[float]]]], torch.Tensor]
-        ] = None,
-        input_labels: Optional[Union[int, list[int], list[list[int]], list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[float], list[list[float]], list[list[list[float]]], torch.Tensor]] = None,
+        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
+        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
         original_size: Optional[tuple[int, int]] = None,
         clear_old_inputs: bool = True,
     ) -> Sam2VideoInferenceSession:
@@ -633,11 +627,11 @@ class Sam2Processor(ProcessorMixin):
             obj_ids (`list[int]`):
                 The object ID(s) to associate with the points or box.
                 These can be any integers and can be reused later on to specify an object.
-            input_points (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
+            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
                 The points to add to the frame.
-            input_labels (`int`, `list[int]`, `list[list[int]]`, `list[list[list[int]]]`, `torch.Tensor`, *optional*):
+            input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
                 The labels for the points.
-            input_boxes (`list[float]`, `list[list[float]]`, `list[list[list[float]]]`, `torch.Tensor`, *optional*):
+            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
                 The bounding boxes to add to the frame.
             original_size (`tuple[int, int]`, *optional*):
                 The original size of the video. Provide when streaming.
