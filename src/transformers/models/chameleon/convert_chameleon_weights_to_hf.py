@@ -446,7 +446,7 @@ def main():
         "--model_size",
         choices=["7B", "30B"],
         help=""
-        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, checkout the original repo: https://github.com/facebookresearch/chameleon",
+        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, check out the original repo: https://github.com/facebookresearch/chameleon",
     )
     parser.add_argument(
         "--output_dir",

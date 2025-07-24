@@ -43,18 +43,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: git branch
-            - run: git log -n 1
-            - run: python3 utils/extract_pr_number_from_circleci.py > pr_number.txt
-            - run: echo $(cat pr_number.txt)
-            - run: if [[ "$(cat pr_number.txt)" == "" && "$CIRCLE_BRANCH" != "main" && "$CIRCLE_BRANCH" != *-release ]]; then echo "Not a PR, not the main branch and not a release branch, skip test!"; circleci-agent step halt; fi
-            - run: 'curl -L -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pulls/$(cat pr_number.txt) >> github.txt'
-            - run: cat github.txt
-            - run: (python3 -c 'import json; from datetime import datetime; fp = open("github.txt"); data = json.load(fp); fp.close(); f = "%Y-%m-%dT%H:%M:%SZ"; created = datetime.strptime(data["created_at"], f); updated = datetime.strptime(data["updated_at"], f); s = (updated - created).total_seconds(); print(int(s))' || true) > elapsed.txt
-            - run: if [ "$(cat elapsed.txt)" == "" ]; then echo 60 > elapsed.txt; fi
-            - run: cat elapsed.txt
-            - run: if [ "$(cat elapsed.txt)" -lt "30" ]; then echo "PR is just opened, wait some actions from GitHub"; sleep 30; fi
-            - run: 'if grep -q "\"draft\": true," github.txt; then echo "draft mode, skip test!"; circleci-agent step halt; fi'
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
@@ -124,8 +112,6 @@ jobs:
 
             - run:
                 name: "Retrieve Artifact Paths"
-                env:
-                    CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
                     job_number=${CIRCLE_BUILD_NUM}
@@ -198,6 +184,7 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: python utils/check_pipeline_typing.py
             - run: python utils/check_config_docstrings.py
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py

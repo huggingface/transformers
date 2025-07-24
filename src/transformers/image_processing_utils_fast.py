@@ -13,16 +13,13 @@
 # limitations under the License.
 
 from collections.abc import Iterable
+from copy import deepcopy
 from functools import lru_cache, partial
 from typing import Any, Optional, TypedDict, Union
 
 import numpy as np
 
-from .image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    get_size_dict,
-)
+from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from .image_transforms import (
     convert_to_rgb,
     get_resize_output_image_size,
@@ -53,6 +50,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.import_utils import is_rocm_platform
 
 
 if is_vision_available():
@@ -188,6 +186,7 @@ class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional["torch.device"]
+    disable_grouping: Optional[bool]
 
 
 @auto_docstring
@@ -231,7 +230,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
             if kwarg is not None:
                 setattr(self, key, kwarg)
             else:
-                setattr(self, key, getattr(self, key, None))
+                setattr(self, key, deepcopy(getattr(self, key, None)))
+
+        # get valid kwargs names
+        self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
     def resize(
         self,
@@ -280,7 +282,33 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
+        # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
+        # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
+        # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
+        if torch.compiler.is_compiling() and is_rocm_platform():
+            return self.compile_friendly_resize(image, new_size, interpolation, antialias)
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+
+    @staticmethod
+    def compile_friendly_resize(
+        image: "torch.Tensor",
+        new_size: tuple[int, int],
+        interpolation: Optional["F.InterpolationMode"] = None,
+        antialias: bool = True,
+    ) -> "torch.Tensor":
+        """
+        A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
+        """
+        if image.dtype == torch.uint8:
+            image = image.float() / 256
+            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+            image = image * 256
+            image = torch.where(image > 255, 255, image)
+            image = torch.where(image < 0, 0, image)
+            image = image.round().to(torch.uint8)
+        else:
+            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return image
 
     def rescale(
         self,
@@ -383,7 +411,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Args:
             image (`"torch.Tensor"`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
 
         Returns:
@@ -425,6 +453,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_images_structure(
         self,
         images: ImageInput,
+        expected_ndims: int = 3,
     ) -> ImageInput:
         """
         Prepare the images structure for processing.
@@ -436,7 +465,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        return make_flat_list_of_images(images)
+        return make_flat_list_of_images(images, expected_ndims=expected_ndims)
 
     def _process_image(
         self,
@@ -458,6 +487,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
             # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
             image = torch.from_numpy(image).contiguous()
 
+        # If the image is 2D, we need to unsqueeze it to add a channel dimension for processing
+        if image.ndim == 2:
+            image = image.unsqueeze(0)
+
         # Infer the channel dimension format if not provided
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
@@ -472,27 +505,47 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         return image
 
-    def _prepare_input_images(
+    def _prepare_image_like_inputs(
         self,
         images: ImageInput,
         do_convert_rgb: Optional[bool] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
+        expected_ndims: int = 3,
     ) -> list["torch.Tensor"]:
         """
-        Prepare the input images for processing.
+        Prepare image-like inputs for processing.
+
+        Args:
+            images (`ImageInput`):
+                The image-like inputs to process.
+            do_convert_rgb (`bool`, *optional*):
+                Whether to convert the images to RGB.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The input data format of the images.
+            device (`torch.device`, *optional*):
+                The device to put the processed images on.
+            expected_ndims (`int`, *optional*):
+                The expected number of dimensions for the images. (can be 2 for segmentation maps etc.)
+
+        Returns:
+            List[`torch.Tensor`]: The processed images.
         """
-        images = self._prepare_images_structure(images)
-        process_image_fn = partial(
-            self._process_image,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
+
+        # Get structured images (potentially nested)
+        images = self._prepare_images_structure(images, expected_ndims=expected_ndims)
+
+        process_image_partial = partial(
+            self._process_image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-        # todo: yoni - check if we can parallelize this efficiently
-        processed_images = []
-        for image in images:
-            processed_images.append(process_image_fn(image))
+
+        # Check if we have nested structure, assuming the nesting is consistent
+        has_nested_structure = len(images) > 0 and isinstance(images[0], (list, tuple))
+
+        if has_nested_structure:
+            processed_images = [[process_image_partial(img) for img in nested_list] for nested_list in images]
+        else:
+            processed_images = [process_image_partial(img) for img in images]
 
         return processed_images
 
@@ -566,22 +619,22 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format=data_format,
         )
 
+    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        return self.preprocess(images, *args, **kwargs)
+
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
+        for kwarg_name in self._valid_kwargs_names:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input images
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
@@ -603,7 +656,29 @@ class BaseImageProcessorFast(BaseImageProcessor):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        return self._preprocess(images=images, **kwargs)
+        return self._preprocess_image_like_inputs(
+            images, *args, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+        )
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        *args,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        To be overriden by subclasses when image-like inputs other than images should be processed.
+        It can be used for segmentation maps, depth maps, etc.
+        """
+        # Prepare input images
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        return self._preprocess(images, *args, **kwargs)
 
     def _preprocess(
         self,
@@ -618,11 +693,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -632,7 +708,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -651,48 +727,5 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def to_dict(self):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_valid_processor_keys", None)
+        encoder_dict.pop("_valid_kwargs_names", None)
         return encoder_dict
-
-
-class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
-        """
-        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
-
-        Args:
-            outputs ([`MobileNetV2ForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
-                predictions will not be resized.
-
-        Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
-        """
-        logits = outputs.logits
-
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            # if is_torch_tensor(target_sizes):
-            #     target_sizes = target_sizes.numpy()
-
-            semantic_segmentation = []
-
-            for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
-        else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
-        return semantic_segmentation

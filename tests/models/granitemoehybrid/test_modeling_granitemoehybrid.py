@@ -105,16 +105,6 @@ class GraniteMoeHybridModelTest(BambaModelTest, GenerationTesterMixin, unittest.
 @unittest.skip(reason="GraniteMoeHybrid models are not yet released")
 @require_torch_gpu
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     @slow
     def test_model_logits(self):
         input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]

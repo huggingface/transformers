@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -27,6 +27,7 @@ from ..utils.quantization_config import (
     EetqConfig,
     FbgemmFp8Config,
     FineGrainedFP8Config,
+    FPQuantConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
@@ -49,6 +50,7 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
@@ -67,6 +69,7 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "quark": QuarkHfQuantizer,
+    "fp_quant": FPQuantHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
@@ -89,6 +92,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "quark": QuarkConfig,
+    "fp_quant": FPQuantConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
@@ -111,7 +115,7 @@ class AutoQuantizationConfig:
     """
 
     @classmethod
-    def from_dict(cls, quantization_config_dict: Dict):
+    def from_dict(cls, quantization_config_dict: dict):
         quant_method = quantization_config_dict.get("quant_method", None)
         # We need a special care for bnb models to make sure everything is BC ..
         if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
@@ -152,7 +156,7 @@ class AutoHfQuantizer:
     """
 
     @classmethod
-    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, Dict], **kwargs):
+    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, dict], **kwargs):
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -252,7 +256,7 @@ def register_quantization_config(method: str):
             raise ValueError(f"Config '{method}' already registered")
 
         if not issubclass(cls, QuantizationConfigMixin):
-            raise ValueError("Config must extend QuantizationConfigMixin")
+            raise TypeError("Config must extend QuantizationConfigMixin")
 
         AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
         return cls

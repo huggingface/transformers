@@ -15,7 +15,7 @@
 """PyTorch SwiftFormer model."""
 
 import collections.abc
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -91,7 +91,7 @@ class SwiftFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class SwiftFormerEmbeddings(nn.Module):
@@ -388,21 +388,29 @@ class SwiftFormerEncoder(nn.Module):
 
 @auto_docstring
 class SwiftFormerPreTrainedModel(PreTrainedModel):
-    config_class = SwiftFormerConfig
+    config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwiftFormerEncoderBlock"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Conv2d, nn.Linear)):
             nn.init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
+        elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
+            module.layer_scale.data.fill_(1.0)
+        elif isinstance(module, SwiftFormerEncoderBlock):
+            if self.config.use_layer_scale:
+                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+        elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
+            nn.init.normal_(module.w_g)
 
 
 @auto_docstring
@@ -423,7 +431,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

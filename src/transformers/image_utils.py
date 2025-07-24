@@ -213,13 +213,16 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
 
 def make_flat_list_of_images(
     images: Union[list[ImageInput], ImageInput],
+    expected_ndims: int = 3,
 ) -> ImageInput:
     """
     Ensure that the output is a flat list of images. If the input is a single image, it is converted to a list of length 1.
     If the input is a nested list of images, it is converted to a flat list of images.
     Args:
-        images (`Union[List[ImageInput], ImageInput]`):
+        images (`Union[list[ImageInput], ImageInput]`):
             The input image.
+        expected_ndims (`int`, *optional*, defaults to 3):
+            The expected number of dimensions for a single input image.
     Returns:
         list: A list of images or a 4d array of images.
     """
@@ -232,15 +235,15 @@ def make_flat_list_of_images(
         return [img for img_list in images for img in img_list]
 
     if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        if is_pil_image(images[0]) or images[0].ndim == 3:
+        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:
             return images
-        if images[0].ndim == 4:
+        if images[0].ndim == expected_ndims + 1:
             return [img for img_list in images for img in img_list]
 
     if is_valid_image(images):
-        if is_pil_image(images) or images.ndim == 3:
+        if is_pil_image(images) or images.ndim == expected_ndims:
             return [images]
-        if images.ndim == 4:
+        if images.ndim == expected_ndims + 1:
             return list(images)
 
     raise ValueError(f"Could not make a flat list of images from {images}")
@@ -248,12 +251,15 @@ def make_flat_list_of_images(
 
 def make_nested_list_of_images(
     images: Union[list[ImageInput], ImageInput],
+    expected_ndims: int = 3,
 ) -> ImageInput:
     """
     Ensure that the output is a nested list of images.
     Args:
-        images (`Union[List[ImageInput], ImageInput]`):
+        images (`Union[list[ImageInput], ImageInput]`):
             The input image.
+        expected_ndims (`int`, *optional*, defaults to 3):
+            The expected number of dimensions for a single input image.
     Returns:
         list: A list of list of images or a list of 4d array of images.
     """
@@ -267,16 +273,16 @@ def make_nested_list_of_images(
 
     # If it's a list of images, it's a single batch, so convert it to a list of lists
     if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        if is_pil_image(images[0]) or images[0].ndim == 3:
+        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:
             return [images]
-        if images[0].ndim == 4:
+        if images[0].ndim == expected_ndims + 1:
             return [list(image) for image in images]
 
     # If it's a single image, convert it to a list of lists
     if is_valid_image(images):
-        if is_pil_image(images) or images.ndim == 3:
+        if is_pil_image(images) or images.ndim == expected_ndims:
             return [[images]]
-        if images.ndim == 4:
+        if images.ndim == expected_ndims + 1:
             return [list(images)]
 
     raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
@@ -300,7 +306,7 @@ def infer_channel_dimension_format(
     Args:
         image (`np.ndarray`):
             The image to infer the channel dimension of.
-        num_channels (`int` or `Tuple[int, ...]`, *optional*, defaults to `(1, 3)`):
+        num_channels (`int` or `tuple[int, ...]`, *optional*, defaults to `(1, 3)`):
             The number of channels of the image.
 
     Returns:
@@ -393,7 +399,7 @@ def get_image_size_for_max_height_width(
         - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
 
     Args:
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             The image to resize.
         max_height (`int`):
             The maximum allowed height.
@@ -678,9 +684,9 @@ class ImageFeatureExtractionMixin:
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to normalize.
-            mean (`List[float]` or `np.ndarray` or `torch.Tensor`):
+            mean (`list[float]` or `np.ndarray` or `torch.Tensor`):
                 The mean (per channel) to use for normalization.
-            std (`List[float]` or `np.ndarray` or `torch.Tensor`):
+            std (`list[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
             rescale (`bool`, *optional*, defaults to `False`):
                 Whether or not to rescale the image to be between 0 and 1. If a PIL image is provided, scaling will
@@ -729,7 +735,7 @@ class ImageFeatureExtractionMixin:
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (`int` or `Tuple[int, int]`):
+            size (`int` or `tuple[int, int]`):
                 The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be
                 matched to this.
 
@@ -797,7 +803,7 @@ class ImageFeatureExtractionMixin:
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape (n_channels, height, width) or (height, width, n_channels)):
                 The image to resize.
-            size (`int` or `Tuple[int, int]`):
+            size (`int` or `tuple[int, int]`):
                 The size to which crop the image.
 
         Returns:

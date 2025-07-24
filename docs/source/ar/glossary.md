@@ -135,7 +135,7 @@
 في كل وحدة الانتباه الباقية في المحولات، تلي طبقة الاهتمام الانتباه عادة طبقتان للتغذية الأمامية.
 حجم تضمين الطبقة الأمامية الوسيطة أكبر عادة من حجم المخفي للنموذج (على سبيل المثال، لـ
 `google-bert/bert-base-uncased`).
-بالنسبة لإدخال بحجم `[batch_size, sequence_length]`، يمكن أن تمثل الذاكرة المطلوبة لتخزين التضمينات الأمامية الوسيطة `[batch_size، sequence_length, config.intermediate_size]` جزءًا كبيرًا من استخدام الذاكرة. لاحظ مؤلفو (https://arxiv.org/abs/2001.04451)[Reformer: The Efficient Transformer] أنه نظرًا لأن الحساب مستقل عن بعد `sequence_length`، فإنه من المكافئ رياضيًا حساب تضمينات الإخراج الأمامية `[batch_size، config.hidden_size]_0, ..., [batch_size، `config_size]_n
+بالنسبة لإدخال بحجم `[batch_size, sequence_length]`، يمكن أن تمثل الذاكرة المطلوبة لتخزين التضمينات الأمامية الوسيطة `[batch_size، sequence_length, config.intermediate_size]` جزءًا كبيرًا من استخدام الذاكرة. لاحظ مؤلفو (https://huggingface.co/papers/2001.04451)[Reformer: The Efficient Transformer] أنه نظرًا لأن الحساب مستقل عن بعد `sequence_length`، فإنه من المكافئ رياضيًا حساب تضمينات الإخراج الأمامية `[batch_size، config.hidden_size]_0, ..., [batch_size، `config_size]_n
 فردياً والتوصيل بها لاحقًا إلى `[batch_size, sequence_length, config.hidden_size]` مع `n = sequence_length`، والذي يتداول زيادة وقت الحساب مقابل تقليل استخدام الذاكرة، ولكنه ينتج عنه نتيجة مكافئة رياضيا.
 
 بالنسبة للنماذج التي تستخدم الدالة `[apply_chunking_to_forward]`، يحدد `chunk_size` عدد التضمينات يتم حساب الإخراج بالتوازي وبالتالي يحدد المقايضة بين حجم الذاكرة والتعقيد الوقت. إذا تم تعيين `chunk_size` إلى `0`، فلن يتم إجراء تجزئة التغذية الأمامية.
@@ -173,7 +173,7 @@
 
 <Youtube id="VFp38yj8h3A"/>
 
-يعمل كل محلل لغوي بشكل مختلف ولكن الآلية الأساسية تبقى كما هي. إليك مثال باستخدام محلل BERT اللغوي، والذي يعد محلل لغوي [WordPiece](https://arxiv.org/pdf/1609.08144.pdf):
+يعمل كل محلل لغوي بشكل مختلف ولكن الآلية الأساسية تبقى كما هي. إليك مثال باستخدام محلل BERT اللغوي، والذي يعد محلل لغوي [WordPiece](https://huggingface.co/papers/1609.08144):
 
 ```python
 >>> from transformers import BertTokenizer

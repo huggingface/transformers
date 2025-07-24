@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
-def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
     # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
@@ -119,6 +119,7 @@ _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
+_torchcodec_available = importlib.util.find_spec("torchcodec") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -126,6 +127,7 @@ _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
+_torch_optimi_available = importlib.util.find_spec("optimi") is not None
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -170,6 +172,8 @@ _auto_round_available, _auto_round_version = _is_package_available("auto_round",
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
+_fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
+_qutlass_available = _is_package_available("qutlass")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -225,6 +229,8 @@ _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
+_matplotlib_available = _is_package_available("matplotlib")
+_mistral_common_available = _is_package_available("mistral_common")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -288,6 +294,30 @@ try:
     logger.debug(f"Successfully imported essentia version {_essentia_version}")
 except importlib.metadata.PackageNotFoundError:
     _essentia_version = False
+
+
+_pydantic_available = importlib.util.find_spec("pydantic") is not None
+try:
+    _pydantic_version = importlib.metadata.version("pydantic")
+    logger.debug(f"Successfully imported pydantic version {_pydantic_version}")
+except importlib.metadata.PackageNotFoundError:
+    _pydantic_available = False
+
+
+_fastapi_available = importlib.util.find_spec("fastapi") is not None
+try:
+    _fastapi_version = importlib.metadata.version("fastapi")
+    logger.debug(f"Successfully imported pydantic version {_fastapi_version}")
+except importlib.metadata.PackageNotFoundError:
+    _fastapi_available = False
+
+
+_uvicorn_available = importlib.util.find_spec("uvicorn") is not None
+try:
+    _uvicorn_version = importlib.metadata.version("uvicorn")
+    logger.debug(f"Successfully imported pydantic version {_uvicorn_version}")
+except importlib.metadata.PackageNotFoundError:
+    _uvicorn_available = False
 
 
 _pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
@@ -393,6 +423,13 @@ def get_torch_version():
     return _torch_version
 
 
+def get_torch_major_and_minor_version() -> str:
+    if _torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(_torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
+
+
 def is_torch_sdpa_available():
     if not is_torch_available():
         return False
@@ -440,6 +477,10 @@ def is_apollo_torch_available():
     return _apollo_torch_available
 
 
+def is_torch_optimi_available():
+    return _torch_optimi_available
+
+
 def is_lomo_available():
     return _lomo_available
 
@@ -464,6 +505,22 @@ def is_essentia_available():
     return _essentia_available
 
 
+def is_pydantic_available():
+    return _pydantic_available
+
+
+def is_fastapi_available():
+    return _fastapi_available
+
+
+def is_uvicorn_available():
+    return _uvicorn_available
+
+
+def is_openai_available():
+    return _openai_available
+
+
 def is_pretty_midi_available():
     return _pretty_midi_available
 
@@ -473,6 +530,24 @@ def is_torch_cuda_available():
         import torch
 
         return torch.cuda.is_available()
+    else:
+        return False
+
+
+def is_cuda_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    else:
+        return False
+
+
+def is_rocm_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
     else:
         return False
 
@@ -564,7 +639,7 @@ def is_torch_bf16_available():
     return is_torch_bf16_gpu_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -596,7 +671,7 @@ def is_torch_fp16_available_on_device(device):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_bf16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -661,10 +736,6 @@ def is_onnx_available():
     return _onnx_available
 
 
-def is_openai_available():
-    return _openai_available
-
-
 def is_flax_available():
     return _flax_available
 
@@ -705,14 +776,14 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_xla_available()
     return False
 
 
-@lru_cache()
+@lru_cache
 def is_torch_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_npu") is None:
@@ -731,7 +802,7 @@ def is_torch_npu_available(check_device=False):
     return hasattr(torch, "npu") and torch.npu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_mlu_available(check_device=False):
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
@@ -756,7 +827,7 @@ def is_torch_mlu_available(check_device=False):
     return available
 
 
-@lru_cache()
+@lru_cache
 def is_torch_musa_available(check_device=False):
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_musa") is None:
@@ -789,8 +860,8 @@ def is_torch_hpu_available():
     ):
         return False
 
-    torch_hpu_min_version = "1.5.0"
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+    torch_hpu_min_accelerate_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
         return False
 
     import torch
@@ -802,27 +873,76 @@ def is_torch_hpu_available():
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
-    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+    # We patch torch.gather for int64 tensors to avoid a bug on Gaudi
+    # Graph compile failed with synStatus 26 [Generic failure]
+    # This can be removed once bug is fixed but for now we need it.
+    original_gather = torch.gather
 
-    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
-    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
-    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
-    # dl1.24xlarge Gaudi1 instances on AWS for testing.
-    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
-    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
-        original_masked_fill_ = torch.Tensor.masked_fill_
+    def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            return original_gather(input.to(torch.int32), dim, index).to(torch.int64)
+        else:
+            return original_gather(input, dim, index)
 
-        def patched_masked_fill_(self, mask, value):
-            if self.dtype == torch.int64:
-                logger.warning_once(
-                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
-                    "This operation will be performed out-of-place using tensor[mask] = value."
-                )
-                self[mask] = value
-            else:
-                original_masked_fill_(self, mask, value)
+    torch.gather = patched_gather
+    torch.Tensor.gather = patched_gather
 
-        torch.Tensor.masked_fill_ = patched_masked_fill_
+    original_take_along_dim = torch.take_along_dim
+
+    def patched_take_along_dim(
+        input: torch.Tensor, indices: torch.LongTensor, dim: Optional[int] = None
+    ) -> torch.Tensor:
+        if input.dtype == torch.int64 and input.device.type == "hpu":
+            return original_take_along_dim(input.to(torch.int32), indices, dim).to(torch.int64)
+        else:
+            return original_take_along_dim(input, indices, dim)
+
+    torch.take_along_dim = patched_take_along_dim
+
+    original_cholesky = torch.linalg.cholesky
+
+    def safe_cholesky(A, *args, **kwargs):
+        output = original_cholesky(A, *args, **kwargs)
+
+        if torch.isnan(output).any():
+            jitter_value = 1e-9
+            diag_jitter = torch.eye(A.size(-1), dtype=A.dtype, device=A.device) * jitter_value
+            output = original_cholesky(A + diag_jitter, *args, **kwargs)
+
+        return output
+
+    torch.linalg.cholesky = safe_cholesky
+
+    original_scatter = torch.scatter
+
+    def patched_scatter(
+        input: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
+        if input.device.type == "hpu" and input is src:
+            return original_scatter(input, dim, index, src.clone(), *args, **kwargs)
+        else:
+            return original_scatter(input, dim, index, src, *args, **kwargs)
+
+    torch.scatter = patched_scatter
+    torch.Tensor.scatter = patched_scatter
+
+    # IlyasMoutawwakil: we patch torch.compile to use the HPU backend by default
+    # https://github.com/huggingface/transformers/pull/38790#discussion_r2157043944
+    # This is necessary for cases where torch.compile is used as a decorator (defaulting to inductor)
+    # https://github.com/huggingface/transformers/blob/af6120b3eb2470b994c21421bb6eaa76576128b0/src/transformers/models/modernbert/modeling_modernbert.py#L204
+    original_compile = torch.compile
+
+    def hpu_backend_compile(*args, **kwargs):
+        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+            logger.warning(
+                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                "We will override the backend with 'hpu_backend' to avoid errors."
+            )
+            kwargs["backend"] = "hpu_backend"
+
+        return original_compile(*args, **kwargs)
+
+    torch.compile = hpu_backend_compile
 
     return True
 
@@ -932,6 +1052,10 @@ def is_decord_available():
     return _decord_available
 
 
+def is_torchcodec_available():
+    return _torchcodec_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -994,9 +1118,15 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-@lru_cache()
-def is_bitsandbytes_available():
-    if not is_torch_available() or not _bitsandbytes_available:
+@lru_cache
+def is_bitsandbytes_available(check_library_only=False) -> bool:
+    if not _bitsandbytes_available:
+        return False
+
+    if check_library_only:
+        return True
+
+    if not is_torch_available():
         return False
 
     import torch
@@ -1043,7 +1173,26 @@ def is_flash_attn_2_available():
         return False
 
 
-@lru_cache()
+@lru_cache
+def is_flash_attn_3_available():
+    if not is_torch_available():
+        return False
+
+    if not _is_package_available("flash_attn_3"):
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+
+    # TODO: Check for a minimum version when FA3 is stable
+    # return version.parse(importlib.metadata.version("flash_attn_3")) >= version.parse("3.0.0")
+
+    return True
+
+
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
         return False
@@ -1051,7 +1200,7 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_greater_or_equal(library_version: str):
     if not _is_package_available("flash_attn"):
         return False
@@ -1059,7 +1208,7 @@ def is_flash_attn_greater_or_equal(library_version: str):
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
 
 
-@lru_cache()
+@lru_cache
 def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
     """
     Accepts a library version and returns True if the current version of the library is greater than or equal to the
@@ -1075,6 +1224,37 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         )
     else:
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+
+
+@lru_cache
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is less than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("torch"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) <= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) <= version.parse(library_version)
+
+
+@lru_cache
+def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
+    if not _is_package_available("huggingface_hub"):
+        return False
+
+    if accept_dev:
+        return version.parse(
+            version.parse(importlib.metadata.version("huggingface_hub")).base_version
+        ) >= version.parse(library_version)
+    else:
+        return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -1134,6 +1314,14 @@ def is_optimum_quanto_available():
 
 def is_quark_available():
     return _quark_available
+
+
+def is_fp_quant_available():
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
+
+
+def is_qutlass_available():
+    return _qutlass_available
 
 
 def is_compressed_tensors_available():
@@ -1209,6 +1397,9 @@ def is_keras_nlp_available():
 
 def is_in_notebook():
     try:
+        # Check if we are running inside Marimo
+        if "marimo" in sys.modules:
+            return True
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
@@ -1396,6 +1587,14 @@ def is_rich_available():
     return _rich_available
 
 
+def is_matplotlib_available():
+    return _matplotlib_available
+
+
+def is_mistral_common_available():
+    return _mistral_common_available
+
+
 def check_torch_load_is_safe():
     if not is_torch_greater_or_equal("2.6"):
         raise ValueError(
@@ -1428,6 +1627,14 @@ DECORD_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
 ```
 pip install decord
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+TORCHCODEC_IMPORT_ERROR = """
+{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
+```
+pip install torchcodec
 ```
 Please note that you may need to restart your runtime after installation.
 """
@@ -1476,7 +1683,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 SENTENCEPIECE_IMPORT_ERROR = """
-{0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
+{0} requires the SentencePiece library but it was not found in your environment. Check out the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1484,7 +1691,7 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 PROTOBUF_IMPORT_ERROR = """
-{0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
+{0} requires the protobuf library but it was not found in your environment. Check out the instructions on the
 installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1492,7 +1699,7 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 FAISS_IMPORT_ERROR = """
-{0} requires the faiss library but it was not found in your environment. Checkout the instructions on the
+{0} requires the faiss library but it was not found in your environment. Check out the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1500,7 +1707,7 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
-{0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
+{0} requires the PyTorch library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -1508,7 +1715,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 TORCHVISION_IMPORT_ERROR = """
-{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
+{0} requires the Torchvision library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -1560,7 +1767,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 TENSORFLOW_IMPORT_ERROR = """
-{0} requires the TensorFlow library but it was not found in your environment. Checkout the instructions on the
+{0} requires the TensorFlow library but it was not found in your environment. Check out the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -1568,7 +1775,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 DETECTRON2_IMPORT_ERROR = """
-{0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
+{0} requires the detectron2 library but it was not found in your environment. Check out the instructions on the
 installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1576,14 +1783,14 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 FLAX_IMPORT_ERROR = """
-{0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
+{0} requires the FLAX library but it was not found in your environment. Check out the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 FTFY_IMPORT_ERROR = """
-{0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
+{0} requires the ftfy library but it was not found in your environment. Check out the instructions on the
 installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1701,6 +1908,29 @@ VISION_IMPORT_ERROR = """
 `pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+PYDANTIC_IMPORT_ERROR = """
+{0} requires the pydantic library but it was not found in your environment. You can install it with pip:
+`pip install pydantic`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+FASTAPI_IMPORT_ERROR = """
+{0} requires the fastapi library but it was not found in your environment. You can install it with pip:
+`pip install fastapi`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+UVICORN_IMPORT_ERROR = """
+{0} requires the uvicorn library but it was not found in your environment. You can install it with pip:
+`pip install uvicorn`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+OPENAI_IMPORT_ERROR = """
+{0} requires the openai library but it was not found in your environment. You can install it with pip:
+`pip install openai`. Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
@@ -1775,6 +2005,11 @@ RICH_IMPORT_ERROR = """
 rich`. Please note that you may need to restart your runtime after installation.
 """
 
+MISTRAL_COMMON_IMPORT_ERROR = """
+{0} requires the mistral-common library but it was not found in your environment. You can install it with pip: `pip install mistral-common`. Please note that you may need to restart your runtime after installation.
+"""
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("av", (is_av_available, AV_IMPORT_ERROR)),
@@ -1812,6 +2047,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
+        ("torchcodec", (is_torchcodec_available, TORCHCODEC_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
@@ -1823,6 +2059,11 @@ BACKENDS_MAPPING = OrderedDict(
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
         ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
+        ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
+        ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
+        ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
+        ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
+        ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
     ]
 )
 
@@ -1877,8 +2118,8 @@ def is_torch_fx_proxy(x):
     return False
 
 
-BACKENDS_T = FrozenSet[str]
-IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+BACKENDS_T = frozenset[str]
+IMPORT_STRUCTURE_T = dict[BACKENDS_T, dict[str, set[str]]]
 
 
 class _LazyModule(ModuleType):
@@ -1894,8 +2135,8 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Optional[Dict[str, object]] = None,
-        explicit_import_shortcut: Optional[Dict[str, List[str]]] = None,
+        extra_objects: Optional[dict[str, object]] = None,
+        explicit_import_shortcut: Optional[dict[str, list[str]]] = None,
     ):
         super().__init__(name)
 
@@ -1952,12 +2193,12 @@ class _LazyModule(ModuleType):
                 self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
-                    if len(missing_backends):
+                    if missing_backends:
                         self._object_missing_backend[key] = missing_backends
 
                     for value in values:
                         self._class_to_module[value] = key
-                        if len(missing_backends):
+                        if missing_backends:
                             self._object_missing_backend[value] = missing_backends
                     _import_structure.setdefault(key, []).extend(values)
 
@@ -2056,10 +2297,7 @@ class _LazyModule(ModuleType):
         try:
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its"
-                f" traceback):\n{e}"
-            ) from e
+            raise e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))
@@ -2111,8 +2349,8 @@ class VersionComparison(Enum):
         return string_to_operator[version_string]
 
 
-@lru_cache()
-def split_package_version(package_version_str) -> Tuple[str, str, str]:
+@lru_cache
+def split_package_version(package_version_str) -> tuple[str, str, str]:
     pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
     match = re.match(pattern, package_version_str)
     if match:
@@ -2155,7 +2393,7 @@ def requires(*, backends=()):
     """
 
     if not isinstance(backends, tuple):
-        raise ValueError("Backends should be a tuple.")
+        raise TypeError("Backends should be a tuple.")
 
     applied_backends = []
     for backend in backends:
@@ -2226,7 +2464,7 @@ def fetch__all__(file_content):
         return _all
 
 
-@lru_cache()
+@lru_cache
 def create_import_structure_from_path(module_path):
     """
     This method takes the path to a file/a folder and returns the import structure.
@@ -2554,7 +2792,7 @@ def spread_import_structure(nested_import_structure):
     return flattened_import_structure
 
 
-@lru_cache()
+@lru_cache
 def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.

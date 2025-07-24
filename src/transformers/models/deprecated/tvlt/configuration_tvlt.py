@@ -38,9 +38,9 @@ class TvltConfig(PretrainedConfig):
             The time length of each audio spectrogram.
         frequency_length (`int`, *optional*, defaults to 128):
             The frequency length of audio spectrogram.
-        image_patch_size (`List[int]`, *optional*, defaults to `[16, 16]`):
+        image_patch_size (`list[int]`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each image patch.
-        audio_patch_size (`List[int]`, *optional*, defaults to `[16, 16]`):
+        audio_patch_size (`list[int]`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each audio patch.
         num_image_channels (`int`, *optional*, defaults to 3):
             The number of input image channels.
