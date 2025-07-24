@@ -761,11 +761,10 @@ def _load_state_dict_into_meta_model(
     This function takes care of correctly casting dtypes, devices, and sharding tensors in case of tensor parallelism.
     """
     tensor_device = "cpu"
-    if device_map is not None and device_map.get("", None) is not None:
-        if device_map[""] not in ("cpu", torch.device("cpu")):
-            tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
+    device_map_regex = ""
     if device_map is not None:
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
+        tensor_device = next(iter(device_map.values()))
 
     is_quantized = hf_quantizer is not None
     is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
@@ -781,13 +780,21 @@ def _load_state_dict_into_meta_model(
         if param_name not in expected_keys:
             continue
 
+        param_device = tensor_device
+        if device_map_regex:
+            module_layer = re.search(device_map_regex, param_name)
+            if not module_layer:
+                raise ValueError(f"{param_name} doesn't have any device set.")
+            else:
+                param_device = device_map[module_layer.group()]
+
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
             serialized_param_name = reverse_renaming_mapping[param_name]
             param = file_pointer.get_slice(serialized_param_name)
         else:
-            param = empty_param.to(tensor_device)  # It is actually not empty!
+            param = empty_param.to(param_device)  # It is actually not empty!
 
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
@@ -814,15 +821,6 @@ def _load_state_dict_into_meta_model(
                 param = param.to(casting_dtype)
             if to_contiguous:
                 param = param.contiguous()
-
-            if device_map is None:
-                param_device = "cpu"
-            else:
-                module_layer = re.search(device_map_regex, param_name)
-                if not module_layer:
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                else:
-                    param_device = device_map[module_layer.group()]
 
             if param_device == "disk":
                 if not is_safetensors:
