@@ -16,7 +16,7 @@ specific language governing permissions and limitations under the License.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview [[개요]]
+## 개요 [[overview]]
 
 Text-Visual Prompting(TVP) 프레임워크는 Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding이 발표한 논문 [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995)에서 제안되었습니다.
 
