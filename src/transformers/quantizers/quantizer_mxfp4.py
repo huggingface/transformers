@@ -370,40 +370,27 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def update_tp_plan(self, config):
-        config.base_model_tp_plan = {
-        # "embed_tokens": "vocab_parallel_rowwise",
-            "layers.*.self_attn.q_proj": "colwise",
-            "layers.*.self_attn.k_proj": "colwise",
-            "layers.*.self_attn.v_proj": "colwise",
-            "layers.*.self_attn.o_proj": "rowwise",
-            "layers.*.self_attn.sinks": "local_rowwise",
-            "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
+        # Only update the existing plans, do not create new dicts
+        if not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None:
+            config.base_model_tp_plan = {}
+        if not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None:
+            config.base_model_ep_plan = {}
+
+        # Update TP plan with scales and blocks
+        config.base_model_tp_plan.update({
             "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
             "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
-            "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
-            "layers.*.mlp.experts.down_proj": "local_colwise",
             "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
             "layers.*.mlp.experts.down_proj_scales": "local_colwise",
-            "layers.*.mlp.experts.down_proj_bias": "local_colwise",
-            # "layers.*.mlp": "gather",
-        }
-        config.base_model_ep_plan = {
-            "layers.*.self_attn.q_proj": "colwise",
-            "layers.*.self_attn.k_proj": "colwise",
-            "layers.*.self_attn.v_proj": "colwise",
-            "layers.*.self_attn.o_proj": "rowwise",
-            "layers.*.self_attn.sinks": "local_rowwise",
-            "layers.*.mlp.experts": "gather",
-            "layers.*.mlp.router": "ep_router",
-            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        })
+
+        # Update EP plan with scales and blocks
+        config.base_model_ep_plan.update({
             "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
             "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
-            "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
-            "layers.*.mlp.experts.down_proj": "grouped_gemm",
             "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
             "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
-            "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
-        }
+        })
 
         return config
 
