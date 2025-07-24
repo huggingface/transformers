@@ -20,6 +20,7 @@ import copy
 import inspect
 import json
 import os
+import re
 import sys
 import typing
 import warnings
@@ -1681,6 +1682,70 @@ class ProcessorMixin(PushToHubMixin):
                     f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
                     "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
                 )
+
+    def default_message(self, full_output: bool = False) -> str:
+        """
+        Returns a single formatted prompt string using the processor's default chat template,
+        containing one image (hf logo) and one user text message (Please describe this image.).
+        Falls back to a minimal `<image>` string if no template is available.
+        Args:
+            full_output (`bool`, *optional*, defaults to `False`):
+                Whether or not to expand the full message to its string form. If False, will compress the image tokens to an ellipsis form.
+        Returns:
+            `str`: The default message from this processor,
+        """
+        # ensure this is a multimodal processor with image + tokenizer
+        if not (
+            hasattr(self, "attributes") and "image_processor" in self.attributes and "tokenizer" in self.attributes
+        ):
+            raise RuntimeError(
+                "Processor does not expose both 'image_processor' and 'tokenizer'; cannot build multimodal example."
+            )
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/hf-logo-224x224.png",
+                    },
+                    {"type": "text", "text": "Please describe this image."},
+                ],
+            }
+        ]
+
+        try:
+            print("For a 224x224 RGB png image: \n")
+            decoded_message = self.batch_decode(
+                self.apply_chat_template(
+                    conversation,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_dict=False,
+                    truncation=False,
+                ),
+                skip_special_tokens=False,
+            )[0]
+            image_token_string = getattr(self, "image_token", "<image>")
+
+            token_escaped = re.escape(image_token_string)
+            image_token_run_pattern = re.compile(rf"(?:{token_escaped})(?:\s*{token_escaped}){{2,}}")
+
+            def replacement_function(match):
+                n_tokens = match.group(0).count(image_token_string)
+                return f"{image_token_string}[...{n_tokens} tokens...]{image_token_string}"
+
+            if full_output:
+                return decoded_message
+            else:
+                return image_token_run_pattern.sub(replacement_function, decoded_message)
+
+        except ValueError:  # what is raised if there's no chat template
+            image_token_string = getattr(
+                self, "image_token", getattr(getattr(self, "tokenizer", None), "image_token", "<image>")
+            )
+            return f"{image_token_string} {'Please describe this image.'}"
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
