@@ -29,6 +29,7 @@ from libcst import matchers as m
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from . import BaseTransformersCLICommand
@@ -92,7 +93,8 @@ class ModelInfos(object):
         else:
             self.image_processor_class, self.fast_image_processor_class = image_processor_classes, None
 
-        # Feature extractor and processor
+        # Video, feature extractor and processor
+        self.video_processor_class = VIDEO_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.feature_extractor_class = FEATURE_EXTRACTOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
 
@@ -366,13 +368,15 @@ def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filename
 
     test_tokenization = filenames_to_add[2][1] or filenames_to_add[3][1]
     test_image_processing = filenames_to_add[4][1] or filenames_to_add[5][1]
-    test_feature_extractor = filenames_to_add[6][1]
-    test_processor = filenames_to_add[7][1]
+    test_video_processor = filenames_to_add[6][1]
+    test_feature_extractor = filenames_to_add[7][1]
+    test_processor = filenames_to_add[8][1]
 
     filenames_to_add = (
         (f"test_modeling_{new_model_lowercase}.py", True),
         (f"test_tokenization_{new_model_lowercase}.py", test_tokenization),
         (f"test_image_processing_{new_model_lowercase}.py", test_image_processing),
+        (f"test_video_processing_{new_model_lowercase}.py", test_video_processor),
         (f"test_feature_extraction_{new_model_lowercase}.py", test_feature_extractor),
         (f"test_processor_{new_model_lowercase}.py", test_processor),
     )
@@ -402,6 +406,7 @@ def create_new_model_like(
     add_fast_tokenizer: bool,
     add_image_processor: bool,
     add_fast_image_processor: bool,
+    add_video_processor: bool,
     add_feature_extractor: bool,
     add_processor: bool,
     create_fast_image_processor: bool,
@@ -421,6 +426,7 @@ def create_new_model_like(
         (f"tokenization_{old_model_lowercase}_fast.py", add_fast_tokenizer),
         (f"image_processing_{old_model_lowercase}.py", add_image_processor),
         (f"image_processing_{old_model_lowercase}_fast.py", add_fast_image_processor),
+        (f"video_processing_{old_model_lowercase}.py", add_video_processor),
         (f"feature_extraction_{old_model_lowercase}.py", add_feature_extractor),
         (f"processing_{old_model_lowercase}.py", add_processor),
     )
@@ -510,6 +516,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.add_fast_tokenizer,
             self.add_image_processor,
             self.add_fast_image_processor,
+            self.add_video_processor,
             self.add_feature_extractor,
             self.add_processor,
             self.create_fast_image_processor,
@@ -534,6 +541,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             add_fast_tokenizer=self.add_fast_tokenizer,
             add_image_processor=self.add_image_processor,
             add_fast_image_processor=self.add_fast_image_processor,
+            add_video_processor=self.add_video_processor,
             add_feature_extractor=self.add_feature_extractor,
             add_processor=self.add_processor,
             create_fast_image_processor=self.create_fast_image_processor,
@@ -639,6 +647,7 @@ def get_user_input():
     add_fast_tokenizer = False
     add_image_processor = False
     add_fast_image_processor = False
+    add_video_processor = False
     add_feature_extractor = False
     add_processor = False
     if old_model_info.tokenizer_class is not None:
@@ -662,6 +671,12 @@ def get_user_input():
     if old_model_info.fast_image_processor_class is not None:
         add_fast_image_processor = not get_user_field(
             f"Will your new model use the same fast image processor class as {old_model_type} (yes/no)? ",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
+    if old_model_info.video_processor_class is not None:
+        add_video_processor = not get_user_field(
+            f"Will your new model use the same video processor class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
@@ -696,6 +711,7 @@ def get_user_input():
         add_fast_tokenizer,
         add_image_processor,
         add_fast_image_processor,
+        add_video_processor,
         add_feature_extractor,
         add_processor,
         create_fast_image_processor,
