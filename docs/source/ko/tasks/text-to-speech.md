@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 텍스트 음성 변환
+# 텍스트 음성 변환[[text-to-speech]]
 
 [[open-in-colab]]
 
