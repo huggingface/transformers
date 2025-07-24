@@ -270,16 +270,14 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.shared_expert.gate_proj": "local_colwise",
-        "layers.*.feed_forward.shared_expert.up_proj": "local_colwise",
-        "layers.*.feed_forward.shared_expert.down_proj": "local_rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
-        "layers.*.feed_forward.experts": "local",
+        # "layers.*.feed_forward.experts": "local",
         "layers.*.feed_forward.gate_proj": "local_colwise",
         "layers.*.feed_forward.up_proj": "local_colwise",
         "layers.*.feed_forward.down_proj": "local_rowwise",
-        "layers.*.feed_forward": "gather",
+        "layers.*.feed_forward.experts": "gather",
+        "layers.*.feed_forward.router": "ep_router",
     }
 
     def __init__(

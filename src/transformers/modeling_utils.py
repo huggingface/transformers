@@ -2261,7 +2261,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.config.base_model_ep_plan.copy()
             if self.config.base_model_ep_plan is not None
             and getattr(self.distributed_config, "enable_expert_parallel", False)
-            and True
+            or True
             else self.config.base_model_tp_plan
         )
         for name, module in self.named_children():
@@ -2280,12 +2280,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not getattr(module, "_is_hooked", False):
                     from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
+                    plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan, is_weight=False)
                     add_tensor_parallel_hooks_to_module(
                         model=self,
                         module=module,
                         tp_plan=self._tp_plan,
                         layer_name="",
-                        current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
+                        current_module_plan=plan,
                         device_mesh=device_mesh,
                         parameter_name=None,
                     )
@@ -5057,7 +5058,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if (
             cls.distributed_config is not None
             and getattr(cls.distributed_config, "enable_expert_parallel", False)
-            and True
+            or True
         ):
             # TODO: add proper support for ep_plan independently of tp_plan
             if getattr(config, "base_model_ep_plan", None) is None:

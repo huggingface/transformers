@@ -119,20 +119,22 @@ def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int
         return [single_size] * blocks
 
 
-def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> str | None:
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
 
     The TP plan is a dictionary that maps parameter names to TP styles.
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+
+    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
+    not parrent classes for `post_init` calls
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
-    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
+    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan and is_weight:
         return tp_plan[generic_param_name.rsplit(".", 1)[0]]
-    else:
-        return None
+    return None
 
 
 str_to_torch_dtype = {
@@ -378,6 +380,8 @@ def distribute_module(
             module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
         if output_fn is not None:
             module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
+    else:
+        print("Skipping", module, "because it already has pre hook")
     return module
 
 
@@ -436,8 +440,6 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        if hasattr(mod, "kernel_layer_name"):  # kernels usually handle this themselves
-            return outputs
         if isinstance(outputs, torch.Tensor):
             dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
         else:
@@ -801,6 +803,31 @@ class SequenceParallel(TensorParallelLayer):
 
 
 class GroupedGemmParallel(TensorParallelLayer):
+    """
+    Applies Expert Parallelism to MoE experts by loading the correct experts on each device.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.use_dtensor = False
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        ep_rank = rank
+        global_num_experts = empty_param.shape[0]
+        if global_num_experts % device_mesh.size() != 0:
+            raise ValueError(
+                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
+            )
+        local_num_experts = global_num_experts // device_mesh.size()
+        param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        if "gate_up" in param_type and False:
+            param = torch.cat([param[..., ::2], param[..., 1::2]], dim=-1)
+        return param
+
+
+class PackedGroupedGemmParallel(TensorParallelLayer):
     """
     Applies Expert Parallelism to MoE experts by loading the correct experts on each device.
     """

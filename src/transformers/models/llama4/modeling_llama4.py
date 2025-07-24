@@ -65,7 +65,7 @@ class Llama4TextExperts(nn.Module):
         Returns:
             torch.Tensor
         """
-        hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+        hidden_states = hidden_states.view(self.gate_up_proj.shape[0], -1, self.hidden_size)
         gate_up = torch.bmm(hidden_states, self.gate_up_proj)
         gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
         next_states = torch.bmm((up * self.act_fn(gate)), self.down_proj)
@@ -127,7 +127,21 @@ class Llama4TextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-@use_kernel_forward_from_hub("MegaBlocksMoeMLP")
+class Llama4Router(nn.Linear):
+    def __init__(self, config):
+        super().__init__(config.hidden_size, config.num_local_experts, bias=False)
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
+
+    def forward(self, hidden_states):
+        router_logits = super().forward(hidden_states)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+        return router_scores, router_indices
+
+
+# @use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -135,27 +149,17 @@ class Llama4TextMoe(nn.Module):
         self.hidden_dim = config.hidden_size
         self.num_experts = config.num_local_experts
         self.experts = Llama4TextExperts(config)
-        self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
+        self.router = Llama4Router(config)
         self.shared_expert = Llama4TextMLP(config)
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = self.router(hidden_states)
-
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
-
-        router_scores = (
-            torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value).transpose(0, 1)
-        )
-        router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
-
-        routed_in = hidden_states.repeat(self.num_experts, 1)
+        router_scores, _ = self.router(hidden_states)
+        routed_in = hidden_states.repeat(router_scores.shape[1], 1)
         routed_in = routed_in * router_scores.reshape(-1, 1)
         routed_out = self.experts(routed_in)
-
         out = self.shared_expert(hidden_states)
-        out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
-
+        out.add_(routed_out.reshape(router_scores.shape[1], -1, routed_out.shape[-1]).sum(dim=0))
         return out, router_scores
 
 
@@ -557,7 +561,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         freq_cis = self.rotary_emb(hidden_states, position_ids)
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
