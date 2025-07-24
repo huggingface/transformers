@@ -2310,8 +2310,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 try:
                     kernel = get_kernel(repo_id)
                     ALL_ATTENTION_FUNCTIONS.register(
-                        f"kernel_{repo_id.replace('/', '_')}",
-                        ALL_ATTENTION_FUNCTIONS["flash_attention_2"],  # we need our extra layer to support kwargs
+                        f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name)
                     )
                     config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
                 except FileNotFoundError as e:
@@ -4944,9 +4943,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # check if using kernels
         if use_kernels:
             from kernels import Device, kernelize
-            from kernels.layer import Mode
 
-            kernelize(model, mode=Mode.TRAINING, device=Device(type=model.device.type))
+            kernelize(model, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
