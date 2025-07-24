@@ -313,8 +313,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
                             module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                             module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+    def _dequantize(self, model):
         return model
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        # we are not really dequantizing, we are just removing everthing related to quantization here
+        self.dequantize(model)
 
     def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
         # Replace expected_keys for experts' gate_up_proj and down_proj with their _blocks and _scales variants

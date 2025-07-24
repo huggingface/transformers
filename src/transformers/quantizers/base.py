@@ -245,10 +245,14 @@ class HfQuantizer(ABC):
         model = self._dequantize(model)
 
         # Delete quantizer and quantization config
-        del model.hf_quantizer
-        del model.config.quantization_config
-        del model.config._pre_quantization_dtype
-        del model.quantization_method
+        if hasattr(model, "hf_quantizer"):
+            del model.hf_quantizer
+        if hasattr(model.config, "quantization_config"):
+            del model.config.quantization_config
+        if hasattr(model.config, "_pre_quantization_dtype"):
+            del model.config._pre_quantization_dtype
+        if hasattr(model, "quantization_method"):
+            del model.quantization_method
         model.is_quantized = False
 
         return model
