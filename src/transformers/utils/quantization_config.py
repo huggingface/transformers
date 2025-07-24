@@ -2072,3 +2072,8 @@ class Mxfp4Config(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.MXFP4
         self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
+
+    def get_loading_attributes(self):
+        return {
+            "dequantize": self.dequantize,
+        }
