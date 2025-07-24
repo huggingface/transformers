@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
@@ -374,6 +374,39 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "temperature_format": {
                         "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The temperature format to use",
+                    }
+                },
+                "required": ["temperature_format"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_literal(self):
+        def fn(temperature_format: Literal["celsius", "fahrenheit"]):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use
+
+
+            Returns:
+                The temperature
+            """
+            return -40.0
+
+        # Let's see if that gets correctly parsed as an enum
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "temperature_format": {
                         "enum": ["celsius", "fahrenheit"],
                         "description": "The temperature format to use",
                     }
