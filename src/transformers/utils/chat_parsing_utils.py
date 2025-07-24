@@ -1,4 +1,5 @@
 import re
+import json
 
 # TODO Cases to handle:
 #      1) Model has multiple chat templates
@@ -35,15 +36,28 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
             return node_match.group(0)
     # First, set some vars and do basic validation
     node_type = node_schema["type"]
+    parser = node_schema.get("x-parser", None)
     has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema
-    if not has_regex and isinstance(node_content, str) and node_type == "array":
-        raise TypeError(f"array node got a string input, but has no regex for parsing.\n"
-                        f"Input: {node_content}")
+    if has_regex and parser is not None:
+        raise ValueError("Schema node has both a regex and a parser.\n"
+                         f"Schema: {node_schema}")
+    if parser is None and not has_regex and isinstance(node_content, str) and node_type == "array":
+        breakpoint()
+        raise TypeError(f"array node got a string input, but has no parser or regex.\n"
+                        f"Input: {node_content}\n",
+                        f"Schema: {node_schema}")
     if has_regex and not isinstance(node_content, str):
         raise TypeError("Schema node got a non-string input, but has a regex for parsing.\n"
                         f"Input: {node_content}\n"
                         f"Schema: {node_schema}")
 
+
+    if node_content and parser == "json":
+        try:
+            node_content = json.loads(node_content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Node has JSON parser but could not parse its contents as JSON: {node_content}\n"
+                             f"Error: {e}")
 
     if node_schema.get("x-regex", None) is not None:
         node_regex = node_schema["x-regex"]
@@ -58,6 +72,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
         if not node_content:
             return None  # TODO Is this correct? Should I raise an error?
 
+
     # Finally, handle parsed content based on schema type and recurse if required
     if node_type == "object":
         if not isinstance(node_content, (dict, str)):
@@ -68,7 +83,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
             # string themselves to extract their value.
             for key, child_node in node_schema["properties"].items():
                 parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key])
-        for key, child_node in node_schema["properties"].items():
+        for key, child_node in node_schema.get("properties", {}).items():
             # TODO Error if required keys are not present
             if key in node_content:
                 parsed_schema[key] = recursive_parse(node_content[key], child_node)
@@ -77,8 +92,15 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
                 parsed_schema[key] = child_node["default"]
             else:
                 pass  # TODO Add an error for required keys not present
+        if "additionalProperties" in node_schema:
+            # TODO Allow untyped additional properties with a parser where we just dump the entire parser output?
+            for key, value in node_content.items():
+                if key not in node_schema.get("properties", {}):
+                    parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"])
         return parsed_schema
     elif node_type == "array":
+        if not node_content:
+            return []
         if not isinstance(node_content, list):
             raise TypeError(f"Expected a list or regex for schema node with type array, got {node_content}")
         parsed_schema = []
