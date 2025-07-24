@@ -163,9 +163,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     ):
         from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
 
-        from ..integrations import Mxfp4OpenAIMoeExperts, convert_moe_packed_tensors, quantize_to_mxfp4, dequantize, dequantize_and_quantize
-        from ..integrations.tensor_parallel import shard_and_distribute_module
-        from ..modeling_utils import _load_parameter_into_model
+        from ..integrations import Mxfp4OpenAIMoeExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
 
         if not self.pre_quantized:
@@ -181,7 +179,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                                 value=0)
                         torch.cuda.empty_cache()
                         loaded_weight, flex, mx = quantize_to_mxfp4(
-                        loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
+                            loaded_weight,
+                            self.swizzle_mx_value,
+                            self.swizzle_mx_scale
+                        )
+                        torch.cuda.empty_cache()
                         module.gate_up_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                         module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
                     elif "down_proj" in param_name:
@@ -191,9 +193,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                                 (0, right_pad, 0, bottom_pad, 0, 0),
                                                 mode="constant",
                                                 value=0).to(target_device)
-                        # delete intermediate tensor immediate to prevent OOM
+                        torch.cuda.empty_cache()
                         loaded_weight, flex, mx = quantize_to_mxfp4(
-                            loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)
+                            loaded_weight,
+                            self.swizzle_mx_value,
+                            self.swizzle_mx_scale
+                        )
+                        torch.cuda.empty_cache()
                         module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                         module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
         # we take this path if already quantized but not in a compatible way:
