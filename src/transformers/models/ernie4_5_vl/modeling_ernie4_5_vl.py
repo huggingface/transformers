@@ -332,211 +332,29 @@ class Ernie4_5_MoeMLP(nn.Module):
         return down_proj
 
 
-def masked_fill(x, mask, value):
+class TopKGate(nn.Module):
     """
-    Fills elements of the input tensor with a given value where mask is True.
-    """
-    return torch.where(mask, torch.full_like(x, value), x)
-
-
-def _squared_l2_norm(x: torch.Tensor) -> torch.Tensor:
-    """Computes 0.5 * sum(x^2)"""
-    return 0.5 * torch.sum(x * x)
-
-
-@torch.no_grad()
-def compute_optimal_transport(M, r, c, lam=1.0, epsilon=1e-8, max_iters: int = 10):
-    """
-    Computes optimal transport matrix and Sinkhorn distance using Sinkhorn-Knopp algorithm.
-    """
-    n, _ = M.shape
-    P = F.softmax(-M / lam, dim=1)  # Applying softmax over columns
-    u = torch.zeros(n, dtype=torch.float32, device=M.device)
-
-    for _ in range(max_iters):
-        P_sum_1 = P.sum(1)
-        if (u - P_sum_1).abs().max() < epsilon:
-            break
-        u = P_sum_1
-        P *= (r / (u + 1e-8)).unsqueeze(1)
-        P *= (c / (P.sum(0) + 1e-8)).unsqueeze(0)
-
-    P = torch.where(~P.isnan(), P, torch.zeros_like(P))
-    return P, _
-
-
-# TODO: seems like only topk is used
-class Top2Gate(nn.Module):
-    """
-    Gate module implementing Top2Gating as described in Gshard paper.
+    Fused version of TopK gate for improved performance.
     """
 
-    def __init__(self, config, layer_idx: int, group=None, gate_weight=None) -> None:
-        """
-        Initialize the MoE (Mixture of Experts) layer.
-
-        Args:
-            config: Model configuration containing MoE parameters
-            layer_idx: Index of this layer in the model
-            group: Distributed communication group
-            gate_weight: Optional pre-existing gate weight tensor
-        """
+    def __init__(self, config, layer_idx: int, **kwargs) -> None:
         super().__init__()
         self.config = config
-
-        self.model_dim = config.hidden_size
-        self.num_experts = config.moe_num_experts
-        self.num_experts_tensor = (
-            sum(config.moe_num_experts)
-            if config.multimodel_experts
-            else config.moe_num_experts
-        )
-
-        self.cap = config.moe_capacity
-        self.group = group
-
         self.layer_idx = layer_idx
 
-        self.sinkhorn_2gate = config.sinkhorn_2gate
-        self.sinkhorn_temp = config.sinkhorn_temp
+        self.cap = config.moe_capacity
+        self.num_experts = config.moe_num_experts
         self.use_correction_bias = config.moe_use_aux_free  # true
-        self.use_token_type_bias = config.get("moe_use_token_type_bias", False)
-
         self.act = partial(F.softmax, dim=-1)  # [S,E]
-
-        self.no_jitter = True
-        self.expert_drop = False
-        self.eye_matrix = None
-        self.eye_matrix_size = None
         self.norm_gate_logits = config.moe_norm_gate_logits  # true
-        self.one = torch.ones([], dtype=torch.float32)
+        self.num_experts_list = self.num_experts
 
-        self.moe_aux_loss_lambda = torch.tensor(config.moe_aux_loss_lambda).to(
-            dtype=torch.float32
-        )
-        self.moe_z_loss_lambda = torch.tensor(config.moe_z_loss_lambda).to(
-            dtype=torch.float32
-        )
-        self.moe_orthogonal_loss_lambda = torch.tensor(
-            config.moe_orthogonal_loss_lambda
-        ).to(dtype=torch.float32)
+        # lm
+        self.weight = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
+        # mm
+        self.weight_1 = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
 
-        if self.moe_aux_loss_lambda.ndim == 0:
-            self.moe_aux_loss_lambda = self.moe_aux_loss_lambda.unsqueeze(0)
-        if self.moe_z_loss_lambda.ndim == 0:
-            self.moe_z_loss_lambda = self.moe_z_loss_lambda.unsqueeze(0)
-        if self.moe_orthogonal_loss_lambda.ndim == 0:
-            self.moe_orthogonal_loss_lambda = self.moe_orthogonal_loss_lambda.unsqueeze(
-                0
-            )
-
-        self.experts_type_ids = None
-
-        self.eps = torch.tensor([1e-12]).to(dtype=torch.float32)
-        if config.multimodel_experts:
-            if config.get("moe_use_hard_gate", False):
-                self.num_experts_list = []
-                self.experts_type_mask = []
-                # hard-gate + group_experts 需要对gate_logits不同部分分开计算
-                experts_ids = torch.zeros(
-                    [sum(self.num_experts)], dtype=torch.int64
-                ).reshape((1, -1))
-                offset = 0
-                for i, expert_num in enumerate(self.num_experts):
-                    experts_ids[:, offset : offset + expert_num] = i
-                    offset += expert_num
-                self.experts_type_ids = experts_ids.reshape([-1])
-                logger.info(
-                    f"use moe_use_hard_gate, experts_ids: {self.experts_type_ids}"
-                )
-                for i, expert_num in enumerate(self.num_experts):
-                    self.experts_type_mask.append(
-                        self.experts_type_ids == i,
-                    )
-                    self.num_experts_list.append(expert_num)
-            else:
-                # 非group_experts, 依赖token_type_bias实现hard-gate能力。
-                assert (
-                    not config.moe_group_experts
-                ), "group_experts must use hard_gate when multimodel_experts is True"
-        else:
-            self.num_experts_list = [self.num_experts]
-
-        if gate_weight is not None:
-            self.weight = gate_weight
-
-            assert (
-                not self.config.moe_use_token_type_bias
-            ), "gate_weights is from outside, token_type_bias can't be used"
-            logger.info("moe use gate_weight from outside")
-            # use fp32 pecison in amp
-            self._cast_to_low_precision = False
-            self._cast_to_low_precison = False
-        else:
-            self._create_gate_parameter()
-        logger.info(
-            f"{config.moe_gate}: w/ capacity: {self.cap} experts:{self.num_experts} "
-            f"use_token_type_bias:{self.use_token_type_bias} "
-            f"gate_act:{config.moe_gate_act} "
-            f"norm_gate_logits={self.norm_gate_logits} use_correction_bias={self.use_correction_bias}"
-        )
-
-    def _create_gate_parameter(self):
-        """
-        Create gate weight parameter.
-        """
-        if self.config.multimodel_experts:
-            # support setting lambda for each expert group
-            self.moe_z_loss_lambda = self.moe_z_loss_lambda.expand(
-                len(self.num_experts)
-            )
-            self.moe_aux_loss_lambda = self.moe_aux_loss_lambda.expand(
-                len(self.num_experts)
-            )
-            self.moe_orthogonal_loss_lambda = self.moe_orthogonal_loss_lambda.expand(
-                len(self.num_experts)
-            )
-
-            for i, num_experts in enumerate(self.num_experts):
-                if i == 1:
-                    with UniqueNameGuard(f"mm_gate_{self.layer_idx}_"):
-                        p = nn.Parameter(
-                            torch.empty(
-                                self.model_dim,
-                                num_experts,
-                                dtype=torch.float32,
-                                device="cpu",
-                            )
-                        )
-                        nn.init.xavier_uniform_(p)  # Common initialization
-                else:
-                    p = nn.Parameter(
-                        torch.empty(
-                            self.model_dim,
-                            num_experts,
-                            dtype=torch.float32,
-                            device="cpu",
-                        )
-                    )
-                    nn.init.xavier_uniform_(p)  # Common initialization
-                self.register_parameter(
-                    "weight" if i == 0 else f"weight_{i}",
-                    p,
-                )
-        else:
-            self.weight = nn.Parameter(
-                torch.empty(self.model_dim, self.num_experts, dtype=torch.float32)
-            )
-            nn.init.xavier_uniform_(self.weight)  # Common initialization
-        # use fp32 pecison in amp
-        self._cast_to_low_precision = False
-        self._cast_to_low_precison = False
-
-    def get_gate_weight(self, transform_weight, is_multimodel=True):
-        """
-        在`multimodel_experts` 的情况下，将多个 weights merge 成一个整体
-        transform_weight: bool, 按照 local-expert id 将 多模态 weight 交叠
-        """
+    def get_gate_weight(self, is_multimodel=True):
         if not is_multimodel or not self.config.multimodel_experts:
             return self.weight
         else:
@@ -547,53 +365,6 @@ class Top2Gate(nn.Module):
                 ],
                 -1,
             )
-
-    def forward(
-        self,
-        input: torch.Tensor,
-        token_type_ids: torch.Tensor = None,
-        transform_weight: bool = True,
-        correction_bias: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass through the gate.
-
-        Args:
-            input: Input tensor of shape [Seq, Dim]
-            token_type_ids: Token type IDs tensor of shape [Seq]
-            transform_weight: Whether to transform weights for multimodal experts
-            correction_bias: Bias tensor for correction
-
-        Returns:
-            tuple: (capacity, dispatch_mask, combine_weights, scatter_index, router_loss, logits)
-        """
-        orig_dtype = input.dtype
-        current_device = input.device
-        weight = self.get_gate_weight(transform_weight)
-
-        logits = F.linear(
-            input.to(dtype=torch.float32, device=current_device),
-            weight.T.to(dtype=torch.float32, device=current_device),
-        )
-
-        (
-            capacity,
-            dispatch_mask,
-            combine_weights,
-            scatter_index,
-            l_aux,
-            l_zloss,
-        ) = self.top2_gating(
-            logits,
-            correction_bias=(
-                correction_bias.to(device=current_device)
-                if correction_bias is not None
-                else None
-            ),
-        )
-
-        combine_weights = combine_weights.to(orig_dtype)
-        return capacity, dispatch_mask, combine_weights, scatter_index, None, logits
 
     def get_capacity(self, num_tokens, cap_factor=None, is_multimodel=True):
         """
@@ -628,260 +399,20 @@ class Top2Gate(nn.Module):
         ), f"requires capacity to >= 0. cap={cap}, num_tokens={num_tokens}"
         return capacity
 
-    def top2_gating(self, logits, cap=None, correction_bias=None):
-        """
-        Implement Top2 gating mechanism.
-
-        Args:
-            logits: Input logits tensor
-            cap: Optional capacity override
-            correction_bias: Bias tensor for correction
-
-        Returns:
-            tuple: (capacity, dispatch_masks, combine_weights, scatter_indexes, loss_aux, loss_z)
-
-        Note:
-        capacity: The maximum number that each token can be dispatched.
-        dispatch_masks: Masks used for dispatching. The first element is the mask for the first
-        type of tokens; the second element is the mask for the second type of tokens.
-        combine_weights: Weights used for combining. The first element is the weight for the first
-        type of tokens; the second element is the weight for the second type of tokens.
-        scatter_indexes: Indexes used for scattering. The first element is the index for the first
-        type of tokens; the second element is the index for the second type of tokens.
-        loss_aux: Auxiliary loss.
-        loss_z: Z loss.
-        """
-        gates = self.act(logits)
-
-        # gates has shape of SE
-        assert logits.ndim == 2, logits.shape
-        num_tokens = gates.shape[0]
-        num_experts = gates.shape[1]
-        # capacity = 2S/E
-        capacity = self.get_capacity(logits.shape[0], cap)
-        current_device = logits.device
-
-        # Create a mask for 1st's expert per token
-        score_for_argmax = (
-            gates + correction_bias.unsqueeze(0)
-            if correction_bias is not None
-            else gates
-        )
-        indices1_s = torch.argmax(score_for_argmax, dim=1)
-        mask1 = F.one_hot(indices1_s, num_classes=num_experts).to(
-            dtype=torch.int64, device=current_device
-        )  # [0,1]
-
-        # Create a mask for 2nd's expert per token using Gumbel-max trick
-        # https://timvieira.github.io/blog/post/2014/07/31/gumbel-max-trick/
-        if self.training and not self.no_jitter:
-            gumbels = (
-                -torch.empty_like(
-                    logits,
-                    device=current_device,
-                )
-                .exponential_()
-                .log()
-            )  # ~Gumbel(0,1)
-            logits_w_noise = logits + gumbels
-        else:
-            logits_w_noise = logits
-
-        logits_except1 = masked_fill(
-            logits_w_noise,
-            mask1.to(dtype=torch.bool, device=current_device),
-            float("-inf"),
-        )
-        score_for_argmax = (
-            self.act(logits_except1) + correction_bias.unsqueeze(0)
-            if correction_bias is not None
-            else logits_except1
-        )
-        indices2_s_original = torch.argmax(score_for_argmax, dim=1)
-
-        if self.training and self.sinkhorn_2gate:
-            r = (
-                torch.ones(num_tokens, dtype=torch.float32, device=current_device)
-                / num_tokens
-            )
-            c_mask_sum = mask1.to(dtype=torch.float32, device=current_device).sum(0)
-            c = capacity - c_mask_sum
-            c = torch.maximum(c, torch.zeros_like(c, device=current_device))
-            c_sum = c.sum()
-            if c_sum > 0:
-                c = c / c_sum
-            else:  # Avoid division by zero if all experts are full from top-1
-                c = torch.ones_like(c, device=current_device) / num_experts
-
-            pi, _ = compute_optimal_transport(
-                -logits_except1.to(dtype=torch.float32, device=current_device).detach(),
-                r,
-                c,
-                lam=self.sinkhorn_temp,
-            )
-            pi = masked_fill(
-                pi, mask1.to(dtype=torch.bool, device=current_device), float("-inf")
-            )
-            indices2_s = torch.argmax(pi, dim=1)
-        else:
-            indices2_s = indices2_s_original
-
-        mask2 = F.one_hot(indices2_s, num_classes=self.num_experts).to(
-            dtype=torch.int64, device=current_device
-        )
-
-        # Compute locations in capacity buffer
-        locations1 = (
-            torch.cumsum(mask1, dim=0) - 1
-        )  # [0,1,1,0,1,0,0] -> [0,0,0,0,1,1,1,]
-        locations2 = torch.cumsum(mask2, dim=0) - 1
-        # Update 2nd's location by accounting for locations of 1st
-        locations2 += torch.sum(mask1, dim=0, keepdim=True)
-
-        # Remove locations outside capacity from mask
-        mask1 = mask1 * (locations1 < capacity).to(
-            dtype=torch.int64, device=current_device
-        )  # [0,1,1,0,0,0,0]
-        mask2 = mask2 * (locations2 < capacity).to(
-            dtype=torch.int64, device=current_device
-        )
-
-        # Store the capacity location for each token
-        locations1_s = torch.sum(locations1 * mask1, dim=1)
-        locations2_s = torch.sum(locations2 * mask2, dim=1)
-
-        # Normalize gate probabilities
-        mask1_float = mask1.to(dtype=torch.float32, device=current_device)
-        mask2_float = mask2.to(dtype=torch.float32, device=current_device)
-        gates1_s = (gates * mask1_float).sum(dim=-1)
-        gates2_s = (gates * mask2_float).sum(dim=-1)
-        # logger.info(f'gates1_s:{gates1_s} gates2_s:{gates2_s} logits:{logits}')
-
-        if self.norm_gate_logits:
-            denom_s = gates1_s + gates2_s  # [0.2, 0.3]
-            # Avoid divide-by-zero
-            denom_s = torch.clamp(denom_s, min=1e-6)
-            gates1_s /= denom_s
-            gates2_s /= denom_s
-        if self.training and self.expert_drop:
-            # log.debug(gates2_s)
-            gates2_s = torch.where(
-                2 * gates2_s < torch.rand_like(gates2_s, device=current_device),
-                torch.zeros_like(gates2_s, device=current_device),
-                gates2_s,
-            )
-
-        # Calculate combine_weights and dispatch_mask
-        gates1 = gates1_s.unsqueeze(1) * mask1_float
-        gates2 = gates2_s.unsqueeze(1) * mask2_float
-
-        combine1_weight, expert1_index = torch.max(gates1, dim=-1, keepdim=True)
-        scatter1_index = expert1_index.squeeze(-1) * capacity + locations1_s
-        scatter1_index = scatter1_index.to(dtype=torch.int64, device=current_device)
-        dispatch1_mask = combine1_weight.to(
-            dtype=torch.bool, device=current_device
-        ).detach()
-
-        combine2_weight, expert2_index = torch.max(gates2, dim=-1, keepdim=True)
-        scatter2_index = expert2_index.squeeze(-1) * capacity + locations2_s
-        scatter2_index = scatter2_index.to(dtype=torch.int64, device=current_device)
-        dispatch2_mask = combine2_weight.to(
-            dtype=torch.bool, device=current_device
-        ).detach()
-        # logger.info(f'expert-id: {expert1_index} vs {expert2_index}, mask:{mask1_float} vs {mask2_float}')
-
-        return (
-            capacity,
-            torch.cat((dispatch1_mask, dispatch2_mask), 1),
-            torch.cat((combine1_weight, combine2_weight), 1),
-            torch.stack((scatter1_index, scatter2_index), 1),
-            None,
-            None,
-        )
-
-    def _cal_orthogonal_loss_opt_each_weight(self, weight, use_group):
-        """
-        Calculate optimized orthogonal loss for each weight.
-
-        Args:
-            weight: Weight tensor
-            use_group: Whether to use expert groups
-
-        Returns:
-            Tensor: Calculated orthogonal loss
-        """
-        if weight.dtype != torch.float32:
-            weight = weight.to(torch.float32)
-
-        wnorm = torch.norm(weight, p=2, dim=1)
-        weight = weight / torch.maximum(wnorm, self.eps.to(weight.device)).unsqueeze(1)
-
-        if use_group:
-            weight = weight.reshape(
-                [self.config.moe_k, -1, weight.shape[1]]
-            )  # [K, E/K, H]
-            eye_matrix = torch.eye(
-                weight.shape[1], dtype=weight.dtype, device=weight.device
-            ).unsqueeze(0)
-        else:
-            eye_matrix = torch.eye(
-                weight.shape[0], dtype=weight.dtype, device=weight.device
-            )
-
-        weight_matmul = torch.matmul(weight, weight.T)
-
-        orthogonal_loss = weight_matmul - eye_matrix
-        orthogonal_loss = _squared_l2_norm(orthogonal_loss) / (
-            orthogonal_loss.size(0) * orthogonal_loss.size(1)
-        )
-        return orthogonal_loss
-
-
-class TopKGate(Top2Gate):
-    """
-    Fused version of TopK gate for improved performance.
-    """
-
     def forward(
         self,
         input: torch.Tensor,
-        token_type_ids=None,
-        transform_weight=True,
         is_multimodel=True,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass for fused gate.
-
-        Args:
-            input: Input tensor
-            token_type_ids: Token type IDs
-            transform_weight: Whether to transform weights
-
-        Returns:
-            tuple: (logits, capacity, router_loss)
-        """
+        **kwargs,
+    ) -> torch.Tensor:
         current_device = input.device
-        weight = self.get_gate_weight(transform_weight, is_multimodel=is_multimodel)
+        weight = self.get_gate_weight(is_multimodel=is_multimodel)
 
         logits = F.linear(
             input.to(dtype=torch.float32, device=current_device),
             weight.T.to(dtype=torch.float32, device=current_device),
         )
-        if self.use_token_type_bias:
-            assert token_type_ids is not None
-            assert (
-                token_type_ids.max() < self.bias.shape[0]
-            ), f"token_type_ids {token_type_ids.max()} >= bias shape {self.bias.shape[0]}"
-            bias = self.bias[token_type_ids]  # [seq]
-            logits = logits + bias
-
         return logits
-
-
-gate_class = dict(
-    top2=Top2Gate,
-    topk=TopKGate,
-)
 
 
 def get_gate(
@@ -939,7 +470,7 @@ def get_gate(
     ), f"experts.len={len(experts)} != experts_num={experts_num}"
     logger.info(f"MOE-GATE:-{config.moe_gate}")
 
-    gate = gate_class[config.moe_gate.lower()](config, layer_idx=layer_idx)
+    gate = TopKGate(config, layer_idx=layer_idx)
 
     if config.multimodel_experts and config.moe_use_hard_gate and moe_num_experts > 2:
         lm_experts = experts[: config.moe_num_experts[0]]
@@ -1819,7 +1350,7 @@ class MOEAllGatherLayerV2(MOELayer):
 
         def build_weights_and_expert_id(input):
             nonlocal token_type_ids, args
-            logits = self.gate(input, *args, transform_weight=False)
+            logits = self.gate(input)
             if self.config.multimodel_experts:
                 gate_logits_lm, gate_logits_mm = logits.chunk(2, dim=-1)
             else:
@@ -1878,21 +1409,6 @@ class MOEAllGatherLayerV2(MOELayer):
             top_k,
             num_experts,
         )
-
-        if self.use_correction_bias:
-            if self.gate.config.multimodel_experts:
-                # MLLM
-                for i in range(len(self.moe_statics.expert_usage)):
-                    self.moe_statics.expert_usage[i] += (
-                        expert_num_local[self.gate.experts_type_mask[i]]
-                        .detach()
-                        .to(self.moe_statics.expert_usage.device)
-                    )
-            else:
-                # LLM
-                self.moe_statics.expert_usage[0] += expert_num_local.detach().to(
-                    self.moe_statics.expert_usage.device
-                )
 
         # When use unpad , `moe_ops_partial` output likes `scatter_index_rev==[]`.
         if scatter_index_rev.ndim == 0:
@@ -2275,7 +1791,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
                     dense_experts is None
                 ), "only `MOEAllGatherLayerV2` can process dense experts"
 
-            """self.mlp = moe_cls(
+            #"""
+            self.mlp = moe_cls(
                 gate=gate,
                 experts=experts,
                 layer_idx=layer_idx,
@@ -2287,8 +1804,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
                 group_experts=False,
                 moe_statics=moe_statics,
                 moe_num_experts=config.moe_num_experts,
-            )"""
-            self.mlp = Ernie4_5_MoESparseMoeBlock(config)
+            )#"""
+            #self.mlp = Ernie4_5_MoESparseMoeBlock(config)
 
             _mlp_text = MOELayer(
                 gate=lm_gate,
@@ -2475,15 +1992,16 @@ class Ernie4_5_DecoderLayer(nn.Module):
         if isinstance(self.mlp, (MOELayer, Ernie4_5_MoESparseMoeBlock)):
             if is_multimodel_token_cpu:
                 hidden_states, _, router_loss, gate_logits = self.mlp(
-                    hidden_states, token_type_ids, is_mm=True
+                    hidden_states, token_type_ids#, is_mm=True
                 )
             else:
-                """hidden_states, _, router_loss, gate_logits = self.mlp_text()(
+                #"""
+                hidden_states, _, router_loss, gate_logits = self.mlp_text()(
                     hidden_states, None, is_multimodel=False
-                )"""
-                hidden_states, _, router_loss, gate_logits = self.mlp(
+                )#"""
+                """hidden_states, _, router_loss, gate_logits = self.mlp(
                     hidden_states, None, is_mm=False
-                )
+                )"""
         else:
             hidden_states = self.mlp(hidden_states)
             gate_logits, router_loss = None, None
