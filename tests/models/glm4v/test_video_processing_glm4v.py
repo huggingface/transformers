@@ -165,7 +165,7 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, {"longest_edge": 20})
+        self.assertEqual(video_processor.size, {"longest_edge": 3364, "shortest_edge": 676})
 
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42)
         self.assertEqual(video_processor.size, {"height": 42, "width": 42})
