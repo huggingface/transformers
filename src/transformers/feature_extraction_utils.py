@@ -30,7 +30,6 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
-    cached_file,
     copy_func,
     download_url,
     is_flax_available,
@@ -45,6 +44,7 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.hub import cached_files
 
 
 if TYPE_CHECKING:
@@ -506,9 +506,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_feature_extractor_file = cached_file(
+                resolved_feature_extractor_files = cached_files(
                     pretrained_model_name_or_path,
-                    feature_extractor_file,
+                    filesnames=[feature_extractor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -518,22 +518,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
+                    raise_exceptions_for_missing_entries=False,
                 )
-            except EnvironmentError:
-                feature_extractor_file = PROCESSOR_NAME
-                resolved_feature_extractor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    feature_extractor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    subfolder=subfolder,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                )
+                resolved_feature_extractor_file = resolved_feature_extractor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.

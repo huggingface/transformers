@@ -600,8 +600,14 @@ class ProcessorMixin(PushToHubMixin):
             del output["tokenizer"]
         if "chat_template" in output:
             del output["chat_template"]
+
         if "audio_tokenizer" in output:
-            del output["audio_tokenizer"]
+            audio_tokenizer_dict = {
+                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
+                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
+            }
+            # Update or overwrite, what do audio tokenizers expect when loading?
+            output["audio_tokenizer"] = audio_tokenizer_dict
 
         # Serialize attributes as a dict
         output = {k: v.to_dict() if k in self.__class__.attributes else v for k, v in output.items()}
@@ -719,7 +725,6 @@ class ProcessorMixin(PushToHubMixin):
             save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
         )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
-        output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
 
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
@@ -764,25 +769,6 @@ class ProcessorMixin(PushToHubMixin):
         # Create a unified `preprocessor_config.json` and save all attributes as a composite config, except for tokenizers
         self.to_json_file(output_processor_file)
         logger.info(f"processor saved in {output_processor_file}")
-
-        if self.audio_tokenizer is not None:
-            audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
-            audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
-
-            audio_tokenizer_dict = {
-                "audio_tokenizer_class": audio_tokenizer_class,
-                "audio_tokenizer_name_or_path": audio_tokenizer_name_or_path,
-            }
-            audio_tokenizer_json = json.dumps(audio_tokenizer_dict, indent=2, sort_keys=True) + "\n"
-
-            with open(output_audio_tokenizer_file, "w", encoding="utf-8") as writer:
-                writer.write(audio_tokenizer_json)
-
-        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
-        # `auto_map` is not specified.
-        if set(processor_dict.keys()) != {"processor_class"}:
-            self.to_json_file(output_processor_file)
-            logger.info(f"processor saved in {output_processor_file}")
 
         if push_to_hub:
             self._upload_modified_files(

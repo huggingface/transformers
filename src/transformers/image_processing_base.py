@@ -29,7 +29,6 @@ from .utils import (
     IMAGE_PROCESSOR_NAME,
     PROCESSOR_NAME,
     PushToHubMixin,
-    cached_file,
     copy_func,
     download_url,
     is_offline_mode,
@@ -37,6 +36,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.hub import cached_files
 
 
 if is_vision_available():
@@ -336,9 +336,9 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
+                resolved_image_processor_files = cached_files(
                     pretrained_model_name_or_path,
-                    image_processor_file,
+                    filesnames=[image_processor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -348,23 +348,9 @@ class ImageProcessingMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    raise_exceptions_for_missing_entries=False,
                 )
-            except EnvironmentError:
-                image_processor_file = PROCESSOR_NAME
-                # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    image_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
+                resolved_image_processor_file = resolved_image_processor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.

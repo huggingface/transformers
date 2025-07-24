@@ -34,11 +34,11 @@ from .image_utils import (
 )
 from .processing_utils import Unpack, VideosKwargs
 from .utils import (
+    IMAGE_PROCESSOR_NAME,
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     TensorType,
     add_start_docstrings,
-    cached_file,
     copy_func,
     download_url,
     is_offline_mode,
@@ -49,6 +49,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.hub import cached_files
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
@@ -442,7 +443,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                   [`~video_processing_utils.VideoProcessorBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved video processor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
+                  `./my_model_directory/video_preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
                 standard cache should not be used.
@@ -497,7 +498,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
             "./test/saved_model/"
         )  # E.g. video processor (or model) was saved using *save_pretrained('./test/saved_model/')*
-        video_processor = LlavaOnevisionVideoProcessor.from_pretrained("./test/saved_model/preprocessor_config.json")
+        video_processor = LlavaOnevisionVideoProcessor.from_pretrained("./test/saved_model/video_preprocessor_config.json")
         video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", do_normalize=False, foo=False
         )
@@ -652,14 +653,13 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             video_processor_file = pretrained_model_name_or_path
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
+            video_processor_file = VIDEO_PROCESSOR_NAME
             try:
-                # Try to load with a new config name first and if not successfull try with
-                # the old file name. In case we can load with old name only, raise a deprecation warning
-                # Deprecated until v5.0
-                video_processor_file = VIDEO_PROCESSOR_NAME
-                resolved_video_processor_file = cached_file(
+                # Try to load with a new config name first and if not successfull try with the old file name
+                # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
+                resolved_video_processor_files = cached_files(
                     pretrained_model_name_or_path,
-                    video_processor_file,
+                    filenames=[VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -669,44 +669,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    raise_exceptions_for_missing_entries=False,
                 )
-            except EnvironmentError:
-                try:
-                    video_processor_file = "preprocessor_config.json"
-                    resolved_video_processor_file = cached_file(
-                        pretrained_model_name_or_path,
-                        video_processor_file,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        token=token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                    )
-                    logger.warning_once(
-                        "You have video processor config saved in `preprocessor.json` file which is deprecated. "
-                        "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
-                        "the file or load and save the processor back which renames it automatically. "
-                        "Loading from `preprocessor.json` will be removed in v5.0."
-                    )
-                except EnvironmentError:
-                    video_processor_file = PROCESSOR_NAME
-                    resolved_video_processor_file = cached_file(
-                        pretrained_model_name_or_path,
-                        PROCESSOR_NAME,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        token=token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                    )
+                resolved_video_processor_file = resolved_video_processor_files[0]
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
