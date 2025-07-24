@@ -370,31 +370,32 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def update_tp_plan(self, config):
-        # Only update the existing plans, do not create new dicts
-        if not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None:
-            config.base_model_tp_plan = {}
-        if not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None:
-            config.base_model_ep_plan = {}
+        if "OpenAIMoeConfig" in config.__class__.__name__:
+            if not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None:
+                config.base_model_tp_plan = {}
+            if not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None:
+                config.base_model_ep_plan = {}
 
-        # Update TP plan with scales and blocks
-        config.base_model_tp_plan.update({
-            "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
-            "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
-            "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
-            "layers.*.mlp.experts.down_proj_scales": "local_colwise",
-        })
+            # Update TP plan with scales and blocks
+            config.base_model_tp_plan.update({
+                "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
+                "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
+                "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
+                "layers.*.mlp.experts.down_proj_scales": "local_colwise",
+            })
 
-        # Update EP plan with scales and blocks
-        config.base_model_ep_plan.update({
-            "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
-            "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
-            "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
-            "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
-        })
+            # Update EP plan with scales and blocks
+            config.base_model_ep_plan.update({
+                "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
+                "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
+            })
 
         return config
 
     def is_serializable(self, safe_serialization=None):
+        logger.warning_once("MXFP4 quantization is not serializable using safetensors for now")
         return False
 
     @property
