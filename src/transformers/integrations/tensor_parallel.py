@@ -1081,8 +1081,11 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 def distribute_model(model, distributed_config, device_mesh, tp_size):
     model._tp_plan = model.config.base_model_tp_plan.copy() if model.config.base_model_tp_plan is not None else None
+    _plan = "_tp_plan"
+    if distributed_config.get("enable_expert_paralllel", False):
+        _plan = "_ep_plan"
     for name, module in model.named_children():
-        if plan := getattr(module, "_tp_plan", None):
+        if plan := getattr(module, _plan, getattr(module, "tp_plan", None)):
             model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
     if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
