@@ -690,7 +690,7 @@ class TrainingArguments:
 
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            `huggingface-cli login`.
+            `hf auth login`.
         hub_private_repo (`bool`, *optional*):
             Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
         hub_always_push (`bool`, *optional*, defaults to `False`):
@@ -2930,7 +2930,7 @@ class TrainingArguments:
 
             token (`str`, *optional*):
                 The token to use to push the model to the Hub. Will default to the token in the cache folder obtained
-                with `huggingface-cli login`.
+                with `hf auth login`.
             private_repo (`bool`, *optional*, defaults to `False`):
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             always_push (`bool`, *optional*, defaults to `False`):
