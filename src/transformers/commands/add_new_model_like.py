@@ -87,7 +87,10 @@ class ModelInfos(object):
         image_processor_classes = IMAGE_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
         if isinstance(image_processor_classes, tuple):
             if len(image_processor_classes) == 1:
-                self.image_processor_class, self.fast_image_processor_class = image_processor_classes[0], None
+                if "Fast" in image_processor_classes[0]:
+                    self.image_processor_class, self.fast_image_processor_class = None, image_processor_classes[0]
+                else:
+                    self.image_processor_class, self.fast_image_processor_class = image_processor_classes[0], None
             else:
                 self.image_processor_class, self.fast_image_processor_class = image_processor_classes
         else:
