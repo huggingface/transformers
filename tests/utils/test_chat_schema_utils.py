@@ -27,8 +27,12 @@ basic_template = """
 """.strip()
 
 tool_template = """
-{{- tools|tojson(indent=2) }}
-{{- "\n" }}
+{% if tools %}
+    {{- "<|tools|>\n" }}
+    {{- tools|tojson(indent=2) }}
+    {{- "\n" }}
+    {{- "<|endtools|>\n" }}
+{% endif %}
 {%- for message in messages %}
     {{- "<|im_start|>" + message["role"] + "\n" }}
     {{- message["content"] }}
@@ -63,7 +67,6 @@ basic_schema_with_named_groups = {
 }
 
 tools_schema_with_named_groups = {
-    # TODO Add regexes
     "type": "object",
     "properties": {
         "tools": {
@@ -71,25 +74,39 @@ tools_schema_with_named_groups = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string"},
-                    "description": {"type": "string"},
-                    "arguments": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {"type": "string"},
-                                "type": {"type": "string"},
-                                "description": {"type": "string"}
-                            },
-                            "required": ["name", "type"]
+                    "type": {"type": "string", "enum": ["function"]},
+                    "function": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "description": {"type": "string"},
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string", "enum": ["object"]},
+                                    "required": {"type": "array", "items": {"type": "string"}},
+                                    "properties": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                            "type": "object",
+                                            "properties": {
+                                                    "type": {"type": "string"},
+                                                    "description": {"type": "string"},
+                                                    "enum": {"type": "array", "items": {"type": "string"}},
+                                            }
+                                        }
+                                    },
+                                }
+                            }
                         }
                     }
                 },
-            }
+            },
+            "x-parser": "json",
         },
         "messages": basic_schema_with_named_groups
     },
+    "x-regex": r"(?:<\|tools\|>\n(?P<tools>.*?)\n<\|endtools\|>\n)?(?P<messages>.*)",
 }
 
 class ChatSchemaParserTest(unittest.TestCase):
@@ -143,4 +160,13 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(parsed_chat['messages'], chat)
         self.assertEqual(parsed_chat['tools'], [get_json_schema(tool)])
 
-    # TODO Tests where groups can be missing (e.g. tools group that isn't necessarily present)
+    def test_tool_template_with_no_tools(self):
+        chat = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there! How can I help you today?"},
+        ]
+        self.tokenizer.chat_template = tool_template
+        formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
+        parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
+        # Test we still extract messages
+        self.assertEqual(parsed_chat['messages'], chat)
