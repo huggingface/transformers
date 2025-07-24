@@ -53,7 +53,6 @@ if is_torchao_available():
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .distributed import DistributedConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -64,8 +63,8 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    distribute_model,
     _get_parameter_tp_plan,
+    distribute_model,
     initialize_tensor_parallelism,
     repack_weights,
     replace_state_dict_local_with_dtensor,
@@ -73,7 +72,6 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .pytorch_utils import id_tensor_storage
 from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .pytorch_utils import (  # noqa: F401
     Conv1D,

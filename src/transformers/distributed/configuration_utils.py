@@ -16,7 +16,7 @@ import copy
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Union
+from typing import Any, Union
 
 
 @dataclass
@@ -66,7 +66,7 @@ class DistributedConfig:
             writer.write(json_string)
 
     # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_dict
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
