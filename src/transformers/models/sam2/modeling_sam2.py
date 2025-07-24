@@ -102,9 +102,9 @@ class Sam2ImageSegmentationOutput(ModelOutput):
         The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
         original image size.
     high_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
-        The predicted masks, upscaled to the original image size. This is only available when `video_inference=True`.
+        The predicted masks, upscaled to the original image size. Only used for Sam2VideoModel.
     object_pointer (`torch.FloatTensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
-        A tensor representing the object pointer, used for tracking in videos. This is only available when `video_inference=True`.
+        A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
     image_embeddings (`tuple(torch.FloatTensor)`):
@@ -1327,7 +1327,6 @@ class Sam2PositionEmbeddingSine(nn.Module):
 
     def _encode_xy(self, x, y):
         # The positions are expected to be normalized
-        assert len(x) == len(y) and x.ndim == y.ndim == 1
         x_embed = x * self.scale
         y_embed = y * self.scale
 
@@ -1349,7 +1348,6 @@ class Sam2PositionEmbeddingSine(nn.Module):
     @torch.no_grad()
     def encode_points(self, x, y, labels):
         (bx, nx), (by, ny), (bl, nl) = x.shape, y.shape, labels.shape
-        assert bx == by and nx == ny and bx == bl and nx == nl
         pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
         pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
         pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
@@ -1538,7 +1536,8 @@ class Sam2VisionRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
         super().__init__()
         # Ensure even dimension for proper axial splitting
-        assert dim % 4 == 0, "Dimension must be divisible by 4 for axial RoPE"
+        if dim % 4 != 0:
+            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
 
         self.dim = dim
         self.theta = theta
@@ -2326,7 +2325,7 @@ class Sam2Model(Sam2PreTrainedModel):
             input_boxes=input_boxes,
             input_masks=input_masks,
         )
-        low_res_multimasks, iou_scores, sam_output_tokens, object_score_logits = self.mask_decoder(
+        low_res_multimasks, iou_scores, _, object_score_logits = self.mask_decoder(
             image_embeddings=image_embeddings[-1],
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
@@ -2599,7 +2598,18 @@ class Sam2VideoInferenceSession:
         is_temporary_output: bool = False,
         is_conditioning_frame: bool = True,
     ):
-        """Store output with smart device management."""
+        """
+        Store output with smart device management.
+        If output_key is None, the output is stored as a dictionary.
+
+        Args:
+            obj_idx (int): The index of the object.
+            frame_idx (int): The index of the frame.
+            output_key (Optional[str]): The key of the output. If None, the output is stored as a dictionary.
+            output_value (Optional[Union[torch.Tensor, dict]]): The value of the output.
+            is_temporary_output (bool): Whether the output is temporary.
+            is_conditioning_frame (bool): Whether the output is for a conditioning frame.
+        """
         target_dict = self.temp_output_dict_per_obj if is_temporary_output else self.output_dict_per_obj
         storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
 
@@ -2627,7 +2637,16 @@ class Sam2VideoInferenceSession:
         is_temporary_output: bool = False,
         is_conditioning_frame: bool = True,
     ):
-        """Get output with smart device management."""
+        """
+        Get output with smart device management.
+
+        Args:
+            obj_idx (int): The index of the object.
+            frame_idx (int): The index of the frame.
+            output_key (str): The key of the output.
+            is_temporary_output (bool): Whether the output is temporary.
+            is_conditioning_frame (bool): Whether the output is for a conditioning frame.
+        """
         target_dict = self.temp_output_dict_per_obj if is_temporary_output else self.output_dict_per_obj
         storage_key = "cond_frame_outputs" if is_conditioning_frame else "non_cond_frame_outputs"
         out = target_dict[obj_idx][storage_key].get(frame_idx, None)
@@ -2722,7 +2741,8 @@ def fill_holes_in_mask_scores(mask, max_area):
     """
     # Holes are those connected components in background with area <= self.max_area
     # (background regions are those with mask scores <= 0)
-    assert max_area > 0, "max_area must be positive"
+    if max_area <= 0:
+        raise ValueError("max_area must be positive")
     input_mask = mask
     try:
         labels, areas = get_connected_components(mask <= 0)
@@ -2844,8 +2864,7 @@ class Sam2VideoModel(Sam2Model):
         )
         return prompt_output
 
-    @check_model_inputs
-    def sam2_forward(
+    def _single_frame_forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         input_points: Optional[torch.FloatTensor] = None,
@@ -2858,7 +2877,7 @@ class Sam2VideoModel(Sam2Model):
         target_embedding: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam2ImageSegmentationOutput:
-        r"""
+        """
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
             better results. The points can be obtained by passing a list of list of list to the processor that will
@@ -2905,38 +2924,12 @@ class Sam2VideoModel(Sam2Model):
             In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
-        video_inference (`bool`, *optional*):
-            Whether to run inference in video mode. This enables tracking-specific logic.
         attention_similarity (`torch.FloatTensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         target_embedding (`torch.FloatTensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoModel, AutoProcessor
-
-        >>> model = AutoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny")
-        >>> processor = AutoProcessor.from_pretrained("danelcsb/sam2.1_hiera_tiny")
-
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-        >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
-
-        >>> # Get segmentation mask
-        >>> outputs = model(**inputs)
-
-        >>> # Postprocess masks
-        >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
-        ... )
-        ```
         """
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
@@ -3319,6 +3312,7 @@ class Sam2VideoModel(Sam2Model):
                 # via `_infer_on_video_frame_with_new_inputs`)
                 for frame_idx in inference_session.temp_output_dict_per_obj[obj_idx][storage_key]:
                     # Run memory encoder on the temporary outputs (if the memory feature is missing)
+                    # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
                     if (
                         inference_session.temp_output_dict_per_obj[obj_idx][storage_key][frame_idx]["maskmem_features"]
                         is None
@@ -3366,13 +3360,14 @@ class Sam2VideoModel(Sam2Model):
                             is_temporary_output=True,
                             is_conditioning_frame=is_conditioning_frame,
                         )
+                        # transfer temporary output to non-temporary output
                         inference_session.output_dict_per_obj[obj_idx][storage_key][frame_idx] = (
                             inference_session.temp_output_dict_per_obj[obj_idx][storage_key][frame_idx]
                         )
                 # clear temporary outputs in `temp_output_dict_per_obj`
                 inference_session.temp_output_dict_per_obj[obj_idx][storage_key].clear()
 
-            # check and make sure that every object has received input points or masks
+            # make sure that every object has received input points or masks
             obj_output_dict = inference_session.output_dict_per_obj[obj_idx]
             if len(obj_output_dict["cond_frame_outputs"]) == 0:
                 obj_id = inference_session.obj_idx_to_id(obj_idx)
@@ -3498,9 +3493,9 @@ class Sam2VideoModel(Sam2Model):
         if start_frame_idx is None:
             # default: start from the earliest frame with input points
             frames_with_inputs = [
-                t
+                frame_idx
                 for obj_output_dict in inference_session.output_dict_per_obj.values()
-                for t in obj_output_dict["cond_frame_outputs"]
+                for frame_idx in obj_output_dict["cond_frame_outputs"]
             ]
             if not frames_with_inputs:
                 raise ValueError(
@@ -3702,7 +3697,7 @@ class Sam2VideoModel(Sam2Model):
         # a dummy IoU prediction of all 1's under mask input
         iou_scores = mask_inputs.new_ones(mask_inputs.size(0), 1).to(backbone_features[0].dtype)
         # produce an object pointer using the SAM decoder from the mask input
-        object_pointer = self.sam2_forward(
+        object_pointer = self._single_frame_forward(
             input_masks=self.mask_downsample(mask_inputs_float.to(backbone_features[0].dtype)),
             image_embeddings=high_res_features + [backbone_features],
         ).object_pointer
@@ -3830,6 +3825,7 @@ class Sam2VideoModel(Sam2Model):
                         base_idx = frame_idx + 2
                         previous_frame_idx = base_idx + (relative_temporal_offset - 2)
 
+                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
                 output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
                     previous_frame_idx, None
                 )
@@ -3888,6 +3884,7 @@ class Sam2VideoModel(Sam2Model):
                 ):
                     break  # Stop if frame index is out of bounds
 
+                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
                 out_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
                     ref_frame_idx, None
                 )
@@ -4087,10 +4084,9 @@ class Sam2VideoModel(Sam2Model):
             # e.g. in demo where such logits come from earlier interaction instead of correction sampling
             # (in this case, any `mask_inputs` shouldn't reach here as they are sent to _use_mask_as_output instead)
             if prev_sam_mask_logits is not None:
-                assert point_inputs is not None and mask_inputs is None
                 mask_inputs = prev_sam_mask_logits
             multimask_output = self._use_multimask(is_init_cond_frame, point_inputs)
-            sam_outputs = self.sam2_forward(
+            sam_outputs = self._single_frame_forward(
                 pixel_values=None,  # Vision features already computed
                 input_points=point_inputs["point_coords"] if point_inputs is not None else None,
                 input_labels=point_inputs["point_labels"] if point_inputs is not None else None,
