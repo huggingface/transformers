@@ -415,117 +415,6 @@ class TopKGate(nn.Module):
         return logits
 
 
-def get_gate(
-    config: Ernie4_5_MoEConfig,
-    expert: nn.Module,
-    layer_idx: int,
-) -> tuple[nn.Module, nn.ModuleList]:
-    """Initialize and distribute MoE (Mixture of Experts) components.
-
-    Creates gate layer and distributed expert network for MoE architecture.
-
-    Args:
-        config (Ernie4_5_MoEConfig): Configuration for MoE architecture
-        expert (nn.Module): Prototype expert network to be replicated
-        layer_idx (int): Index of current layer in transformer stack
-
-    Returns:
-        Tuple[nn.Module, nn.ModuleList]:
-            - gate: Initialized gate layer for routing
-            - experts: ModuleList containing expert networks
-    """
-    moe_num_experts = (
-        sum(config.moe_num_experts)
-        if config.multimodel_experts
-        else config.moe_num_experts
-    )
-    experts = nn.ModuleList([])
-
-    for expert_id, (experts_num, fc) in enumerate(expert):
-        experts_to_append = []
-        if not hasattr(fc, "__len__"):  # run this
-            experts_to_append.append(fc)
-            if expert_id == 1:
-                with UniqueNameGuard("_mm_deepcopy"):
-                    for _ in range(experts_num - 1):
-                        experts_to_append.append(deepcopy(fc))
-            else:
-                for _ in range(experts_num - 1):
-                    experts_to_append.append(deepcopy(fc))
-        else:
-            experts_to_append = fc
-        for ex in experts_to_append:
-            for p in ex.parameters():
-                p.expert_type = f"expert_type_{expert_id}"  # Different `expert_type` can have different intermediate-size
-        index = 0
-        for i in range(experts_num):
-            if i // experts_num == 0:
-                experts.append(experts_to_append[index])
-                index += 1
-            else:
-                experts.append(None)
-
-    assert (
-        len(experts) == moe_num_experts
-    ), f"experts.len={len(experts)} != experts_num={experts_num}"
-    logger.info(f"MOE-GATE:-{config.moe_gate}")
-
-    gate = TopKGate(config, layer_idx=layer_idx)
-
-    if config.multimodel_experts and config.moe_use_hard_gate and moe_num_experts > 2:
-        lm_experts = experts[: config.moe_num_experts[0]]
-        lm_gate = gate
-    else:
-        if config.multimodel_experts and config.moe_use_hard_gate:
-            lm_gate, lm_experts = gate, experts
-        else:
-            lm_gate, lm_experts = None, None
-
-    logger.info(f"LM-experts-{lm_experts} -- experts-{experts}")
-
-    return gate, experts, lm_gate, lm_experts
-
-
-class MoEStatics(nn.Module):
-    """
-    Stores MoE (Mixture of Experts) statistics
-    and expert usage information.
-    """
-
-    def __init__(self, config, layer_idx):
-        """
-        Initialize MoE statistics tracking.
-
-        Args:
-            config: Model configuration containing MoE parameters
-            layer_idx: Index of the MoE layer in the model
-        """
-        super().__init__()
-        self._cast_to_low_precision = False
-        self._cast_to_low_precison = False
-        num_experts = (
-            config.moe_num_experts[0]
-            if config.multimodel_experts
-            else config.moe_num_experts
-        )
-        if config.multimodel_experts:
-            assert (
-                len(set(config.moe_num_experts)) == 1
-            ), "assume expert group has same size, got: {config.moe_num_experts}"
-
-        with UniqueNameGuard(f"mm_layer_{layer_idx}_"):
-            num_experts_groups = (
-                len(config.moe_num_experts) if config.multimodel_experts else 1
-            )
-            p = nn.Parameter(
-                torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
-                requires_grad=False,
-            )
-            self.e_score_correction_bias = p
-            p = torch.zeros(num_experts_groups, num_experts, dtype=torch.int64)
-            self.expert_usage = p
-
-
 def dispatching(x, dispatch_mask, scatter_index, num_experts, capacity):
     """
     Reorders input tensor based on gate results with capacity truncation and padding.
@@ -1759,37 +1648,33 @@ class Ernie4_5_DecoderLayer(nn.Module):
             else config.moe_layer_end_index
         )
 
+        moe_statics = Ernie4_5_MoEStatics(self.config)
+
+        experts = nn.ModuleList(
+            [Ernie4_5_MoeMLP(self.config, self.config.moe_intermediate_size[int(i >= self.config.moe_num_experts[0])]) for i in range(sum(self.config.moe_num_experts))]
+        )
+        lm_experts = experts[: self.config.moe_num_experts[0]]
+        gate = TopKGate(self.config, self.layer_idx)
+        lm_gate = gate
+
+        shared_experts = None
+        if config.moe_num_shared_experts > 0:
+            shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
+
         if (
             self.use_moe
             and ((layer_idx + 1) % config.moe_layer_interval == 0)
             and layer_idx >= moe_layer_start_index  # 3
             and layer_idx <= moe_layer_end_index  # 53
         ):
-            gate, experts, lm_gate, lm_experts, moe_statics = (
-                self._init_gate_and_experts(layer_idx)
+            moe_cls = partial(
+                MOEAllGatherLayerV2,
+                use_expert_out_alltoall="alltoall"
+                in config.moe_multimodal_dispatch_use_allgather,  # false
+                use_padding=False,
+                enable_reverse_token_drop=config.moe_reverse_token_drop,  # false
+                dense_token_type=config.moe_dense_experts_token_type_id,  # 3
             )
-            shared_experts = (
-                self._init_shared_experts()
-                if hasattr(config, "moe_num_shared_experts")
-                else None
-            )
-
-            dense_experts = None
-            moe_cls = MOELayer
-            if config.moe_multimodal_dispatch_use_allgather:  # v2
-                logger.info("Enable MOEAllGatherLayerV2!")
-                moe_cls = partial(
-                    MOEAllGatherLayerV2,
-                    use_expert_out_alltoall="alltoall"
-                    in config.moe_multimodal_dispatch_use_allgather,  # false
-                    use_padding=False,
-                    enable_reverse_token_drop=config.moe_reverse_token_drop,  # false
-                    dense_token_type=config.moe_dense_experts_token_type_id,  # 3
-                )
-            else:
-                assert (
-                    dense_experts is None
-                ), "only `MOEAllGatherLayerV2` can process dense experts"
 
             #"""
             self.mlp = moe_cls(
@@ -1826,102 +1711,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
         else:
             self.mlp = Ernie4_5_MoeMLP(config)
 
-        Norm = Ernie4_5_MoERMSNorm
-
-        self.input_layernorm = Norm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Norm(config.hidden_size, config.rms_norm_eps)
-
-    def _init_shared_experts(self):
-        """init shared experts
-
-        Returns:
-            _type_: _description_
-        """
-        cfg = deepcopy(self.config)
-        if cfg.moe_num_shared_experts > 0:
-            if cfg.moe_intermediate_size:
-                inter_size = (
-                    next(iter(cfg.moe_intermediate_size))
-                    if isinstance(cfg.moe_intermediate_size, (tuple, list))
-                    else cfg.moe_intermediate_size
-                )
-                cfg.intermediate_size = inter_size * cfg.moe_num_shared_experts
-            else:
-                cfg.intermediate_size = (
-                    cfg.intermediate_size * cfg.moe_num_shared_experts
-                )
-            cfg.disable_ffn_model_parallel = False  # split shared epxert
-            shared_experts = Ernie4_5_MoeMLP(cfg)
-        else:
-            shared_experts = None
-        return shared_experts
-
-    def _init_gate_and_experts(self, layer_idx):
-        """Initialize MoE gate and expert networks.
-
-        Args:
-            layer_idx (int): Current layer index
-
-        Returns:
-            Tuple: Contains:
-                - gate: MoE routing gate
-                - experts: List of expert networks
-                - moe_statics: Optional statistics tracker
-        """
-        cfg = deepcopy(self.config)
-        fc_cls = Ernie4_5_MoeMLP
-        if cfg.moe_intermediate_size:
-            if isinstance(cfg.moe_intermediate_size, (tuple, list)):
-                assert isinstance(cfg.moe_num_experts, (tuple, list)) and len(
-                    cfg.moe_num_experts
-                ) == len(cfg.moe_intermediate_size)
-                fc = []
-                for _i, (num_experts, intermediate_size) in enumerate(
-                    zip(cfg.moe_num_experts, cfg.moe_intermediate_size)
-                ):
-                    ex_cfg = deepcopy(cfg)
-                    ex_cfg.intermediate_size = intermediate_size
-                    cur_modality_start_layer_idx = (
-                        cfg.moe_layer_start_index[_i]
-                        if isinstance(cfg.moe_layer_start_index, (tuple, list))
-                        else cfg.moe_layer_start_index
-                    )
-                    cur_modality_end_layer_idx = (
-                        cfg.moe_layer_end_index[_i]
-                        if isinstance(cfg.moe_layer_end_index, (tuple, list))
-                        else cfg.moe_layer_end_index
-                    )
-                    if (
-                        layer_idx >= cur_modality_start_layer_idx
-                        and layer_idx <= cur_modality_end_layer_idx
-                    ):
-                        if _i == 1:
-                            with UniqueNameGuard(f"mm_expert_{layer_idx}_") as guard:
-                                fc.append((num_experts, fc_cls(ex_cfg)))
-                        else:
-                            fc.append((num_experts, fc_cls(ex_cfg)))
-                    else:
-                        logger.info(
-                            f"moe multimodal experts use Identity layer_idx: {layer_idx}"
-                        )
-                        fc.append((num_experts, nn.Identity()))
-            else:
-                cfg.intermediate_size = cfg.moe_intermediate_size
-                fc = [(cfg.moe_num_experts, fc_cls(cfg, layer_idx))]
-        else:
-            fc = [(cfg.moe_num_experts, fc_cls(cfg, layer_idx))]
-        if cfg.multimodel_experts:
-            gate, experts, lm_gate, lm_experts = get_gate(self.config, fc, layer_idx)
-        else:
-            gate, experts = get_gate(self.config, fc, layer_idx)
-            lm_gate, lm_experts = None, None
-
-        # for AuxLoss Free Router:
-        if cfg.moe_use_aux_free:
-            moe_statics = MoEStatics(cfg, layer_idx)
-        else:
-            moe_statics = None
-        return gate, experts, lm_gate, lm_experts, moe_statics
+        self.input_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -1958,14 +1749,9 @@ class Ernie4_5_DecoderLayer(nn.Module):
 
         if token_type_ids is not None:
             is_multimodel_token = token_type_ids.any()
-            has_dense_experts_token = (
-                token_type_ids == self.config.moe_dense_experts_token_type_id
-            ).any()
             is_multimodel_token_cpu = is_multimodel_token.cpu()
-            has_dense_experts_token_cpu = has_dense_experts_token.cpu()
         else:
             is_multimodel_token_cpu = None
-            has_dense_experts_token_cpu = None
 
         hidden_states = self.input_layernorm(hidden_states)
 
