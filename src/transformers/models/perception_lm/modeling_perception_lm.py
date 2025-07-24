@@ -87,31 +87,17 @@ class PerceptionLMMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PerceptionLMPreTrainedModel(PreTrainedModel):
-    config_class = PerceptionLMConfig
+    config: PerceptionLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        # important: this ported version of PerceptionLM isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/PerceptionLM/tree/main/perception_lm should serve for that purpose
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
 
 @dataclass
@@ -130,10 +116,14 @@ class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -157,7 +147,10 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -166,6 +159,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -317,9 +311,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)

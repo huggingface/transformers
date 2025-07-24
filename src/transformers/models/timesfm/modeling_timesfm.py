@@ -299,29 +299,15 @@ class TimesFmDecoderLayer(nn.Module):
 
 @auto_docstring
 class TimesFmPreTrainedModel(PreTrainedModel):
-    config_class = TimesFmConfig
+    config: TimesFmConfig
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0, std=self.config.initializer_range)
-
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
-
-        elif isinstance(module, TimesFmRMSNorm):
-            nn.init.zeros_(module.weight)
-
-        elif isinstance(module, TimesFmAttention):
+        super()._init_weights(module)
+        if isinstance(module, TimesFmAttention):
             # Initialize scaling parameter
             nn.init.ones_(module.scaling)
 

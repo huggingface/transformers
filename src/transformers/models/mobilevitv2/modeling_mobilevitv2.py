@@ -569,23 +569,22 @@ class MobileViTV2Encoder(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
 class MobileViTV2PreTrainedModel(PreTrainedModel):
-    config_class = MobileViTV2Config
+    config: MobileViTV2Config
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTV2Layer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.GroupNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 

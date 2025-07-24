@@ -1183,11 +1183,6 @@ class GroundingDinoMultiheadAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_dropout)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         queries: torch.Tensor,
@@ -1196,9 +1191,18 @@ class GroundingDinoMultiheadAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        query_layer = self.transpose_for_scores(self.query(queries))
-        key_layer = self.transpose_for_scores(self.key(keys))
-        value_layer = self.transpose_for_scores(self.value(values))
+        batch_size, seq_length, _ = queries.shape
+        query_layer = (
+            self.query(queries)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(keys).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(values).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -1369,7 +1373,7 @@ class GroundingDinoContrastiveEmbedding(nn.Module):
 
 @auto_docstring
 class GroundingDinoPreTrainedModel(PreTrainedModel):
-    config_class = GroundingDinoConfig
+    config: GroundingDinoConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

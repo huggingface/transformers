@@ -802,16 +802,15 @@ class DbrxBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
-    config_class = DbrxConfig
+    config: DbrxConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
