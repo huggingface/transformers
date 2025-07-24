@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -72,7 +71,7 @@ class UniqueNameGuard:
         return f"{self.prefix}{name}_{self.counter[name]}"
 
 
-class RopeEmbedding(nn.Module):
+class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None, freq_allocation=0):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -124,31 +123,50 @@ class RopeEmbedding(nn.Module):
 
     def recomposition_to_3d(self, freq):
         freq_h, freq_w, freq_t = (m[(i+1) % 3] for i, m in enumerate(freq.split([*self.split_sizes], dim=-1)))
+        # TODO: can we avoid this stack somehow?
         freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
         return freq_hwt.repeat_interleave(2, dim=-1)
 
-    def apply_rotary_3d(self, q, k, cos, sin):
-        """
-        rope 3d rotary
-        """
-        # copy glm rotate
-        def rotate_half(x):
-            """Rotates half the hidden dims of the input."""
-            x1 = x[..., 0::2]
-            x2 = x[..., 1::2]
-            return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
-        # copy apply
-        original_dtype = q.dtype
+# copy glm rotate
+def rotate_half_text(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
-        cos = cos.unsqueeze(-2)
-        sin = sin.unsqueeze(-2)
 
-        q_embed = (q.float() * cos) + (rotate_half(q).float() * sin)
-        k_embed = (k.float() * cos) + (rotate_half(k).float() * sin)
+# closest are the qwen vl models (vision)
+def apply_rotary_pos_emb_text(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
 
-        return q_embed.to(original_dtype), k_embed.to(original_dtype)
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    original_dtype = q.dtype
+
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    q_embed = (q.float() * cos) + (rotate_half_text(q).float() * sin)
+    k_embed = (k.float() * cos) + (rotate_half_text(k).float() * sin)
+
+    return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
 # copy Llama
@@ -191,7 +209,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Ernie4_5_Attention(nn.Module):
+class Ernie4_5_VLTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx=0):
@@ -219,7 +237,7 @@ class Ernie4_5_Attention(nn.Module):
 
         # TODO: rope to be moved outside
         self.freq_allocation = getattr(config, "freq_allocation", 0)
-        self.rotary_emb = RopeEmbedding(
+        self.rotary_emb = Ernie4_5_VLTextRotaryEmbedding(
             config=config,
             freq_allocation=self.freq_allocation,
         )
@@ -238,29 +256,25 @@ class Ernie4_5_Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # rope
         if past_key_value is not None:
             position_ids = position_ids[:, -1:, :]
 
         cos, sin = self.rotary_emb(query_states, position_ids)
-        query_states, key_states = self.rotary_emb.apply_rotary_3d(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb_text(query_states, key_states, cos, sin)
 
         # cache
         if past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=1)
-            value_states = torch.cat([past_key_value[1], value_states], dim=1)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
         past_key_value = [key_states, value_states] if use_cache else None
 
         # core attention
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
         #attention_interface: Callable = eager_attention_forward
         #if self.config._attn_implementation != "eager":
         #    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -2030,7 +2044,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
         self.layer_idx = layer_idx
         self.config = config
         self.use_moe = config.use_moe
-        self.self_attn = Ernie4_5_Attention(config, layer_idx)
+        self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
         moe_layer_start_index = (
             min(config.moe_layer_start_index)
