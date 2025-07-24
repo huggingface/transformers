@@ -383,6 +383,12 @@ def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filename
             original_test_file = new_file.replace(new_model_lowercase, old_model_lowercase)
             with open(REPO_PATH / "tests" / "models" / old_model_lowercase / original_test_file, "r") as f:
                 test_code = f.read()
+            # Remove old copyright and add new one
+            test_lines = test_code.split("\n")
+            idx = 0
+            while test_lines[idx].startswith("#"):
+                idx += 1
+            test_code = COPYRIGHT + "\n".join(test_lines[idx:])
             test_files[new_file] = test_code.replace(old_cased_name, new_cased_name)
 
     return test_files
@@ -477,7 +483,9 @@ def create_new_model_like(
     subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
 
     # 10. Run the modular conversion
-    subprocess.run(["python", "utils/modular_model_converter.py", new_model_lowercase], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["python", "utils/modular_model_converter.py", new_model_lowercase], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+    )
 
 
 def add_new_model_like_command_factory(args: Namespace):
