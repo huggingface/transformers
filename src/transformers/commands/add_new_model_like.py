@@ -29,9 +29,9 @@ from libcst import matchers as m
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
-from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from . import BaseTransformersCLICommand
 
 
