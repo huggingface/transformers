@@ -101,7 +101,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
         from triton_kernels.numerics_details.mxfp import SwizzlingType
-
+        # TODO: Explain what swizzle_mx_value and swizzle_mx_scale are
         if major < 9:
             # NYI for Ampere
             swizzle_mx_value = None
@@ -161,7 +161,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     ):
         from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
 
-        from ..integrations import Mxfp4OpenAIMoeExperts, convert_moe_packed_tensors, quantize_to_mxfp4, shuffle_weight
+        from ..integrations import Mxfp4OpenAIMoeExperts, convert_moe_packed_tensors, quantize_to_mxfp4
         from ..integrations.tensor_parallel import shard_and_distribute_module
         from ..modeling_utils import _load_parameter_into_model
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
@@ -173,13 +173,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     if "gate_up_proj" in param_name:
                         right_pad = module.gate_up_proj_right_pad
                         bottom_pad = module.gate_up_proj_bottom_pad
-                        # we only shuffle gate_proj
-                        loaded_weight_shuffled = shuffle_weight(param_value).to(target_device)
-                        loaded_weight = torch.nn.functional.pad(loaded_weight_shuffled,
+                        loaded_weight = torch.nn.functional.pad(param_value,
                                                 (0, right_pad, 0, bottom_pad, 0, 0),
                                                 mode="constant",
                                                 value=0)
-                        del loaded_weight_shuffled
                         torch.cuda.empty_cache()
                         loaded_weight, flex, mx = quantize_to_mxfp4(
                         loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale)

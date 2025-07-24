@@ -52,26 +52,6 @@ def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
         swizzle_value=swizzle_mx_value,
         actual_weight_scale_shape=weight_scale_shape)
 
-def shuffle_weight(w: "torch.Tensor") -> "torch.Tensor":
-    # Shuffle weight along the last dimension so that
-    # we folded the weights to adjance location
-    # Example:
-    # input:
-    #       [[1, 2, 3, 4, 5, 6],
-    #        [7, 8, 9, 10, 11, 12]]
-    # output:
-    #       [[1, 4, 2, 5, 3, 6],
-    #        [7, 10, 8, 11, 9, 12]]
-    # This will be used together with triton swiglu kernel
-    shape = w.shape
-    N = shape[-1]
-    first = w[..., :N // 2]
-    second = w[..., N // 2:]
-
-    stacked = torch.stack((first, second), dim=-1)
-    w_shuffled = stacked.reshape(shape)
-    return w_shuffled
-
 def convert_moe_packed_tensors(
     blocks,
     scales,
@@ -115,15 +95,13 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    # to match for now existing implementation
     return out
 
-# maybe subclass
 class Mxfp4OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
 
         super().__init__()
-        self.num_experts = config.num_experts if hasattr(config, "num_experts") else config.num_local_experts
+        self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
@@ -149,33 +127,21 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
 
-        smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
+        # TODO: To remove once we make sure that we don't need this
+        # smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
 
-        self.gate_up_proj_right_pad = 0#    smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
+        self.gate_up_proj_right_pad = 0 #smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
         self.gate_up_proj_bottom_pad = 0
+        self.down_proj_right_pad = 0 #smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
+        self.down_proj_bottom_pad = 0 #self.gate_up_proj_right_pad // 2
+        self.hidden_size_pad = 0 #smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
 
-        self.down_proj_right_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
-        self.down_proj_bottom_pad = 0#self.gate_up_proj_right_pad // 2
-
-        self.hidden_size_pad = 0#smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         """
         To update with moe mxfp4 kernels, for now we just upcast the weights in torch.bfloat16
         """
-        # type check, uint8 means mxfp4
-        #TODO: fp8 x mxfp4 on blackwell
-        assert hidden_states.dtype == torch.bfloat16
-        assert self.gate_up_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
-        assert self.down_proj_blocks.dtype in (torch.bfloat16, torch.uint8)
-
-        if self.gate_up_proj_blocks.dtype != torch.uint8:
-            assert hidden_states.ndim == 2
-            assert hidden_states.shape[-1] == self.gate_up_proj_blocks.shape[-2]
-            assert self.down_proj_blocks.shape[-1] == self.gate_up_proj_blocks.shape[1]
-
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
         from triton_kernels.swiglu import swiglu_fn
-        # TODO: needed in the context of device_map, maybe not for TP
         with torch.cuda.device(hidden_states.device):
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),(self.alpha, None), 2)
 
@@ -185,20 +151,15 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                                     mode="constant",
                                     value=0)
 
-            apply_router_weight_on_input = False
-
             intermediate_cache1 = matmul_ogs(hidden_states,
                                             self.gate_up_proj,
                                             self.gate_up_proj_bias.to(torch.float32),
                                             routing_data,
                                             gather_indx=gather_idx,
                                             precision_config=self.gate_up_proj_precision_config,
-                                            gammas=routing_data.gate_scal if apply_router_weight_on_input else None,
+                                            gammas=None,
                                             fused_activation=act)
 
-            torch.cuda.synchronize()
-
-        with torch.cuda.device(hidden_states.device):
             intermediate_cache3 = matmul_ogs(
                 intermediate_cache1,
                 self.down_proj,
@@ -206,13 +167,9 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                 routing_data,
                 scatter_indx=scatter_idx,
                 precision_config=self.down_proj_precision_config,
-                gammas=None if apply_router_weight_on_input else routing_data.gate_scal)
+                gammas=routing_data.gate_scal)
 
-            torch.cuda.synchronize()
-            # manually crop the tensor since oai kernel pad the output
-            output_states = intermediate_cache3[..., :self.hidden_size].contiguous()
-        torch.cuda.synchronize()
-        return output_states
+        return intermediate_cache3
 
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
@@ -223,14 +180,13 @@ def mlp_forward(self, hidden_states):
         routing = routing
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k, sm_first=False)
+    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
 
 def routing_torch_dist(
     logits,
     n_expts_act,
-    sm_first=False
 ):
     import os
 
@@ -269,13 +225,14 @@ def routing_torch_dist(
 
         expt_indx = expt_indx.view(-1).to(torch.int32)
 
-        expt_indx = torch.where(expt_indx < local_expert_start, 1000, expt_indx)
+        # we use a large value to replace the indices that are not in the local expert range
+        var = 1000
+        expt_indx = torch.where(expt_indx < local_expert_start, var, expt_indx)
         topk_indx = torch.argsort(expt_indx, stable=True).to(torch.int32)
         gate_indx = torch.argsort(topk_indx).to(torch.int32)
         expt_indx = torch.where(expt_indx < local_expert_end, expt_indx, replace_value)
         expt_indx = torch.where(local_expert_start <= expt_indx, expt_indx, replace_value)
 
-        gate_indx = torch.where(expt_indx == replace_value, replace_value, gate_indx)
         gate_indx = torch.where(expt_indx == replace_value, replace_value, gate_indx)
         gate_scal = expt_scal[topk_indx]
 

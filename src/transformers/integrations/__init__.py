@@ -119,7 +119,7 @@ _import_structure = {
         "run_hp_search_sigopt",
         "run_hp_search_wandb",
     ],
-    "mxfp4": ["replace_with_mxfp4_linear", "Mxfp4OpenAIMoeExperts", "quantize_to_mxfp4", "shuffle_weight", "convert_moe_packed_tensors", "reverse_replace_with_mxfp4_linear"],
+    "mxfp4": ["replace_with_mxfp4_linear", "Mxfp4OpenAIMoeExperts", "quantize_to_mxfp4", "convert_moe_packed_tensors"],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "spqr": ["replace_with_spqr_linear"],
@@ -256,7 +256,7 @@ if TYPE_CHECKING:
         run_hp_search_sigopt,
         run_hp_search_wandb,
     )
-    from .mxfp4 import replace_with_mxfp4_linear, quantize_to_mxfp4, shuffle_weight, Mxfp4OpenAIMoeExperts
+    from .mxfp4 import replace_with_mxfp4_linear, quantize_to_mxfp4, Mxfp4OpenAIMoeExperts
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .spqr import replace_with_spqr_linear
