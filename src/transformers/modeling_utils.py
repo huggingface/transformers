@@ -5035,11 +5035,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Make sure to tie the weights correctly
         model.tie_weights()
 
-        # Last check for tp
-        if device_mesh is not None and not model.supports_tp_plan:
-            if config.base_model_tp_plan is None and config.get_text_config().base_model_tp_plan is None:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
-
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
