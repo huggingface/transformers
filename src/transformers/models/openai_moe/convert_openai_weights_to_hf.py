@@ -16,7 +16,6 @@ import argparse
 import gc
 import json
 import os
-import math
 from pathlib import Path
 from typing import List, Optional
 
@@ -125,56 +124,6 @@ def convert_moe_packed_tensors(
     # to match for now existing implementation
     return out.to(torch.float8_e5m2)
 
-FP4_VALUES = [
-    +0.0, +0.5, +1.0, +1.5, +2.0, +3.0, +4.0, +6.0,
-    -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
-]
-
-def convert_moe_packed_tensors(
-    blocks,
-    scales,
-    *,
-    dtype: torch.dtype = torch.bfloat16,
-    rows_per_chunk: int = 32768 * 1024,
-) -> torch.Tensor:
-    import math
-    scales = scales.to(torch.int32) - 127
-
-    assert blocks.shape[:-1] == scales.shape, (
-        f"{blocks.shape=} does not match {scales.shape=}"
-    )
-
-    lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
-
-    *prefix_shape, G, B = blocks.shape
-    rows_total   = math.prod(prefix_shape) * G
-
-    blocks = blocks.reshape(rows_total, B)
-    scales = scales.reshape(rows_total, 1)
-
-    out = torch.empty(rows_total, B * 2, dtype=dtype, device=blocks.device)
-
-    for r0 in range(0, rows_total, rows_per_chunk):
-        r1 = min(r0 + rows_per_chunk, rows_total)
-
-        blk = blocks[r0:r1]
-        exp = scales[r0:r1]
-
-        # nibble indices -> int64
-        idx_lo = (blk & 0x0F).to(torch.long)
-        idx_hi = (blk >> 4).to(torch.long)
-
-        sub = out[r0:r1]
-        sub[:, 0::2] = lut[idx_lo]
-        sub[:, 1::2] = lut[idx_hi]
-
-        torch.ldexp(sub, exp, out=sub)
-        del idx_lo, idx_hi, blk, exp
-
-    out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    # to match for now existing implementation
-    return out.to(torch.float8_e5m2)
-
 
 def write_model(
     model_path,
@@ -203,11 +152,10 @@ def write_model(
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
     for file in list(os.listdir(input_base_path)):
-        # TODO: remove that 
         if file.endswith(".safetensors"):
             final_.update(safe_load(os.path.join(input_base_path, file)))
 
-    print("Converting ..", unpack)
+    print("Converting ..")
     all_keys = final_.keys()
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
@@ -260,9 +208,6 @@ def write_model(
             if not re.search("norm", new_key):
                 weight = weight.to(torch.bfloat16)  # norms are the only ones in float32
             state_dict[new_key] = weight
-            if "bias" in new_key and "down_proj" in new_key:
-                print("new_key: ", new_key)
-                print(f"bias.shape: {state_dict[new_key].shape}")
 
     del final_
     gc.collect()
@@ -378,57 +323,6 @@ def bytes_to_unicode():
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
-
-FP4_VALUES = [
-    +0.0, +0.5, +1.0, +1.5, +2.0, +3.0, +4.0, +6.0,
-    -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
-]
-
-def convert_moe_packed_tensors(
-    blocks,
-    scales,
-    *,
-    dtype: torch.dtype = torch.bfloat16,
-    rows_per_chunk: int = 32768 * 1024,
-) -> torch.Tensor:
-
-    scales = scales.to(torch.int32) - 127
-
-    assert blocks.shape[:-1] == scales.shape, (
-        f"{blocks.shape=} does not match {scales.shape=}"
-    )
-
-    lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
-
-    *prefix_shape, G, B = blocks.shape
-    rows_total   = math.prod(prefix_shape) * G
-
-    blocks = blocks.reshape(rows_total, B)
-    scales = scales.reshape(rows_total, 1)
-
-    out = torch.empty(rows_total, B * 2, dtype=dtype, device=blocks.device)
-
-    for r0 in range(0, rows_total, rows_per_chunk):
-        r1 = min(r0 + rows_per_chunk, rows_total)
-
-        blk = blocks[r0:r1]
-        exp = scales[r0:r1]
-
-        # nibble indices -> int64
-        idx_lo = (blk & 0x0F).to(torch.long)
-        idx_hi = (blk >> 4).to(torch.long)
-
-        sub = out[r0:r1]
-        sub[:, 0::2] = lut[idx_lo]
-        sub[:, 1::2] = lut[idx_hi]
-
-        torch.ldexp(sub, exp, out=sub)
-        del idx_lo, idx_hi, blk, exp
-
-    out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    # to match for now existing implementation
-    out = out.to(torch.float8_e5m2)
-    return out.to(torch.float8_e5m2)
 
 
 class OpenAIMoeConverter(TikTokenConverter):
