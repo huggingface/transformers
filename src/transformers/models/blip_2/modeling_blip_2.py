@@ -1831,7 +1831,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config: Blip2Config
     main_input_name = "pixel_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 

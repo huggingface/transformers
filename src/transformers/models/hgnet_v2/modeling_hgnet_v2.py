@@ -45,16 +45,6 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = ["HGNetV2BasicLayer"]
 
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm2d):
-            module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
 
 class HGNetV2LearnableAffineBlock(nn.Module):
     def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
