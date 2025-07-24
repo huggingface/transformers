@@ -217,6 +217,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             if isinstance(module, Mxfp4OpenAIMoeExperts) or (isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize):
                 tp_mode = kwargs.get("device_mesh", None) is not None
                 if self.quantization_config.dequantize:
+                    # neutral_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
+                    # so we only have the original param name
                     neutral_param_name = param_name[:-len("_blocks")] if "blocks" in param_name else param_name[:-len("_scales")]
                     dequantize(
                         module,
@@ -333,6 +335,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
             })
 
         return config
+
+
+    def update_param_name(self, param_name: str) -> str:
+        if "_blocks" in param_name:
+            return param_name.replace("_blocks", "")
+        elif "_scales" in param_name:
+            return param_name.replace("_scales", "")
+        return param_name
 
     def is_serializable(self, safe_serialization=None):
         logger.warning_once("MXFP4 quantization is not serializable using safetensors for now")

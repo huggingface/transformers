@@ -273,6 +273,12 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
+    def update_param_name(self, param_name: str) -> str:
+        """
+        Override this method if you want to adjust the `param_name`.
+        """
+        return param_name
+
     @staticmethod
     def get_modules_to_not_convert(
         model: "PreTrainedModel",

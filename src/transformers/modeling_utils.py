@@ -6173,15 +6173,17 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
             continue
+
+        # Exception in the case of MXFP4 quantization, we need to update the param name to the original param name
+        # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
+        if hf_quantizer.quantization_config.quant_method in {QuantizationMethod.MXFP4} and hf_quantizer.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
+            param_name = hf_quantizer.update_param_name(param_name)
+
         try:
             param = model.get_parameter_or_buffer(param_name)
         except AttributeError:
-            if hf_quantizer.quantization_config.quant_method in {QuantizationMethod.MXFP4} and ("blocks" in param_name or "scales" in param_name):
-                neutral_param_name = param_name[:-len("_blocks")] if "blocks" in param_name else param_name[:-len("_scales")]
-            try:
-                param = model.get_parameter_or_buffer(neutral_param_name)
-            except AttributeError:
-                raise AttributeError(f"Parameter {param_name} not found in model")
+            raise AttributeError(f"Parameter {param_name} not found in model")
+
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()
 
