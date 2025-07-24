@@ -332,86 +332,64 @@ class Ernie4_5_MoeMLP(nn.Module):
         return down_proj
 
 
-class TopKGate(nn.Module):
+class Ernie4_5_MoEStatics(nn.Module):
     """
-    Fused version of TopK gate for improved performance.
+    Stores MoE (Mixture of Experts) statistics
+        - Bias for the gating
+        - Additionally, usage per expert in the original codebase
     """
 
-    def __init__(self, config, layer_idx: int, **kwargs) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
 
-        self.cap = config.moe_capacity
-        self.num_experts = config.moe_num_experts
-        self.use_correction_bias = config.moe_use_aux_free  # true
-        self.act = partial(F.softmax, dim=-1)  # [S,E]
-        self.norm_gate_logits = config.moe_norm_gate_logits  # true
-        self.num_experts_list = self.num_experts
+        num_experts_groups = 2  # lm and mm
+        num_experts = config.moe_num_experts[0]  # both have the same number
+
+        self.e_score_correction_bias = nn.Parameter(
+            torch.zeros(size=(num_experts_groups, num_experts,), dtype=torch.float32),
+            requires_grad=False,
+        )
+
+    def forward(self, hidden_states, is_multimodel=False):
+        # NOTE: This is a workaround to enable TP with a module that only has parameters
+        #
+        # Otherwise, it stays as `DTensor` when called in the "super" forward
+        #   1. All other tensors are local (`torch.Tensor`)
+        #   2. Isolate does not work on `nn.Module` which only has parameters
+        return hidden_states + self.e_score_correction_bias[int(is_multimodel)]
+
+
+class Ernie4_5_VLGate(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config  # TODO: weird cross dep somewhere
 
         # lm
         self.weight = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
         # mm
         self.weight_1 = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
 
-    def get_gate_weight(self, is_multimodel=True):
-        if not is_multimodel or not self.config.multimodel_experts:
-            return self.weight
-        else:
-            return torch.cat(
-                [
-                    getattr(self, "weight" if i == 0 else f"weight_{i}")
-                    for i in range(len(self.num_experts))
-                ],
-                -1,
-            )
-
-    def get_capacity(self, num_tokens, cap_factor=None, is_multimodel=True):
-        """
-        Calculate capacity based on number of tokens.
-
-        Args:
-            num_tokens: Number of input tokens
-            cap_factor: Optional capacity factor override
-
-        Returns:
-            int: Calculated capacity
-        """
-        if is_multimodel and self.config.multimodel_experts:
-            num_experts = sum(self.num_experts_list)
-        elif isinstance(self.num_experts, (list, tuple)):
-            num_experts = self.num_experts[0]
-        else:
-            num_experts = self.num_experts
-        if cap_factor is not None:
-            cap = cap_factor
-        else:
-            if self.training:
-                cap = self.cap[0]
-            elif num_tokens < num_experts:  # seqlen < num_expert
-                cap = self.cap[2]
-            else:
-                cap = self.cap[1]
-        # capacity = 2S/E
-        capacity = int(cap * num_tokens // num_experts)
-        assert (
-            capacity > 0
-        ), f"requires capacity to >= 0. cap={cap}, num_tokens={num_tokens}"
-        return capacity
+    def get_capacity(self, num_tokens, is_multimodel=True):
+        return num_tokens if is_multimodel else num_tokens * 2
 
     def forward(
         self,
-        input: torch.Tensor,
+        hidden_states: torch.Tensor,
         is_multimodel=True,
-        **kwargs,
     ) -> torch.Tensor:
-        current_device = input.device
-        weight = self.get_gate_weight(is_multimodel=is_multimodel)
-
-        logits = F.linear(
-            input.to(dtype=torch.float32, device=current_device),
-            weight.T.to(dtype=torch.float32, device=current_device),
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
         )
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            device = hidden_states.device
+            weights = torch.cat([self.weight, self.weight_1], dim=-1) if is_multimodel else self.weight
+
+            logits = F.linear(
+                hidden_states.float(),
+                weights.T.to(device).float(),
+            )
         return logits
 
 
@@ -529,11 +507,6 @@ class MOELayer(nn.Module):
         self.all_to_all_dropout = all_to_all_dropout
         self.use_correction_bias = moe_statics is not None
         self.moe_statics = moe_statics
-        if self.use_correction_bias:
-            logger.info(
-                f"using correction bias, aux-coef:{self.gate.config.moe_aux_loss_lambda}"
-            )
-            assert self.gate.config.moe_use_aux_free
 
         self.world_size = 1
         self.rank = 0
@@ -661,16 +634,16 @@ class MOELayer(nn.Module):
             scatter_index, router_loss, gate_logits, gate_prob)
         """
         d_model = input.shape[1]
-        if isinstance(self.gate, (TopKGate)):
+        if isinstance(self.gate, (Ernie4_5_VLGate)):
             capacity = self.gate.get_capacity(
                 input.shape[0], is_multimodel=is_multimodel
             )
             if token_type_ids is not None:
                 token_type_ids = token_type_ids.reshape([-1])
             gate_logits = self.gate(
-                input, token_type_ids=token_type_ids, is_multimodel=is_multimodel
+                input, is_multimodel=is_multimodel
             )
-            prob = self.gate.act(gate_logits)
+            prob = F.softmax(gate_logits, dim=-1)
             (
                 dispatched_input,
                 combine_weights_unnorm,
@@ -892,7 +865,7 @@ class MOEAllGatherLayerV2(MOELayer):
                 combine_weights: Expert combination coefficients,
             )
         """
-        use_fuse = isinstance(self.gate, (TopKGate))
+        use_fuse = isinstance(self.gate, (Ernie4_5_VLGate))
         assert use_fuse
         if input.ndim == 3:
             orig_shape = input.shape
@@ -1068,14 +1041,14 @@ class MOEAllGatherLayerV2(MOELayer):
             gate_logits_lm = gate_logits_lm.reshape(
                 [gate_logits_lm.shape[0], top_k, -1]
             )
-            prob_lm = self.gate.act(gate_logits_lm)
+            prob_lm = F.softmax(gate_logits_lm, dim=-1)
             prob_lm_ = prob_lm
             weight_lm, expert_id_lm = prob_lm_.topk(k=1, dim=-1)
             weight_lm = weight_lm.reshape([gate_logits_lm.shape[0], -1])
             group_size = gate_logits_lm.shape[-1]
             expert_id_lm = expert_id_lm.squeeze(-1)
         else:
-            prob_lm = self.gate.act(gate_logits_lm)
+            prob_lm = F.softmax(gate_logits_lm, dim=-1)
             if self.use_correction_bias:
                 prob_lm_ = prob_lm + self.moe_statics.e_score_correction_bias[
                     0
@@ -1111,7 +1084,7 @@ class MOEAllGatherLayerV2(MOELayer):
                 None,
             )
 
-        prob_mm = self.gate.act(gate_logits_mm)
+        prob_mm = F.softmax(gate_logits_mm, dim=-1)
         if self.use_correction_bias:
             prob_mm_ = prob_mm + self.moe_statics.e_score_correction_bias[
                 1
@@ -1330,12 +1303,9 @@ class MOEAllGatherLayerV2(MOELayer):
             scatter_index + offset,
             scatter_index,
         )
-        if self.gate.norm_gate_logits:
-            local_combine_weights = local_combine_weights_unnorm / torch.clip(
-                local_combine_weights_unnorm.sum(-1, keepdim=True), min=1e-12
-            )
-        else:
-            local_combine_weights = local_combine_weights_unnorm
+        local_combine_weights = local_combine_weights_unnorm / torch.clip(
+            local_combine_weights_unnorm.sum(-1, keepdim=True), min=1e-12
+        )
         local_combine_weights = local_combine_weights.to(dispatched_input.dtype)
         if self.use_padding:
             dispatched_input = dispatched_input.reshape(
@@ -1424,31 +1394,32 @@ class MOEAllGatherLayerV2(MOELayer):
         return expert_outputs
 
 
-class Ernie4_5_MoEStatics(nn.Module):
-    """
-    Stores MoE (Mixture of Experts) statistics
-        - Bias for the gating
-        - Additionally, usage per expert in the original codebase
-    """
-
+class Ernie4_5_VLGate(nn.Module):
     def __init__(self, config):
         super().__init__()
+        # lm
+        self.weight = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
+        # mm
+        self.weight_1 = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
 
-        num_experts_groups = 2  # lm and mm
-        num_experts = config.moe_num_experts[0]  # both have the same number
-
-        self.e_score_correction_bias = nn.Parameter(
-            torch.zeros(size=(num_experts_groups, num_experts,), dtype=torch.float32),
-            requires_grad=False,
-        )
+    def get_capacity(self, num_tokens, is_multimodel=True, **kwargs):
+        return num_tokens if is_multimodel else num_tokens * 2
 
     def forward(self, hidden_states, is_mm=False):
-        # NOTE: This is a workaround to enable TP with a module that only has parameters
-        #
-        # Otherwise, it stays as `DTensor` when called in the "super" forward
-        #   1. All other tensors are local (`torch.Tensor`)
-        #   2. Isolate does not work on `nn.Module` which only has parameters
-        return hidden_states + self.e_score_correction_bias[int(is_mm)]
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            device = hidden_states.device
+            weights = torch.cat([self.weight, self.weight_1], dim=-1) if is_mm else self.weight
+
+            logits = F.linear(
+                hidden_states.float(),
+                weights.T.to(device).float(),
+            )
+        return logits
 
 
 class Ernie4_5_DecoderLayer(nn.Module):
@@ -1491,7 +1462,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
             [Ernie4_5_MoeMLP(self.config, self.config.moe_intermediate_size[int(i >= self.config.moe_num_experts[0])]) for i in range(sum(self.config.moe_num_experts))]
         )
         lm_experts = experts[: self.config.moe_num_experts[0]]
-        gate = TopKGate(self.config, self.layer_idx)
+        gate = Ernie4_5_VLGate(self.config)
         lm_gate = gate
 
         shared_experts = None
