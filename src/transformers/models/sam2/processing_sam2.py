@@ -143,20 +143,20 @@ class Sam2Processor(ProcessorMixin):
                 input_points,
                 expected_depth=4,
                 input_name="points",
-                expected_format="[image_idx, object_idx, point_idx, point_coords]",
+                expected_format="[image level, object level, point level, point coordinates]",
                 expected_coord_size=2,
             )
             processed_labels = self._validate_single_input(
                 input_labels,
                 expected_depth=3,
                 input_name="labels",
-                expected_format="[image_idx, object_idx, point_idx]",
+                expected_format="[image level, object level, point level]",
             )
             processed_boxes = self._validate_single_input(
                 input_boxes,
                 expected_depth=3,
                 input_name="boxes",
-                expected_format="[image_idx, box_idx, box_coords]",
+                expected_format="[image level, box level, box coordinates]",
                 expected_coord_size=4,
             )
 
@@ -434,7 +434,7 @@ class Sam2Processor(ProcessorMixin):
             # For tensors/arrays, we can directly check the number of dimensions
             if data.ndim != expected_depth:
                 raise ValueError(
-                    f"Input {input_name} must be a tensor/array with {expected_depth} dimensions. The expected format is {expected_format}. Got {data.ndim} dimensions."
+                    f"Input {input_name} must be a tensor/array with {expected_depth} dimensions. The expected nesting format is {expected_format}. Got {data.ndim} dimensions."
                 )
             elif expected_coord_size is not None:
                 if data.shape[-1] != expected_coord_size:
@@ -448,7 +448,7 @@ class Sam2Processor(ProcessorMixin):
             current_depth = self._get_nesting_level(data)
             if current_depth != expected_depth:
                 raise ValueError(
-                    f"Input {input_name} must be a nested list with {expected_depth} levels. The expected format is {expected_format}. Got {current_depth} levels."
+                    f"Input {input_name} must be a nested list with {expected_depth} levels. The expected nesting format is {expected_format}. Got {current_depth} levels."
                 )
             return self._convert_to_nested_list(data, expected_depth)
 
