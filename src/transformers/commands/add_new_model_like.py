@@ -476,6 +476,9 @@ def create_new_model_like(
     )
     subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
 
+    # 10. Run the modular conversion
+    subprocess.run(["python", "utils/modular_model_converter.py", new_model_lowercase], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
+
 
 def add_new_model_like_command_factory(args: Namespace):
     return AddNewModelLikeCommand(path_to_repo=args.path_to_repo)
