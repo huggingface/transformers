@@ -128,6 +128,12 @@ class Lfm2HybridConvCache(DynamicCache):
     Conv layer cache shape: `[batch_size, hidden_size, L_cache-1]`.
     """
 
+    # Override @property existing in Cache
+    max_batch_size = None
+    is_compileable = False
+    key_cache = None
+    value_cache = None
+
     def __init__(
         self,
         config: Lfm2Config,
@@ -135,7 +141,8 @@ class Lfm2HybridConvCache(DynamicCache):
         dtype: torch.dtype = torch.float32,
         device: Union[torch.device, str, None] = None,
     ):
-        super().__init__()  # initialize key and value cache
+        self.key_cache = []
+        self.value_cache = []
         self.max_batch_size = max_batch_size
         self.layer_types = config.layer_types
         self.first_attention_layer = self.layer_types.index("full_attention")
@@ -217,6 +224,35 @@ class Lfm2HybridConvCache(DynamicCache):
         if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        full_mask_kv_offset = 0
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length()
+        kv_length = query_length + past_seen_tokens
+        return kv_length, full_mask_kv_offset
+
+    def crop(self, max_length: int):
+        """Crop the cache to the given length"""
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+
+        if self.get_seq_length() <= max_length:
+            return
+
+        for idx in range(len(self.key_cache)):
+            if self.key_cache[idx].numel():
+                self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
+                self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
+
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
         raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
@@ -542,25 +578,12 @@ class Lfm2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Lfm2DecoderLayer,
         "attentions": Lfm2Attention,
     }
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Lfm2RMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
@@ -685,11 +708,6 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
