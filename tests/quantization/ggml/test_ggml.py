@@ -975,7 +975,7 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "HelloED\nI need to find the value of the"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-        
+
     def test_qwen3moe_q8(self):
         tokenizer = AutoTokenizer.from_pretrained(self.qwen3moe_model_id, gguf_file=self.q8_qwen3moe_model_id)
         model = AutoModelForCausalLM.from_pretrained(
