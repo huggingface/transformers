@@ -129,6 +129,11 @@ def _parse_type_hint(hint: str) -> dict:
         return return_dict
 
     elif origin is Literal and len(args) > 0:
+        LITERAL_TYPES = (int, float, str, bool, type(None))
+        if any(type(arg) not in LITERAL_TYPES for arg in args):
+            raise TypeHintParsingException(
+                "Only the valid python literals can be listed in typing.Literal."
+            )
         return {"enum": list(args)}
 
     elif origin is list:
