@@ -40,7 +40,7 @@ from .configuration_openai_moe import OpenAIMoeConfig
 
 @use_kernel_forward_from_hub("RMSNorm")
 class OpenAIMoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-5):
         """
         OpenAIMoeRMSNorm is equivalent to T5LayerNorm
         """
@@ -71,6 +71,7 @@ class OpenAIMoeExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
         self.alpha = 1.702
+        self.limit = 7.0
 
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
@@ -114,6 +115,8 @@ class OpenAIMoeExperts(nn.Module):
             hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
             gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
             gate, up = gate_up[..., ::2], gate_up[..., 1::2]
+            gate = gate.clamp(min=None, max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
