@@ -1394,34 +1394,6 @@ class MOEAllGatherLayerV2(MOELayer):
         return expert_outputs
 
 
-class Ernie4_5_VLGate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        # lm
-        self.weight = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
-        # mm
-        self.weight_1 = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
-
-    def get_capacity(self, num_tokens, is_multimodel=True, **kwargs):
-        return num_tokens if is_multimodel else num_tokens * 2
-
-    def forward(self, hidden_states, is_mm=False):
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            device = hidden_states.device
-            weights = torch.cat([self.weight, self.weight_1], dim=-1) if is_mm else self.weight
-
-            logits = F.linear(
-                hidden_states.float(),
-                weights.T.to(device).float(),
-            )
-        return logits
-
-
 class Ernie4_5_DecoderLayer(nn.Module):
     """A single transformer decoder layer in ERNIE-MoE model.
 
