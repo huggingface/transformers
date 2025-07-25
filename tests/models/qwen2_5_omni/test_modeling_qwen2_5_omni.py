@@ -698,7 +698,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=text * 2,
+            text=[text] * 2,
             audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
