@@ -13,6 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio]>=1.14.0",
+#     "evaluate",
+#     "librosa",
+#     "torchaudio",
+#     "torch>=1.6",
+# ]
+# ///
+
 import logging
 import os
 import sys
@@ -156,7 +167,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )

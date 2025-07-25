@@ -12,6 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio] >= 1.18.0",
+#     "torch >= 1.5",
+#     "torchaudio",
+#     "librosa",
+#     "jiwer",
+#     "evaluate",
+# ]
+# ///
+
 """
 Fine-tuning the library models for sequence to sequence speech recognition.
 """
@@ -89,7 +102,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )

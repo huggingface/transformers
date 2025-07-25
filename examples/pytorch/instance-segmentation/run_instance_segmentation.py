@@ -12,6 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning 🤗 Transformers model for instance segmentation leveraging the Trainer API."""
 
 import logging
@@ -86,7 +97,7 @@ class Arguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )

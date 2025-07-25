@@ -289,7 +289,7 @@ You could also create and use your own dataset if you prefer to train with the [
           }
      )
 
-     # step 3: push to Hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+     # step 3: push to Hub (assumes you have ran the hf auth login command in a terminal/notebook)
      dataset.push_to_hub("your-name/dataset-repo")
 
      # optionally, you can push to a private repo on the Hub
