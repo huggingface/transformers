@@ -581,7 +581,7 @@ class Lfm2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Lfm2DecoderLayer,
+        "hidden_states": [nn.Embedding, Lfm2DecoderLayer],
         "attentions": Lfm2Attention,
     }
 

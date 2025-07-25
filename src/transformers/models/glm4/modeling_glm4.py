@@ -334,7 +334,7 @@ class Glm4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Glm4DecoderLayer,
+        "hidden_states": [nn.Embedding, Glm4DecoderLayer],
         "attentions": Glm4Attention,
     }
 

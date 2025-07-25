@@ -302,7 +302,7 @@ class Olmo2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Olmo2DecoderLayer,
+        "hidden_states": [nn.Embedding, Olmo2DecoderLayer],
         "attentions": Olmo2Attention,
     }
 

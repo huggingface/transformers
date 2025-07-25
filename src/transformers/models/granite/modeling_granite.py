@@ -312,7 +312,7 @@ class GranitePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": GraniteDecoderLayer,
+        "hidden_states": [nn.Embedding, GraniteDecoderLayer],
         "attentions": GraniteAttention,
     }
 

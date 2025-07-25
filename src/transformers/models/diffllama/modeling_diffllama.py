@@ -536,7 +536,7 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = False
     _can_record_outputs = {
-        "hidden_states": DiffLlamaDecoderLayer,
+        "hidden_states": [nn.Embedding, DiffLlamaDecoderLayer],
         "attentions": DiffLlamaAttention,
     }
 

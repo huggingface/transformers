@@ -315,7 +315,7 @@ class HeliumPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": HeliumDecoderLayer,
+        "hidden_states": [nn.Embedding, HeliumDecoderLayer],
         "attentions": HeliumAttention,
     }
 
