@@ -12,6 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "accelerate >= 0.12.0",
+#     "torch >= 1.3",
+#     "datasets >= 2.14.0",
+#     "sentencepiece != 0.1.92",
+#     "protobuf",
+#     "evaluate",
+#     "scikit-learn",
+# ]
+# ///
+
 """
 Fine-tuning the library models for causal language modeling using
 Fill-in-the middle (FIM) objective on a text file or a dataset.
@@ -57,7 +72,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.53.0.dev0")
+check_min_version("4.55.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -118,7 +133,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -140,15 +155,6 @@ class ModelArguments:
                 "dtype will be automatically derived from the model's weights."
             ),
             "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
-    low_cpu_mem_usage: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
-                "set True will benefit LLM loading time and RAM consumption."
-            )
         },
     )
     pad_to_multiple_of: bool = field(
@@ -501,7 +507,6 @@ def main():
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
             torch_dtype=torch_dtype,
-            low_cpu_mem_usage=model_args.low_cpu_mem_usage,
             attn_implementation=model_args.attn_implementation,
         )
 
@@ -521,7 +526,7 @@ def main():
 
     # Get the factor by which the embedding layer should be padded based on the device
     pad_factor = 1
-    if torch.cuda.is_availble():
+    if torch.cuda.is_available():
         pad_factor = 8
 
     elif is_torch_xla_available(check_is_tpu=True):

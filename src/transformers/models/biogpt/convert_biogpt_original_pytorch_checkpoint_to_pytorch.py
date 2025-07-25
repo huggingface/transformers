@@ -115,7 +115,7 @@ class Dictionary:
             except FileNotFoundError as fnfe:
                 raise fnfe
             except UnicodeError:
-                raise Exception("Incorrect encoding detected in {}, please rebuild the dataset".format(f))
+                raise Exception(f"Incorrect encoding detected in {f}, please rebuild the dataset")
             return
 
         lines = f.readlines()
@@ -133,11 +133,11 @@ class Dictionary:
                 word = line
                 if word in self and not overwrite:
                     raise RuntimeError(
-                        "Duplicate word found when loading Dictionary: '{}'. "
+                        f"Duplicate word found when loading Dictionary: '{word}'. "
                         "Duplicate words can overwrite earlier ones by adding the "
                         "#fairseq:overwrite flag at the end of the corresponding row "
                         "in the dictionary file. If using the Camembert model, please "
-                        "download an updated copy of the model file.".format(word)
+                        "download an updated copy of the model file."
                     )
                 self.add_symbol(word, n=count, overwrite=overwrite)
             except ValueError:

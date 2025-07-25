@@ -19,7 +19,7 @@ Processor class for Donut.
 import re
 import warnings
 from contextlib import contextmanager
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -77,7 +77,7 @@ class DonutProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[DonutProcessorKwargs],
@@ -199,7 +199,7 @@ class DonutProcessor(ProcessorMixin):
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
                     return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
-        if len(output):
+        if output:
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}

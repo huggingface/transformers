@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The PLBART model was proposed in [Unified Pre-training for Program Understanding and Generation](https://arxiv.org/abs/2103.06333) by Wasi Uddin Ahmad, Saikat Chakraborty, Baishakhi Ray, Kai-Wei Chang.
+The PLBART model was proposed in [Unified Pre-training for Program Understanding and Generation](https://huggingface.co/papers/2103.06333) by Wasi Uddin Ahmad, Saikat Chakraborty, Baishakhi Ray, Kai-Wei Chang.
 This is a BART-like model which can be used to perform code-summarization, code-generation, and code-translation tasks. The pre-trained model `plbart-base` has been trained using multilingual denoising task
 on Java, Python and English.
 
@@ -50,7 +50,7 @@ model is multilingual it expects the sequences in a different format. A special 
 source and target text. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The
 target text format is `[tgt_lang_code] X [eos]`. `bos` is never used.
 
-However, for fine-tuning, in some cases no language token is provided in cases where a single language is used. Please refer to [the paper](https://arxiv.org/abs/2103.06333) to learn more about this.
+However, for fine-tuning, in some cases no language token is provided in cases where a single language is used. Please refer to [the paper](https://huggingface.co/papers/2103.06333) to learn more about this.
 
 In cases where the language code is needed, the regular [`~PLBartTokenizer.__call__`] will encode source text format
 when you pass texts as the first argument or with the keyword argument `text`, and will encode target text format if

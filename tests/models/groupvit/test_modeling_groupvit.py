@@ -202,7 +202,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -246,7 +247,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
                     continue
 
                 self.assertListEqual(
-                    list(self_attentions[i].shape[-2:]),
+                    list(self_attn.shape[-2:]),
                     [
                         self.model_tester.num_output_groups[i],
                         self.model_tester.num_output_groups[i - 1] if i > 0 else seq_len,

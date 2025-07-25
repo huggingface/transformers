@@ -27,7 +27,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
+    get_device_properties,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -362,7 +364,8 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -521,7 +524,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         max_new_tokens = 30
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -548,13 +551,21 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                # Ensure inputs_dict also has labels in it, as their presence/absence can induce
+                # dtype conversions. This also lets us compare losses.
+                labels = inputs_dict["input_ids"].clone()
+                # Mask padding tokens
+                labels[~dummy_attention_mask.bool()] = -100
+                # Also need to mask the first non-trivial token to match the padding-free batch.
+                first_nonneg_idx = (labels >= 0).int().argmax(dim=1)
+                labels[torch.arange(labels.size(0), device=labels.device), first_nonneg_idx] = -100
+                inputs_dict["labels"] = labels
 
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
                         torch_dtype=torch.float16,
                         attn_implementation="flash_attention_2",
-                        low_cpu_mem_usage=True,
                     )
                     .to(torch_device)
                     .eval()
@@ -571,10 +582,10 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
                 )
                 batch = data_collator(features)
-                batch_cuda = {k: t.cuda() if torch.is_tensor(t) else t for k, t in batch.items()}
+                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
 
                 res_padded = model(**inputs_dict)
-                res_padfree = model(**batch_cuda)
+                res_padfree = model(**batch_accelerator)
 
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
@@ -583,6 +594,10 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # acceptable numerical instability
                 tol = torch.finfo(torch.float16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
+                loss_padded = res_padded.loss
+                loss_padfree = res_padfree.loss
+                torch.testing.assert_close(loss_padded, loss_padfree)
 
 
 @slow
@@ -593,39 +608,30 @@ class BambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test
         cls.tokenizer.pad_token_id = cls.model.config.pad_token_id
         cls.tokenizer.padding_side = "left"
 
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
+        # fmt: off
         expectations = Expectations(
             {
-                (
-                    "cuda",
-                    8,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-                (
-                    "rocm",
-                    9,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
-                (
-                    "xpu",
-                    3,
-                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                ("cuda", 8): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
+                ("rocm", 9): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                ("xpu", 3): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
             }
         )
+        # fmt: on
 
         self.model.to(torch_device)
 
@@ -638,7 +644,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
@@ -659,6 +665,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         #
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
+        # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): [],
@@ -671,11 +678,12 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     "!!!<|begin_of_text|>I am late! I need to be at the airport in 20 minutes! I",
                 ],
                 ("xpu", 3): [
-                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
                     "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
                 ],
             }
         )
+        # fmt: on
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         self.model.to(torch_device)
@@ -691,7 +699,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], EXPECTED_TEXT[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

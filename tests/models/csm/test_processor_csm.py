@@ -37,8 +37,7 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # TODO: @eustlb, change for hf-internal-testing/csm-1b
-        cls.checkpoint = "eustlb/csm-1b"
+        cls.checkpoint = "hf-internal-testing/namespace-sesame-repo_name_csm-1b"
         processor = CsmProcessor.from_pretrained(cls.checkpoint)
         cls.audio_token = processor.audio_token
         cls.audio_token_id = processor.audio_token_id
@@ -138,3 +137,8 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             [[128000, 58, 15, 60, 2028, 374, 264, 1296, 11914, 13, 128001, 128002, 128002, 128002, 128003]]
         )
         torch.testing.assert_close(input_ids, expected_ids)
+
+    @require_torch
+    @unittest.skip("CSM doesn't need assistant masks as an audio generation model")
+    def test_apply_chat_template_assistant_mask(self):
+        pass

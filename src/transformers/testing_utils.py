@@ -59,6 +59,7 @@ from .integrations import (
     is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
@@ -86,8 +87,10 @@ from .utils import (
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_flax_available,
     is_flute_available,
+    is_fp_quant_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
@@ -103,24 +106,29 @@ from .utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_mistral_common_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
+    is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
     is_pretty_midi_available,
+    is_psutil_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
     is_quark_available,
+    is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -128,8 +136,8 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_available,
     is_spacy_available,
+    is_speech_available,
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
@@ -149,6 +157,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -156,6 +165,7 @@ from .utils import (
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
+    is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
@@ -375,6 +385,14 @@ def require_apollo_torch(test_case):
     return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
 
 
+def require_torch_optimi(test_case):
+    """
+    Decorator marking a test that requires torch-optimi. These tests are skipped when torch-optimi isn't installed.
+    https://github.com/jxnl/torch-optimi
+    """
+    return unittest.skipUnless(is_torch_optimi_available(), "test requires torch-optimi")(test_case)
+
+
 def require_lomo(test_case):
     """
     Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
@@ -491,6 +509,10 @@ def require_jinja(test_case):
 
 
 def require_tf2onnx(test_case):
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tf2onnx`, is deprecated and will be removed in "
+        "Transformers v4.55"
+    )
     return unittest.skipUnless(is_tf2onnx_available(), "test requires tf2onnx")(test_case)
 
 
@@ -568,6 +590,25 @@ def require_flash_attn(test_case):
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
 
 
+def require_kernels(test_case):
+    """
+    Decorator marking a test that requires Flash Attention.
+
+    These tests are skipped when Flash Attention isn't installed.
+
+    """
+    return unittest.skipUnless(is_kernels_available(), "test requires Flash Attention")(test_case)
+
+
+def require_flash_attn_3(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 3.
+
+    These tests are skipped when Flash Attention 3 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+
+
 def require_torch_sdpa(test_case):
     """
     Decorator marking a test that requires PyTorch's SDPA.
@@ -632,6 +673,16 @@ def require_torchvision(test_case):
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
 
 
+def require_torchcodec(test_case):
+    """
+    Decorator marking a test that requires Torchcodec.
+
+    These tests are skipped when Torchcodec isn't installed.
+
+    """
+    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
+
+
 def require_torch_or_tf(test_case):
     """
     Decorator marking a test that requires PyTorch or TensorFlow.
@@ -666,6 +717,10 @@ def require_tensorflow_probability(test_case):
     These tests are skipped when TensorFlow probability isn't installed.
 
     """
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tensorflow_probability`, is deprecated and will be "
+        "removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_tensorflow_probability_available(), "test requires TensorFlow probability")(
         test_case
     )
@@ -682,6 +737,9 @@ def require_tf(test_case):
     """
     Decorator marking a test that requires TensorFlow. These tests are skipped when TensorFlow isn't installed.
     """
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tf`, is deprecated and will be removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_tf_available(), "test requires TensorFlow")(test_case)
 
 
@@ -689,6 +747,9 @@ def require_flax(test_case):
     """
     Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
     """
+    logger.warning_once(
+        "JAX test-related code, including `require_flax`, is deprecated and will be removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_flax_available(), "test requires JAX & Flax")(test_case)
 
 
@@ -732,6 +793,10 @@ def require_tensorflow_text(test_case):
     Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
     installed.
     """
+    logger.warning_once(
+        "TensorFlow test-related code, including `require_tensorflow_text`, is deprecated and will be "
+        "removed in Transformers v4.55"
+    )
     return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
@@ -1052,6 +1117,24 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_mps(test_case):
+    """Decorator marking a test that requires CUDA and PyTorch."""
+    return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
+
+
+def require_large_cpu_ram(test_case, memory: float = 80):
+    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+    if not is_psutil_available():
+        return test_case
+
+    import psutil
+
+    return unittest.skipUnless(
+        psutil.virtual_memory().total / 1024**3 > memory,
+        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+    )(test_case)
+
+
 def require_torch_large_gpu(test_case, memory: float = 20):
     """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
     if torch_device != "cuda":
@@ -1194,6 +1277,16 @@ def require_swanlab(test_case):
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
 
 
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio.
+
+    These tests are skipped when trackio isn't installed.
+
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
+
+
 def require_wandb(test_case):
     """
     Decorator marking a test that requires wandb.
@@ -1212,16 +1305,6 @@ def require_clearml(test_case):
 
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
-
-
-def require_soundfile(test_case):
-    """
-    Decorator marking a test that requires soundfile
-
-    These tests are skipped when soundfile isn't installed.
-
-    """
-    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -1386,6 +1469,20 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fp_quant(test_case):
+    """
+    Decorator marking a test that requires fp_quant and qutlass
+    """
+    return unittest.skipUnless(is_fp_quant_available(), "test requires fp_quant")(test_case)
+
+
+def require_qutlass(test_case):
+    """
+    Decorator marking a test that requires qutlass
+    """
+    return unittest.skipUnless(is_qutlass_available(), "test requires qutlass")(test_case)
+
+
 def require_phonemizer(test_case):
     """
     Decorator marking a test that requires phonemizer
@@ -1474,6 +1571,27 @@ def require_tiktoken(test_case):
     Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
     """
     return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
+
+
+def require_speech(test_case):
+    """
+    Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
+    """
+    return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
+
+
+def require_openai(test_case):
+    """
+    Decorator marking a test that requires openai
+    """
+    return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
+
+
+def require_mistral_common(test_case):
+    """
+    Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
+    """
+    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
 
 
 def get_gpu_count():
@@ -2985,6 +3103,9 @@ class HfDoctestModule(Module):
 
 def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
+        if not callable(dispatch_table["default"]):
+            return dispatch_table["default"]
+
         return dispatch_table["default"](*args, **kwargs)
 
     fn = dispatch_table[device]
@@ -3215,7 +3336,9 @@ def cleanup(device: str, gc_collect=False):
 
 
 # Type definition of key used in `Expectations` class.
-DeviceProperties = tuple[Union[str, None], Union[int, None]]
+DeviceProperties = tuple[Optional[str], Optional[int], Optional[int]]
+# Helper type. Makes creating instances of `Expectations` smoother.
+PackedDeviceProperties = tuple[Optional[str], Union[None, int, tuple[int, int]]]
 
 
 @cache
@@ -3226,11 +3349,11 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        major, _ = torch.cuda.get_device_capability()
+        major, minor = torch.cuda.get_device_capability()
         if IS_ROCM_SYSTEM:
-            return ("rocm", major)
+            return ("rocm", major, minor)
         else:
-            return ("cuda", major)
+            return ("cuda", major, minor)
     elif IS_XPU_SYSTEM:
         import torch
 
@@ -3238,58 +3361,98 @@ def get_device_properties() -> DeviceProperties:
         arch = torch.xpu.get_device_capability()["architecture"]
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
-        return ("xpu", gen)
+        return ("xpu", gen, None)
     else:
-        return (torch_device, None)
+        return (torch_device, None, None)
 
 
-class Expectations(UserDict[DeviceProperties, Any]):
+def unpack_device_properties(
+    properties: Optional[PackedDeviceProperties] = None,
+) -> DeviceProperties:
+    """
+    Unpack a `PackedDeviceProperties` tuple into consistently formatted `DeviceProperties` tuple. If properties is None, it is fetched.
+    """
+    if properties is None:
+        return get_device_properties()
+    device_type, major_minor = properties
+    if major_minor is None:
+        major, minor = None, None
+    elif isinstance(major_minor, int):
+        major, minor = major_minor, None
+    else:
+        major, minor = major_minor
+    return device_type, major, minor
+
+
+class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
         Find best matching expectation based on environment device properties.
         """
         return self.find_expectation(get_device_properties())
 
-    @staticmethod
-    def is_default(key: DeviceProperties) -> bool:
-        return all(p is None for p in key)
+    def unpacked(self) -> list[tuple[DeviceProperties, Any]]:
+        return [(unpack_device_properties(k), v) for k, v in self.data.items()]
 
     @staticmethod
-    def score(key: DeviceProperties, other: DeviceProperties) -> int:
+    def is_default(expectation_key: PackedDeviceProperties) -> bool:
+        """
+        This function returns True if the expectation_key is the Default expectation (None, None).
+        When an Expectation dict contains a Default value, it is generally because the test existed before Expectations.
+        When we modify a test to use Expectations for a specific hardware, we don't want to affect the tests on other
+        hardwares. Thus we set the previous value as the Default expectation with key (None, None) and add a value for
+        the specific hardware with key (hardware_type, (major, minor)).
+        """
+        return all(p is None for p in expectation_key)
+
+    @staticmethod
+    def score(properties: DeviceProperties, other: DeviceProperties) -> float:
         """
         Returns score indicating how similar two instances of the `Properties` tuple are.
-        Points are calculated using bits, but documented as int.
         Rules are as follows:
-            * Matching `type` gives 8 points.
-            * Semi-matching `type`, for example cuda and rocm, gives 4 points.
-            * Matching `major` (compute capability major version) gives 2 points.
-            * Default expectation (if present) gives 1 points.
+            * Matching `type` adds one point, semi-matching `type` adds 0.1 point (e.g. cuda and rocm).
+            * If types match, matching `major` adds another point, and then matching `minor` adds another.
+            * The Default expectation (None, None) is worth 0.5 point, which is better than semi-matching. More on this
+            in the `is_default` function.
         """
-        (device_type, major) = key
-        (other_device_type, other_major) = other
+        device_type, major, minor = properties
+        other_device_type, other_major, other_minor = other
 
-        score = 0b0
-        if device_type == other_device_type:
-            score |= 0b1000
+        score = 0
+        # Matching device type, maybe major and minor
+        if device_type is not None and device_type == other_device_type:
+            score += 1
+            if major is not None and major == other_major:
+                score += 1
+                if minor is not None and minor == other_minor:
+                    score += 1
+        # Semi-matching device type, which carries less importance than the default expectation
         elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
-            score |= 0b100
+            score = 0.1
 
-        if major == other_major and other_major is not None:
-            score |= 0b10
-
+        # Default expectation
         if Expectations.is_default(other):
-            score |= 0b1
+            score = 0.5
 
-        return int(score)
+        return score
 
-    def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
+    def find_expectation(self, properties: DeviceProperties = (None, None, None)) -> Any:
         """
-        Find best matching expectation based on provided device properties.
+        Find best matching expectation based on provided device properties. We score each expectation, and to
+        distinguish between expectations with the same score, we use the major and minor version numbers, prioritizing
+        most recent versions.
         """
-        (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
+        (result_key, result) = max(
+            self.unpacked(),
+            key=lambda x: (
+                Expectations.score(properties, x[0]),  # x[0] is a device properties tuple (device_type, major, minor)
+                x[0][1] if x[0][1] is not None else -1,  # This key is the major version, -1 if major is None
+                x[0][2] if x[0][2] is not None else -1,  # This key is the minor version, -1 if minor is None
+            ),
+        )
 
-        if Expectations.score(key, result_key) == 0:
-            raise ValueError(f"No matching expectation found for {key}")
+        if Expectations.score(properties, result_key) == 0:
+            raise ValueError(f"No matching expectation found for {properties}")
 
         return result
 

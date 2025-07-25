@@ -327,7 +327,6 @@ We enable custom decoding methods through model repositories, assuming a specifi
 
 If a model repository holds a custom decoding method, the easiest way to try it out is to load the model and generate with it:
 
-<!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -430,7 +429,7 @@ This is the core of your decoding method. It *must* contain a method named `gene
 > [!WARNING]
 > `generate.py` must be placed in a folder named `custom_generate`, and not at the root level of the repository. The file paths for this feature are hardcoded.
 
-Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements (if any), then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method.
+Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements (if any), then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method, with the exception of the arguments used to trigger the custom generation (`trust_remote_code` and `custom_generate`).
 
 This means your `generate` can have a mix of original and custom arguments (as well as a different output type) as shown below.
 
@@ -469,8 +468,16 @@ def generate(model, input_ids, generation_config=None, left_padding=None, **kwar
 Follow the recommended practices below to ensure your custom decoding method works as expected.
 - Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
 - Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
-- You can add other files in the `custom_generate` folder, and use relative imports.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
+
+Your custom `generate` method can relative import code from the `custom_generate` folder. For example, if you have a `utils.py` file, you can import it like this:
+
+```py
+from .utils import some_function
+```
+
+Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure. This is the recommended workflow for developing your custom decoding method.
+
 
 #### requirements.txt
 

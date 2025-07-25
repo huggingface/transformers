@@ -457,6 +457,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask = decoder_attention_mask[:, :-1]
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.config._attn_implementation = "eager"  # model config -> won't work
         enc_dec_model.config.output_attentions = True  # model config -> won't work
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(

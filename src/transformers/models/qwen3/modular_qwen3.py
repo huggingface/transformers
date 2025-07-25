@@ -14,17 +14,16 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import TransformersKwargs, logging
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -36,6 +35,7 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
     Qwen2Model,
+    Qwen2PreTrainedModel,
     Qwen2RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -66,12 +66,12 @@ class Qwen3Attention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -89,13 +89,7 @@ class Qwen3Attention(LlamaAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -118,17 +112,18 @@ class Qwen3DecoderLayer(Qwen2DecoderLayer):
     pass
 
 
-class Qwen3Model(Qwen2Model):
+class Qwen3PreTrainedModel(Qwen2PreTrainedModel):
     pass
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+class Qwen3Model(Qwen2Model):
+    pass
 
 
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
     def forward(
         self,
-        **super_kwargs: Unpack[KwargsForCausalLM],
+        **super_kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -170,8 +165,8 @@ class Qwen3ForQuestionAnswering(Qwen2ForQuestionAnswering):
 __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
+    "Qwen3PreTrainedModel",
     "Qwen3Model",
-    "Qwen3PreTrainedModel",  # noqa: F822
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
 ]

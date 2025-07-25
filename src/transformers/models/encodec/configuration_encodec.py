@@ -37,7 +37,7 @@ class EncodecConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        target_bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
+        target_bandwidths (`list[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0, 24.0]`):
             The range of different bandwidths the model can encode audio with.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
@@ -180,13 +180,20 @@ class EncodecConfig(PretrainedConfig):
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
 
     @property
+    def hop_length(self) -> int:
+        return int(np.prod(self.upsampling_ratios))
+
+    @property
+    def codebook_nbits(self) -> int:
+        return math.ceil(math.log2(self.codebook_size))
+
+    @property
     def frame_rate(self) -> int:
-        hop_length = np.prod(self.upsampling_ratios)
-        return math.ceil(self.sampling_rate / hop_length)
+        return math.ceil(self.sampling_rate / self.hop_length)
 
     @property
     def num_quantizers(self) -> int:
-        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * self.codebook_nbits))
 
 
 __all__ = ["EncodecConfig"]

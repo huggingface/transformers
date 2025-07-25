@@ -27,10 +27,13 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     pipeline,
+    set_seed,
 )
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
     apply_skip_if_not_implemented,
+    backend_empty_cache,
+    backend_torch_accelerator_module,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
@@ -111,6 +114,8 @@ class BaseMixedInt8Test(unittest.TestCase):
     MAX_NEW_TOKENS = 10
     # Expected values with offload
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer based in")
+    # Expected values on Intel XPU and NV A100
+    EXPECTED_OUTPUTS.add("Hello my name is Alina. I have been working as a professional")
 
     def setUp(self):
         # Models and tokenizer
@@ -137,7 +142,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         del self.model_8bit
 
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_get_keys_to_not_convert(self):
         r"""
@@ -484,7 +489,7 @@ class MixedInt8T5Test(unittest.TestCase):
         avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
         """
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_inference_without_keep_in_fp32(self):
         r"""
@@ -599,7 +604,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         del self.seq_to_seq_model
 
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_correct_head_class(self):
         r"""
@@ -631,7 +636,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             del self.pipe
 
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_pipeline(self):
         r"""
@@ -647,6 +652,8 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
+        # Avoid sampling different outputs
+        set_seed(42)
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
@@ -728,7 +735,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
         self.assertIn(output_text, self.EXPECTED_OUTPUTS)
 
-    def test_cpu_gpu_loading_random_device_map(self):
+    def test_cpu_accelerator_loading_random_device_map(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
@@ -776,7 +783,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
         self.check_inference_correctness(model_8bit)
 
-    def test_cpu_gpu_loading_custom_device_map(self):
+    def test_cpu_accelerator_loading_custom_device_map(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         This time the device map is more organized than the test above and uses the abstraction
@@ -803,7 +810,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
         self.check_inference_correctness(model_8bit)
 
-    def test_cpu_gpu_disk_loading_custom_device_map(self):
+    def test_cpu_accelerator_disk_loading_custom_device_map(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         This time we also add `disk` on the device_map.
@@ -830,7 +837,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
             self.check_inference_correctness(model_8bit)
 
-    def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+    def test_cpu_accelerator_disk_loading_custom_device_map_kwargs(self):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
@@ -872,10 +879,10 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
         model.train()
 
-        if torch.cuda.is_available():
-            self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
-        elif torch.xpu.is_available():
-            self.assertEqual(set(model.hf_device_map.values()), {f"xpu:{torch.xpu.current_device()}"})
+        if torch_device in ["cuda", "xpu"]:
+            self.assertEqual(
+                set(model.hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
+            )
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 

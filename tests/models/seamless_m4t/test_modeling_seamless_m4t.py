@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_speech, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
@@ -475,7 +475,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -1027,6 +1028,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
+    @require_speech
     @slow
     def test_to_rus_speech(self):
         model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
@@ -1065,6 +1067,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         }
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, kwargs1, kwargs2)
 
+    @require_speech
     @slow
     def test_speech_to_text_model(self):
         kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True, "generate_speech": False}
@@ -1076,6 +1079,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         }
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, kwargs1, kwargs2)
 
+    @require_speech
     @slow
     def test_speech_to_speech_model(self):
         kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True}

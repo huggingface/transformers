@@ -21,6 +21,8 @@ import pytest
 
 from transformers import FalconH1Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    get_device_properties,
     require_torch,
     require_torch_gpu,
     slow,
@@ -36,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
+    from transformers import AutoTokenizer, Cache, FalconH1ForCausalLM, FalconH1Model
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
         FalconHybridMambaAttentionDynamicCache,
     )
@@ -270,6 +272,43 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
 
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+
+        # (batch, head, seq_length, head_features)
+        expected_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.hidden_size // config.num_attention_heads,
+        )
+
+        if isinstance(decoder_past_key_values, Cache):
+            self.assertListEqual(
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_shape] * len(decoder_past_key_values.key_cache),
+            )
+            self.assertListEqual(
+                [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
+                [expected_shape] * len(decoder_past_key_values.value_cache),
+            )
+
+        # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
+        else:
+            self.assertListEqual(
+                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
+                [True] * len(decoder_past_key_values),
+            )
+            # check shape key, value
+            self.assertListEqual(
+                [layer_past_key_values[0].shape for layer_past_key_values in decoder_past_key_values],
+                [expected_shape] * len(decoder_past_key_values),
+            )
+            self.assertListEqual(
+                [layer_past_key_values[1].shape for layer_past_key_values in decoder_past_key_values],
+                [expected_shape] * len(decoder_past_key_values),
+            )
+
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FalconH1Config, hidden_size=64)
@@ -337,7 +376,8 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -483,24 +523,61 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
         """
         An integration test for Falcon-H1.
         """
-        EXPECTED_TEXT = (
-            "Tell me about the french revolution.\n"
-            "The French Revolution (1789–1799) was a period of radical social and political upheaval in France that "
-            "fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:\n\n"
-            "### **Causes**\n"
-            "1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.\n"
-            "2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the common people (Third Estate), who bore the brunt of taxation and had few rights.\n"
-            "3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.\n"
-            "4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual formation of the National Assembly.\n\n"
-            "### **Key Events**\n"
-            "1. **Opening of the Revolution (1789)**:\n"
-            "- **Storming of the Bastille**: Symbolic of the fall of royal tyranny.\n"
-            "- **Declaration of the Rights of Man and of the Citizen**: Proclaimed universal rights to liberty, property, and security.\n"
-            "- **Creation of the National Assembly**: The Third Estate declared itself the representative body of France.\n\n"
-            "2. **Radical Phase (1792–1794)**:\n"
-            "- **Reign of Terror**: Led by Maximilien Robespierre, the Committee of Public Safety enforced radical egalitarianism through the guillotine, executing thousands of perceived enemies of the revolution (monarchists, clergy, aristocrats, and counter-revolutionaries).\n"
-            "- **Execution of Louis XVI**: The king was guillotined in June 1793, symbolizing the end of the monarchy.\n"
+        EXPECTED_TEXT_DEFAULT = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
+
+            ### **Key Events**
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (August 1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **National Assembly and King’s Trial (1791–1792)**: King Louis XVI and his ministers were tried and executed (King Louis was guillotined, Marie Antoinette was banished), marking the end of the monarchy.
+            4. **Rise of the Jacobins and Reign of Terror (1793–1794)**: Radical leaders like Maximilien Robespierre sought to purge France of counter-revolutionaries, leading to mass executions and widespread fear.
+            5. **Thermidorian Reaction
+        """
+
+        EXPECTED_TEXT_A10 = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of profound social upheaval and radical political change in France that fundamentally transformed the nation and had far-reaching effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and an inefficient tax system.
+            2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed immense wealth and power, while the majority of the population (the Third Estate, comprising commoners) faced poverty and lack of representation.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty, which fueled revolutionary fervor.
+            4. **Political Instability**: The absolute monarchy under King Louis XVI proved unable to address the nation's problems, leading to growing discontent.
+
+            ### **Key Events**
+            1. **Estates-General (1789)**: The Third Estate broke away and formed the National Assembly, forcing King Louis XVI to convene the Estates-General, an old legislative body, to address the financial crisis.
+            2. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            3. **Declaration of the Rights of Man and of the Citizen (August 1789)**: This foundational document proclaimed liberty, equality, and fraternity as fundamental rights.
+            4. **Abolition of Feudalism (November 1789)**: The National Assembly abolished feudal privileges, redistributing church lands to the people.
+            5. **Tennis Court Oath (May 5, 1789)**: The National Assembly members, meeting on a tennis court, pledged to continue their work until a new constitution was established.
+            6.
+        """
+
+        expected_texts = Expectations(
+            {
+                (None, None): EXPECTED_TEXT_DEFAULT,
+                ("cuda", 8): EXPECTED_TEXT_A10,
+            }
         )
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        # Remove the first char (`\n`) and the consecutive whitespaces caused by the formatting.
+        EXPECTED_TEXT = EXPECTED_TEXT.strip().replace(" " * 12, "")
+
+        device_properties = get_device_properties()
+        # For A10, there is an ending " "
+        if device_properties[0] == "cuda" and device_properties[1] == 8:
+            EXPECTED_TEXT = EXPECTED_TEXT + " "
 
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
