@@ -30,6 +30,7 @@ from ...utils import (
     can_return_tuple,
     is_xlstm_available,
 )
+from ...utils.generic import check_model_inputs
 from .configuration_xlstm import xLSTMConfig
 
 
@@ -1253,6 +1254,9 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": xLSTMBlock,
+    }
 
     def _module_name_map(self, module):
         for name, mod in self.named_modules():
@@ -1263,8 +1267,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
-
-        if isinstance(module, nn.Linear):
+        elif isinstance(module, nn.Linear):
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
             if self.config.weight_mode == "single" and "gate" in self._module_name_map(module):
@@ -1303,8 +1306,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(module.weight)
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
-
-        if isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
+        elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
             torch.nn.init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
@@ -1459,7 +1461,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
     def set_input_embeddings(self, new_embedding):
         self.embeddings = new_embedding
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1467,16 +1469,12 @@ class xLSTMModel(xLSTMPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         cache_params: Optional[xLSTMCache] = None,
         use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMOutput]:
         """
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1484,9 +1482,6 @@ class xLSTMModel(xLSTMPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            use_cache = False
 
         if use_cache:
             if cache_params is None:
@@ -1496,12 +1491,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if (
-            not self.training
-            and self.config.max_inference_chunksize < hidden_states.shape[1]
-            and not output_hidden_states
-        ):
-            all_hidden_states = None
+        if not self.training and self.config.max_inference_chunksize < hidden_states.shape[1]:
             offset = 0
             with torch.no_grad():
                 if cache_params is None:
@@ -1526,7 +1516,6 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     offset += self.config.max_inference_chunksize
                 hidden_states = final_state
         else:
-            all_hidden_states = () if output_hidden_states else None
             for layer_idx, xlstm_block in enumerate(self.blocks):
                 if self.gradient_checkpointing and self.training:
                     hidden_states, rnn_state = self._gradient_checkpointing_func(
@@ -1545,21 +1534,14 @@ class xLSTMModel(xLSTMPreTrainedModel):
                         cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
                     cache_params.rnn_state_initial = False
 
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden_states,)
-
         if use_cache:
             cache_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.out_norm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         return xLSTMOutput(
             last_hidden_state=hidden_states,
             cache_params=cache_params,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -1639,7 +1621,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache_params: Optional[xLSTMCache] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
@@ -1653,7 +1634,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             input_ids,
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             cache_position=cache_position,
             attention_mask=attention_mask,
