@@ -1483,11 +1483,10 @@ class xLSTMModel(xLSTMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if use_cache:
-            if cache_params is None:
-                cache_params = xLSTMCache(
-                    self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
-                )
+        if use_cache and cache_params is None:
+            cache_params = xLSTMCache(
+                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
 
         hidden_states = inputs_embeds
 
