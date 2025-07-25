@@ -33,11 +33,7 @@ To be released with the official model launch.
 
 [[autodoc]] HunYuanDenseV1Config
 
-## HYTokenizer
-
-[[autodoc]] HYTokenizer
-
-## HunYuanDenseV1Model
+## HunYuanModel
 
 [[autodoc]] HunYuanDenseV1Model
     - forward
