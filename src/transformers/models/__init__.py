@@ -110,6 +110,7 @@ if TYPE_CHECKING:
     from .encoder_decoder import *
     from .ernie import *
     from .esm import *
+    from .evolla import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
