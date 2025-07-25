@@ -306,7 +306,7 @@ class PushToHubCallback(keras.callbacks.Callback):
             Will default to the name of `output_dir`.
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            `huggingface-cli login`.
+            `hf auth login`.
         checkpoint (`bool`, *optional*, defaults to `False`):
             Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
             resumed. Only usable when `save_strategy` is `"epoch"`.
