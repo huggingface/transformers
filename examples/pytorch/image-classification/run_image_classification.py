@@ -12,6 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "accelerate>=0.12.0",
+#     "torch>=1.5.0",
+#     "torchvision>=0.6.0",
+#     "datasets>=2.14.0",
+#     "evaluate",
+#     "scikit-learn",
+# ]
+# ///
+
 import logging
 import os
 import sys
