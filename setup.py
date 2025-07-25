@@ -188,7 +188,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "tiktoken",
-    "timm<=1.0.11",
+    "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.21,<0.22",
     "torch>=2.1",
     "torchaudio",
