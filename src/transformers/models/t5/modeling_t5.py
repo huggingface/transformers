@@ -1375,7 +1375,7 @@ class T5Model(T5PreTrainedModel):
         class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+            self.encoder.block[layer].SelfAttention.prune_heads(heads)
 
     @auto_docstring
     def forward(
