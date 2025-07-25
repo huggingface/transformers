@@ -332,7 +332,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    def flash_attention_padding_matches_padding_free_with_position_ids(
+    def attention_mask_padding_matches_padding_free_with_position_ids(
         self, attn_implementation: str, fa_kwargs: bool = False
     ):
         max_new_tokens = 30
