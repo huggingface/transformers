@@ -2707,7 +2707,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
                 # Register it
-                ALL_ATTENTION_FUNCTIONS.register(repo_id, transformers_wrapper)
+                ALL_ATTENTION_FUNCTIONS.register(repo_id, kernel_function)
                 ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
                 applicable_attn_implementation = repo_id
             except Exception as e:
