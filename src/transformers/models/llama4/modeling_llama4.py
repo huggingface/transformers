@@ -141,7 +141,7 @@ class Llama4Router(nn.Linear):
         return router_scores, router_logits
 
 
-# @use_kernel_forward_from_hub("Llama4TextMoe")
+@use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
