@@ -173,7 +173,6 @@ else:
             ("tvlt", ("TvltImageProcessor",)),
             ("tvp", ("TvpImageProcessor",)),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
-            ("upernet", ("SegformerImageProcessor",)),
             ("udop", ("LayoutLMv3ImageProcessor",)),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),

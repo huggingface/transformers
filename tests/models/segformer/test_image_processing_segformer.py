@@ -286,7 +286,9 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
         )
         labels_diff = torch.abs(image_encoding_slow.labels - image_encoding_fast.labels).float()
-        print(f"Labels difference - max: {labels_diff.max().item()}, mean: {labels_diff.mean().item()}, std: {labels_diff.std().item()}")
+        print(
+            f"Labels difference - max: {labels_diff.max().item()}, mean: {labels_diff.mean().item()}, std: {labels_diff.std().item()}"
+        )
         self.assertTrue(torch.allclose(image_encoding_slow.labels, image_encoding_fast.labels, atol=2.5))
 
     def test_slow_fast_equivalence_batched(self):
