@@ -1066,7 +1066,7 @@ class ProcessorMixin(PushToHubMixin):
             if resolved_audio_tokenizer_file is not None:
                 reader = open(resolved_audio_tokenizer_file, "r", encoding="utf-8")
                 audio_tokenizer_dict = reader.read()
-                audio_tokenizer_dict = json.load(audio_tokenizer_dict)
+                audio_tokenizer_dict = json.loads(audio_tokenizer_dict)
             else:
                 audio_tokenizer_dict = processor_dict["audio_tokenizer"]
 
