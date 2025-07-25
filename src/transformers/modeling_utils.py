@@ -2703,14 +2703,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 kernel = get_kernel(repo_id)
                 if hasattr(kernel, "flash_attn_varlen_func"):
-                    ALL_ATTENTION_FUNCTIONS._global_mapping[repo_id] = partial(
-                        flash_attention_forward, implementation=kernel
-                    )
+                    ALL_ATTENTION_FUNCTIONS.register(repo_id, partial(flash_attention_forward, implementation=kernel))
                 elif kernel_name is not None:
-                    ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
-                ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
-                    "flash_attention_2"
-                ]
+                    ALL_ATTENTION_FUNCTIONS.register(repo_id, getattr(kernel, kernel_name))
+                ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
                 applicable_attn_implementation = repo_id
             except FileNotFoundError as e:
                 logger.warning_once(
