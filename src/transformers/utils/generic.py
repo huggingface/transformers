@@ -1074,8 +1074,7 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
-                if isinstance(capture_flags[key], list) and capture_flags[key][0] == torch.nn.Embedding:
-                    collected_outputs[key] = collected_outputs[key][:-1]
+                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
                     collected_outputs[key] += (outputs.vision_hidden_states,)
                 elif hasattr(outputs, "last_hidden_state"):
