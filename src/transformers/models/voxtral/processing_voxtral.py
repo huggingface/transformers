@@ -242,7 +242,7 @@ class VoxtralProcessor(ProcessorMixin):
         the text. Please refer to the docstring of the above methods for more information.
         This methods does not support audio. To prepare the audio, please use:
         1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
-        2. `apply_transcrition_request` [`~VoxtralProcessor.apply_transcrition_request`] method.
+        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
 
         Args:
             text (`str`, `list[str]`, `list[list[str]]`):
@@ -284,7 +284,7 @@ class VoxtralProcessor(ProcessorMixin):
         return BatchFeature(data=out, tensor_type=common_kwargs.pop("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
-    def apply_transcrition_request(
+    def apply_transcription_request(
         self,
         language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
@@ -306,7 +306,7 @@ class VoxtralProcessor(ProcessorMixin):
         language = "en"
         audio = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
 
-        inputs = processor.apply_transcrition_request(language=language, audio=audio, model_id=model_id)
+        inputs = processor.apply_transcription_request(language=language, audio=audio, model_id=model_id)
         ```
 
         Args:

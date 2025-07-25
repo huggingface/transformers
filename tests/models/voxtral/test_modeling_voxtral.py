@@ -492,7 +492,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = VoxtralForConditionalGeneration.from_pretrained(
             self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
         )
-        inputs = self.processor.apply_transcrition_request(
+        inputs = self.processor.apply_transcription_request(
             language="en",
             audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
             model_id=self.checkpoint_name,
