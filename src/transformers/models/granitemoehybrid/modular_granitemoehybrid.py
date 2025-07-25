@@ -162,18 +162,13 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 
 
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
-    config_class = GraniteMoeHybridConfig
+    config: GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
     def _init_weights(self, module):
-        super()._init_weights()
-        # Initialize Mamba modules
-        if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, GraniteMoeHybridMambaLayer):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeHybridMambaLayer):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
             module.D.data.fill_(1.0)
@@ -382,15 +377,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
             }
         )
         return model_inputs
-
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
-        and do not need to initialize the Cache in advance in order to save memory
-        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
 
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

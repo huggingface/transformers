@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from packaging import version
 
@@ -117,7 +117,7 @@ class GptqHfQuantizer(HfQuantizer):
             model.config.quantization_config = GPTQConfig.from_dict(self.optimum_quantizer.to_dict())
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return True
 
     def is_serializable(self, safe_serialization=None):

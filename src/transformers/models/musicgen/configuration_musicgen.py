@@ -214,6 +214,7 @@ class MusicgenConfig(PretrainedConfig):
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
         self.decoder = MusicgenDecoderConfig(**decoder_config)
         self.is_encoder_decoder = True
+        self.initializer_factor = self.decoder.initializer_factor
 
     @classmethod
     def from_sub_models_config(
