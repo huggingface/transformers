@@ -108,6 +108,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size (`dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
             Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
             `True`. Can be overridden by `size` in the `preprocess` method.
+        resample (`Resampling`, *optional*, defaults to `2`):
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
