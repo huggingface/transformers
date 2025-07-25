@@ -18,8 +18,9 @@
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
+
+from transformers.utils.generic import check_model_inputs
 
 from ...cache_utils import Cache, DynamicCache, HybridCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -47,7 +48,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..olmo2.modeling_olmo2 import Olmo2MLP
+from ..olmo2.modeling_olmo2 import Olmo2DecoderLayer, Olmo2MLP
 
 
 logger = logging.get_logger(__name__)
@@ -198,10 +199,10 @@ class Exaone4Config(PretrainedConfig):
         self,
         vocab_size=102400,
         hidden_size=4096,
-        intermediate_size=None,
+        intermediate_size=16384,
         num_hidden_layers=32,
         num_attention_heads=32,
-        num_key_value_heads=None,
+        num_key_value_heads=32,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -214,7 +215,7 @@ class Exaone4Config(PretrainedConfig):
         rope_scaling=None,
         attention_dropout=0.0,
         sliding_window=None,
-        sliding_window_pattern=None,
+        sliding_window_pattern=4,
         layer_types=None,
         **kwargs,
     ):
@@ -222,13 +223,8 @@ class Exaone4Config(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
-        if intermediate_size:
-            self.intermediate_size = intermediate_size
-        else:
-            self.intermediate_size = hidden_size * 4
+        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
@@ -243,9 +239,13 @@ class Exaone4Config(PretrainedConfig):
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if check_is_sliding(self, i) else "full_attention"
+                "sliding_attention"
+                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
+                else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        if "sliding_window" in self.layer_types:
+            self._attn_implementation = "hybrid"
         layer_type_validation(self.layer_types)
 
         super().__init__(
@@ -253,37 +253,8 @@ class Exaone4Config(PretrainedConfig):
         )
 
 
-def check_is_sliding(config, layer_idx):
-    """
-    Check if the current layer is a sliding window attention (local attention) layer.
-    """
-    if config.sliding_window is None:
-        return False
-    if config.layer_types is not None:
-        return config.layer_types[layer_idx] == "sliding_attention"
-    if isinstance(config.sliding_window_pattern, int):
-        return ((layer_idx + 1) % config.sliding_window_pattern) != 0
-    elif isinstance(config.sliding_window_pattern, str):
-        assert isinstance(config.sliding_window, int), (
-            f"Sliding window must be positive integer, but got {config.sliding_window}"
-        )
-        return (
-            layer_idx != config.num_hidden_layers - 1
-            and config.sliding_window_pattern[layer_idx % len(config.sliding_window_pattern)] == "L"
-        )
-    else:
-        logger.warning_once(
-            "Sliding window is set, but none of `sliding_window_pattern` or `layer_types` is set. "
-            "Defaulting to use 'full_attention' for all layers."
-        )
-    return False
-
-
 class Exaone4RMSNorm(LlamaRMSNorm):
     pass
-
-
-ALL_LAYERNORM_LAYERS.append(Exaone4RMSNorm)
 
 
 class Exaone4RotaryEmbedding(LlamaRotaryEmbedding):
@@ -305,7 +276,7 @@ class Exaone4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         self.sliding_window_pattern = config.sliding_window_pattern
-        self.is_sliding = check_is_sliding(config, layer_idx)
+        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -343,20 +314,8 @@ class Exaone4Attention(nn.Module):
         if past_key_value is not None:
             cache_kwargs = {
                 "cache_position": cache_position,
-                "sliding_window": self.sliding_window,
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-            # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            # attention_mask can be None, so we use cache_position rather than attention_mask's shape
-            # NOTE: seq_len can be retrieved from past_key_value.get_seq_length(),
-            # but currently, only 0th-layer is used for .get_seq_length() in HybridCache.
-            # This can cause issues when the 0th-layer is sliding window and seq_len > window_size,
-            # as it affects full attention layers by slicing KV cache improperly.
-            # Dynamic calculation of seq_len is not optimal for CUDAGraph, thus it seems to be updated later.
-            if self.config._attn_implementation == "flash_attention_2":
-                seq_len = cache_position[-1] + 1 if attention_mask is None else attention_mask.shape[1]
-                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -383,62 +342,8 @@ class Exaone4MLP(Olmo2MLP):
     pass
 
 
-class Exaone4DecoderLayer(nn.Module):
-    def __init__(self, config: Exaone4Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = Exaone4Attention(config, layer_idx)
-        self.mlp = Exaone4MLP(config)
-
-        self.post_attention_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.is_sliding = check_is_sliding(config, layer_idx)
-        self.sliding_window = config.sliding_window
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        residual = hidden_states
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        # Use post-LN
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-
-        # Fully Connected
-        hidden_states = self.mlp(hidden_states)
-
-        # Use post-LN
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
+class Exaone4DecoderLayer(Olmo2DecoderLayer):
+    pass
 
 
 class Exaone4PreTrainedModel(LlamaPreTrainedModel):
@@ -457,6 +362,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -468,33 +374,14 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None and not self.training:
-            batch_size, seq_len, _ = inputs_embeds.shape
-            # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
-            if self.config.sliding_window is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = HybridCache(
-                    self.config,
-                    max_batch_size=batch_size,
-                    max_cache_len=seq_len,
-                    dtype=inputs_embeds.dtype,
-                    device=self.device,
-                )
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -525,7 +412,6 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
