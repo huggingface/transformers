@@ -1376,9 +1376,6 @@ class MimiPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    # Mimi is non-generative model but uses cache, special case
-    _supports_default_dynamic_cache = True
-
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):

@@ -1215,13 +1215,16 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         cache_methods = [
             "_prepare_cache_for_generation",
             "_get_cache",
-            "_supports_default_dynamic_cache",
             "_get_layer_device_map_for_cache_init",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
 
-        self._prepare_cache_for_generation(
+        setattr(
+            self.codec_model, "_supports_default_dynamic_cache", types.MethodType(lambda x: True, self.codec_model)
+        )
+
+        self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,
             model_kwargs=temporary_model_kwargs,
             assistant_model=None,
