@@ -585,7 +585,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),
-        "hidden_states": MiniMaxDecoderLayer,
+        "hidden_states": [nn.Embedding, MiniMaxDecoderLayer],
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
 

@@ -1032,7 +1032,6 @@ class SamVisionEncoder(SamPreTrainedModel):
 
     def __init__(self, config: SamVisionConfig):
         super().__init__(config)
-        self.config = config
         self.image_size = config.image_size
         self.patch_embed = SamPatchEmbeddings(config)
 

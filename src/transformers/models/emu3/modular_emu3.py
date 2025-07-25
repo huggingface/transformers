@@ -848,7 +848,7 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
     _can_record_outputs = {
-        "hidden_states": Emu3DecoderLayer,
+        "hidden_states": [nn.Embedding, Emu3DecoderLayer],
         "attentions": Emu3Attention,
     }
 

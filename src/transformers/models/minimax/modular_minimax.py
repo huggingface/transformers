@@ -471,7 +471,7 @@ class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),
-        "hidden_states": MiniMaxDecoderLayer,
+        "hidden_states": [nn.Embedding, MiniMaxDecoderLayer],
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
 
