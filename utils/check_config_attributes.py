@@ -258,7 +258,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "GPTNeoXConfig": ["rotary_emb_base"],
     "Gemma3Config": ["boi_token_index", "eoi_token_index"],
-    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
+    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings", "rope_local_base_freq"],
     "ShieldGemma2Config": [
         "boi_token_index",
         "eoi_token_index",
@@ -297,6 +297,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "MarkupLMConfig": ["position_embedding_type"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "Gemma3nTextConfig": ["rope_local_base_freq"],
 }
 
 
@@ -408,6 +409,9 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "backbone_kwargs",
         # rope attributes may not appear directly in the modeling but are used
         "rope_theta",
+        "local_rope_theta",
+        "rope_scaling",
+        "local_rope_scaling",
         "partial_rotary_factor",
         "pretraining_tp",
         "boi_token_id",

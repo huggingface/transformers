@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_type_from_config
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
@@ -241,20 +241,16 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(nn.Module):
-    def __init__(self, config: ModernBertConfig, device=None):
+    def __init__(self, config: ModernBertConfig, device=None, is_global=True):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
+        self.rope_type = extract_rope_type_from_config(config, is_global=is_global)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, is_global=is_global)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -459,20 +455,20 @@ class ModernBertAttention(nn.Module):
 
         if layer_id % config.global_attn_every_n_layers != 0:
             self.local_attention = (config.local_attention // 2, config.local_attention // 2)
+            is_global = True if config.local_rope_theta is None else False
+            max_position_embeddings = config.local_attention
         else:
             self.local_attention = (-1, -1)
-
-        max_position_embeddings = config.max_position_embeddings
-        if self.local_attention != (-1, -1):
-            rope_theta = config.global_rope_theta if config.local_rope_theta is None else config.local_rope_theta
-            max_position_embeddings = config.local_attention
+            is_global = True
+            max_position_embeddings = config.max_position_embeddings
 
         if config._attn_implementation == "flash_attention_2":
+            rope_theta = config.global_rope_theta if is_global else config.local_rope_theta
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config)
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config, is_global=is_global)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()

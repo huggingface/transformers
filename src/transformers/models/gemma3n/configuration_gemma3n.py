@@ -129,6 +129,9 @@ class Gemma3nTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        local_rope_scaling (`Dict`, *optional*):
+            Dictionary equivalent to `config.rope_scaling` containing the scaling configuration for the RoPE embeddings used
+            in local attention.
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -193,6 +196,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {"local_rope_theta": "rope_local_base_freq"}
 
     def __init__(
         self,
@@ -215,6 +219,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         bos_token_id: int = 2,
         rope_theta: float = 1_000_000.0,
         rope_scaling: Optional[dict[str, Any]] = None,
+        local_rope_scaling: Optional[dict[str, Any]] = None,
         rope_local_base_freq: float = 10_000.0,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
@@ -267,6 +272,7 @@ class Gemma3nTextConfig(PretrainedConfig):
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
+        self.local_rope_scaling = local_rope_scaling
         rope_config_validation(self)
 
         if layer_types is None:

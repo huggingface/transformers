@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -35,7 +34,7 @@ from ...masking_utils import create_causal_mask, create_masks_for_generate, crea
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_type_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -158,20 +157,16 @@ class Gemma3RMSNorm(nn.Module):
 
 
 class Gemma3RotaryEmbedding(nn.Module):
-    def __init__(self, config: Gemma3TextConfig, device=None):
+    def __init__(self, config: Gemma3TextConfig, device=None, is_global=True):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
+        self.rope_type = extract_rope_type_from_config(config, is_global=is_global)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, is_global=is_global)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -467,12 +462,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         self.rotary_emb = Gemma3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
-        # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas
-        # when we want to create a local RoPE layer. Config defaults should hold values for global RoPE
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config)
+        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config, is_global=False)
 
         # Initialize weights and apply final processing
         self.post_init()

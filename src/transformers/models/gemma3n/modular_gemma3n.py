@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import math
 from collections.abc import Callable, Sequence
 from typing import Any, Optional, Union
@@ -156,6 +155,9 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        local_rope_scaling (`Dict`, *optional*):
+            Dictionary equivalent to `config.rope_scaling` containing the scaling configuration for the RoPE embeddings used
+            in local attention.
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -205,6 +207,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
     """
 
     model_type = "gemma3n_text"
+    attribute_map = {"local_rope_theta": "rope_local_base_freq"}
 
     def __init__(
         self,
@@ -227,6 +230,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         bos_token_id: int = 2,
         rope_theta: float = 1_000_000.0,
         rope_scaling: Optional[dict[str, Any]] = None,
+        local_rope_scaling: Optional[dict[str, Any]] = None,
         rope_local_base_freq: float = 10_000.0,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
@@ -279,6 +283,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
+        self.local_rope_scaling = local_rope_scaling
         rope_config_validation(self)
 
         if layer_types is None:
@@ -1967,14 +1972,7 @@ class Gemma3nTextModel(Gemma3TextModel):
         self.register_buffer("per_layer_projection_scale", torch.tensor(self.hidden_size**-0.5), persistent=False)
         self.register_buffer("per_layer_input_scale", torch.rsqrt(torch.tensor(2.0)), persistent=False)
         self.rotary_emb = Gemma3nTextRotaryEmbedding(config=config)
-
-        # TODO (raushan): Fix this after RoPE refactor. For now we hack it by
-        # reassigning thetas when we want to create a local RoPE layer. Config
-        # defaults should hold values for global RoPE.
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = Gemma3nTextRotaryEmbedding(config=config)
+        self.rotary_emb_local = Gemma3nTextRotaryEmbedding(config=config, is_global=False)
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:
         return self.embed_tokens_per_layer(input_ids).reshape(
