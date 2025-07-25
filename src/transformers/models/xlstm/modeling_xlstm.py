@@ -1438,20 +1438,9 @@ class xLSTMModel(xLSTMPreTrainedModel):
         super().__init__(config)
         # use embbeding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
-
         self.blocks = nn.ModuleList([xLSTMBlock(config) for _ in range(config.num_blocks)])
-
-        self.gradient_checkpointing = False
-        # actually unused, but needed in external integration
-        _ = (
-            config.add_out_norm,
-            config.tie_word_embeddings,
-            config.chunkwise_kernel,
-            config.sequence_kernel,
-            config.step_kernel,
-        )
-
         self.out_norm = xLSTMRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
