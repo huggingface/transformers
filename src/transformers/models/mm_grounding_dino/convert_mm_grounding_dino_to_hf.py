@@ -152,18 +152,18 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"backbone.patch_embed.norm.(weight|bias)":                                                                     r"model.backbone.conv_encoder.model.embeddings.norm.\1",
     r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.(relative_position_bias_table|relative_position_index)":        r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.self.\3",
     r"backbone.stages.(\d+).blocks.(\d+).norm1.(weight|bias)":                                                      r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.layernorm_before.\3",
-    r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.(query|key|value).(weight|bias)":                               r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.self.\3.\4", # NOTE: will be split in split_qkv_swin
+    r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.(query|key|value).(weight|bias)":                               r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.self.\3.\4",
     r"backbone.stages.(\d+).blocks.(\d+).attn.w_msa.proj.(weight|bias)":                                            r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.attention.output.dense.\3",
     r"backbone.stages.(\d+).blocks.(\d+).norm2.(weight|bias)":                                                      r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.layernorm_after.\3",
     r"backbone.stages.(\d+).blocks.(\d+).ffn.layers.0.0.(weight|bias)":                                             r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.intermediate.dense.\3",
     r"backbone.stages.(\d+).blocks.(\d+).ffn.layers.1.(weight|bias)":                                               r"model.backbone.conv_encoder.model.encoder.layers.\1.blocks.\2.output.dense.\3",
-    r"backbone.stages.(\d+).downsample.reduction.weight":                                                           r"model.backbone.conv_encoder.model.encoder.layers.\1.downsample.reduction.weight", # NOTE: will be reordered
-    r"backbone.stages.(\d+).downsample.norm.(weight|bias)":                                                         r"model.backbone.conv_encoder.model.encoder.layers.\1.downsample.norm.\2", # NOTE: will be reordered
-    r"backbone.norms.(\d+).(weight|bias)":                                                                            r"model.backbone.conv_encoder.model.hidden_states_norms.stage\1.\2", # NOTE: original will be shifted one down
+    r"backbone.stages.(\d+).downsample.reduction.weight":                                                           r"model.backbone.conv_encoder.model.encoder.layers.\1.downsample.reduction.weight",
+    r"backbone.stages.(\d+).downsample.norm.(weight|bias)":                                                         r"model.backbone.conv_encoder.model.encoder.layers.\1.downsample.norm.\2",
+    r"backbone.norms.(\d+).(weight|bias)":                                                                            r"model.backbone.conv_encoder.model.hidden_states_norms.stage\1.\2",
     r"neck.convs.(\d+).conv.(weight|bias)":                                                                         r"model.input_proj_vision.\1.0.\2",
     r"neck.convs.(\d+).gn.(weight|bias)":                                                                           r"model.input_proj_vision.\1.1.\2",
-    r"neck.extra_convs.(\d+).conv.(weight|bias)":                                                                   r"model.input_proj_vision.\1.0.\2", # NOTE: original will be shifted by normal convs up
-    r"neck.extra_convs.(\d+).gn.(weight|bias)":                                                                     r"model.input_proj_vision.\1.1.\2", # NOTE: original will be shifted by normal convs up
+    r"neck.extra_convs.(\d+).conv.(weight|bias)":                                                                   r"model.input_proj_vision.\1.0.\2",
+    r"neck.extra_convs.(\d+).gn.(weight|bias)":                                                                     r"model.input_proj_vision.\1.1.\2",
     # text backbone
     r"language_model.language_backbone.body.model.(.*)":                                                            r"model.text_backbone.\1",
     r"text_feat_map.(weight|bias)":                                                                                 r"model.text_projection.\1",
@@ -183,23 +183,23 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"encoder.layers.(\d+).ffn.layers.0.0.(weight|bias)":                                                           r"model.encoder.layers.\1.deformable_layer.fc1.\2",
     r"encoder.layers.(\d+).ffn.layers.1.(weight|bias)":                                                             r"model.encoder.layers.\1.deformable_layer.fc2.\2",
     r"encoder.layers.(\d+).norms.1.(weight|bias)":                                                                  r"model.encoder.layers.\1.deformable_layer.final_layer_norm.\2",
-    r"encoder.text_layers.(\d+).self_attn.attn.(query|key|value)_proj_(weight|bias)":                               r"model.encoder.layers.\1.text_enhancer_layer.self_attn.\2.\3", # NOTE: in_proj will be split
+    r"encoder.text_layers.(\d+).self_attn.attn.(query|key|value)_proj_(weight|bias)":                               r"model.encoder.layers.\1.text_enhancer_layer.self_attn.\2.\3",
     r"encoder.text_layers.(\d+).self_attn.attn.out_proj.(weight|bias)":                                             r"model.encoder.layers.\1.text_enhancer_layer.self_attn.out_proj.\2",
     r"encoder.text_layers.(\d+).norms.0.(weight|bias)":                                                             r"model.encoder.layers.\1.text_enhancer_layer.layer_norm_before.\2",
     r"encoder.text_layers.(\d+).ffn.layers.0.0.(weight|bias)":                                                      r"model.encoder.layers.\1.text_enhancer_layer.fc1.\2",
     r"encoder.text_layers.(\d+).ffn.layers.1.(weight|bias)":                                                        r"model.encoder.layers.\1.text_enhancer_layer.fc2.\2",
     r"encoder.text_layers.(\d+).norms.1.(weight|bias)":                                                             r"model.encoder.layers.\1.text_enhancer_layer.layer_norm_after.\2",
-    r"encoder.bbox_head.cls_branch.bias":                                                                           r"model.encoder_output_class_embed.bias", # NOTE: key needs to be duped from last idx in bbox_head
-    r"encoder.bbox_head.reg_branch.0.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.0.\1", #  NOTE: key needs to be duped from last idx in bbox_head
-    r"encoder.bbox_head.reg_branch.2.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.1.\1", #  NOTE: key needs to be duped from last idx in bbox_head
-    r"encoder.bbox_head.reg_branch.4.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.2.\1", #  NOTE: key needs to be duped from last idx in bbox_head
+    r"encoder.bbox_head.cls_branch.bias":                                                                           r"model.encoder_output_class_embed.bias",
+    r"encoder.bbox_head.reg_branch.0.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.0.\1",
+    r"encoder.bbox_head.reg_branch.2.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.1.\1",
+    r"encoder.bbox_head.reg_branch.4.(weight|bias)":                                                                r"model.encoder_output_bbox_embed.layers.2.\1",
     # decoder
     r"decoder.norm.(weight|bias)":                                                                                  r"model.decoder.layer_norm.\1",
     r"decoder.ref_point_head.layers.(\d+).(weight|bias)":                                                           r"model.decoder.reference_points_head.layers.\1.\2",
-    r"decoder.layers.(\d+).self_attn.attn.(query|key|value)_proj_(weight|bias)":                                    r"model.decoder.layers.\1.self_attn.\2.\3", # NOTE: will need to be split
+    r"decoder.layers.(\d+).self_attn.attn.(query|key|value)_proj_(weight|bias)":                                    r"model.decoder.layers.\1.self_attn.\2.\3",
     r"decoder.layers.(\d+).self_attn.attn.out_proj.(weight|bias)":                                                  r"model.decoder.layers.\1.self_attn.out_proj.\2",
     r"decoder.layers.(\d+).norms.0.(weight|bias)":                                                                  r"model.decoder.layers.\1.self_attn_layer_norm.\2",
-    r"decoder.layers.(\d+).cross_attn_text.attn.(query|key|value)_proj_(weight|bias)":                              r"model.decoder.layers.\1.encoder_attn_text.\2.\3", # NOTE: will need to be split
+    r"decoder.layers.(\d+).cross_attn_text.attn.(query|key|value)_proj_(weight|bias)":                              r"model.decoder.layers.\1.encoder_attn_text.\2.\3",
     r"decoder.layers.(\d+).cross_attn_text.attn.out_proj.(weight|bias)":                                            r"model.decoder.layers.\1.encoder_attn_text.out_proj.\2",
     r"decoder.layers.(\d+).norms.1.(weight|bias)":                                                                  r"model.decoder.layers.\1.encoder_attn_text_layer_norm.\2",
     r"decoder.layers.(\d+).cross_attn.(sampling_offsets|attention_weights|value_proj|output_proj).(weight|bias)":   r"model.decoder.layers.\1.encoder_attn.\2.\3",
@@ -207,10 +207,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"decoder.layers.(\d+).ffn.layers.0.0.(weight|bias)":                                                           r"model.decoder.layers.\1.fc1.\2",
     r"decoder.layers.(\d+).ffn.layers.1.(weight|bias)":                                                             r"model.decoder.layers.\1.fc2.\2",
     r"decoder.layers.(\d+).norms.3.(weight|bias)":                                                                  r"model.decoder.layers.\1.final_layer_norm.\2",
-    r"decoder.bbox_head.cls_branches.(\d+).bias":                                                                   r"model.decoder.class_embed.\1.bias", # NOTE: key needs to be duplicated from bbox_head...
-    r"decoder.bbox_head.reg_branches.(\d+).0.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.0.\2", # NOTE: key needs to be duplicated from bbox_head...
-    r"decoder.bbox_head.reg_branches.(\d+).2.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.1.\2", # NOTE: key needs to be duplicated from bbox_head...
-    r"decoder.bbox_head.reg_branches.(\d+).4.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.2.\2", # NOTE: key needs to be duplicated from bbox_head...
+    r"decoder.bbox_head.cls_branches.(\d+).bias":                                                                   r"model.decoder.class_embed.\1.bias",
+    r"decoder.bbox_head.reg_branches.(\d+).0.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.0.\2",
+    r"decoder.bbox_head.reg_branches.(\d+).2.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.1.\2",
+    r"decoder.bbox_head.reg_branches.(\d+).4.(weight|bias)":                                                        r"model.decoder.bbox_embed.\1.layers.2.\2",
     # other
     r"level_embed":                                                                                                 r"model.level_embed",
     r"query_embedding.weight":                                                                                      r"model.query_position_embeddings.weight",

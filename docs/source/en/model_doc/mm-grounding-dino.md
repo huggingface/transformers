@@ -14,7 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# add appropriate badges
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -32,7 +31,7 @@ You can find all the original MM Grounding DINO checkpoints under the [MM Ground
 > [!TIP]
 > Click on the MM Grounding DINO models in the right sidebar for more examples of how to apply MM Grounding DINO to different MM Grounding DINO tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text based on an image with the [`AutoModelForZeroShotObjectDetection`] class.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
