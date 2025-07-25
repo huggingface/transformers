@@ -179,7 +179,7 @@ class Exaone4Config(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_dropout=0.0,
-        sliding_window=None,
+        sliding_window=4096,
         sliding_window_pattern=4,
         layer_types=None,
         **kwargs,
@@ -202,6 +202,8 @@ class Exaone4Config(PretrainedConfig):
         self.sliding_window_pattern = sliding_window_pattern
 
         self.layer_types = layer_types
+        if self.sliding_window is None:
+            sliding_window_pattern = 0
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"

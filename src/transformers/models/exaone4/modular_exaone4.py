@@ -214,7 +214,7 @@ class Exaone4Config(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_dropout=0.0,
-        sliding_window=None,
+        sliding_window=4096,
         sliding_window_pattern=4,
         layer_types=None,
         **kwargs,
@@ -237,6 +237,8 @@ class Exaone4Config(PretrainedConfig):
         self.sliding_window_pattern = sliding_window_pattern
 
         self.layer_types = layer_types
+        if self.sliding_window is None:
+            sliding_window_pattern = 0
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -407,15 +409,15 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
             }
-            if self.config.sliding_window is not None:
+            if "sliding_attention" in self.config.layer_types:
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_type = self.config.layer_types[decoder_layer.layer_idx]
+        for i, decoder_layer in enumerate(self.layers):
+            layer_type = self.config.layer_types[i]
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
