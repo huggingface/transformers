@@ -554,7 +554,6 @@ class MllamaTextSelfAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        
         attention_interface: Callable = eager_attention_forward
 
         if self.config._attn_implementation != "eager":
@@ -767,7 +766,8 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": MllamaSelfAttentionDecoderLayer,
-        "attentions": MllamaTextSelfAttention,
+        "attentions": OutputRecorder(MllamaTextSelfAttention, index=1),
+        "cross_attentions": OutputRecorder(MllamaTextCrossAttention, index=1),
     }
 
     def _init_weights(self, module):
@@ -990,6 +990,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         pixel_values: torch.Tensor,
         aspect_ratio_ids: torch.Tensor,
         aspect_ratio_mask: torch.Tensor,
+        **kwargs
     ) -> BaseModelOutput:
         r"""
         aspect_ratio_ids (`torch.Tensor` of shape `(batch_size, max_num_images)`, *optional*):
