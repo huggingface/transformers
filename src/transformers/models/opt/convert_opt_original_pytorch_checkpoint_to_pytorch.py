@@ -29,9 +29,9 @@ logger = logging.get_logger(__name__)
 
 def load_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
-    sd = torch.load(checkpoint_path, map_location="cpu")
+    sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if "model" in sd.keys():
-        sd = torch.load(checkpoint_path, map_location="cpu")["model"]
+        sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # pop unnecessary weights
     keys_to_delete = [

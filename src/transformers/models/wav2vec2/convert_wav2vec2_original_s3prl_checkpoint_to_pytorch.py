@@ -71,7 +71,7 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     downstream_dict = checkpoint["Downstream"]
 

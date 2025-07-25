@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 from queue import Queue
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -70,7 +72,7 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+    def __init__(self, tokenizer: AutoTokenizer, skip_prompt: bool = False, **decode_kwargs):
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
         self.decode_kwargs = decode_kwargs
@@ -144,14 +146,14 @@ class TextStreamer(BaseStreamer):
         # like the all of the other languages.
         if (
             (cp >= 0x4E00 and cp <= 0x9FFF)
-            or (cp >= 0x3400 and cp <= 0x4DBF)  #
-            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0x3400 and cp <= 0x4DBF)
+            or (cp >= 0x20000 and cp <= 0x2A6DF)
+            or (cp >= 0x2A700 and cp <= 0x2B73F)
+            or (cp >= 0x2B740 and cp <= 0x2B81F)
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)
             or (cp >= 0xF900 and cp <= 0xFAFF)
-            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-        ):  #
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)
+        ):
             return True
 
         return False
@@ -160,7 +162,7 @@ class TextStreamer(BaseStreamer):
 class TextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an iterator. This is
-    useful for applications that benefit from acessing the generated text in a non-blocking way (e.g. in an interactive
+    useful for applications that benefit from accessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
     <Tip warning={true}>
@@ -204,7 +206,7 @@ class TextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+        self, tokenizer: AutoTokenizer, skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
@@ -231,7 +233,7 @@ class TextIteratorStreamer(TextStreamer):
 class AsyncTextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an async iterator.
-    This is useful for applications that benefit from acessing the generated text asynchronously (e.g. in an
+    This is useful for applications that benefit from accessing the generated text asynchronously (e.g. in an
     interactive Gradio demo).
 
     <Tip warning={true}>
@@ -282,7 +284,7 @@ class AsyncTextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
+        self, tokenizer: AutoTokenizer, skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = asyncio.Queue()

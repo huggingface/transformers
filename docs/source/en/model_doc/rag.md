@@ -17,9 +17,9 @@ rendered properly in your Markdown viewer.
 # RAG
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=rag">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-rag-blueviolet">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 </div>
 
 ## Overview
@@ -29,7 +29,7 @@ sequence-to-sequence models. RAG models retrieve documents, pass them to a seq2s
 outputs. The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing
 both retrieval and generation to adapt to downstream tasks.
 
-It is based on the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
+It is based on the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
 Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
 
 The abstract from the paper is the following:

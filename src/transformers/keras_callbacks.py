@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from time import sleep
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -54,9 +54,9 @@ class KerasMetricCallback(keras.callbacks.Callback):
             metric names to numerical values.
         eval_dataset (`tf.data.Dataset` or `dict` or `tuple` or `np.ndarray` or `tf.Tensor`):
             Validation data to be used to generate predictions for the `metric_fn`.
-        output_cols (`List[str], *optional*):
+        output_cols (`list[str], *optional*):
             A list of columns to be retained from the model output as the predictions. Defaults to all.
-        label_cols ('`List[str]`, *optional*'):
+        label_cols ('`list[str]`, *optional*'):
             A list of columns to be retained from the input dataset as the labels. Will be autodetected if this is not
             supplied.
         batch_size (`int`, *optional*):
@@ -79,8 +79,8 @@ class KerasMetricCallback(keras.callbacks.Callback):
         self,
         metric_fn: Callable,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
-        output_cols: Optional[List[str]] = None,
-        label_cols: Optional[List[str]] = None,
+        output_cols: Optional[list[str]] = None,
+        label_cols: Optional[list[str]] = None,
         batch_size: Optional[int] = None,
         predict_with_generate: bool = False,
         use_xla_generation: bool = False,

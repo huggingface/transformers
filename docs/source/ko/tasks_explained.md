@@ -120,7 +120,7 @@ ViT가 도입한 주요 변경 사항은 이미지가 Transformer로 어떻게 �
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
 </div>
 
-<small>패딩이나 보폭이 없는 기본 합성곱, <a href="https://arxiv.org/abs/1603.07285">딥러닝을 위한 합성곱 연산 가이드</a></small>
+<small>패딩이나 보폭이 없는 기본 합성곱, <a href="https://huggingface.co/papers/1603.07285">딥러닝을 위한 합성곱 연산 가이드</a></small>
 
 이 출력을 다른 합성곱 레이어에 전달할 수 있으며, 각 연속적인 레이어를 통해 네트워크는 핫도그나 로켓과 같이 더 복잡하고 추상적인 것을 학습합니다. 합성곱 레이어 사이에 풀링 레이어를 추가하여 차원을 줄이고 특징의 위치 변화에 대해 모델을 더 견고하게 만드는 것이 일반적입니다.
 

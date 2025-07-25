@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,13 @@ import json
 import os
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -44,13 +44,13 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.setUp with T5->Siglip
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_convert_token_and_id with T5->Siglip
     def test_convert_token_and_id(self):
@@ -135,9 +135,12 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def siglip_tokenizer(self):
         return SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
-    def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> SiglipTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_rust_and_python_full_tokenizers with T5->Siglip
     def test_rust_and_python_full_tokenizers(self):
@@ -227,10 +230,10 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
-                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_cr = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                 )
                 tokenizer_p = self.tokenizer_class.from_pretrained(

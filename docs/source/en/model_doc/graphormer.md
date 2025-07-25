@@ -14,6 +14,10 @@ rendered properly in your Markdown viewer.
 
 # Graphormer
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, we don't accept any new PRs changing its code.
@@ -24,7 +28,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The Graphormer model was proposed in [Do Transformers Really Perform Bad for Graph Representation?](https://arxiv.org/abs/2106.05234)  by
+The Graphormer model was proposed in [Do Transformers Really Perform Bad for Graph Representation?](https://huggingface.co/papers/2106.05234)  by
 Chengxuan Ying, Tianle Cai, Shengjie Luo, Shuxin Zheng, Guolin Ke, Di He, Yanming Shen and Tie-Yan Liu. It is a Graph Transformer model, modified to allow computations on graphs instead of text sequences by generating embeddings and features of interest during preprocessing and collation, then using a modified attention.
 
 The abstract from the paper is the following:

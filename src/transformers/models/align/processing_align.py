@@ -16,10 +16,10 @@
 Image/Text processor class for ALIGN
 """
 
-from typing import List, Union
+from typing import Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
@@ -36,7 +36,7 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
 class AlignProcessor(ProcessorMixin):
     r"""
     Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
-    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that interits both the image processor and
+    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
@@ -73,7 +73,7 @@ class AlignProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[AlignProcessorKwargs],
@@ -83,13 +83,13 @@ class AlignProcessor(ProcessorMixin):
         arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` arguments to
         EfficientNetImageProcessor's [`~EfficientNetImageProcessor.__call__`] if `images` is not `None`. Please refer
-        to the doctsring of the above two methods for more information.
+        to the docstring of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`):
+            text (`str`, `list[str]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -110,8 +110,6 @@ class AlignProcessor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             AlignProcessorKwargs,

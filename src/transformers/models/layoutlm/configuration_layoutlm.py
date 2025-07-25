@@ -14,8 +14,10 @@
 # limitations under the License.
 """LayoutLM model configuration"""
 
+import warnings
 from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
@@ -69,9 +71,9 @@ class LayoutLMConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -129,9 +131,21 @@ class LayoutLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
+        self._position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+    @property
+    def position_embedding_type(self):
+        warnings.warn(
+            "The `position_embedding_type` attribute is deprecated and will be removed in v4.55.",
+            FutureWarning,
+        )
+        return self._position_embedding_type
+
+    @position_embedding_type.setter
+    def position_embedding_type(self, value):
+        self._position_embedding_type = value
 
 
 class LayoutLMOnnxConfig(OnnxConfig):
@@ -139,7 +153,7 @@ class LayoutLMOnnxConfig(OnnxConfig):
         self,
         config: PretrainedConfig,
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs)
         self.max_2d_positions = config.max_2d_position_embeddings - 1
@@ -194,3 +208,6 @@ class LayoutLMOnnxConfig(OnnxConfig):
         batch_size, seq_length = input_dict["input_ids"].shape
         input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
+
+
+__all__ = ["LayoutLMConfig", "LayoutLMOnnxConfig"]

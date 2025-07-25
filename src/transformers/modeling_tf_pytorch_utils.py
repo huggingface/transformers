@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -22,6 +21,7 @@ import numpy
 
 from .utils import (
     ExplicitEnum,
+    check_torch_load_is_safe,
     expand_dims,
     is_numpy_array,
     is_safetensors_available,
@@ -78,6 +78,9 @@ def convert_tf_weight_name_to_pt_weight_name(
         tf_name = tf_name[len(name_scope) :]
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
+    if (len(tf_name) > 2048 and "___" in tf_name) or tf_name.count("___") > 10:
+        # ReDOS check
+        raise ValueError("TF variable name is too long or contains too many ___ separators: " + tf_name)
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
     )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
@@ -199,8 +202,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            weights_only_kwarg = {"weights_only": True}
-            state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
+            check_torch_load_is_safe()
+            state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
 
         pt_state_dict.update(state_dict)
 
@@ -585,8 +588,8 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
-        # Handle PyTorch shared weight ()not duplicated in TF 2.0
-        if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
+        # Handle PyTorch shared weight not duplicated in TF 2.0
+        if pt_weight.data_ptr() in loaded_pt_weights_data_ptr and pt_weight.data_ptr() != 0:
             new_pt_params_dict[pt_weight_name] = loaded_pt_weights_data_ptr[pt_weight.data_ptr()]
             continue
 

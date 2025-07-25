@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -303,7 +303,8 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    check_torch_load_is_safe()
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 
@@ -329,7 +330,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             [[[-0.0173]], [[-1.0379]], [[-0.1030]], [[0.3642]], [[0.1601]], [[-1.3136]], [[0.8780]]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_prediction_head(self):
@@ -349,7 +350,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             [[0.5142, 0.6928, 0.6118, 0.5724, -0.3735, -0.1336, -0.7124]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_prediction_generation(self):
         model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
@@ -367,7 +368,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_regression_generation(self):
         model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-regression-distribution").to(torch_device)
@@ -385,4 +386,4 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-        self.assertTrue(torch.allclose(mean_prediction[-5:], expected_slice, rtol=TOLERANCE))
+        torch.testing.assert_close(mean_prediction[-5:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)

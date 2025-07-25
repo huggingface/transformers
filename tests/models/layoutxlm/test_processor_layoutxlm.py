@@ -17,7 +17,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
@@ -34,8 +33,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
-    from PIL import Image
-
     from transformers import LayoutLMv2ImageProcessor
 
 
@@ -47,40 +44,46 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LayoutXLMTokenizerFast
     processor_class = LayoutXLMProcessor
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         image_processor_map = {
             "do_resize": True,
             "size": 224,
             "apply_ocr": True,
         }
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
         # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
-        self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+        cls.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = cls.get_tokenizer()
+        image_processor = cls.get_image_processor()
         processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+    @classmethod
+    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
+        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv2ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return LayoutLMv2ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()
@@ -88,8 +91,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-            processor.save_pretrained(self.tmpdirname)
-            processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                processor.save_pretrained(tmpdir)
+                processor = LayoutXLMProcessor.from_pretrained(tmpdir)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
@@ -98,21 +102,22 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutXLMProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = LayoutXLMProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+            processor.save_pretrained(tmpdir)
 
-        # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+            # slow tokenizer
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
-        processor = LayoutXLMProcessor.from_pretrained(
-            self.tmpdirname,
-            use_fast=False,
-            bos_token="(BOS)",
-            eos_token="(EOS)",
-            do_resize=False,
-            size=30,
-        )
+            processor = LayoutXLMProcessor.from_pretrained(
+                tmpdir,
+                use_fast=False,
+                bos_token="(BOS)",
+                eos_token="(EOS)",
+                do_resize=False,
+                size=30,
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)
@@ -155,11 +160,11 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
+        datasets = load_dataset("nielsr/funsd")
         processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
 
         def preprocess_data(examples):
-            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            images = [image.convert("RGB") for image in examples["image"]]
             words = examples["words"]
             boxes = examples["bboxes"]
             word_labels = examples["ner_tags"]
@@ -193,12 +198,8 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
-
-        image_1 = Image.open(ds[0]["file"]).convert("RGB")
-        image_2 = Image.open(ds[1]["file"]).convert("RGB")
-
-        return image_1, image_2
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[0]["image"].convert("RGB"), ds[1]["image"].convert("RGB")
 
     @cached_property
     def get_tokenizers(self):

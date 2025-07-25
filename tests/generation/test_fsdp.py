@@ -15,19 +15,29 @@
 import argparse
 from typing import Any, Callable
 
-from transformers import is_torch_available
+from transformers import is_torch_available, is_torch_xpu_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
+    backend_torch_accelerator_module,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
+    torch_device,
 )
+from transformers.utils import is_ccl_available, is_ipex_available
 
 
 if is_torch_available():
     import functools
 
     import torch
+
+    if is_torch_xpu_available():
+        if is_ipex_available():
+            import intel_extension_for_pytorch  # noqa: F401
+        if is_ccl_available():
+            import oneccl_bindings_for_pytorch  # noqa: F401
     import torch.distributed
     from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
     from torch.distributed.device_mesh import init_device_mesh
@@ -46,7 +56,8 @@ if is_torch_available():
         """Manage the creation and destruction of the distributed process group for the wrapped function."""
 
         def wrapped(*args: Any, **kwargs: Any) -> Any:
-            torch.distributed.init_process_group(world_size=torch.cuda.device_count())
+            device_count = backend_device_count(torch_device)
+            torch.distributed.init_process_group(world_size=device_count)
             try:
                 return func(*args, **kwargs)
             finally:
@@ -56,7 +67,8 @@ if is_torch_available():
 
     @manage_process_group
     def fsdp_generate():
-        torch.cuda.set_device(device := torch.device(rank := torch.distributed.get_rank()))
+        torch_accelerator_module = backend_torch_accelerator_module(torch_device)
+        torch_accelerator_module.set_device(device := torch.device(rank := torch.distributed.get_rank()))
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
 
@@ -79,11 +91,12 @@ if is_torch_available():
 
     @manage_process_group
     def fsdp2_generate():
-        torch.cuda.set_device(device := torch.device(rank := torch.distributed.get_rank()))
+        torch_accelerator_module = backend_torch_accelerator_module(torch_device)
+        torch_accelerator_module.set_device(device := torch.device(rank := torch.distributed.get_rank()))
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
 
-        mesh = init_device_mesh("cuda", (torch.distributed.get_world_size(),))
+        mesh = init_device_mesh(device.type, (torch.distributed.get_world_size(),))
         for submodule in model.modules():
             if isinstance(submodule, GPT2Block):
                 fully_shard(submodule, mesh=mesh)
@@ -102,9 +115,10 @@ if is_torch_available():
 
 
 class TestFSDPGeneration(TestCasePlus):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_fsdp_generate(self):
-        distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
+        device_count = backend_device_count(torch_device)
+        distributed_args = f"""--nproc_per_node={device_count}
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
         """.split()
@@ -113,9 +127,11 @@ class TestFSDPGeneration(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_fsdp2_generate(self):
-        distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
+        device_count = backend_device_count(torch_device)
+
+        distributed_args = f"""--nproc_per_node={device_count}
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
         """.split()

@@ -91,7 +91,7 @@ class TrainCommand(BaseTransformersCLICommand):
         train_parser.set_defaults(func=train_command_factory)
 
     def __init__(self, args: Namespace):
-        self.logger = logging.get_logger("transformers-cli/training")
+        self.logger = logging.get_logger("transformers/training")
 
         self.framework = "tf" if is_tf_available() else "torch"
 

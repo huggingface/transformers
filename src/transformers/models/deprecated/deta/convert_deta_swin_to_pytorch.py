@@ -230,7 +230,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     else:
         raise ValueError(f"Model name {model_name} not supported")
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # original state dict
     for name, param in state_dict.items():

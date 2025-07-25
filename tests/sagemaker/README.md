@@ -138,7 +138,7 @@ images:
 
 ## Current Tests
 
-| ID                                  | Description                                                       | Platform                   | #GPUS | Collected & evaluated metrics            |
+| ID                                  | Description                                                       | Platform                   | #GPUs | Collected & evaluated metrics            |
 |-------------------------------------|-------------------------------------------------------------------|-----------------------------|-------|------------------------------------------|
 | pytorch-transfromers-test-single    | test bert finetuning using BERT fromtransformerlib+PT             | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
 | pytorch-transfromers-test-2-ddp     | test bert finetuning using BERT from transformer lib+ PT DPP      | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |

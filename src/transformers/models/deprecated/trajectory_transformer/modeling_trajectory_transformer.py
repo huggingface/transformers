@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     ModelOutput,
@@ -125,7 +126,7 @@ class TrajectoryTransformerOutput(ModelOutput):
             Language modeling loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`Tuple[Tuple[torch.Tensor]]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`tuple[tuple[torch.Tensor]]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of length `config.n_layers`, containing tuples of tensors of shape `(batch_size, num_heads,
             sequence_length, embed_size_per_head)`). Contains pre-computed hidden-states (key and values in the
             attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -140,10 +141,10 @@ class TrajectoryTransformerOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
@@ -152,7 +153,7 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = TrajectoryTransformerConfig
+    config: TrajectoryTransformerConfig
     load_tf_weights = load_tf_weights_in_trajectory_transformer
     base_model_prefix = "trajectory_transformer"
     main_input_name = "trajectories"
@@ -190,7 +191,7 @@ TRAJECTORY_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
         trajectories (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Batch of trajectories, where a trajectory is a sequence of states, actions and rewards.
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`, *optional*):
+        past_key_values (`tuple[tuple[torch.Tensor]]` of length `config.n_layers`, *optional*):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
             their past given to this model should not be passed as `input_ids` as they have already been computed.
@@ -286,8 +287,8 @@ class CausalSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor]],
+        layer_past: Optional[tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ):
@@ -346,7 +347,7 @@ class CausalSelfAttention(nn.Module):
         return outputs
 
 
-class Block(nn.Module):
+class Block(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.ln1 = nn.LayerNorm(config.n_embd)
@@ -361,8 +362,8 @@ class Block(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor]],
+        layer_past: Optional[tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ):
@@ -463,14 +464,14 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
     def forward(
         self,
         trajectories: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         targets: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TrajectoryTransformerOutput]:
+    ) -> Union[tuple[torch.Tensor], TrajectoryTransformerOutput]:
         r"""
         Returns:
 
@@ -540,16 +541,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    layer_past,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(hidden_states, layer_past, use_cache, output_attentions)
+            outputs = block(hidden_states, layer_past, use_cache, output_attentions)
 
             hidden_states = outputs[0]
             if use_cache is True:
@@ -601,3 +593,10 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+
+__all__ = [
+    "TrajectoryTransformerModel",
+    "TrajectoryTransformerPreTrainedModel",
+    "load_tf_weights_in_trajectory_transformer",
+]

@@ -1,1 +1,0 @@
-transformers>=4.9.2

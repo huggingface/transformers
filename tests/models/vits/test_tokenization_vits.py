@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +18,13 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import VitsTokenizer
 from transformers.models.vits.tokenization_vits import VOCAB_FILES_NAMES
 from transformers.testing_utils import slow
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
@@ -32,8 +32,9 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = VitsTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = (
             "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g ț ţ < > | <pad> <unk>".split(
@@ -44,18 +45,22 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens[" "] = vocab_tokens["X"]
         del vocab_tokens["X"]
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>"}
+        cls.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>"}
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
         kwargs["phonemize"] = False
         kwargs["normalize"] = False
-        return VitsTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return VitsTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
         txt = "beyonce lives in los angeles"

@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BLIP-2 モデルは、[BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models](https://arxiv.org/abs/2301.12597) で提案されました。
+BLIP-2 モデルは、[BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models](https://huggingface.co/papers/2301.12597) で提案されました。
 Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi.・サバレーゼ、スティーブン・ホイ。 BLIP-2 は、軽量の 12 層 Transformer をトレーニングすることで、フリーズされた事前トレーニング済み画像エンコーダーと大規模言語モデル (LLM) を活用します。
-それらの間にエンコーダーを配置し、さまざまな視覚言語タスクで最先端のパフォーマンスを実現します。最も注目すべき点は、BLIP-2 が 800 億パラメータ モデルである [Flamingo](https://arxiv.org/abs/2204.14198) を 8.7% 改善していることです。
+それらの間にエンコーダーを配置し、さまざまな視覚言語タスクで最先端のパフォーマンスを実現します。最も注目すべき点は、BLIP-2 が 800 億パラメータ モデルである [Flamingo](https://huggingface.co/papers/2204.14198) を 8.7% 改善していることです。
 ゼロショット VQAv2 ではトレーニング可能なパラメーターが 54 分の 1 に減少します。
 
 論文の要約は次のとおりです。
@@ -30,7 +30,7 @@ Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi.・サバレーゼ、スティ
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/blip2_architecture.jpg"
 alt="drawing" width="600"/> 
 
-<small> BLIP-2 アーキテクチャ。 <a href="https://arxiv.org/abs/2301.12597">元の論文から抜粋。</a> </small>
+<small> BLIP-2 アーキテクチャ。 <a href="https://huggingface.co/papers/2301.12597">元の論文から抜粋。</a> </small>
 
 このモデルは、[nielsr](https://huggingface.co/nielsr) によって提供されました。
 元のコードは [ここ](https://github.com/salesforce/LAVIS/tree/5ee63d688ba4cebff63acee04adaef2dee9af207) にあります。

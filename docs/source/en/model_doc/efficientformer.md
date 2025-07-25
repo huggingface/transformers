@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # EfficientFormer
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+</div>
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, we don't accept any new PRs changing its code.
@@ -26,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://arxiv.org/abs/2206.01191)
+The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://huggingface.co/papers/2206.01191)
 by Yanyu Li, Geng Yuan, Yang Wen, Eric Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang, Jian Ren.  EfficientFormer proposes a
 dimension-consistent pure transformer that can be run on mobile devices for dense prediction tasks like image classification, object
 detection and semantic segmentation.

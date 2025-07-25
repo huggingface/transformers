@@ -109,6 +109,9 @@ class ModernBertConfig(PretrainedConfig):
             the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
             shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
             be faster in some scenarios.
+        repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
+            When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
+            applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
 
     Examples:
 
@@ -126,6 +129,7 @@ class ModernBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernbert"
+    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -164,6 +168,7 @@ class ModernBertConfig(PretrainedConfig):
         sparse_prediction=False,
         sparse_pred_ignore_index=-100,
         reference_compile=None,
+        repad_logits_with_grad=False,
         **kwargs,
     ):
         super().__init__(
@@ -203,11 +208,17 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
+        self.repad_logits_with_grad = repad_logits_with_grad
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("reference_compile", None)
+        return output
 
 
 __all__ = ["ModernBertConfig"]

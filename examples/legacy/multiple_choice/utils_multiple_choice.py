@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -22,7 +21,7 @@ import logging
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 import tqdm
 from filelock import FileLock
@@ -49,8 +48,8 @@ class InputExample:
 
     example_id: str
     question: str
-    contexts: List[str]
-    endings: List[str]
+    contexts: list[str]
+    endings: list[str]
     label: Optional[str]
 
 
@@ -62,9 +61,9 @@ class InputFeatures:
     """
 
     example_id: str
-    input_ids: List[List[int]]
-    attention_mask: Optional[List[List[int]]]
-    token_type_ids: Optional[List[List[int]]]
+    input_ids: list[list[int]]
+    attention_mask: Optional[list[list[int]]]
+    token_type_ids: Optional[list[list[int]]]
     label: Optional[int]
 
 
@@ -84,7 +83,7 @@ if is_torch_available():
         soon.
         """
 
-        features: List[InputFeatures]
+        features: list[InputFeatures]
 
         def __init__(
             self,
@@ -113,7 +112,7 @@ if is_torch_available():
             with FileLock(lock_path):
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
-                    self.features = torch.load(cached_features_file)
+                    self.features = torch.load(cached_features_file, weights_only=True)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
                     label_list = processor.get_labels()
@@ -149,7 +148,7 @@ if is_tf_available():
         soon.
         """
 
-        features: List[InputFeatures]
+        features: list[InputFeatures]
 
         def __init__(
             self,
@@ -253,7 +252,7 @@ class RaceProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         high = os.path.join(data_dir, "train/high")
         middle = os.path.join(data_dir, "train/middle")
         high = self._read_txt(high)
@@ -262,7 +261,7 @@ class RaceProcessor(DataProcessor):
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         high = os.path.join(data_dir, "dev/high")
         middle = os.path.join(data_dir, "dev/middle")
         high = self._read_txt(high)
@@ -271,7 +270,7 @@ class RaceProcessor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} test".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} test")
         high = os.path.join(data_dir, "test/high")
         middle = os.path.join(data_dir, "test/middle")
         high = self._read_txt(high)
@@ -286,7 +285,7 @@ class RaceProcessor(DataProcessor):
         lines = []
         files = glob.glob(input_dir + "/*txt")
         for file in tqdm.tqdm(files, desc="read files"):
-            with open(file, "r", encoding="utf-8") as fin:
+            with open(file, encoding="utf-8") as fin:
                 data_raw = json.load(fin)
                 data_raw["race_id"] = file
                 lines.append(data_raw)
@@ -296,7 +295,7 @@ class RaceProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for _, data_raw in enumerate(lines):
-            race_id = "%s-%s" % (set_type, data_raw["race_id"])
+            race_id = "{}-{}".format(set_type, data_raw["race_id"])
             article = data_raw["article"]
             for i in range(len(data_raw["answers"])):
                 truth = str(ord(data_raw["answers"][i]) - ord("A"))
@@ -320,17 +319,17 @@ class SynonymProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mctrain.csv")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mchp.csv")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
 
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mctest.csv")), "test")
 
@@ -339,10 +338,10 @@ class SynonymProcessor(DataProcessor):
         return ["0", "1", "2", "3", "4"]
 
     def _read_csv(self, input_file):
-        with open(input_file, "r", encoding="utf-8") as f:
+        with open(input_file, encoding="utf-8") as f:
             return list(csv.reader(f))
 
-    def _create_examples(self, lines: List[List[str]], type: str):
+    def _create_examples(self, lines: list[list[str]], type: str):
         """Creates examples for the training and dev sets."""
 
         examples = [
@@ -366,17 +365,17 @@ class SwagProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "train.csv")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "val.csv")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         raise ValueError(
             "For swag testing, the input file does not contain a label column. It can not be tested in current code "
             "setting!"
@@ -388,10 +387,10 @@ class SwagProcessor(DataProcessor):
         return ["0", "1", "2", "3"]
 
     def _read_csv(self, input_file):
-        with open(input_file, "r", encoding="utf-8") as f:
+        with open(input_file, encoding="utf-8") as f:
             return list(csv.reader(f))
 
-    def _create_examples(self, lines: List[List[str]], type: str):
+    def _create_examples(self, lines: list[list[str]], type: str):
         """Creates examples for the training and dev sets."""
         if type == "train" and lines[0][-1] != "label":
             raise ValueError("For training, the input file must contain a label column.")
@@ -417,16 +416,16 @@ class ArcProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_json(os.path.join(data_dir, "train.jsonl")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_json(os.path.join(data_dir, "dev.jsonl")), "dev")
 
     def get_test_examples(self, data_dir):
-        logger.info("LOOKING AT {} test".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} test")
         return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
 
     def get_labels(self):
@@ -434,7 +433,7 @@ class ArcProcessor(DataProcessor):
         return ["0", "1", "2", "3"]
 
     def _read_json(self, input_file):
-        with open(input_file, "r", encoding="utf-8") as fin:
+        with open(input_file, encoding="utf-8") as fin:
             lines = fin.readlines()
             return lines
 
@@ -504,11 +503,11 @@ class ArcProcessor(DataProcessor):
 
 
 def convert_examples_to_features(
-    examples: List[InputExample],
-    label_list: List[str],
+    examples: list[InputExample],
+    label_list: list[str],
     max_length: int,
     tokenizer: PreTrainedTokenizer,
-) -> List[InputFeatures]:
+) -> list[InputFeatures]:
     """
     Loads a data file into a list of `InputFeatures`
     """
@@ -540,7 +539,7 @@ def convert_examples_to_features(
             if "num_truncated_tokens" in inputs and inputs["num_truncated_tokens"] > 0:
                 logger.info(
                     "Attention! you are cropping tokens (swag task is ok). "
-                    "If you are training ARC and RACE and you are poping question + options, "
+                    "If you are training ARC and RACE and you are popping question + options, "
                     "you need to try to use a bigger max seq length!"
                 )
 

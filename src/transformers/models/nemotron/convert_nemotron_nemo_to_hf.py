@@ -65,13 +65,13 @@ def get_args():
         "--hf_input_path",
         type=str,
         default=None,
-        help="A HF model path, " "e.g. a folder containing https://huggingface.co/nvidia/Minitron-8B-Base",
+        help="A HF model path, e.g. a folder containing https://huggingface.co/nvidia/Minitron-8B-Base",
     )
     parser.add_argument(
         "--hf_output_path",
         type=str,
         default=None,
-        help="Output HF model path, " "with the same format as above but user's own weights",
+        help="Output HF model path, with the same format as above but user's own weights",
     )
     parser.add_argument(
         "--precision",

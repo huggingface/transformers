@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BLIP モデルは、[BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) で Junnan Li、Dongxu Li、Caiming Xiong、Steven Hoi によって提案されました。 。
+BLIP モデルは、[BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://huggingface.co/papers/2201.12086) で Junnan Li、Dongxu Li、Caiming Xiong、Steven Hoi によって提案されました。 。
 
 BLIP は、次のようなさまざまなマルチモーダル タスクを実行できるモデルです。
 - 視覚的な質問応答
@@ -59,6 +59,11 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 ## BlipImageProcessor
 
 [[autodoc]] BlipImageProcessor
+    - preprocess
+
+## BlipImageProcessorFast
+
+[[autodoc]] BlipImageProcessorFast
     - preprocess
 
 <frameworkcontent>

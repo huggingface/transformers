@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax.linen as nn
 import jax
@@ -275,9 +275,9 @@ class FlaxTransformerBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        assert (
-            self.config.dim % self.config.n_heads == 0
-        ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        assert self.config.dim % self.config.n_heads == 0, (
+            f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        )
 
         self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
         self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
@@ -424,7 +424,7 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: DistilBertConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -433,7 +433,7 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
@@ -459,7 +459,7 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         head_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -861,7 +861,7 @@ class FlaxDistilBertForQuestionAnsweringModule(nn.Module):
 
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -893,3 +893,14 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForQuestionAnswering",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertPreTrainedModel",
+]

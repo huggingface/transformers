@@ -13,12 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-from typing import Optional
+
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2Backbone,
@@ -29,8 +30,8 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PreTrainedModel,
 )
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import BackboneOutput
-from ...utils import logging
+from ...modeling_outputs import BackboneOutput, ImageClassifierOutput
+from ...utils import logging, torch_int
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
@@ -83,16 +84,12 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to use the SwiGLU feedforward neural network.
         num_register_tokens (`int`, *optional*, defaults to 4):
             Number of register tokens to use.
-        interpolate_antialias (`bool`, *optional*, defaults to `True`):
-            Whether to use antialiasing when interpolating the image patches.
-        interpolate_offset (`float`, *optional*, defaults to 0.0):
-            Offset to use when interpolating the image patches.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
@@ -119,7 +116,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "dinov2-with-registers-base"
+    model_type = "dinov2_with_registers"
 
     def __init__(
         self,
@@ -140,8 +137,6 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
         num_register_tokens=4,
-        interpolate_antialias=True,
-        interpolate_offset=0.0,
         out_features=None,
         out_indices=None,
         apply_layernorm=True,
@@ -167,8 +162,6 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
         self.num_register_tokens = num_register_tokens
-        self.interpolate_antialias = interpolate_antialias
-        self.interpolate_offset = interpolate_offset
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
@@ -196,43 +189,61 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        resolution images. This implementation supports torch.jit tracing while maintaining backwards compatibility
+        with the original implementation.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
+        - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
         """
-
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+
+        # Skip interpolation for matching dimensions (unless tracing)
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
+
+        # Handle class token and patch embeddings separately
         class_pos_embed = self.position_embeddings[:, 0]
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
+
+        # Calculate new dimensions
         height = height // self.config.patch_size
         width = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        height, width = height + self.config.interpolate_offset, width + self.config.interpolate_offset
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        # Reshape for interpolation
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        # Store original dtype for restoration after interpolation
         target_dtype = patch_pos_embed.dtype
+
+        # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
-            scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
+            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
             mode="bicubic",
             align_corners=False,
-            antialias=self.config.interpolate_antialias,
-        )
-        patch_pos_embed = patch_pos_embed.to(dtype=target_dtype)
-        if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
+            antialias=True,
+        ).to(dtype=target_dtype)
+
+        # Validate output dimensions if not tracing
+        if not torch.jit.is_tracing():
+            if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
+                raise ValueError("Width or height does not match with the interpolated position embeddings")
+
+        # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -267,7 +278,36 @@ class Dinov2WithRegistersEncoder(Dinov2Encoder):
 
 
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
-    pass
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
+            # `trunc_normal_cpu` not implemented in `half` issues
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
+            ).to(module.weight.dtype)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Dinov2WithRegistersEmbeddings):
+            module.position_embeddings.data = nn.init.trunc_normal_(
+                module.position_embeddings.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.position_embeddings.dtype)
+
+            module.cls_token.data = nn.init.trunc_normal_(
+                module.cls_token.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.cls_token.dtype)
+
+            module.mask_token.data.zero_()
+            module.register_tokens.data.zero_()
+        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
+            module.lambda1.data.fill_(self.config.layerscale_value)
 
 
 class Dinov2WithRegistersModel(Dinov2Model):
@@ -275,7 +315,76 @@ class Dinov2WithRegistersModel(Dinov2Model):
 
 
 class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
-    pass
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, ImageClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.dinov2_with_registers(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
+
+        cls_token = sequence_output[:, 0]
+        # cls and register tokens should not be included in patch tokens variable
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
+
+        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+
+        logits = self.classifier(linear_input)
+
+        loss = None
+        if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
@@ -303,9 +412,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

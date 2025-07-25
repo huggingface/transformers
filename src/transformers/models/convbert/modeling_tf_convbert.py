@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union
-
 import numpy as np
 import tensorflow as tf
 
@@ -106,10 +104,10 @@ class TFConvBertEmbeddings(keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -860,16 +858,16 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: Optional[Union[np.array, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.array, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.array, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.array, tf.Tensor]] = None,
+        attention_mask: np.array | tf.Tensor | None = None,
+        token_type_ids: np.array | tf.Tensor | None = None,
+        position_ids: np.array | tf.Tensor | None = None,
+        head_mask: np.array | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         outputs = self.convbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -995,12 +993,12 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMaskedLMOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFMaskedLMOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1120,12 +1118,12 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSequenceClassifierOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFSequenceClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1208,12 +1206,12 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFMultipleChoiceModelOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFMultipleChoiceModelOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1316,12 +1314,12 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFTokenClassifierOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFTokenClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1399,13 +1397,13 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         start_positions: tf.Tensor | None = None,
         end_positions: tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[Tuple, TFQuestionAnsweringModelOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFQuestionAnsweringModelOutput:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1462,3 +1460,15 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFConvBertForMaskedLM",
+    "TFConvBertForMultipleChoice",
+    "TFConvBertForQuestionAnswering",
+    "TFConvBertForSequenceClassification",
+    "TFConvBertForTokenClassification",
+    "TFConvBertLayer",
+    "TFConvBertModel",
+    "TFConvBertPreTrainedModel",
+]

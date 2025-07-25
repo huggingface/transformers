@@ -160,7 +160,48 @@ outputs[0]["generated_text"]
 #  with a yellow center in the foreground. The flower is surrounded by red and white flowers with green stems
 ```
 
-## Streaming
+If you prefer, you can also load the images separately and pass them to the pipeline like so:
+
+```python
+pipe = pipeline("image-text-to-text", model="HuggingFaceTB/SmolVLM-256M-Instruct")
+
+img_urls = [
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+]
+images = [
+    Image.open(requests.get(img_urls[0], stream=True).raw),
+    Image.open(requests.get(img_urls[1], stream=True).raw),
+]
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "text", "text": "What do you see in these images?"},
+        ],
+    }
+]
+outputs = pipe(text=messages, images=images, max_new_tokens=50, return_full_text=False)
+outputs[0]["generated_text"]
+" In the first image, there are two cats sitting on a plant. In the second image, there are flowers with a pinkish hue."
+```
+
+The images will still be included in the `"input_text"` field of the output:
+
+```python
+outputs[0]['input_text']
+"""
+[{'role': 'user',
+  'content': [{'type': 'image',
+    'image': <PIL.PngImagePlugin.PngImageFile image mode=RGBA size=622x412>},
+   {'type': 'image',
+    'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=5184x3456>},
+   {'type': 'text', 'text': 'What do you see in these images?'}]}]## Streaming
+"""
+```
 
 We can use [text streaming](./generation_strategies#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
 

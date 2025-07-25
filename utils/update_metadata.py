@@ -34,7 +34,6 @@ import collections
 import os
 import re
 import tempfile
-from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
@@ -110,7 +109,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    ("image-to-text", "MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
@@ -124,7 +123,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
 ]
 
 
-def camel_case_split(identifier: str) -> List[str]:
+def camel_case_split(identifier: str) -> list[str]:
     """
     Split a camel-cased name into words.
 
@@ -132,7 +131,7 @@ def camel_case_split(identifier: str) -> List[str]:
         identifier (`str`): The camel-cased name to parse.
 
     Returns:
-        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+        `List[str]`: The list of words in the identifier (as separated by capital letters).
 
     Example:
 
@@ -213,9 +212,9 @@ def get_frameworks_table() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
+def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> dict[str, tuple[str, str]]:
     """
-    Update the table maping models to pipelines and auto classes without removing old keys if they don't exist anymore.
+    Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 
     Args:
         table (`Dict[str, Tuple[str, str]]`):
@@ -247,7 +246,7 @@ def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> D
                     model_names.extend(list(name))
 
             # Add pipeline tag and auto model class for those models
-            table.update({model_name: (pipeline_tag, cls) for model_name in model_names})
+            table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
 
     return table
 

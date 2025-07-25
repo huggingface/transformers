@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple, Union
 
 import tensorflow as tf
 
@@ -68,9 +67,9 @@ class TFDPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    pooler_output: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -96,9 +95,9 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    pooler_output: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -127,11 +126,11 @@ class TFDPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: tf.Tensor = None
-    end_logits: tf.Tensor = None
-    relevance_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    start_logits: tf.Tensor | None = None
+    end_logits: tf.Tensor | None = None
+    relevance_logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 class TFDPREncoderLayer(keras.layers.Layer):
@@ -155,15 +154,15 @@ class TFDPREncoderLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
+    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor, ...]:
         outputs = self.bert_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -226,14 +225,14 @@ class TFDPRSpanPredictorLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRReaderOutput | tuple[tf.Tensor, ...]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:2]
         # feed encoder
@@ -296,7 +295,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
@@ -304,7 +303,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRReaderOutput | tuple[tf.Tensor, ...]:
         outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -329,7 +328,7 @@ class TFDPREncoder(TFPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
@@ -337,7 +336,7 @@ class TFDPREncoder(TFPreTrainedModel):
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRReaderOutput | tuple[tf.Tensor, ...]:
         outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -560,7 +559,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> TFDPRContextEncoderOutput | Tuple[tf.Tensor, ...]:
+    ) -> TFDPRContextEncoderOutput | tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -649,7 +648,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> TFDPRQuestionEncoderOutput | Tuple[tf.Tensor, ...]:
+    ) -> TFDPRQuestionEncoderOutput | tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -736,7 +735,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> TFDPRReaderOutput | Tuple[tf.Tensor, ...]:
+    ) -> TFDPRReaderOutput | tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -788,3 +787,13 @@ class TFDPRReader(TFDPRPretrainedReader):
         if getattr(self, "span_predictor", None) is not None:
             with tf.name_scope(self.span_predictor.name):
                 self.span_predictor.build(None)
+
+
+__all__ = [
+    "TFDPRContextEncoder",
+    "TFDPRPretrainedContextEncoder",
+    "TFDPRPretrainedQuestionEncoder",
+    "TFDPRPretrainedReader",
+    "TFDPRQuestionEncoder",
+    "TFDPRReader",
+]

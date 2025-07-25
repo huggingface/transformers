@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Optuna, Hugging Face
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -65,7 +64,7 @@ def _get_default_logging_level():
         else:
             logging.getLogger().warning(
                 f"Unknown option TRANSFORMERS_VERBOSITY={env_level_str}, "
-                f"has to be one of: { ', '.join(log_levels.keys()) }"
+                f"has to be one of: {', '.join(log_levels.keys())}"
             )
     return _default_log_level
 
@@ -101,7 +100,8 @@ def _configure_library_root_logger() -> None:
             formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
             _default_handler.setFormatter(formatter)
 
-        library_root_logger.propagate = False
+        is_ci = os.getenv("CI") is not None and os.getenv("CI").upper() in {"1", "ON", "YES", "TRUE"}
+        library_root_logger.propagate = True if is_ci else False
 
 
 def _reset_library_root_logger() -> None:

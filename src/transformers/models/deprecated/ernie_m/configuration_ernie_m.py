@@ -17,8 +17,6 @@
 
 from __future__ import annotations
 
-from typing import Dict
-
 from ....configuration_utils import PretrainedConfig
 
 
@@ -75,7 +73,7 @@ class ErnieMConfig(PretrainedConfig):
     """
 
     model_type = "ernie_m"
-    attribute_map: Dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}
+    attribute_map: dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}
 
     def __init__(
         self,
@@ -109,3 +107,6 @@ class ErnieMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
         self.act_dropout = act_dropout
+
+
+__all__ = ["ErnieMConfig"]

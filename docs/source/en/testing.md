@@ -220,7 +220,7 @@ Just run the following line to automatically test every docstring example in the
 ```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
-If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
+If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
 ### Run only modified tests
 
@@ -472,13 +472,6 @@ For example, here is a test that must be run only when there are 2 or more GPUs 
 ```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
-```
-
-If a test requires `tensorflow` use the `require_tf` decorator. For example:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
 ```
 
 These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
@@ -1226,11 +1219,6 @@ if torch.cuda.is_available():
 import numpy as np
 
 np.random.seed(seed)
-
-# tf RNG
-import tensorflow as tf 
-
-tf.random.set_seed(seed)
 ```
 
 ### Debugging tests

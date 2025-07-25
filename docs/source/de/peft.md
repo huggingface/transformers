@@ -44,7 +44,7 @@ Transformers unterstützt nativ einige PEFT-Methoden, d.h. Sie können lokal ode
 
 - [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
-- [AdaLoRA](https://arxiv.org/abs/2303.10512)
+- [AdaLoRA](https://huggingface.co/papers/2303.10512)
 
 Wenn Sie andere PEFT-Methoden, wie z.B. Prompt Learning oder Prompt Tuning, verwenden möchten, oder über die 🤗 PEFT-Bibliothek im Allgemeinen, lesen Sie bitte die [Dokumentation](https://huggingface.co/docs/peft/index).
 

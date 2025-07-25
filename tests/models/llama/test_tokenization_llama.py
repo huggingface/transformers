@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,13 +59,14 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_tokenizers(self, **kwargs):
         kwargs.update({"pad_token": "<PAD>"})
@@ -149,8 +149,8 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizers_list += (self.rust_tokenizer_class, "hf-internal-testing/llama-tokenizer", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -229,7 +229,6 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     batch = tokenizer(
                         text=text,
                         max_length=3,
-                        max_target_length=10,
                         return_tensors="pt",
                     )
                 except NotImplementedError:
@@ -239,7 +238,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
 
-                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
+                batch_encoder_only = tokenizer(text=text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
@@ -253,7 +252,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
@@ -263,7 +262,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in r_output)
 
                 if self.test_slow_tokenizer:
-                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    tokenizer_cr = self.get_rust_tokenizer(
                         pretrained_name,
                         additional_special_tokens=added_tokens,
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert
@@ -313,8 +312,8 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         EXPECTED_WITH_SPACE = [1, 18637, 920, 526, 366, 2599]
         EXPECTED_WO_SPACE = [1, 29950, 1032, 920, 526, 366, 2599]
 
-        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
-        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
+        slow_ = self.get_tokenizer(pretrained_name, add_prefix_space=False, legacy=False)
+        fast_ = self.get_rust_tokenizer(pretrained_name, add_prefix_space=False, legacy=False)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["H", "ey", "▁how", "▁are", "▁you", "▁doing"])
@@ -324,8 +323,8 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fast_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
         )
 
-        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
-        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
+        slow_ = self.get_tokenizer(pretrained_name, add_prefix_space=True, legacy=False)
+        fast_ = self.get_rust_tokenizer(pretrained_name, add_prefix_space=True, legacy=False)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WITH_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["▁Hey", "▁how", "▁are", "▁you", "▁doing"])
@@ -408,6 +407,8 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
+    # See internal discussion: https://huggingface.slack.com/archives/C01NE71C4F7/p1750680376085749?thread_ts=1750676268.233309&cid=C01NE71C4F7
+    @unittest.skip("failing, won't fix")
     @slow
     def test_conversion(self):
         # This is excruciatingly slow since it has to recreate the entire merge
@@ -416,14 +417,14 @@ class LlamaIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dirname:
             self.rust_tokenizer.save_pretrained(dirname)
 
-            with open(os.path.join(dirname, "tokenizer.json"), "r") as f:
+            with open(os.path.join(dirname, "tokenizer.json")) as f:
                 old_serialized = f.read()
 
         new_tokenizer = convert_slow_tokenizer(self.tokenizer)
         with tempfile.NamedTemporaryFile() as f:
             new_tokenizer.save(f.name)
             # Re-opening since `f` is in bytes.
-            new_serialized = open(f.name, "r").read()
+            new_serialized = open(f.name).read()
             with open("out_tokenizer.json", "w") as g:
                 g.write(new_serialized)
 

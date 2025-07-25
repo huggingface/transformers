@@ -17,18 +17,15 @@ rendered properly in your Markdown viewer.
 # DPR
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=dpr">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpr-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/dpr-question_encoder-bert-base-multilingual">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
 
 Dense Passage Retrieval (DPR) is a set of tools and models for state-of-the-art open-domain Q&A research. It was
-introduced in [Dense Passage Retrieval for Open-Domain Question Answering](https://arxiv.org/abs/2004.04906) by
+introduced in [Dense Passage Retrieval for Open-Domain Question Answering](https://huggingface.co/papers/2004.04906) by
 Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih.
 
 The abstract from the paper is the following:

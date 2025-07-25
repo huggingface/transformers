@@ -100,7 +100,7 @@ def create_rename_keys_vision(state_dict, config):
     ########################################## VISION BACKBONE - END
 
     ########################################## ENCODER - START
-    for layer_name, params in state_dict.items():
+    for layer_name in state_dict.keys():
         if "neck" in layer_name:
             layer_name_replace = layer_name.replace("neck", "encoder")
             layer_name_replace = layer_name_replace.replace("input_proj", "channel_projection_layers")
@@ -117,7 +117,7 @@ def create_rename_keys_vision(state_dict, config):
     ########################################## ENCODER - END
 
     ########################################## DECODER - START
-    for layer_name, params in state_dict.items():
+    for layer_name in state_dict.keys():
         if layer_name.startswith("decoder"):
             layer_name_replace = layer_name.replace("decoder.decoder.layers", "decoder.layers")
             layer_name_replace = layer_name_replace.replace("input_proj", "channel_projection_layers")
@@ -268,7 +268,7 @@ def convert_omdet_turbo_checkpoint(args):
             "https://huggingface.co/omlab/OmDet-Turbo_tiny_SWIN_T/resolve/main/ViT-B-16.pt",
         ],
     }
-    # Define default OmDetTurbo configuation
+    # Define default OmDetTurbo configuration
     config = get_omdet_turbo_config(model_name, use_timm_backbone)
 
     # Load original checkpoint

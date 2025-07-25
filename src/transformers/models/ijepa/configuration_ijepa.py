@@ -22,7 +22,7 @@ class IJepaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`IJepaModel`]. It is used to instantiate an IJEPA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the I-JEPA
-    [google/ijepa-base-patch16-224](https://huggingface.co/google/ijepa-base-patch16-224) architecture.
+    [facebook/ijepa_vith14_1k](https://huggingface.co/facebook/ijepa_vith14_1k) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -56,6 +56,12 @@ class IJepaConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        pooler_output_size (`int`, *optional*):
+           Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        pooler_act (`str`, *optional*, defaults to `"tanh"`):
+           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
+           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
+           supported for Tensorflow.
 
     Example:
 
@@ -89,6 +95,8 @@ class IJepaConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
+        pooler_output_size=None,
+        pooler_act="tanh",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -106,3 +114,8 @@ class IJepaConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
+        self.pooler_act = pooler_act
+
+
+__all__ = ["IJepaConfig"]

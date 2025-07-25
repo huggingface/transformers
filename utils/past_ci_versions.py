@@ -116,8 +116,8 @@ if __name__ == "__main__":
 
     info = past_versions_testing[args.framework][args.version]
 
-    os.system(f'echo "export INSTALL_CMD=\'{info["install"]}\'" >> ~/.profile')
-    print(f'echo "export INSTALL_CMD=\'{info["install"]}\'" >> ~/.profile')
+    os.system(f"echo \"export INSTALL_CMD='{info['install']}'\" >> ~/.profile")
+    print(f"echo \"export INSTALL_CMD='{info['install']}'\" >> ~/.profile")
 
     cuda = ""
     if args.framework == "pytorch":

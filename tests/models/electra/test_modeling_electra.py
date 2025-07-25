@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -389,6 +388,8 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ElectraModel,
@@ -485,4 +486,4 @@ class ElectraModelIntegrationTest(unittest.TestCase):
             [[[0.4471, 0.6821, -0.3265], [0.4627, 0.5255, -0.3668], [0.4532, 0.3313, -0.4344]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)

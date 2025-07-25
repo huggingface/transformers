@@ -1,6 +1,6 @@
 import inspect
 import warnings
-from typing import Dict
+from typing import Any, Union
 
 import numpy as np
 
@@ -78,6 +78,11 @@ class TextClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=text-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     return_all_scores = False
     function_to_apply = ClassificationFunction.NONE
 
@@ -120,12 +125,16 @@ class TextClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs, **kwargs):
+    def __call__(
+        self,
+        inputs: Union[str, list[str], dict[str, str], list[dict[str, str]]],
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
         """
         Classify the text(s) given as inputs.
 
         Args:
-            inputs (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+            inputs (`str` or `list[str]` or `dict[str]`, or `list[dict[str]]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
                 dictionary containing `{"text", "text_pair"}` keys, or a list of those.
             top_k (`int`, *optional*, defaults to `1`):
@@ -148,7 +157,7 @@ class TextClassificationPipeline(Pipeline):
                 - `"none"`: Does not apply any function on the output.
 
         Return:
-            A list or a list of list of `dict`: Each result comes as list of dictionaries with the following keys:
+            A list of `dict`: Each result comes as list of dictionaries with the following keys:
 
             - **label** (`str`) -- The label predicted.
             - **score** (`float`) -- The corresponding probability.
@@ -165,7 +174,7 @@ class TextClassificationPipeline(Pipeline):
         else:
             return result
 
-    def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, **tokenizer_kwargs) -> dict[str, GenericTensor]:
         return_tensors = self.framework
         if isinstance(inputs, dict):
             return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,18 +17,12 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils.import_utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    import tensorflow as tf
-
-if is_flax_available():
-    import jax
 
 if is_vision_available():
     import PIL.Image
@@ -123,20 +116,6 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertTrue(np_img.min() == 0)
         self.assertTrue(np_img.max() == 1)
 
-    @require_tf
-    def test_to_pil_image_from_tensorflow(self):
-        # channels_first
-        image = tf.random.uniform((3, 4, 5))
-        pil_image = to_pil_image(image)
-        self.assertIsInstance(pil_image, PIL.Image.Image)
-        self.assertEqual(pil_image.size, (5, 4))
-
-        # channels_last
-        image = tf.random.uniform((4, 5, 3))
-        pil_image = to_pil_image(image)
-        self.assertIsInstance(pil_image, PIL.Image.Image)
-        self.assertEqual(pil_image.size, (5, 4))
-
     @require_torch
     def test_to_pil_image_from_torch(self):
         # channels first
@@ -147,21 +126,6 @@ class ImageTransformsTester(unittest.TestCase):
 
         # channels last
         image = torch.rand((4, 5, 3))
-        pil_image = to_pil_image(image)
-        self.assertIsInstance(pil_image, PIL.Image.Image)
-        self.assertEqual(pil_image.size, (5, 4))
-
-    @require_flax
-    def test_to_pil_image_from_jax(self):
-        key = jax.random.PRNGKey(0)
-        # channel first
-        image = jax.random.uniform(key, (3, 4, 5))
-        pil_image = to_pil_image(image)
-        self.assertIsInstance(pil_image, PIL.Image.Image)
-        self.assertEqual(pil_image.size, (5, 4))
-
-        # channel last
-        image = jax.random.uniform(key, (4, 5, 3))
         pil_image = to_pil_image(image)
         self.assertIsInstance(pil_image, PIL.Image.Image)
         self.assertEqual(pil_image.size, (5, 4))
@@ -282,7 +246,7 @@ class ImageTransformsTester(unittest.TestCase):
 
         # Test that exception is raised if inputs are incorrect
         # Not a numpy array image
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             normalize(5, 5, 5)
 
         # Number of mean values != number of channels
@@ -326,8 +290,8 @@ class ImageTransformsTester(unittest.TestCase):
 
         # Test float16 image input keeps float16 dtype
         image = np.random.randint(0, 256, (224, 224, 3)).astype(np.float16) / 255
-        mean = (0.5, 0.6, 0.7)
-        std = (0.1, 0.2, 0.3)
+        mean = np.array((0.5, 0.6, 0.7))
+        std = np.array((0.1, 0.2, 0.3))
 
         # The mean and std are cast to match the dtype of the input image
         cast_mean = np.array(mean, dtype=np.float16)
@@ -572,6 +536,25 @@ class ImageTransformsTester(unittest.TestCase):
             [[0, 0], [0, 1], [2, 3]],
             [[0, 0], [0, 0], [0, 0]],
         ])
+        # fmt: on
+        self.assertTrue(
+            np.allclose(
+                expected_image, pad(image, ((0, 1), (1, 0)), mode="constant", input_data_format="channels_last")
+            )
+        )
+
+        # Test that padding works on batched images
+        image = np.array(
+            [
+                [[0, 1], [2, 3]],
+            ]
+        )[None, ...]
+        expected_image = np.array(
+            [
+                [[0, 0], [0, 1], [2, 3]],
+                [[0, 0], [0, 0], [0, 0]],
+            ]
+        )[None, ...]
         # fmt: on
         self.assertTrue(
             np.allclose(

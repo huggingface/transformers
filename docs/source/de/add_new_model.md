@@ -95,7 +95,7 @@ wie der Code geschrieben werden sollte :-)
 1. Der Vorwärtsdurchlauf Ihres Modells sollte vollständig in die Modellierungsdatei geschrieben werden und dabei völlig unabhängig von anderen
    Modellen in der Bibliothek. Wenn Sie einen Block aus einem anderen Modell wiederverwenden möchten, kopieren Sie den Code und fügen ihn mit einem
    `# Kopiert von` ein (siehe [hier](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
-   für ein gutes Beispiel und [hier](pr_checks#check-copies) für weitere Dokumentation zu Copied from). 
+   für ein gutes Beispiel und [hier](pr_checks#check-copies) für weitere Dokumentation zu Copied from).
 2. Der Code sollte vollständig verständlich sein, auch für einen Nicht-Muttersprachler. Das heißt, Sie sollten
    beschreibende Variablennamen wählen und Abkürzungen vermeiden. Ein Beispiel: `activation` ist `act` vorzuziehen.
    Von Variablennamen mit nur einem Buchstaben wird dringend abgeraten, es sei denn, es handelt sich um einen Index in einer for-Schleife.
@@ -402,7 +402,7 @@ Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Wir empfehlen d
 ein bestehendes Modell:
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 Sie werden mit einem Fragebogen aufgefordert, die grundlegenden Informationen Ihres Modells einzugeben.

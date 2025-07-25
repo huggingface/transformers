@@ -80,7 +80,7 @@ class DebugUnderflowOverflow:
     You can see here, that `T5DenseGatedGeluDense.forward` resulted in output activations, whose absolute max value was
     around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have `Dropout` which
     renormalizes the weights, after it zeroed some of the elements, which pushes the absolute max value to more than
-    64K, and we get an overlow.
+    64K, and we get an overflow.
 
     As you can see it's the previous frames that we need to look into when the numbers start going into very large for
     fp16 numbers.
@@ -136,7 +136,7 @@ class DebugUnderflowOverflow:
             The model to debug.
         max_frames_to_save (`int`, *optional*, defaults to 21):
             How many frames back to record
-        trace_batch_nums(`List[int]`, *optional*, defaults to `[]`):
+        trace_batch_nums(`list[int]`, *optional*, defaults to `[]`):
             Which batch numbers to trace (turns detection off)
         abort_after_batch_num  (`int``, *optional*):
             Whether to abort after a certain batch number has finished
@@ -206,7 +206,7 @@ class DebugUnderflowOverflow:
         self.expand_frame(f"{'abs min':8} {'abs max':8} metadata")
 
     def batch_end_frame(self):
-        self.expand_frame(f"{self.prefix} *** Finished batch number={self.batch_number-1} ***\n\n")
+        self.expand_frame(f"{self.prefix} *** Finished batch number={self.batch_number - 1} ***\n\n")
 
     def create_frame(self, module, input, output):
         self.expand_frame(f"{self.prefix} {self.module_names[module]} {module.__class__.__name__}")

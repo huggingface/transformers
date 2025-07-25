@@ -42,7 +42,7 @@ def convert_longformer_qa_checkpoint_to_pytorch(
     longformer = LongformerModel.from_pretrained(longformer_model)
     lightning_model = LightningModel(longformer)
 
-    ckpt = torch.load(longformer_question_answering_ckpt_path, map_location=torch.device("cpu"))
+    ckpt = torch.load(longformer_question_answering_ckpt_path, map_location=torch.device("cpu"), weights_only=True)
     lightning_model.load_state_dict(ckpt["state_dict"])
 
     # init longformer question answering model

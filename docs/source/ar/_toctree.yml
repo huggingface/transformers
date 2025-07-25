@@ -23,8 +23,6 @@
     title: تحميل النماذج المخصصة وتدريبها باستخدام 🤗 PEFT
   - local: model_sharing
     title: مشاركة نموذجك
-  - local: agents
-    title: الوكلاء
   - local: llm_tutorial
     title: التوليد باستخدام LLMs
   - local: conversations
@@ -33,22 +31,22 @@
 - sections:
   - isExpanded: false
     sections:
-#     - local: tasks/sequence_classification
-#       title: تصنيف النصوص
-#     - local: tasks/token_classification
-#       title: تصنيف الرموز
+    - local: tasks/sequence_classification
+      title: تصنيف النصوص
+    - local: tasks/token_classification
+      title: تصنيف الرموز
     - local: tasks/question_answering
       title: الإجابة على الأسئلة
-#     - local: tasks/language_modeling
-#       title: نمذجة اللغة السببية
-#     - local: tasks/masked_language_modeling
-#       title: نمذجة اللغة المقنعة
-#     - local: tasks/translation
-#       title: الترجمة
+    - local: tasks/language_modeling
+      title: نمذجة اللغة السببية
+    - local: tasks/masked_language_modeling
+      title: نمذجة اللغة المقنعة
+    - local: tasks/translation
+      title: الترجمة
     - local: tasks/summarization
       title: التلخيص
-#     - local: tasks/multiple_choice
-#       title: الاختيار المتعدد
+    - local: tasks/multiple_choice
+      title: الاختيار المتعدد
     title: معالجة اللغات الطبيعية
 #   - isExpanded: false
 #     sections:
@@ -110,7 +108,7 @@
   title: أدلة المهام
 - sections:
   - local: fast_tokenizers
-    title: استخدم مجزئيات النصوص السريعة من 🤗 Tokenizers 
+    title: استخدم مجزئيات النصوص السريعة من 🤗 Tokenizers
   - local: multilingual
     title: الاستدلال باستخدام نماذج متعددة اللغات
   - local: create_a_model
@@ -129,8 +127,6 @@
     title: التصدير إلى TFLite
   - local: torchscript
     title: التصدير إلى TorchScript
-  - local: benchmarks
-    title: المعايير
   - local: notebooks
     title: دفاتر الملاحظات مع الأمثلة
   - local: community
@@ -254,8 +250,6 @@
   title: أطر مفاهيمية
 # - sections:
 #   - sections:
-#     - local: main_classes/agent
-#       title: الوكلاء والأدوات
 #     - local: model_doc/auto
 #       title: فئات يتم إنشاؤها ديناميكيًا
 #     - local: main_classes/backbones
@@ -883,7 +877,7 @@
 #     - local: internal/pipelines_utils
 #       title: مرافق خطوط الأنابيب
 #     - local: internal/tokenization_utils
-#       title: مرافق مقسم النصوص 
+#       title: مرافق مقسم النصوص
 #     - local: internal/trainer_utils
 #       title: مرافق المدرب
 #     - local: internal/generation_utils

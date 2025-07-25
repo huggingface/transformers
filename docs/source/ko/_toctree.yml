@@ -1,38 +1,220 @@
 - sections:
   - local: index
     title: 🤗 Transformers
-  - local: quicktour
-    title: 둘러보기
   - local: installation
     title: 설치방법
+  - local: quicktour
+    title: 둘러보기
   title: 시작하기
-- sections:
-  - local: pipeline_tutorial
-    title: Pipeline으로 추론하기
-  - local: autoclass_tutorial
-    title: AutoClass로 사전 학습된 인스턴스 로드하기
-  - local: preprocessing
-    title: 데이터 전처리하기
-  - local: training
-    title: 사전 학습된 모델 미세 조정하기
-  - local: run_scripts
-    title: 스크립트로 학습하기
-  - local: accelerate
-    title: 🤗 Accelerate로 분산 학습 구성하기
+- isExpanded: false
+  sections:
+  - sections:
+    - local: in_translation
+      title: (번역중) Loading models
+    - local: custom_models
+      title: 사용자 정의 모델 공유하기
+    - local: in_translation
+      title: (번역중) Customizing model components
+    - local: model_sharing
+      title: 만든 모델 공유하기
+    - local: modular_transformers
+      title: transformers에서의 모듈성
+    - local: add_new_model
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
+    - local: in_translation
+      title: (번역중) Documenting a model
+    - local: in_translation
+      title: (번역중) Customizing attention function
+    title: 모델
+  - sections:
+    - local: fast_tokenizers
+      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
+    - local: in_translation
+      title: (번역중) Image processors
+    - local: in_translation
+      title: (번역중) Video processors
+    - local: in_translation
+      title: (번역중) Backbones
+    - local: in_translation
+      title: (번역중) Feature extractors
+    - local: in_translation
+      title: (번역중) Processors
+    - local: tokenizer_summary
+      title: 토크나이저 요약
+    - local: pad_truncation
+      title: 패딩과 잘라내기
+    title: 전처리기(Preprocessors)
+  title: Base classes
+- isExpanded: false
+  sections:
+  - sections:
+    - local: pipeline_tutorial
+      title: Pipeline으로 추론하기
+    - local: in_translation
+      title: (번역중) Machine learning apps
+    - local: pipeline_webserver
+      title: 추론 웹 서버를 위한 파이프라인
+    - local: add_new_pipeline
+      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
+    title: 파이프라인 API
+  - sections:
+    - local: llm_tutorial
+      title: 대규모 언어 모델로 생성하기
+    - local: generation_strategies
+      title: 텍스트 생성 전략 사용자 정의
+    - local: in_translation
+      title: (번역중) Generation features
+    - local: tasks/prompting
+      title: 대규모 언어 모델 프롬프팅 가이드
+    - local: llm_optims
+      title: LLM 추론 최적화
+    - local: in_translation
+      title: (번역중) Caching
+    - local: in_translation
+      title: (번역중) KV cache strategies
+    - local: serving
+      title: 모델 서빙하기
+    - local: llm_tutorial_optimization
+      title: LLM을 최대한 활용하기
+    - local: perplexity
+      title: 고정 길이 모델의 펄플렉서티(Perplexity)
+    title: 거대 언어 모델(LLMs)
+  - sections:
+    - local: conversations
+      title: Transformers로 채팅하기
+    - local: chat_templating
+      title: 챗봇 템플릿 익히기
+    - local: in_translation
+      title: (번역중) Multimodal templates
+    - local: in_translation
+      title: (번역중) Template writing
+    - local: in_translation
+      title: (번역중) Tools and RAG
+    title: 모델을 사용해 대화하기
+  - sections:
+    - local: in_translation
+      title: (번역중) torch.compile
+    - local: perf_infer_gpu_one
+      title: 하나의 GPU를 활용한 추론
+    - local: in_translation
+      title: (번역중) Distributed inference
+    - local: perf_infer_cpu
+      title: CPU로 추론하기
+    title: 최적화(Optimization)
+  - local: in_translation
+    title: (번역중) Agents
+  - local: in_translation
+    title: (번역중) Tools
+  title: 추론(Inference)
+- isExpanded: false
+  sections:
+  - sections:
+    - local: trainer
+      title: 트레이너(Trainer)
+    - local: training
+      title: 사전 학습된 모델 미세 조정하기
+    - local: in_translation
+      title: (번역중) Optimizers
+    - local: hpo_train
+      title: Trainer API를 사용한 하이퍼파라미터 탐색
+    title: Trainer API
+  - sections:
+    - local: in_translation
+      title: (번역중) Accelerator selection
+    - local: accelerate
+      title: 🤗 Accelerate로 분산 학습 구성하기
+    - local: fsdp
+      title: 완전 분할 데이터 병렬 처리
+    - local: deepspeed
+      title: DeepSpeed
+    - local: debugging
+      title: 디버깅
+    - local: perf_train_cpu_many
+      title: 다중 CPU에서 학습하기
+    - local: perf_train_gpu_many
+      title: 다중 GPU에서 학습 진행하기
+    title: 분산 학습(Distributed training)
+  - sections:
+    - local: in_translation
+      title: (번역중) GPU
+    - local: perf_train_cpu
+      title: CPU에서 훈련
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
+    - local: in_translation
+      title: (번역중) Intel Gaudi
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
+    title: 하드웨어
   - local: peft
     title: 🤗 PEFT로 어댑터 로드 및 학습하기
-  - local: model_sharing
-    title: 만든 모델 공유하기
-  - local: transformers_agents
-    title: 에이전트
-  - local: llm_tutorial
-    title: 대규모 언어 모델로 생성하기
-  - local: conversations
-    title: Transformers로 채팅하기
-  title: 튜토리얼
-- sections:
-  - isExpanded: false
-    sections:
+  - local: model_memory_anatomy
+    title: 모델 학습 해부하기
+  title: 학습(Training)
+- isExpanded: false
+  sections:
+  - local: in_translation
+    title: (번역중) Overview
+  - local: in_translation
+    title: (번역중) Selecting a quantization method
+  - local: in_translation
+    title: (번역중) Quantization concepts
+  - local: in_translation
+    title: (번역중) AQLM
+  - local: in_translation
+    title: (번역중) AutoRound
+  - local: quantization/awq
+    title: AWQ
+  - local: in_translation
+    title: (번역중) BitNet
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: in_translation
+    title: (번역중) compressed-tensors
+  - local: quantization/eetq
+    title: EETQ
+  - local: in_translation
+    title: (번역중) FBGEMM
+  - local: in_translation
+    title: (번역중) Fine-grained FP8
+  - local: gguf
+    title: GGUF 파일들과의 상호 운용성
+  - local: quantization/gptq
+    title: GPTQ
+  - local: in_translation
+    title: (번역중) HIGGS
+  - local: in_translation
+    title: (번역중) HQQ
+  - local: in_translation
+    title: (번역중) Optimum
+  - local: quantization/quanto
+    title: Quanto
+  - local: quantization/quark
+    title: Quark
+  - local: in_translation
+    title: (번역중) torchao
+  - local: in_translation
+    title: (번역중) SpQR
+  - local: in_translation
+    title: (번역중) VPTQ
+  - local: in_translation
+    title: (번역중) Contribute
+  title: 양자화(Quantization)
+- isExpanded: false
+  sections:
+  - local: serialization
+    title: ONNX로 내보내기
+  - local: tflite
+    title: TFLite로 내보내기
+  - local: executorch
+    title: ExecuTorch
+  - local: torchscript
+    title: TorchScript로 내보내기
+  title: 배포환경에 내보내기
+- isExpanded: false
+  sections:
+  - sections:
+    - sections:
       - local: tasks/sequence_classification
         title: 텍스트 분류
       - local: tasks/token_classification
@@ -49,24 +231,22 @@
         title: 요약
       - local: tasks/multiple_choice
         title: 객관식 문제(Multiple Choice)
-    title: 자연어처리
-  - isExpanded: false
-    sections:
+      title: 자연어처리
+    - sections:
       - local: tasks/audio_classification
         title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
-    title: 오디오
-  - isExpanded: false
-    sections:
+      title: 오디오
+    - sections:
       - local: tasks/image_classification
         title: 이미지 분류
       - local: tasks/semantic_segmentation
-        title: 의미적 분할(Semantic segmentation)
+        title: 이미지 세그멘테이션
       - local: tasks/video_classification
-        title: 영상 분류
+        title: 비디오 분류
       - local: tasks/object_detection
-        title: 객체 탐지
+        title: 객체 탐지(Object detection)
       - local: tasks/zero_shot_object_detection
         title: 제로샷(zero-shot) 객체 탐지
       - local: tasks/zero_shot_image_classification
@@ -79,11 +259,12 @@
         title: 이미지 특징 추출
       - local: tasks/mask_generation
         title: 마스크 생성
+      - local: tasks/keypoint_detection
+        title: 키포인트 탐지
       - local: tasks/knowledge_distillation_for_image_classification
         title: 컴퓨터 비전(이미지 분류)를 위한 지식 증류(knowledge distillation)
-    title: 컴퓨터 비전
-  - isExpanded: false
-    sections:
+      title: 컴퓨터 비전
+    - sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
       - local: tasks/document_question_answering
@@ -92,204 +273,55 @@
         title: 시각적 질의응답 (Visual Question Answering)
       - local: in_translation
         title: (번역중) Text to speech
-    title: 멀티모달
-  - isExpanded: false
-    sections:
-    - local: generation_strategies
-      title: 텍스트 생성 전략 사용자 정의
-    title: 생성
-  - isExpanded: false
-    sections:
-    - local: tasks/idefics
-      title: IDEFICS를 이용한 이미지 작업
-    - local: tasks/prompting
-      title: 대규모 언어 모델 프롬프팅 가이드
-    title: 프롬프팅
-  title: 태스크 가이드
-- sections:
-  - local: fast_tokenizers
-    title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-  - local: multilingual
-    title: 다국어 모델 추론하기
-  - local: create_a_model
-    title: 모델별 API 사용하기
-  - local: custom_models
-    title: 사용자 정의 모델 공유하기
-  - local: chat_templating
-    title: 챗봇 템플릿 익히기
-  - local: trainer
-    title: Trainer 사용하기
-  - local: sagemaker
-    title: Amazon SageMaker에서 학습 실행하기
-  - local: serialization
-    title: ONNX로 내보내기
-  - local: tflite
-    title: TFLite로 내보내기
-  - local: torchscript
-    title: TorchScript로 내보내기
-  - local: in_translation
-    title: (번역중) Benchmarks
+      - local: tasks/idefics
+        title: IDEFICS를 이용한 이미지 작업
+      - local: in_translation
+        title: (번역중) Image-text-to-text
+      - local: in_translation
+        title: (번역중) Video-text-to-text
+      - local: in_translation
+        title: (번역중) Visual Document Retrieval
+      title: 멀티모달
+    title: 태스크 레시피
+  - local: run_scripts
+    title: 스크립트로 학습하기
+  - local: glossary
+    title: Glossary
+  - local: philosophy
+    title: 이념과 목표
   - local: in_translation
     title: (번역중) Notebooks with examples
   - local: community
     title: 커뮤니티 리소스
   - local: troubleshooting
     title: 문제 해결
-  - local: gguf
-    title: GGUF 파일들과의 상호 운용성
-  - local: modular_transformers
-    title: transformers에서의 모듈성
-  title: (번역중) 개발자 가이드
-- sections:
-  - local: in_translation
-    title: (번역중) Getting started
-  - local: quantization/bitsandbytes
-    title: bitsandbytes
-  - local: in_translation
-    title: (번역중) GPTQ
-  - local: quantization/awq
-    title: AWQ
-  - local: in_translation
-    title: (번역중) AQLM
-  - local: in_translation
-    title: (번역중) VPTQ 
-  - local: in_translation
-    title: (번역중) Quanto
-  - local: in_translation
-    title: (번역중) EETQ
-  - local: in_translation
-    title: (번역중) HQQ
-  - local: in_translation
-    title: (번역중) Optimum
-  - local: in_translation
-    title: (번역중) Contribute new quantization method
-  title: (번역중) 경량화 메소드
-- sections:
-  - local: in_translation
-    title: (번역중) Getting started
-  - local: in_translation
-    title: (번역중) bitsandbytes
-  - local: quantization/gptq
-    title: GPTQ
-  - local: in_translation
-    title: (번역중) AWQ
-  - local: in_translation
-    title: (번역중) AQLM
-  - local: in_translation
-    title: (번역중) VPTQ
-  - local: quantization/quanto
-    title: Quanto
-  - local: quantization/eetq
-    title: EETQ
-  - local: in_translation
-    title: (번역중) HQQ
-  - local: in_translation
-    title: (번역중) Optimum
-  - local: in_translation
-    title: (번역중) Contribute new quantization method
-  title: (번역중) 경량화 메소드
-- sections:
-  - local: performance
-    title: 성능 및 확장성
-  - local: in_translation
-    title: (번역중) Quantization
-  - local: llm_optims
-    title: LLM 추론 최적화
-  - sections:
-    - local: in_translation
-      title: (번역중) Methods and tools for efficient training on a single GPU
-    - local: perf_train_gpu_many
-      title: 다중 GPU에서 훈련 진행하기
-    - local: deepspeed
-      title: DeepSpeed
-    - local: fsdp
-      title: 완전 분할 데이터 병렬 처리
-    - local: perf_train_cpu
-      title: CPU에서 훈련
-    - local: perf_train_cpu_many
-      title: 다중 CPU에서 훈련하기
-    - local: perf_train_tpu_tf
-      title: TensorFlow로 TPU에서 훈련하기
-    - local: perf_train_special
-      title: Apple 실리콘에서 PyTorch 학습
-    - local: perf_hardware
-      title: 훈련용 사용자 맞춤형 하드웨어
-    - local: hpo_train
-      title: Trainer API를 사용한 하이퍼파라미터 탐색
-    title: (번역중) 효율적인 학습 기술들
-  - sections:
-    - local: perf_infer_cpu
-      title: CPU로 추론하기
-    - local: perf_infer_gpu_one
-      title: 하나의 GPU를 활용한 추론
-    title: 추론 최적화하기
-  - local: big_models
-    title: 대형 모델을 인스턴스화
-  - local: debugging
-    title: 디버깅
-  - local: tf_xla
-    title: TensorFlow 모델을 위한 XLA 통합
-  - local: in_translation
-    title: (번역중) Optimize inference using `torch.compile()`
-  title: (번역중) 성능 및 확장성
-- sections:
-    - local: contributing
-      title: 🤗 Transformers에 기여하는 방법
-    - local: add_new_model
-      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
-    - local: add_new_pipeline
-      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
-    - local: testing
-      title: 테스트
-    - local: pr_checks
-      title: Pull Request에 대한 검사
+  title: 리소스
+- isExpanded: false
+  sections:
+  - local: contributing
+    title: 🤗 Transformers에 기여하는 방법
+  - local: testing
+    title: Transformers 모델 테스트하기
+  - local: pr_checks
+    title: Pull request 검사하기
   title: 기여하기
-- sections:
-  - local: philosophy
-    title: 이념과 목표
-  - local: in_translation
-    title: (번역중) Glossary
-  - local: task_summary
-    title: 🤗 Transformers로 할 수 있는 작업
-  - local: tasks_explained
-    title: 🤗 Transformers로 작업을 해결하는 방법
-  - local: model_summary
-    title: Transformer 모델군
-  - local: tokenizer_summary
-    title: 토크나이저 요약
-  - local: attention
-    title: 어텐션 매커니즘
-  - local: pad_truncation
-    title: 패딩과 잘라내기
-  - local: bertology
-    title: BERTology
-  - local: perplexity
-    title: 고정 길이 모델의 펄플렉서티(Perplexity)
-  - local: pipeline_webserver
-    title: 추론 웹 서버를 위한 파이프라인
-  - local: model_memory_anatomy
-    title: 모델 학습 해부하기
-  - local: llm_tutorial_optimization
-    title: LLM을 최대한 활용하기
-  title: (번역중) 개념 가이드
-- sections:
+- isExpanded: false
+  sections:
   - sections:
-    - local: main_classes/agent
-      title: 에이전트와 도구
     - local: model_doc/auto
-      title: 자동 클래스
+      title: Auto Classes
     - local: in_translation
       title: (번역중) Backbones
     - local: main_classes/callback
-      title: 콜백
+      title: Callbacks
     - local: main_classes/configuration
-      title: 구성
+      title: Configuration
     - local: main_classes/data_collator
-      title: 데이터 콜레이터
+      title: Data Collator
     - local: main_classes/keras_callbacks
-      title: 케라스 콜백
+      title: Keras callbacks
     - local: main_classes/logging
-      title: 로깅
+      title: Logging
     - local: main_classes/model
       title: Models
     - local: main_classes/text_generation
@@ -298,9 +330,11 @@
       title: ONNX
     - local: in_translation
       title: (번역중) Optimization
-    - local: in_translation
-      title: 모델 출력
     - local: main_classes/output
+      title: 모델 출력
+    - local: in_translation
+      title: (번역중) PEFT
+    - local: in_translation
       title: (번역중) Pipelines
     - local: in_translation
       title: (번역중) Processors
@@ -310,20 +344,25 @@
       title: (번역중) Tokenizer
     - local: main_classes/trainer
       title: Trainer
-    - local: deepspeed
-      title: DeepSpeed
+    - local: in_translation
+      title: (번역중) DeepSpeed
     - local: main_classes/executorch
       title: ExecuTorch
     - local: main_classes/feature_extractor
-      title: 특성 추출기
+      title: 피쳐 추출기
     - local: in_translation
       title: (번역중) Image Processor
-    title: (번역중) 메인 클래스
+    - local: in_translation
+      title: (번역중) Video Processor
+    title: 메인 클래스
   - sections:
-    - isExpanded: false
-      sections:
-      - local: in_translation
-        title: (번역중) ALBERT
+    - sections:
+      - local: model_doc/albert
+        title: ALBERT
+      - local: model_doc/arcee
+        title: Arcee
+      - local: model_doc/bamba
+        title: Bamba
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -332,450 +371,742 @@
         title: BARTpho
       - local: model_doc/bert
         title: BERT
-      - local: in_translation
-        title: (번역중) BertGeneration
+      - local: model_doc/bert-generation
+        title: BertGeneration
       - local: model_doc/bert-japanese
-        title: 일본어 Bert
+        title: BertJapanese
       - local: model_doc/bertweet
-        title: Bertweet
-      - local: in_translation
-        title: (번역중) BigBird
-      - local: in_translation
-        title: (번역중) BigBirdPegasus
+        title: BERTweet
+      - local: model_doc/big_bird
+        title: BigBird
+      - local: model_doc/bigbird_pegasus
+        title: BigBirdPegasus
       - local: model_doc/biogpt
         title: BioGpt
-      - local: in_translation
-        title: (번역중) Blenderbot
-      - local: in_translation
-        title: (번역중) Blenderbot Small
-      - local: in_translation
-        title: (번역중) BLOOM
-      - local: in_translation
-        title: (번역중) BORT
-      - local: in_translation
-        title: (번역중) ByT5
-      - local: in_translation
-        title: (번역중) CamemBERT
-      - local: in_translation
-        title: (번역중) CANINE
-      - local: in_translation
-        title: (번역중) CodeGen
+      - local: model_doc/bitnet
+        title: BitNet
+      - local: model_doc/blenderbot
+        title: Blenderbot
+      - local: model_doc/blenderbot-small
+        title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/bort
+        title: BORT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
-      - local: in_translation
-        title: (번역중) CPM
-      - local: in_translation
-        title: (번역중) CPMANT
-      - local: in_translation
-        title: (번역중) CTRL
+      - local: model_doc/cpm
+        title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
       - local: model_doc/dbrx
         title: DBRX
       - local: model_doc/deberta
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
-      - local: in_translation
-        title: (번역중) DialoGPT
-      - local: in_translation
-        title: (번역중) DistilBERT
-      - local: in_translation
-        title: (번역중) DPR
-      - local: in_translation
-        title: (번역중) ELECTRA
+      - local: model_doc/deepseek_v3
+        title: DeepSeek-V3
+      - local: model_doc/dialogpt
+        title: DialoGPT
+      - local: model_doc/diffllama
+        title: DiffLlama
+      - local: model_doc/distilbert
+        title: DistilBERT
+      - local: model_doc/doge
+        title: Doge
+      - local: model_doc/dots1
+        title: dots1
+      - local: model_doc/dpr
+        title: DPR
+      - local: model_doc/electra
+        title: ELECTRA
       - local: model_doc/encoder-decoder
-        title: 인코더 디코더 모델
-      - local: in_translation
-        title: (번역중) ERNIE
-      - local: in_translation
-        title: (번역중) ErnieM
+        title: Encoder Decoder Models
+      - local: model_doc/ernie
+        title: ERNIE
+      - local: model_doc/ernie_m
+        title: ErnieM
       - local: model_doc/esm
         title: ESM
-      - local: in_translation
-        title: (번역중) FLAN-T5
-      - local: in_translation
-        title: (번역중) FLAN-UL2
-      - local: in_translation
-        title: (번역중) FlauBERT
-      - local: in_translation
-        title: (번역중) FNet
-      - local: in_translation
-        title: (번역중) FSMT
-      - local: in_translation
-        title: (번역중) Funnel Transformer
+      - local: model_doc/falcon
+        title: Falcon
+      - local: model_doc/falcon3
+        title: Falcon3
+      - local: model_doc/falcon_h1
+        title: FalconH1
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
+      - local: model_doc/flan-t5
+        title: FLAN-T5
+      - local: model_doc/flan-ul2
+        title: FLAN-UL2
+      - local: model_doc/flaubert
+        title: FlauBERT
+      - local: model_doc/fnet
+        title: FNet
+      - local: model_doc/fsmt
+        title: FSMT
+      - local: model_doc/funnel
+        title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
       - local: model_doc/gemma
         title: Gemma
       - local: model_doc/gemma2
         title: Gemma2
+      - local: model_doc/glm
+        title: GLM
+      - local: model_doc/glm4
+        title: glm4
       - local: model_doc/openai-gpt
         title: GPT
-      - local: in_translation
-        title: (번역중) GPT Neo
-      - local: in_translation
-        title: (번역중) GPT NeoX
+      - local: model_doc/gpt_neo
+        title: GPT Neo
+      - local: model_doc/gpt_neox
+        title: GPT NeoX
       - local: model_doc/gpt_neox_japanese
         title: GPT NeoX Japanese
-      - local: in_translation
-        title: (번역중) GPT-J
-      - local: in_translation
-        title: (번역중) GPT2
-      - local: in_translation
-        title: (번역중) GPTBigCode
-      - local: in_translation
-        title: (번역중) GPTSAN Japanese
-      - local: in_translation
-        title: (번역중) GPTSw3
-      - local: in_translation
-        title: (번역중) HerBERT
-      - local: in_translation
-        title: (번역중) I-BERT
-      - local: in_translation
-        title: (번역중) Jukebox
-      - local: in_translation
-        title: (번역중) LED
+      - local: model_doc/gptj
+        title: GPT-J
+      - local: model_doc/gpt2
+        title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
+      - local: model_doc/gptsan-japanese
+        title: GPTSAN Japanese
+      - local: model_doc/gpt-sw3
+        title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
+      - local: model_doc/granitemoe
+        title: GraniteMoe
+      - local: model_doc/granitemoehybrid
+        title: GraniteMoeHybrid
+      - local: model_doc/granitemoeshared
+        title: GraniteMoeShared
+      - local: model_doc/helium
+        title: Helium
+      - local: model_doc/herbert
+        title: HerBERT
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
+      - local: model_doc/ibert
+        title: I-BERT
+      - local: model_doc/jamba
+        title: Jamba
+      - local: model_doc/jetmoe
+        title: JetMoe
+      - local: model_doc/jukebox
+        title: Jukebox
+      - local: model_doc/led
+        title: LED
+      - local: model_doc/lfm2
+        title: LFM2
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
-        title: LLaMA2
+        title: Llama2
       - local: model_doc/llama3
-        title: LLaMA3
-      - local: in_translation
-        title: (번역중) Longformer
-      - local: in_translation
-        title: (번역중) LongT5
-      - local: in_translation
-        title: (번역중) LUKE
-      - local: in_translation
-        title: (번역중) M2M100
+        title: Llama3
+      - local: model_doc/longformer
+        title: Longformer
+      - local: model_doc/longt5
+        title: LongT5
+      - local: model_doc/luke
+        title: LUKE
+      - local: model_doc/m2m_100
+        title: M2M100
+      - local: model_doc/madlad-400
+        title: MADLAD-400
       - local: model_doc/mamba
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
       - local: model_doc/marian
         title: MarianMT
-      - local: in_translation
-        title: (번역중) MarkupLM
-      - local: in_translation
-        title: (번역중) MBart and MBart-50
-      - local: in_translation
-        title: (번역중) MEGA
-      - local: in_translation
-        title: (번역중) MegatronBERT
-      - local: in_translation
-        title: (번역중) MegatronGPT2
+      - local: model_doc/markuplm
+        title: MarkupLM
+      - local: model_doc/mbart
+        title: MBart and MBart-50
+      - local: model_doc/mega
+        title: MEGA
+      - local: model_doc/megatron-bert
+        title: MegatronBERT
+      - local: model_doc/megatron_gpt2
+        title: MegatronGPT2
+      - local: model_doc/minimax
+        title: MiniMax
       - local: model_doc/mistral
         title: Mistral
-      - local: in_translation
-        title: (번역중) mLUKE
-      - local: in_translation
-        title: (번역중) MobileBERT
-      - local: in_translation
-        title: (번역중) MPNet
-      - local: in_translation
-        title: (번역중) MT5
-      - local: in_translation
-        title: (번역중) MVP
-      - local: in_translation
-        title: (번역중) NEZHA
-      - local: in_translation
-        title: (번역중) NLLB
-      - local: in_translation
-        title: (번역중) NLLB-MoE
-      - local: in_translation
-        title: (번역중) Nyströmformer
-      - local: in_translation
-        title: (번역중) Open-Llama
-      - local: in_translation
-        title: (번역중) OPT
-      - local: in_translation
-        title: (번역중) Pegasus
-      - local: in_translation
-        title: (번역중) PEGASUS-X
-      - local: in_translation
-        title: (번역중) PhoBERT
-      - local: in_translation
-        title: (번역중) PLBart
-      - local: in_translation
-        title: (번역중) ProphetNet
-      - local: in_translation
-        title: (번역중) QDQBert
+      - local: model_doc/mixtral
+        title: Mixtral
+      - local: model_doc/mluke
+        title: mLUKE
+      - local: model_doc/mobilebert
+        title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
+      - local: model_doc/modernbert-decoder
+        title: ModernBERTDecoder
+      - local: model_doc/mpnet
+        title: MPNet
+      - local: model_doc/mpt
+        title: MPT
+      - local: model_doc/mra
+        title: MRA
+      - local: model_doc/mt5
+        title: MT5
+      - local: model_doc/mvp
+        title: MVP
+      - local: model_doc/myt5
+        title: myt5
+      - local: model_doc/nemotron
+        title: Nemotron
+      - local: model_doc/nezha
+        title: NEZHA
+      - local: model_doc/nllb
+        title: NLLB
+      - local: model_doc/nllb-moe
+        title: NLLB-MoE
+      - local: model_doc/nystromformer
+        title: Nyströmformer
+      - local: model_doc/olmo
+        title: OLMo
+      - local: model_doc/olmo2
+        title: OLMo2
+      - local: model_doc/olmoe
+        title: OLMoE
+      - local: model_doc/open-llama
+        title: Open-Llama
+      - local: model_doc/opt
+        title: OPT
+      - local: model_doc/pegasus
+        title: Pegasus
+      - local: model_doc/pegasus_x
+        title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
+      - local: model_doc/phi
+        title: Phi
+      - local: model_doc/phi3
+        title: Phi-3
+      - local: model_doc/phimoe
+        title: PhiMoE
+      - local: model_doc/phobert
+        title: PhoBERT
+      - local: model_doc/plbart
+        title: PLBart
+      - local: model_doc/prophetnet
+        title: ProphetNet
+      - local: model_doc/qdqbert
+        title: QDQBert
+      - local: model_doc/qwen2
+        title: Qwen2
+      - local: model_doc/qwen2_moe
+        title: Qwen2MoE
+      - local: model_doc/qwen3
+        title: Qwen3
+      - local: model_doc/qwen3_moe
+        title: Qwen3MoE
       - local: model_doc/rag
-        title: RAG(검색 증강 생성)
-      - local: in_translation
-        title: (번역중) REALM
-      - local: in_translation
-        title: (번역중) Reformer
-      - local: in_translation
-        title: (번역중) RemBERT
-      - local: in_translation
-        title: (번역중) RetriBERT
-      - local: in_translation
-        title: (번역중) RoBERTa
-      - local: in_translation
-        title: (번역중) RoBERTa-PreLayerNorm
-      - local: in_translation
-        title: (번역중) RoCBert
-      - local: in_translation
-        title: (번역중) RoFormer
-      - local: in_translation
-        title: (번역중) Splinter
-      - local: in_translation
-        title: (번역중) SqueezeBERT
-      - local: in_translation
-        title: (번역중) SwitchTransformers
-      - local: in_translation
-        title: (번역중) T5
-      - local: in_translation
-        title: (번역중) T5v1.1
-      - local: in_translation
-        title: (번역중) TAPEX
-      - local: in_translation
-        title: (번역중) Transformer XL
-      - local: in_translation
-        title: (번역중) UL2
-      - local: in_translation
-        title: (번역중) X-MOD
-      - local: in_translation
-        title: (번역중) XGLM
-      - local: in_translation
-        title: (번역중) XLM
-      - local: in_translation
-        title: (번역중) XLM-ProphetNet
-      - local: in_translation
-        title: (번역중) XLM-RoBERTa
-      - local: in_translation
-        title: (번역중) XLM-RoBERTa-XL
-      - local: in_translation
-        title: (번역중) XLM-V
-      - local: in_translation
-        title: (번역중) XLNet
-      - local: in_translation
-        title: (번역중) YOSO
-      title: (번역중) 텍스트 모델
-    - isExpanded: false
-      sections:
-      - local: in_translation
-        title: (번역중) BEiT
-      - local: in_translation
-        title: (번역중) BiT
-      - local: in_translation
-        title: (번역중) Conditional DETR
-      - local: in_translation
-        title: (번역중) ConvNeXT
-      - local: in_translation
-        title: (번역중) ConvNeXTV2
-      - local: in_translation
-        title: (번역중) CvT
-      - local: in_translation
-        title: (번역중) Deformable DETR
-      - local: in_translation
-        title: (번역중) DeiT
-      - local: in_translation
-        title: (번역중) DETA
-      - local: in_translation
-        title: (번역중) DETR
-      - local: in_translation
-        title: (번역중) DiNAT
-      - local: in_translation
-        title: (번역중) DiT
-      - local: in_translation
-        title: (번역중) DPT
-      - local: in_translation
-        title: (번역중) EfficientFormer
-      - local: in_translation
-        title: (번역중) EfficientNet
-      - local: in_translation
-        title: (번역중) FocalNet
-      - local: in_translation
-        title: (번역중) GLPN
-      - local: in_translation
-        title: (번역중) ImageGPT
-      - local: in_translation
-        title: (번역중) LeViT
-      - local: in_translation
-        title: (번역중) Mask2Former
-      - local: in_translation
-        title: (번역중) MaskFormer
-      - local: in_translation
-        title: (번역중) MobileNetV1
-      - local: in_translation
-        title: (번역중) MobileNetV2
-      - local: in_translation
-        title: (번역중) MobileViT
-      - local: in_translation
-        title: (번역중) NAT
-      - local: in_translation
-        title: (번역중) PoolFormer
-      - local: in_translation
-        title: (번역중) RegNet
-      - local: in_translation
-        title: (번역중) ResNet
-      - local: in_translation
-        title: (번역중) SegFormer
+        title: RAG
+      - local: model_doc/realm
+        title: REALM
+      - local: model_doc/recurrent_gemma
+        title: RecurrentGemma
+      - local: model_doc/reformer
+        title: Reformer
+      - local: model_doc/rembert
+        title: RemBERT
+      - local: model_doc/retribert
+        title: RetriBERT
+      - local: model_doc/roberta
+        title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
+      - local: model_doc/roc_bert
+        title: RoCBert
+      - local: model_doc/roformer
+        title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
+      - local: model_doc/splinter
+        title: Splinter
+      - local: model_doc/squeezebert
+        title: SqueezeBERT
+      - local: model_doc/stablelm
+        title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
+      - local: model_doc/switch_transformers
+        title: SwitchTransformers
+      - local: model_doc/t5
+        title: T5
+      - local: model_doc/t5gemma
+        title: T5Gemma
+      - local: model_doc/t5v1.1
+        title: T5v1.1
+      - local: model_doc/tapex
+        title: TAPEX
+      - local: model_doc/transfo-xl
+        title: Transformer XL
+      - local: model_doc/ul2
+        title: UL2
+      - local: model_doc/umt5
+        title: UMT5
+      - local: model_doc/xmod
+        title: X-MOD
+      - local: model_doc/xglm
+        title: XGLM
+      - local: model_doc/xlm
+        title: XLM
+      - local: model_doc/xlm-prophetnet
+        title: XLM-ProphetNet
+      - local: model_doc/xlm-roberta
+        title: XLM-RoBERTa
+      - local: model_doc/xlm-roberta-xl
+        title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
+      - local: model_doc/xlnet
+        title: XLNet
+      - local: model_doc/yoso
+        title: YOSO
+      - local: model_doc/zamba
+        title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
+      title: 텍스트 모델
+    - sections:
+      - local: model_doc/aimv2
+        title: Aimv2
+      - local: model_doc/beit
+        title: BEiT
+      - local: model_doc/bit
+        title: BiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
+      - local: model_doc/cvt
+        title: CvT
+      - local: model_doc/d_fine
+        title: D-FINE
+      - local: model_doc/dab-detr
+        title: DAB-DETR
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/depth_anything
+        title: Depth Anything
+      - local: model_doc/depth_anything_v2
+        title: Depth Anything V2
+      - local: model_doc/depth_pro
+        title: DepthPro
+      - local: model_doc/deta
+        title: DETA
+      - local: model_doc/detr
+        title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
+      - local: model_doc/dinov2
+        title: DINOV2
+      - local: model_doc/dinov2_with_registers
+        title: DINOv2 with Registers
+      - local: model_doc/dit
+        title: DiT
+      - local: model_doc/dpt
+        title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
+      - local: model_doc/efficientnet
+        title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
+      - local: model_doc/focalnet
+        title: FocalNet
+      - local: model_doc/glpn
+        title: GLPN
+      - local: model_doc/hiera
+        title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
+      - local: model_doc/imagegpt
+        title: ImageGPT
+      - local: model_doc/levit
+        title: LeViT
+      - local: model_doc/lightglue
+        title: LightGlue
+      - local: model_doc/mask2former
+        title: Mask2Former
+      - local: model_doc/maskformer
+        title: MaskFormer
+      - local: model_doc/mlcd
+        title: MLCD
+      - local: model_doc/mobilenet_v1
+        title: MobileNetV1
+      - local: model_doc/mobilenet_v2
+        title: MobileNetV2
+      - local: model_doc/mobilevit
+        title: MobileViT
+      - local: model_doc/mobilevitv2
+        title: MobileViTV2
+      - local: model_doc/nat
+        title: NAT
+      - local: model_doc/poolformer
+        title: PoolFormer
+      - local: model_doc/prompt_depth_anything
+        title: Prompt Depth Anything
+      - local: model_doc/pvt
+        title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
+      - local: model_doc/regnet
+        title: RegNet
+      - local: model_doc/resnet
+        title: ResNet
+      - local: model_doc/rt_detr
+        title: RT-DETR
+      - local: model_doc/rt_detr_v2
+        title: RT-DETRv2
+      - local: model_doc/segformer
+        title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
+      - local: model_doc/superpoint
+        title: SuperPoint
+      - local: model_doc/swiftformer
+        title: SwiftFormer
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
       - local: model_doc/swin2sr
         title: Swin2SR
-      - local: in_translation
-        title: (번역중) Table Transformer
-      - local: in_translation
-        title: (번역중) TimeSformer
-      - local: in_translation
-        title: (번역중) UperNet
-      - local: in_translation
-        title: (번역중) VAN
-      - local: in_translation
-        title: (번역중) VideoMAE
-      - local: in_translation
-        title: Vision Transformer (ViT)
+      - local: model_doc/table-transformer
+        title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
+      - local: model_doc/upernet
+        title: UperNet
+      - local: model_doc/van
+        title: VAN
       - local: model_doc/vit
-        title: (번역중) ViT Hybrid
-      - local: in_translation
-        title: (번역중) ViTMAE
-      - local: in_translation
-        title: (번역중) ViTMSN
-      - local: in_translation
-        title: (번역중) YOLOS
-      title: (번역중) 비전 모델
-    - isExpanded: false
-      sections:
-      - local: in_translation
-        title: (번역중) Audio Spectrogram Transformer
-      - local: in_translation
-        title: (번역중) CLAP
-      - local: in_translation
-        title: (번역중) Hubert
-      - local: in_translation
-        title: (번역중) MCTCT
-      - local: in_translation
-        title: (번역중) SEW
-      - local: in_translation
-        title: (번역중) SEW-D
-      - local: in_translation
-        title: (번역중) Speech2Text
-      - local: in_translation
-        title: (번역중) Speech2Text2
-      - local: in_translation
-        title: (번역중) SpeechT5
-      - local: in_translation
-        title: (번역중) UniSpeech
-      - local: in_translation
-        title: (번역중) UniSpeech-SAT
-      - local: in_translation
-        title: (번역중) Wav2Vec2
-      - local: in_translation
-        title: (번역중) Wav2Vec2-Conformer
-      - local: in_translation
-        title: (번역중) Wav2Vec2Phoneme
-      - local: in_translation
-        title: (번역중) WavLM
+        title: Vision Transformer (ViT)
+      - local: model_doc/vit_hybrid
+        title: ViT Hybrid
+      - local: model_doc/vitdet
+        title: ViTDet
+      - local: model_doc/vit_mae
+        title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
+      - local: model_doc/vit_msn
+        title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
+      - local: model_doc/yolos
+        title: YOLOS
+      - local: model_doc/zoedepth
+        title: ZoeDepth
+      title: 비전 모델
+    - sections:
+      - local: model_doc/audio-spectrogram-transformer
+        title: Audio Spectrogram Transformer
+      - local: model_doc/bark
+        title: Bark
+      - local: model_doc/clap
+        title: CLAP
+      - local: model_doc/csm
+        title: CSM
+      - local: model_doc/dac
+        title: dac
+      - local: model_doc/dia
+        title: Dia
+      - local: model_doc/encodec
+        title: EnCodec
+      - local: model_doc/fastspeech2_conformer
+        title: FastSpeech2Conformer
+      - local: model_doc/granite_speech
+        title: GraniteSpeech
+      - local: model_doc/hubert
+        title: Hubert
+      - local: model_doc/kyutai_speech_to_text
+        title: Kyutai Speech-To-Text
+      - local: model_doc/mctct
+        title: MCTCT
+      - local: model_doc/mimi
+        title: Mimi
+      - local: model_doc/mms
+        title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
+      - local: model_doc/moshi
+        title: Moshi
+      - local: model_doc/musicgen
+        title: MusicGen
+      - local: model_doc/musicgen_melody
+        title: MusicGen Melody
+      - local: model_doc/pop2piano
+        title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
+      - local: model_doc/seamless_m4t_v2
+        title: SeamlessM4T-v2
+      - local: model_doc/sew
+        title: SEW
+      - local: model_doc/sew-d
+        title: SEW-D
+      - local: model_doc/speech_to_text
+        title: Speech2Text
+      - local: model_doc/speech_to_text_2
+        title: Speech2Text2
+      - local: model_doc/speecht5
+        title: SpeechT5
+      - local: model_doc/unispeech
+        title: UniSpeech
+      - local: model_doc/unispeech-sat
+        title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
+      - local: model_doc/vits
+        title: VITS
+      - local: model_doc/wav2vec2
+        title: Wav2Vec2
+      - local: model_doc/wav2vec2-bert
+        title: Wav2Vec2-BERT
+      - local: model_doc/wav2vec2-conformer
+        title: Wav2Vec2-Conformer
+      - local: model_doc/wav2vec2_phoneme
+        title: Wav2Vec2Phoneme
+      - local: model_doc/wavlm
+        title: WavLM
       - local: model_doc/whisper
         title: Whisper
-      - local: in_translation
-        title: (번역중) XLS-R
-      - local: in_translation
-        title: (번역중) XLSR-Wav2Vec2
-      title: (번역중) 오디오 모델
-    - isExpanded: false
-      sections:
+      - local: model_doc/xls_r
+        title: XLS-R
+      - local: model_doc/xlsr_wav2vec2
+        title: XLSR-Wav2Vec2
+      title: 오디오 모델
+    - sections:
       - local: model_doc/timesformer
         title: TimeSformer
-      - local: in_translation
-        title: (번역중) VideoMAE
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
+      - local: model_doc/videomae
+        title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
-      title: (번역중) 비디오 모델
-    - isExpanded: false
-      sections:
-      - local: in_translation
-        title: (번역중) ALIGN
-      - local: in_translation
-        title: (번역중) AltCLIP
-      - local: model_doc/blip-2
-        title: BLIP-2
+      title: 비디오 모델
+    - sections:
+      - local: model_doc/align
+        title: ALIGN
+      - local: model_doc/altclip
+        title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
+      - local: model_doc/aya_vision
+        title: AyaVision
       - local: model_doc/blip
         title: BLIP
-      - local: in_translation
-        title: (번역중) BridgeTower
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
       - local: model_doc/chameleon
         title: Chameleon
-      - local: in_translation
-        title: (번역중) Chinese-CLIP
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
-      - local: in_translation
-        title: (번역중) CLIPSeg
-      - local: in_translation
-        title: (번역중) Data2Vec
-      - local: in_translation
-        title: (번역중) DePlot
-      - local: in_translation
-        title: (번역중) Donut
-      - local: in_translation
-        title: (번역중) FLAVA
-      - local: in_translation
-        title: (번역중) GIT
-      - local: in_translation
-        title: (번역중) GroupViT
-      - local: in_translation
-        title: (번역중) LayoutLM
-      - local: in_translation
-        title: (번역중) LayoutLMV2
-      - local: in_translation
-        title: (번역중) LayoutLMV3
-      - local: in_translation
-        title: (번역중) LayoutXLM
-      - local: in_translation
-        title: (번역중) LiLT
-      - local: in_translation
-        title: (번역중) LXMERT
-      - local: in_translation
-        title: (번역중) MatCha
-      - local: in_translation
-        title: (번역중) MGP-STR
-      - local: in_translation
-        title: (번역중) OneFormer
-      - local: in_translation
-        title: (번역중) OWL-ViT
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
+      - local: model_doc/colpali
+        title: ColPali
+      - local: model_doc/colqwen2
+        title: ColQwen2
+      - local: model_doc/data2vec
+        title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
+      - local: model_doc/donut
+        title: Donut
+      - local: model_doc/emu3
+        title: Emu3
+      - local: model_doc/flava
+        title: FLAVA
+      - local: model_doc/gemma3
+        title: Gemma3
+      - local: model_doc/gemma3n
+        title: Gemma3n
+      - local: model_doc/git
+        title: GIT
+      - local: model_doc/glm4v
+        title: glm4v
+      - local: model_doc/got_ocr2
+        title: GOT-OCR2
+      - local: model_doc/granitevision
+        title: GraniteVision
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
+      - local: model_doc/groupvit
+        title: GroupViT
+      - local: model_doc/idefics
+        title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
+      - local: model_doc/idefics3
+        title: Idefics3
+      - local: model_doc/instructblip
+        title: InstructBLIP
+      - local: model_doc/instructblipvideo
+        title: InstructBlipVideo
+      - local: model_doc/internvl
+        title: InternVL
+      - local: model_doc/janus
+        title: Janus
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
+      - local: model_doc/layoutlm
+        title: LayoutLM
+      - local: model_doc/layoutlmv2
+        title: LayoutLMV2
+      - local: model_doc/layoutlmv3
+        title: LayoutLMV3
+      - local: model_doc/layoutxlm
+        title: LayoutXLM
+      - local: model_doc/lilt
+        title: LiLT
+      - local: model_doc/llama4
+        title: Llama4
+      - local: model_doc/llava
+        title: Llava
+      - local: model_doc/llava_next
+        title: LLaVA-NeXT
+      - local: model_doc/llava_next_video
+        title: LLaVa-NeXT-Video
+      - local: model_doc/llava_onevision
+        title: LLaVA-Onevision
+      - local: model_doc/lxmert
+        title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
+      - local: model_doc/mgp-str
+        title: MGP-STR
+      - local: model_doc/mistral3
+        title: Mistral3
+      - local: model_doc/mllama
+        title: mllama
+      - local: model_doc/nougat
+        title: Nougat
+      - local: model_doc/omdet-turbo
+        title: OmDet-Turbo
+      - local: model_doc/oneformer
+        title: OneFormer
+      - local: model_doc/owlvit
+        title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/paligemma
         title: PaliGemma
-      - local: in_translation
-        title: (번역중) Perceiver
-      - local: in_translation
-        title: (번역중) Pix2Struct
-      - local: in_translation
-        title: (번역중) Segment Anything
-      - local: in_translation
-        title: (번역중) Speech Encoder Decoder Models
-      - local: in_translation
-        title: (번역중) TAPAS
-      - local: in_translation
-        title: (번역중) TrOCR
-      - local: in_translation
-        title: (번역중) TVLT
-      - local: in_translation
-        title: (번역중) ViLT
-      - local: in_translation
-        title: (번역중) Vision Encoder Decoder Models
-      - local: in_translation
-        title: (번역중) Vision Text Dual Encoder
-      - local: in_translation
-        title: (번역중) VisualBERT
-      - local: in_translation
-        title: (번역중) X-CLIP
-      title: (번역중) 멀티모달 모델
-    - isExpanded: false
-      sections:
-      - local: in_translation
-        title: (번역중) Decision Transformer
+      - local: model_doc/perceiver
+        title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
+      - local: model_doc/phi4_multimodal
+        title: Phi4 Multimodal
+      - local: model_doc/pix2struct
+        title: Pix2Struct
+      - local: model_doc/pixtral
+        title: Pixtral
+      - local: model_doc/qwen2_5_omni
+        title: Qwen2.5-Omni
+      - local: model_doc/qwen2_5_vl
+        title: Qwen2.5-VL
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
+      - local: model_doc/sam
+        title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
+      - local: model_doc/shieldgemma2
+        title: ShieldGemma2
+      - local: model_doc/siglip
+        title: SigLIP
+      - local: model_doc/siglip2
+        title: SigLIP2
+      - local: model_doc/smollm3
+        title: SmolLM3
+      - local: model_doc/smolvlm
+        title: SmolVLM
+      - local: model_doc/speech-encoder-decoder
+        title: Speech Encoder Decoder Models
+      - local: model_doc/tapas
+        title: TAPAS
+      - local: model_doc/trocr
+        title: TrOCR
+      - local: model_doc/tvlt
+        title: TVLT
+      - local: model_doc/tvp
+        title: TVP
+      - local: model_doc/udop
+        title: UDOP
+      - local: model_doc/video_llava
+        title: VideoLlava
+      - local: model_doc/vilt
+        title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
+      - local: model_doc/vision-encoder-decoder
+        title: Vision Encoder Decoder Models
+      - local: model_doc/vision-text-dual-encoder
+        title: Vision Text Dual Encoder
+      - local: model_doc/visual_bert
+        title: VisualBERT
+      - local: model_doc/voxtral
+        title: Voxtral
+      - local: model_doc/xclip
+        title: X-CLIP
+      title: 멀티모달 모델
+    - sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
       - local: model_doc/trajectory_transformer
-        title: 궤적 트랜스포머
-      title: (번역중) 강화학습 모델
-    - isExpanded: false
-      sections:
+        title: Trajectory Transformer
+      title: 강화학습 모델
+    - sections:
       - local: model_doc/autoformer
         title: Autoformer
       - local: model_doc/informer
@@ -785,17 +1116,20 @@
       - local: model_doc/patchtst
         title: PatchTST
       - local: model_doc/time_series_transformer
-        title: 시계열 트랜스포머
-      title: 시계열 모델
-    - isExpanded: false
-      sections:
+        title: Time Series Transformer
+      - local: model_doc/timesfm
+        title: TimesFM
+      title: 시게열 모델
+    - sections:
       - local: model_doc/graphormer
         title: Graphormer
       title: 그래프 모델
-    title: (번역중) 모델
+    title: 모델
   - sections:
     - local: internal/modeling_utils
       title: 사용자 정의 레이어 및 유틸리티
+    - local: in_translation
+      title: (번역중) Utilities for Model Debugging
     - local: internal/pipelines_utils
       title: 파이프라인을 위한 유틸리티
     - local: internal/tokenization_utils
@@ -810,7 +1144,13 @@
       title: 오디오 처리를 위한 유틸리티
     - local: internal/file_utils
       title: 일반 유틸리티
+    - local: in_translation
+      title: (번역중) Importing Utilities
     - local: internal/time_series_utils
       title: 시계열을 위한 유틸리티
-    title: (번역중) Internal Helpers
-  title: (번역중) API
+    title: 내부 헬퍼(Internal helpers)
+  - sections:
+    - local: in_translation
+      title: (번역중)Environment Variables
+    title: Reference
+  title: API
