@@ -62,7 +62,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class FalconHybridMambaAttentionDynamicCache(DynamicCache):
+class FalconHybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -75,6 +75,10 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
     while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
+
+    key_cache = None
+    value_cache = None
+    is_compileable = False
 
     def __init__(
         self,
@@ -1145,15 +1149,13 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class FalconH1PreTrainedModel(PreTrainedModel):
-    config_class = FalconH1Config
+    config: FalconH1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconH1DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports FalconHybridMambaAttentionDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
@@ -1239,12 +1241,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1485,18 +1481,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder

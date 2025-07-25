@@ -35,7 +35,6 @@ from ..cache_utils import (
     HybridChunkedCache,
     OffloadedCache,
     OffloadedHybridCache,
-    QuantizedCacheConfig,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -68,7 +67,6 @@ from .candidate_generator import (
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
-    _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
@@ -567,15 +565,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 1. Handle BC:
         model_inputs = {}
-        # - some models don't have `Cache` support (which implies they don't expect `cache_position` in `forward`)
-        if self._supports_cache_class:
-            model_inputs["cache_position"] = cache_position
-        # - `cache_position` was not a mandatory input in `prepare_inputs_for_generation` for those models, and this
-        #   function may be called outside of `generate`. Handle most use cases by creating `cache_position` on the fly
-        #   (this alternative is not as robust as calling `generate` and letting it create `cache_position`)
-        elif cache_position is None:
-            past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-            cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
+        model_inputs["cache_position"] = cache_position
 
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
@@ -655,8 +645,8 @@ class GenerationMixin(ContinuousMixin):
 
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                token_type_ids = getattr(model_input, "token_type_ids", None)
-                position_ids = getattr(model_input, position_ids_key, None)
+                token_type_ids = model_inputs.get("token_type_ids", None)
+                position_ids = model_inputs.get(position_ids_key, None)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
                 attention_mask = causal_mask_creation_function(
@@ -686,6 +676,24 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
+        if "flash" in self.config._attn_implementation and self._supports_attention_backend:
+            tensor_kws = {"dtype": torch.int32, "device": self.device}
+            pos = model_inputs["position_ids"][:, -1]
+
+            cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), pos.cumsum(0).add(1)], 0)
+            max_length_k = int(pos.max()) + 1
+
+            bs, seq_len = input_ids.size()
+            q_len = torch.ones(bs, **tensor_kws) if seq_len == 1 else pos.to(torch.int32).add(1)
+            cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), q_len.cumsum(0)], 0)
+            max_length_q = int(q_len.max())
+
+            model_inputs.update(
+                cu_seq_lens_q=cu_seq_lens_q.to(self.device),
+                cu_seq_lens_k=cu_seq_lens_k.to(self.device),
+                max_length_q=max_length_q,
+                max_length_k=max_length_k,
+            )
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
@@ -1013,12 +1021,6 @@ class GenerationMixin(ContinuousMixin):
             ).to(past_positions.device)
             model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
         return model_kwargs
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        raise NotImplementedError(
-            f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to"
-            f" enable beam search for {self.__class__}"
-        )
 
     def _get_candidate_generator(
         self,
@@ -1554,18 +1556,11 @@ class GenerationMixin(ContinuousMixin):
         else:
             if tokenizer is None or assistant_tokenizer is None:
                 raise ValueError(
-                    f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
+                    f"The main and assistant models have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
                 )
 
     def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
-        # If a `Cache` instance is passed, checks whether the model is compatible with it
-        if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support an instance of `Cache` as `past_key_values`. Please "
-                "check the model documentation for supported cache formats."
-            )
-
         # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
@@ -1938,9 +1933,8 @@ class GenerationMixin(ContinuousMixin):
             or isinstance(
                 cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
             )  # due to internal slicing, we always re-init
+            or cache_to_check.max_cache_len < max_cache_len
         )
-        if cache_implementation != "mamba":
-            need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
 
         if requires_cross_attention_cache and hasattr(self, "_cache"):
             need_new_cache = (
@@ -1975,21 +1969,23 @@ class GenerationMixin(ContinuousMixin):
             self._cache.reset()
         return self._cache
 
-    def _supports_default_dynamic_cache(self) -> bool:
+    @classmethod
+    def _supports_default_dynamic_cache(cls) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
-        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
+        This adds exception for some models like `Mamba` models which use their own caches
+        and do not need to initialize the Cache in advance in order to save memory (because no back and forth
+        `to_legacy_cache` and `from_legacy_cache` will be performed for mamba-based models).
         """
-        return (
-            self._supports_cache_class
-            and "jamba" not in self.__class__.__name__.lower()
-            and "zamba" not in self.__class__.__name__.lower()
-            and "bamba" not in self.__class__.__name__.lower()
-            and "minimax" not in self.__class__.__name__.lower()
-            and "lfm2" not in self.__class__.__name__.lower()
+        # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
+        return not cls._is_stateful and all(
+            special_model_name not in cls.__name__.lower()
+            for special_model_name in [
+                "reformer",
+                "minimax",
+                "xlnet",
+                "lfm2",
+            ]
         )
 
     def _prepare_cache_for_generation(
@@ -2036,7 +2032,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.use_cache is False:
             return
 
-        # Quick escape route 3: model that only supports legacy caches = nothing to prepare
+        # Quick escape route 3: model that only supports legacy caches or models that supply it in `prepare_inputs_for_generation` (mamba, zamba, ...)
         if not self._supports_default_dynamic_cache():
             if generation_config.cache_implementation is not None:
                 warnings.warn(
@@ -2063,7 +2059,7 @@ class GenerationMixin(ContinuousMixin):
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-                if generation_config.cache_implementation == "static" and not self._supports_static_cache:
+                if generation_config.cache_implementation == "static" and not self._can_compile_fullgraph:
                     raise ValueError(
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
@@ -2076,7 +2072,7 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
-                if not self._supports_quantized_cache:
+                if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
                     raise ValueError(
                         "This model does not support the quantized cache. If you want your model to support quantized "
                         "cache, please open an issue and tag @zucchini-nlp."
@@ -2085,22 +2081,22 @@ class GenerationMixin(ContinuousMixin):
                 cache_config = (
                     generation_config.cache_config
                     if generation_config.cache_config is not None
-                    else QuantizedCacheConfig()
+                    else {"backend": "quanto"}
                 )
-                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
+                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config["backend"]]
 
-                if cache_config.backend == "quanto" and not is_optimum_quanto_available():
+                if cache_config["backend"] == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
                         "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
                         "Please install it via  with `pip install optimum-quanto`"
                     )
-                elif cache_config.backend == "HQQ" and not is_hqq_available():
+                elif cache_config["backend"] == "HQQ" and not is_hqq_available():
                     raise ImportError(
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"
                     )
 
-                model_kwargs[cache_name] = cache_class(cache_config)
+                model_kwargs[cache_name] = cache_class(**cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
             elif generation_config.cache_implementation == "dynamic":
@@ -2219,7 +2215,8 @@ class GenerationMixin(ContinuousMixin):
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
-        can_compile = valid_hardware and using_compilable_cache and self._supports_static_cache
+        # TODO @raushan `self._can_compile_fullgraph` can be removed and inferred from model arch (e.g. MoE doesn't support compile)
+        can_compile = valid_hardware and using_compilable_cache and self._can_compile_fullgraph
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
@@ -3708,33 +3705,6 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
-    # Auxiliary functions for beam search
-    def _temporary_reorder_cache(self, past_key_values, beam_idx):
-        """
-        Temporary function to handle the different types of cache reordering processes while we roll out `Cache`.
-
-        TODO: standardize cache formats and make all models compatible with `Cache`. It would remove the need
-        for this function, with `Cache.reorder_cache` being the sole remaining code path
-        """
-        model_class = self.__class__.__name__.lower()
-        # Exception 1: code path for models using the legacy cache format
-        if isinstance(past_key_values, (tuple, list)):
-            past_key_values = self._reorder_cache(past_key_values, beam_idx)
-        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
-        # cache format is standardized, to avoid adding complexity to the codebase.
-        elif "gptbigcode" in model_class:
-            if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
-                raise ValueError(
-                    f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
-                    "legacy tuple format or `DynamicCache`"
-                )
-            past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-        # Standard code path: use the `Cache.reorder_cache`
-        else:
-            past_key_values.reorder_cache(beam_idx)
-        return past_key_values
-
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
         """[batch_size, num_beams, ...] -> [batch_size * num_beams, ...]"""
@@ -4230,11 +4200,13 @@ class GenerationMixin(ContinuousMixin):
             # beam search as a whole (as opposed to individual beams, i.e. `stopping_criteria`)
 
             # pluck the cache from the beam indices that will be used in the next iteration
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    past_key_values=model_kwargs["past_key_values"],
-                    beam_idx=self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len]),
-                )
+                beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
 
             cur_len = cur_len + 1
             is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
@@ -4537,10 +4509,14 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], reordering_indices
-                )
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(
+                        model_kwargs["past_key_values"], reordering_indices
+                    )
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(reordering_indices)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -4774,10 +4750,12 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], beam_idx
-                )
+                if hasattr(self, "_reorder_cache"):
+                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                else:
+                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple(beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices)))
@@ -5002,8 +4980,7 @@ class GenerationMixin(ContinuousMixin):
             new_cur_len = input_ids.shape[1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
-            new_cache_size = new_cur_len - 1
-            outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
+            outputs.past_key_values.crop(new_cur_len - 1)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
@@ -5256,106 +5233,6 @@ def _ranking_fast(
     return selected_idx
 
 
-def _split(data, full_batch_size: int, split_size: int):
-    """
-    Takes care of three cases:
-    1. data is a tensor: e.g. last_hidden_state, pooler_output etc. split them on the batch_size dim
-    2. data is a tuple: e.g. hidden_states, attentions etc. Keep the tuple as it is and split each tensor in it and
-       return a list of tuples
-    3. data is a tuple of tuples, e.g. past_key_values. Keep the tuple as it is and split each tuple in it and
-       return a list of tuples of tuples
-    (see documentation of ModelOutput)
-    """
-    if data is None:
-        return [None] * (full_batch_size // split_size)
-    if isinstance(data, torch.Tensor):
-        return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
-    # New cache format
-    elif isinstance(data, DynamicCache) or (
-        isinstance(data, EncoderDecoderCache) and isinstance(data.self_attention_cache, DynamicCache)
-    ):
-        return data.batch_split(full_batch_size, split_size)
-    elif isinstance(data, tuple):
-        # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
-        if isinstance(data[0], tuple):
-            return [
-                tuple(tuple(tensor[i : i + split_size] for tensor in inner_tuple) for inner_tuple in data)
-                for i in range(0, full_batch_size, split_size)
-            ]
-
-        else:
-            return [
-                tuple(sub_tensor[i : i + split_size] for sub_tensor in data)
-                for i in range(0, full_batch_size, split_size)
-            ]
-    else:
-        raise TypeError(f"Unexpected attribute type: {type(data)}")
-
-
-def _split_model_inputs(
-    model_input: Union[ModelOutput, dict], split_size: int, full_batch_size: int, config: PretrainedConfig
-) -> list[Union[ModelOutput, dict]]:
-    """
-    Split a ModelOutput object (or its subclasses) or Dict into a list of same-class objects based on a specified split
-    size. The input object is dict when it was prepared for forward pass and ModelOutput when it was returned from
-    previous forward pass.
-    """
-    # Edge case: if model_input is None, return a list of Nones
-    # this happens with Whisper where encoder_outputs is None
-    if model_input is None:
-        return [model_input] * (full_batch_size // split_size)
-    # Infer the class from the object
-    model_output_cls = type(model_input)
-    if (full_batch_size % split_size) != 0:
-        raise ValueError("`full_batch_size` must be divisible by `split_size`")
-
-    if split_size > full_batch_size:
-        raise ValueError("`split_size` must be smaller or equal to `full_batch_size`")
-
-    # Helper function to split tensors or tuples of tensors
-
-    # Find all the dataclass fields (e.g., last_hidden_state, pooler_output etc.) and split them
-    keys = (
-        model_input.__dataclass_fields__.keys() if hasattr(model_input, "__dataclass_fields__") else model_input.keys()
-    )
-    # We only keep keys that are in the model_input
-    keys = [k for k in keys if k in model_input]
-    # Here we can have four types of values: tensors, tuples of tensors and booleans, and encoder_outputs which is a
-    # ModelOutput object.
-    # bool should not be split but replicated for each split
-    bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
-    keys_to_ignore = ["cache_position", "encoder_outputs", "logits_to_keep"]
-    non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
-
-    # we split the tensors and tuples of tensors
-    data_split_list = [
-        {k: _split(model_input[k], full_batch_size, split_size)[i] for k in non_bool_keys}
-        for i in range(full_batch_size // split_size)
-    ]
-    # bool values are the same and replicated for each split
-    bool_data = {k: model_input[k] for k in bool_keys}
-    # encoder_outputs is a ModelOutput object and should be split by its own
-    if "encoder_outputs" in model_input:
-        encoder_outputs_split = _split_model_inputs(
-            model_input["encoder_outputs"], split_size, full_batch_size, config.get_text_config()
-        )
-        data_split_list = [
-            {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
-        ]
-    # logits_to_keep should be replicated for each split, similar to bool values
-    if "logits_to_keep" in model_input:
-        data_split_list = [
-            {**data_split, "logits_to_keep": model_input["logits_to_keep"]} for data_split in data_split_list
-        ]
-
-    # Convert each dictionary in the list to an object of the inferred class
-    split_model_inputs: list[Union[ModelOutput, dict]] = [
-        model_output_cls(**data_split, **bool_data) for data_split in data_split_list
-    ]
-
-    return split_model_inputs
-
-
 def stack_model_outputs(model_outputs: list[ModelOutput], config: PretrainedConfig) -> ModelOutput:
     """
     Stack a list of ModelOutput objects (or its subclasses) along the batch_size dimension. The function infers the
@@ -5380,11 +5257,6 @@ def stack_model_outputs(model_outputs: list[ModelOutput], config: PretrainedConf
             return None
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
-        # New cache format
-        elif isinstance(data[0], DynamicCache):
-            return DynamicCache.from_batch_splits(data)
-        elif isinstance(data[0], EncoderDecoderCache):
-            return EncoderDecoderCache.from_batch_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):

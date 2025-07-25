@@ -126,17 +126,16 @@ class VideoLlavaMultiModalProjector(nn.Module):
 
 @auto_docstring
 class VideoLlavaPreTrainedModel(PreTrainedModel):
-    config_class = VideoLlavaConfig
+    config: VideoLlavaConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -308,10 +307,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`VideoLlavaImageProcessor`] for processing images).
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input video. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`VideoLlavaImageProcessor`] for processing videos).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -435,9 +430,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
@@ -500,10 +492,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`VideoLlavaImageProcessor`] for processing images).
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input video. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`VideoLlavaImageProcessor`] for processing videos).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored

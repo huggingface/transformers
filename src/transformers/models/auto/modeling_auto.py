@@ -114,11 +114,14 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("efficientformer", "EfficientFormerModel"),
+        ("efficientloftr", "EfficientLoFTRModel"),
         ("efficientnet", "EfficientNetModel"),
         ("electra", "ElectraModel"),
         ("emu3", "Emu3Model"),
         ("encodec", "EncodecModel"),
         ("ernie", "ErnieModel"),
+        ("ernie4_5", "Ernie4_5Model"),
+        ("ernie4_5_moe", "Ernie4_5_MoEModel"),
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
         ("falcon", "FalconModel"),
@@ -144,6 +147,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("git", "GitModel"),
         ("glm", "GlmModel"),
         ("glm4", "Glm4Model"),
+        ("glm4_moe", "Glm4MoeModel"),
         ("glm4v", "Glm4vModel"),
         ("glm4v_text", "Glm4vTextModel"),
         ("glpn", "GLPNModel"),
@@ -230,6 +234,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTModel"),
         ("mobilevitv2", "MobileViTV2Model"),
         ("modernbert", "ModernBertModel"),
+        ("modernbert-decoder", "ModernBertDecoderModel"),
         ("moonshine", "MoonshineModel"),
         ("moshi", "MoshiModel"),
         ("mpnet", "MPNetModel"),
@@ -318,7 +323,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("stablelm", "StableLmModel"),
         ("starcoder2", "Starcoder2Model"),
-        ("superglue", "SuperGlueForKeypointMatching"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
@@ -358,6 +362,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
+        ("voxtral_encoder", "VoxtralEncoder"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -458,6 +464,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForPreTraining"),
         ("xlm", "XLMWithLMHeadModel"),
@@ -591,6 +598,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraForCausalLM"),
         ("emu3", "Emu3ForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
+        ("ernie4_5", "Ernie4_5ForCausalLM"),
+        ("ernie4_5_moe", "Ernie4_5_MoEForCausalLM"),
         ("falcon", "FalconForCausalLM"),
         ("falcon_h1", "FalconH1ForCausalLM"),
         ("falcon_mamba", "FalconMambaForCausalLM"),
@@ -604,6 +613,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("git", "GitForCausalLM"),
         ("glm", "GlmForCausalLM"),
         ("glm4", "Glm4ForCausalLM"),
+        ("glm4_moe", "Glm4MoeForCausalLM"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
@@ -633,6 +643,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralForCausalLM"),
         ("mixtral", "MixtralForCausalLM"),
         ("mllama", "MllamaForCausalLM"),
+        ("modernbert-decoder", "ModernBertDecoderForCausalLM"),
         ("moshi", "MoshiForCausalLM"),
         ("mpt", "MptForCausalLM"),
         ("musicgen", "MusicgenForCausalLM"),
@@ -1079,6 +1090,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
 )
@@ -1132,6 +1144,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForSequenceClassification"),
         ("gemma", "GemmaForSequenceClassification"),
         ("gemma2", "Gemma2ForSequenceClassification"),
+        ("gemma3", "Gemma3ForSequenceClassification"),
         ("glm", "GlmForSequenceClassification"),
         ("glm4", "Glm4ForSequenceClassification"),
         ("gpt-sw3", "GPT2ForSequenceClassification"),
@@ -1161,6 +1174,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("modernbert", "ModernBertForSequenceClassification"),
+        ("modernbert-decoder", "ModernBertDecoderForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
         ("mpt", "MptForSequenceClassification"),
         ("mra", "MraForSequenceClassification"),
@@ -1596,6 +1610,13 @@ MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES = OrderedDict(
+    [
+        ("efficientloftr", "EfficientLoFTRForKeypointMatching"),
+        ("lightglue", "LightGlueForKeypointMatching"),
+        ("superglue", "SuperGlueForKeypointMatching"),
+    ]
+)
 
 MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
@@ -1757,6 +1778,8 @@ MODEL_FOR_KEYPOINT_DETECTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES
 )
 
+MODEL_FOR_KEYPOINT_MATCHING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES)
+
 MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
 
 MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = _LazyAutoMapping(
@@ -1782,6 +1805,10 @@ class AutoModelForMaskGeneration(_BaseAutoModelClass):
 
 class AutoModelForKeypointDetection(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_KEYPOINT_DETECTION_MAPPING
+
+
+class AutoModelForKeypointMatching(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_KEYPOINT_MATCHING_MAPPING
 
 
 class AutoModelForTextEncoding(_BaseAutoModelClass):
@@ -2140,6 +2167,7 @@ __all__ = [
     "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
     "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
     "MODEL_FOR_KEYPOINT_DETECTION_MAPPING",
+    "MODEL_FOR_KEYPOINT_MATCHING_MAPPING",
     "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
     "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_MASKED_LM_MAPPING",
@@ -2185,6 +2213,7 @@ __all__ = [
     "AutoModelForImageToImage",
     "AutoModelForInstanceSegmentation",
     "AutoModelForKeypointDetection",
+    "AutoModelForKeypointMatching",
     "AutoModelForMaskGeneration",
     "AutoModelForTextEncoding",
     "AutoModelForMaskedImageModeling",

@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import itertools
 from typing import Callable, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -525,25 +525,9 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
-    def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Glm4vRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
-    config_class = Glm4vVisionConfig
+    config: Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -838,6 +822,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = self.post_self_attn_layernorm(hidden_states)
@@ -1222,10 +1207,6 @@ class Glm4vModel(Qwen2_5_VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
-            [`Glm4vImageProcessor`] for processing videos.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1385,6 +1366,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Glm4vCausalLMOutputWithPast]:
         r"""
@@ -1392,10 +1374,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
-            [`Glm4vImageProcessor`] for processing videos.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1457,7 +1435,10 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1586,6 +1567,7 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
     }
 
@@ -1727,9 +1709,15 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
 
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 

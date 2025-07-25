@@ -873,15 +873,14 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class IdeficsPreTrainedModel(PreTrainedModel):
-    config_class = IdeficsConfig
+    config: IdeficsConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
-    _supports_static_cache = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
+
+    _supports_flash_attn = True
+    _can_compile_fullgraph = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -943,6 +942,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         self.image_size = config.vision_config.image_size
         self.vision_config = config.vision_config
+        # The module using it is not a PreTrainedModel subclass so we need this
+        self.vision_config._attn_implementation = config._attn_implementation
         self.vision_model = IdeficsVisionTransformer(config.vision_config)
 
         # Perceiver Resampler
@@ -991,12 +992,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1343,18 +1338,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1554,13 +1537,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         # Get the precomputed image_hidden_states
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states
         return model_kwargs
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
 
 
 __all__ = ["IdeficsForVisionText2Text", "IdeficsModel", "IdeficsPreTrainedModel"]

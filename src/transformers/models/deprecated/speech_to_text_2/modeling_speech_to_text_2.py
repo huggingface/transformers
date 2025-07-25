@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Speech2Text2 model."""
 
-import copy
 import math
 from typing import Optional, Union
 
@@ -385,7 +384,7 @@ class Speech2Text2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Speech2Text2PreTrainedModel(PreTrainedModel):
-    config_class = Speech2Text2Config
+    config: Speech2Text2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
@@ -453,12 +452,6 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -559,7 +552,7 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -682,7 +675,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
@@ -698,12 +690,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.decoder = decoder
@@ -886,7 +872,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
             attention_mask = input_ids.new_ones(input_ids.shape)
 
         if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

@@ -819,17 +819,15 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
 
 @auto_docstring
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
-    config_class = InstructBlipVideoConfig
+    config: InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+
+    _can_compile_fullgraph = True
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
@@ -860,7 +858,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
 
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = InstructBlipVideoVisionConfig
+    config: InstructBlipVideoVisionConfig
 
     def __init__(self, config: InstructBlipVideoVisionConfig):
         super().__init__(config)
@@ -927,7 +925,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     """
 
     _supports_attention_backend = False  # adds position on attn weights before last matmul
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
@@ -1359,11 +1357,10 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
     """
 )
 class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
-    config_class = InstructBlipVideoConfig
+    config: InstructBlipVideoConfig
     main_input_name = "pixel_values"
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+
+    _can_compile_fullgraph = True
     _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipVideoConfig):
