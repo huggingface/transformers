@@ -72,22 +72,20 @@ else:
         return cap_value * torch.tanh(values / cap_value)
 
     def mlstm_chunkwise_recurrent_fw_C(
-        matK: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        matV: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHHV)
-        vecB: torch.Tensor,  # (BATCH_SIZE, NH, NC, CHUNKSIZE) # cumsum(logsigmoid(fgate))
-        vecI: torch.Tensor,  # (BATCH_SIZE, NH, NC, CHUNKSIZE)
-        matC_states: torch.Tensor = None,  # (BATCH_SIZE, NH, (NC + 1) * DHQK, DHHV)
-        vecN_states: torch.Tensor = None,  # (BATCH_SIZE, NH, (NC + 1) * DHQK)
-        scaMinter_states: torch.Tensor = None,  # (BATCH_SIZE, NH, (NC + 1)
-        matC_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK, DHHV)
-        vecN_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK)
-        scaMinter_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, 1)
+        matK: torch.Tensor,
+        matV: torch.Tensor,
+        vecB: torch.Tensor,
+        vecI: torch.Tensor,
+        matC_states: torch.Tensor = None,
+        vecN_states: torch.Tensor = None,
+        scaMinter_states: torch.Tensor = None,
+        matC_initial: torch.Tensor = None,
+        vecN_initial: torch.Tensor = None,
+        scaMinter_initial: torch.Tensor = None,
         qk_scale: Optional[float] = None,
         chunk_size: int = 64,
         num_chunks: int = 1,
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor
-    ]:  # matC_states (BATCH_SIZE, NH, (NC+1) * DHQK, DHHV), vecN_states (BATCH_SIZE, NH, (NC+1) * DHQK), scaMinter_states (BATCH_SIZE, NH, (NC+1))
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         BATCH_SIZE, NH, _, DHQK, DHHV = *matK.shape, matV.shape[-1]
         NC = num_chunks
         _dtype, _device = matK.dtype, matK.device
@@ -121,7 +119,6 @@ else:
         scaG = vecB[..., -1]
         scaA_max = vecA.max(-1).values
 
-        # for this implementation we actually want to have shape (BATCH_SIZE, NH) for scaM_inter_k
         scaM_inter_k = scaM_inter_k.squeeze(-1)
 
         for key in range(0, num_chunks):
@@ -165,22 +162,20 @@ else:
         return matC_states, vecN_states, scaMinter_states
 
     def mlstm_chunkwise_parallel_fw_H(
-        matQ: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        matK: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        matV: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHHV)
+        matQ: torch.Tensor,
+        matK: torch.Tensor,
+        matV: torch.Tensor,
         # these states must be all states up to the last chunk, i.e. :-1
-        matC_states: torch.Tensor,  # (BATCH_SIZE, NH, NC * DHQK, DHHV)
-        vecN_states: torch.Tensor,  # (BATCH_SIZE, NH, NC * DHQK)
-        scaMinter_states: torch.Tensor,  # (BATCH_SIZE, NH, NC)
-        vecI: torch.Tensor,  # (BATCH_SIZE, NH, NC, CHUNKSIZE)
-        vecB: torch.Tensor,  # (BATCH_SIZE, NH, NC, CHUNKSIZE)
+        matC_states: torch.Tensor,
+        vecN_states: torch.Tensor,
+        scaMinter_states: torch.Tensor,
+        vecI: torch.Tensor,
+        vecB: torch.Tensor,
         qk_scale: float,
         chunk_size: int = 64,
         num_chunks: int = 1,
         eps: float = 1e-6,
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor
-    ]:  # matH_out (BATCH_SIZE, NH, SEQLEN, DHHV), vecN_out (BATCH_SIZE, NH, SEQLEN), vecM_out (BATCH_SIZE, NH, SEQLEN)
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         _device = matQ.device
         NC, CHUNKSIZE = num_chunks, chunk_size
         BATCH_SIZE, NH, DQK, DHV = matC_states.shape
@@ -200,8 +195,6 @@ else:
             )
         )
 
-        # compute the H_states in parallel
-
         # Compute intra chunk contribution: H_intra
         matF_logsig_chunk = vecB[:, :, :, :, None] - vecB[:, :, :, None, :]
 
@@ -210,14 +203,14 @@ else:
         matLogD_chunk = matF_logsig_mask_chunk + vecI[:, :, :, None, :]
 
         # max_state intra
-        vecMintra_k = torch.max(matLogD_chunk, dim=-1, keepdim=False).values  # (BATCH_SIZE, NH, NC, CHUNKSIZE)
+        vecMintra_k = torch.max(matLogD_chunk, dim=-1, keepdim=False).values
 
         # max_state combined
-        vecM_b_inter = vecB + scaMinter_k_states[:, :, :, None]  # (BATCH_SIZE, NH, NC, CHUNKSIZE)
-        vecM_k_combine = torch.maximum(vecM_b_inter, vecMintra_k)  # (BATCH_SIZE, NH, NC, CHUNKSIZE)
+        vecM_b_inter = vecB + scaMinter_k_states[:, :, :, None]
+        vecM_k_combine = torch.maximum(vecM_b_inter, vecMintra_k)
 
-        vecM_k_combine = vecM_k_combine[:, :, :, :, None]  # (BATCH_SIZE, NH, NC, CHUNKSIZE, 1)
-        vecM_b_inter = vecM_b_inter[:, :, :, :, None]  # (BATCH_SIZE, NH, NC, CHUNKSIZE, 1)
+        vecM_k_combine = vecM_k_combine[:, :, :, :, None]
+        vecM_b_inter = vecM_b_inter[:, :, :, :, None]
 
         matLogD_stabilized_chunk = matLogD_chunk - vecM_k_combine
         matD_chunk = torch.exp(matLogD_stabilized_chunk)
@@ -230,13 +223,9 @@ else:
         vecBbar = torch.exp(vecM_b_inter - vecM_k_combine)
         matQ_chunk_gated = matQ * vecBbar * qk_scale
 
-        matNumerator_common = (
-            matQ_chunk_gated @ matC_k_states + matM_chunk @ matV
-        )  # (BATCH_SIZE, NH, NC, CHUNKSIZE, DHHV)
+        matNumerator_common = matQ_chunk_gated @ matC_k_states + matM_chunk @ matV
 
-        vecDenom_l_common = matQ_chunk_gated @ vecN_k_states.unsqueeze(-1) + matM_chunk.sum(
-            dim=-1, keepdim=True
-        )  # (BATCH_SIZE, NH, NC, CHUNKSIZE, 1)
+        vecDenom_l_common = matQ_chunk_gated @ vecN_k_states.unsqueeze(-1) + matM_chunk.sum(dim=-1, keepdim=True)
 
         vecDenom_max_common = torch.maximum(torch.abs(vecDenom_l_common), torch.exp(-vecM_k_combine))
 
@@ -250,29 +239,25 @@ else:
         return matH_out, vecN_out, vecM_out
 
     def mlstm_chunkwise_fw(
-        query: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        key: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        value: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHHV)
-        igate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        fgate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        cstate: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK, DHHV)
-        nstate: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK)
-        mstate: torch.Tensor = None,  # (BATCH_SIZE, NH, 1)
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        igate: torch.Tensor,
+        fgate: torch.Tensor,
+        cstate: torch.Tensor = None,
+        nstate: torch.Tensor = None,
+        mstate: torch.Tensor = None,
         qk_scale: Optional[float] = None,
         return_last_states: bool = False,
         return_all_states: bool = False,
         chunk_size: int = 64,
         eps: float = 1e-6,
     ) -> tuple[
-        torch.Tensor,  # matH_out (BATCH_SIZE, NH, SEQLEN, DHHV)
-        torch.Tensor,  # vecN_out (BATCH_SIZE, NH, SEQLEN)
-        torch.Tensor,  # vecM_out (BATCH_SIZE, NH, SEQLEN)
-        Optional[
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        ],  # last_states (matC_states (BATCH_SIZE, NH, DHQK, DHHV), vecN_states (BATCH_SIZE, NH, DHQK), scaMinter_states (BATCH_SIZE, NH, 1))
-        Optional[
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        ],  # all_states (matC_states (BATCH_SIZE, NH, (NC+1) * DHQK, DHHV), vecN_states (BATCH_SIZE, NH, (NC+1) * DHQK), scaMinter_states (BATCH_SIZE, NH, (NC+1)))
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
     ]:
         BATCH_SIZE, NH, SEQLEN, DHQK = query.shape
         if SEQLEN % chunk_size != 0:
@@ -340,7 +325,7 @@ else:
         else:
             ret_tuple += (None,)
 
-        return ret_tuple  # (matH_out, vecN_out, vecM_out, optional(last_states), optional(all_states))
+        return ret_tuple
 
     def mlstm_chunkwise_native_autograd(
         query: torch.Tensor,
@@ -412,20 +397,18 @@ else:
             return matH_out
 
     def mlstm_recurrent_step_native(
-        query: torch.Tensor,  # (BATCH_SIZE, NH, DHQK)
-        key: torch.Tensor,  # (BATCH_SIZE, NH, DHQK)
-        value: torch.Tensor,  # (BATCH_SIZE, NH, DHV)
-        igate: torch.Tensor,  # (BATCH_SIZE, NH, 1)
-        fgate: torch.Tensor,  # (BATCH_SIZE, NH, 1)
-        cstate: torch.Tensor,  # (BATCH_SIZE, NH, DHQK, DHV)
-        nstate: torch.Tensor,  # (BATCH_SIZE, NH, DHQK)
-        mstate: torch.Tensor,  # (BATCH_SIZE, NH, 1)
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        igate: torch.Tensor,
+        fgate: torch.Tensor,
+        cstate: torch.Tensor,
+        nstate: torch.Tensor,
+        mstate: torch.Tensor,
         eps: float = 1e-6,
         dtype_state: torch.dtype = torch.float32,
         **kwargs,
-    ) -> tuple[
-        torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-    ]:  # vecH, (matC_state_new (BATCH_SIZE, NH, DHQK, DHV), vecN_state_new (BATCH_SIZE, NH, DHQK), vecM_state_new (BATCH_SIZE, NH, 1))
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """This is a single step of the mLSTM operation in recurrent form."""
         dtype_qkv = query.dtype
         matC_old = cstate.to(dtype=dtype_state)
@@ -436,24 +419,11 @@ else:
         _, _, DHHV = value.shape
         if query.shape != key.shape:
             raise ValueError("query and key must have the same shape")
-        if matC_old.shape != (
-            BATCH_SIZE,
-            NH,
-            DHQK,
-            DHHV,
-        ):
+        if matC_old.shape != (BATCH_SIZE, NH, DHQK, DHHV):
             raise ValueError(f"matC_old has wrong shape, got {matC_old.shape}")
-        if vecN_old.shape != (
-            BATCH_SIZE,
-            NH,
-            DHQK,
-        ):
+        if vecN_old.shape != (BATCH_SIZE, NH, DHQK):
             raise ValueError(f"vecN_old has wrong shape, got {vecN_old.shape}")
-        if scaM_old.shape != (
-            BATCH_SIZE,
-            NH,
-            1,
-        ):
+        if scaM_old.shape != (BATCH_SIZE, NH, 1):
             raise ValueError(f"scaM_old has wrong shape, got {scaM_old.shape}")
         if igate.shape != (BATCH_SIZE, NH, 1):
             raise ValueError(f"scaI has wrong shape, got {igate.shape}")
@@ -464,26 +434,24 @@ else:
         scaF_log = torch.nn.functional.logsigmoid(fgate)
 
         # update rule
-        scaM_state_new = torch.max(scaF_log + scaM_old, igate)  # (BATCH_SIZE, NH, 1)
+        scaM_state_new = torch.max(scaF_log + scaM_old, igate)
 
-        scaF_act = torch.exp(scaF_log + scaM_old - scaM_state_new)  # (BATCH_SIZE, NH, 1)
-        scaI_act = torch.exp(igate - scaM_state_new)  # (BATCH_SIZE, NH, 1)
+        scaF_act = torch.exp(scaF_log + scaM_old - scaM_state_new)
+        scaI_act = torch.exp(igate - scaM_state_new)
 
-        vecQ_scaled = query * (DHQK ** (-0.5))  # (BATCH_SIZE, NH, DHQK)
+        vecQ_scaled = query * (DHQK ** (-0.5))
         matC_state_new = scaF_act[:, :, :, None] * matC_old + scaI_act[:, :, :, None] * (
             key[:, :, :, None] @ value[:, :, None, :]
-        )  # (BATCH_SIZE, NH, DHQK, DHV)
-        vecN_state_new = scaF_act * vecN_old + scaI_act * key  # (BATCH_SIZE, NH, DHQK)
-        h_num = vecQ_scaled[:, :, None, :] @ matC_state_new.to(dtype=dtype_qkv)  # (BATCH_SIZE, NH, 1, DHV)
-        h_num = h_num.squeeze(2).to(dtype=dtype_state)  # (BATCH_SIZE, NH, DHV)
+        )
+        vecN_state_new = scaF_act * vecN_old + scaI_act * key
+        h_num = vecQ_scaled[:, :, None, :] @ matC_state_new.to(dtype=dtype_qkv)
+        h_num = h_num.squeeze(2).to(dtype=dtype_state)
 
-        qn_dotproduct = vecQ_scaled[:, :, None, :] @ vecN_state_new[:, :, :, None].to(
-            dtype=dtype_qkv
-        )  # (BATCH_SIZE, NH, 1, 1)
-        qn_dotproduct = qn_dotproduct.squeeze(2)  # (BATCH_SIZE, NH, 1)
-        max_val = torch.exp(-scaM_state_new)  # (BATCH_SIZE, NH, 1)
-        h_denom = (torch.maximum(qn_dotproduct.abs(), max_val) + eps).to(dtype=dtype_state)  # (BATCH_SIZE, NH, 1)
-        h = h_num / h_denom  # (BATCH_SIZE, NH, DHV) / (BATCH_SIZE, NH, 1) = (BATCH_SIZE, NH, DHV)
+        qn_dotproduct = vecQ_scaled[:, :, None, :] @ vecN_state_new[:, :, :, None].to(dtype=dtype_qkv)
+        qn_dotproduct = qn_dotproduct.squeeze(2)
+        max_val = torch.exp(-scaM_state_new)
+        h_denom = (torch.maximum(qn_dotproduct.abs(), max_val) + eps).to(dtype=dtype_state)
+        h = h_num / h_denom
 
         h = h.to(dtype=dtype_qkv)
         matC_state_new = matC_state_new.to(dtype=dtype_state)
@@ -492,28 +460,24 @@ else:
         return h, (matC_state_new, vecN_state_new, scaM_state_new)
 
     def mlstm_recurrent_sequence_native(
-        query: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        key: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        value: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHV)
-        igate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        fgate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        c_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK, DHV)
-        n_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK)
-        m_initial: torch.Tensor = None,  # (BATCH_SIZE, NH)
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        igate: torch.Tensor,
+        fgate: torch.Tensor,
+        c_initial: torch.Tensor = None,
+        n_initial: torch.Tensor = None,
+        m_initial: torch.Tensor = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         dtype_state: torch.dtype = torch.float32,
         **kwargs,
     ) -> tuple[
-        torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHV)
-        torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        Optional[
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        ],  # (matC_state_last (BATCH_SIZE, NH, DHQK, DHV), vecN_state_last (BATCH_SIZE, NH, DHQK), vecM_state_last (BATCH_SIZE, NH, 1))
-        Optional[
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        ],  # (matC_states (BATCH_SIZE, NH, SEQLEN, DHQK, DHV), vecN_states (BATCH_SIZE, NH, SEQLEN, DHQK), vecM_states (BATCH_SIZE, NH, SEQLEN))
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
     ]:
         BATCH_SIZE, NH, SEQLEN, DHQK = query.shape
         DHV = value.shape[-1]
@@ -540,14 +504,10 @@ else:
         vecH_list = []
         for t in range(SEQLEN):
             # gates
-            vecF_t, vecI_t = fgate[:, :, t, None], igate[:, :, t, None]  # (BATCH_SIZE, NH, 1)
+            vecF_t, vecI_t = fgate[:, :, t, None], igate[:, :, t, None]
 
             # projections
-            vecQ_t, vecK_t, vecV_t = (
-                query[:, :, t, :],  # (BATCH_SIZE, NH, DHQK)
-                key[:, :, t, :],  # (BATCH_SIZE, NH, DHQK)
-                value[:, :, t, :],  # (BATCH_SIZE, NH, DHV)
-            )
+            vecQ_t, vecK_t, vecV_t = query[:, :, t, :], key[:, :, t, :], value[:, :, t, :]
 
             # step
             vecH, (matC_state, vecN_state, vecM_state) = mlstm_recurrent_step_native(
@@ -565,7 +525,7 @@ else:
             )
             vecH_list.append(vecH)
 
-        matH = torch.stack(vecH_list, dim=-2)  # (BATCH_SIZE, NH, SEQLEN, DHV)
+        matH = torch.stack(vecH_list, dim=-2)
 
         if return_last_states:
             return matH, (matC_state, vecN_state, vecM_state)
@@ -574,14 +534,14 @@ else:
 
     def wrap_chunkwise_pad_zeros(
         mlstm_chunkwise_kernel: Callable,
-        query: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        key: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        value: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHHV)
-        fgate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        igate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        c_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK, DHHV)
-        n_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK)
-        m_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, 1)
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        fgate: torch.Tensor,
+        igate: torch.Tensor,
+        c_initial: torch.Tensor = None,
+        n_initial: torch.Tensor = None,
+        m_initial: torch.Tensor = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
@@ -594,7 +554,7 @@ else:
                 "as they would be not the true last states.",
             )
 
-        BATCH_SIZE, NH, SEQLEN, DHQK = query.shape  # (BATCH_SIZE, NH, SEQLEN, DHQK)
+        BATCH_SIZE, NH, SEQLEN, DHQK = query.shape
         S_unpadded = SEQLEN
         # padding to chunk size for kernels
         if SEQLEN % chunk_size != 0:
@@ -638,22 +598,20 @@ else:
         mlstm_chunkwise_kernel: Callable,
         mlstm_sequence_kernel: Callable,
         mlstm_step_kernel: Callable,
-        query: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        key: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHQK)
-        value: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN, DHHV)
-        fgate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        igate: torch.Tensor,  # (BATCH_SIZE, NH, SEQLEN)
-        c_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK, DHHV)
-        n_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, DHQK)
-        m_initial: torch.Tensor = None,  # (BATCH_SIZE, NH, 1)
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        fgate: torch.Tensor,
+        igate: torch.Tensor,
+        c_initial: torch.Tensor = None,
+        n_initial: torch.Tensor = None,
+        m_initial: torch.Tensor = None,
         return_last_states: bool = True,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         enable_logging: bool = False,
-    ) -> Union[
-        torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
-    ]:  # matH (BATCH_SIZE, NH, SEQLEN, DHHV), tuple[matC_state_last (BATCH_SIZE, NH, DHQK, DHHV), vecN_states_last (BATCH_SIZE, NH, DHQK), scaMinter_states_last (BATCH_SIZE, NH, 1)]
+    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
         """This function computes the last hidden state and matH outputs of the mLSTM, independently of the sequence length.
 
         For this it uses three kernels:
@@ -948,7 +906,6 @@ else:
             return x
 
         def _rms_normalize(self, x: torch.Tensor) -> torch.Tensor:
-            # x: (BATCH_SIZE, ..., SEQLEN,..., HD)
             # apply rms norm over the last dimension, i.e. HD dimension
             in_dtype = x.dtype
             if self.force_float32_reductions:
@@ -957,7 +914,6 @@ else:
             return x.to(in_dtype)
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-            # x: (BATCH_SIZE, ..., SEQLEN,..., HD)
             x = self._rms_normalize(x)
             x = self._apply_weight_bias(x)
             return x
@@ -1021,7 +977,6 @@ else:
             return x
 
         def _layer_normalize(self, x: torch.Tensor) -> torch.Tensor:
-            # x: (BATCH_SIZE, ..., SEQLEN,..., HD)
             # apply layer norm over the last dimension, i.e. HD dimension
             in_dtype = x.dtype
             if self.force_float32_reductions:
@@ -1032,8 +987,8 @@ else:
 
         def forward(
             self,
-            x: torch.Tensor,  # (BATCH_SIZE, SEQLEN, NH, DH)
-        ) -> torch.Tensor:  # (BATCH_SIZE, SEQLEN, NH * DH)
+            x: torch.Tensor,
+        ) -> torch.Tensor:
             BATCH_SIZE, SEQLEN, NH, DH = x.shape
             if NH != self.num_heads:
                 raise ValueError(f"Expected {self.num_heads} heads, got {NH}, input shape: {x.shape}")
