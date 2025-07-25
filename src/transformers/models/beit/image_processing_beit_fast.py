@@ -16,9 +16,6 @@
 
 from typing import Any, Optional, Union
 
-import torch
-from torchvision.transforms import functional as F
-
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -36,11 +33,26 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
 
 
 class BeitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
+    r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
