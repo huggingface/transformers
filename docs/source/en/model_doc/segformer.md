@@ -126,6 +126,7 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] SegformerImageProcessor
     - preprocess
+    - post_process_semantic_segmentation
 
 ## SegformerImageProcessorFast
 
