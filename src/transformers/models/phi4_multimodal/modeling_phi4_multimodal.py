@@ -1585,7 +1585,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Phi4MultimodalDecoderLayer,
+        "hidden_states": [nn.Embedding, Phi4MultimodalDecoderLayer],
         "attentions": Phi4MultimodalAttention,
     }
     _version = "0.0.5"
