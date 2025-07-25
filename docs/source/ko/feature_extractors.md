@@ -41,7 +41,7 @@ processed_sample
 
 Transformers 특징 추출기는 [`FeatureExtractionMixin`]을 서브클래싱하는 기본 [`SequenceFeatureExtractor`] 클래스를 상속합니다.
 
-- [`SequenceFeatureExtractor`]는 시퀀스 길이가 달라지는 것을 막기 위해 시퀀스를 특정 길이로 [`~SequenceFeatureExtractor.pad`]하는 메서드를 제공합니다.
+- [`SequenceFeatureExtractor`]는 시퀀스 길이가 달라지는 것을 막기 위해 시퀀스를 특정 길이로 [`~SequenceFeatureExtractor.pad`]하는 메소드를 제공합니다.
 - [`FeatureExtractionMixin`]은 특징 추출기를 로드하고 저장하기 위한 [`~FeatureExtractionMixin.from_pretrained`]와 [`~FeatureExtractionMixin.save_pretrained`]를 제공합니다.
 
 특징 추출기를 로드하는 방법에는 [`AutoFeatureExtractor`]와 모델별 특징 추출기 클래스를 사용하는 두 가지 방법이 있습니다.
