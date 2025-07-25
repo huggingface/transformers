@@ -381,8 +381,6 @@ def distribute_module(
             module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
         if output_fn is not None:
             module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
-    else:
-        print("Skipping", module, "because it already has pre hook")
     return module
 
 
