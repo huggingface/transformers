@@ -14,11 +14,26 @@
 # limitations under the License.
 """Fast Image processor class for ImageGPT."""
 
+import numpy as np
+from typing import Dict, List, Optional, Tuple, Union
+
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import PILImageResampling
 from ...utils import auto_docstring
 
+def squared_euclidean_distance_fast(a, b):
+    b = b.T
+    a2 = torch.sum(a ** 2, dim = 1)
+    b2 = torch.sum(b ** 2, dim = 0)
+    ab = torch.matmul(a, b)
+    d = a2[:, None] - 2 * ab + b2[None, :]
+    return d
 
+
+def color_quantize_fast(x, clusters):
+    x = x.reshape(-1, 3)
+    d = squared_euclidean_distance_fast(x, clusters)
+    return np.argmin(d, axis=1)
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
