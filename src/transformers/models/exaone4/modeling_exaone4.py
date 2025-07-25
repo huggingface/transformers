@@ -400,10 +400,11 @@ class Exaone4Model(Exaone4PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            layer_type = self.config.layer_types[decoder_layer.layer_idx]
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[layer_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 use_cache=use_cache,
