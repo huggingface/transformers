@@ -133,9 +133,7 @@ def _parse_type_hint(hint: str) -> dict:
         args_types = []
         for arg in args:
             if type(arg) not in LITERAL_TYPES:
-                raise TypeHintParsingException(
-                    "Only the valid python literals can be listed in typing.Literal."
-                )
+                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
             arg_type = _get_json_schema_type(type(arg)).get("type")
             if arg_type is not None and arg_type not in args_types:
                 args_types.append(arg_type)
