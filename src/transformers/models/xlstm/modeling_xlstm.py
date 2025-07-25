@@ -297,18 +297,10 @@ else:
             eps=eps,
         )
 
-        ret_tuple = (
-            matH_out,
-            vecN_out,
-            vecM_out,
-        )
+        ret_tuple = (matH_out, vecN_out, vecM_out)
         if return_last_states:
             ret_tuple += (
-                (
-                    matC_k_states[:, :, -dhqk:, :],
-                    vecN_k_states[:, :, -dhqk:],
-                    scaMinter_k_states[:, :, -1:],
-                ),
+                (matC_k_states[:, :, -dhqk:, :], vecN_k_states[:, :, -dhqk:], scaMinter_k_states[:, :, -1:]),
             )
         else:
             ret_tuple += (None,)
@@ -378,11 +370,7 @@ else:
             eps=eps,
         )
 
-        last_states = (
-            matC_k_states[:, :, -dhqk:, :],
-            vecN_k_states[:, :, -dhqk:],
-            scaMinter_k_states[:, :, -1:],
-        )
+        last_states = (matC_k_states[:, :, -dhqk:, :], vecN_k_states[:, :, -dhqk:], scaMinter_k_states[:, :, -1:])
 
         if return_last_states:
             return matH_out, last_states
@@ -1372,51 +1360,14 @@ class xLSTMCache:
 
 
 @dataclass
+@auto_docstring
 class xLSTMOutput(ModelOutput):
+    r"""
+    cache_params (`xLSTMCache`):
+        The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+        avoid providing the old `input_ids`.
     """
-    Class for the xLSTM model outputs
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        cache_params (`xLSTMCache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-
-    """
-
     last_hidden_state: Optional[torch.FloatTensor]
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class xLSTMCausalLMOutput(ModelOutput):
-    """
-    Base class for causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache_params (`xLSTMCache`, *optional*, carrying the RNN states):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[xLSTMCache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
@@ -1450,7 +1401,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMOutput]:
-        """
+        r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
@@ -1538,6 +1489,24 @@ class xLSTMModel(xLSTMPreTrainedModel):
             cache_params=cache_params,
             hidden_states=all_hidden_states,
         )
+
+
+@dataclass
+@auto_docstring
+class xLSTMCausalLMOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    cache_params (`xLSTMCache`, *optional*, carrying the RNN states):
+        The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+        avoid providing the old `input_ids`.
+    """
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    cache_params: Optional[xLSTMCache] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
