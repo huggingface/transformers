@@ -56,6 +56,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
@@ -109,6 +110,10 @@ def is_wandb_available():
         )
         return False
     return importlib.util.find_spec("wandb") is not None
+
+
+def is_trackio_available():
+    return importlib.util.find_spec("trackio") is not None
 
 
 def is_clearml_available():
@@ -630,6 +635,8 @@ def get_available_reporting_integrations():
         integrations.append("clearml")
     if is_swanlab_available():
         integrations.append("swanlab")
+    if is_trackio_available():
+        integrations.append("trackio")
     return integrations
 
 
@@ -1031,6 +1038,118 @@ class WandbCallback(TrainerCallback):
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._wandb.log(metrics)
+
+
+class TrackioCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that logs metrics to Trackio.
+    """
+
+    def __init__(self):
+        has_trackio = is_trackio_available()
+        if not has_trackio:
+            raise RuntimeError("TrackioCallback requires trackio to be installed. Run `pip install trackio`.")
+        if has_trackio:
+            import trackio
+
+            self._trackio = trackio
+        self._initialized = False
+
+    def setup(self, args, state, model, **kwargs):
+        """
+        Setup the optional Trackio integration.
+
+        To customize the setup you can also override the following environment variables:
+
+        Environment:
+        - **TRACKIO_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
+            The name of the project (can be an existing project to continue tracking or a new project to start tracking
+            from scratch).
+        - **TRACKIO_SPACE_ID** (`str`, *optional*, defaults to `None`):
+            If set, the project will be logged to a Hugging Face Space instead of a local directory. Should be a
+            complete Space name like `"username/reponame"` or `"orgname/reponame"`, or just `"reponame" in which case
+            the Space will be created in the currently-logged-in Hugging Face user's namespace. If the Space does not
+            exist, it will be created. If the Space already exists, the project will be logged to it.
+        """
+        if state.is_world_process_zero:
+            combined_dict = {**args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+
+            self._trackio.init(
+                project=os.getenv("TRACKIO_PROJECT", "huggingface"),
+                name=args.run_name,
+                space_id=os.getenv("TRACKIO_SPACE_ID", None),
+                resume="allow",
+            )
+
+            # Add config parameters (run may have been created manually)
+            self._trackio.config.update(combined_dict, allow_val_change=True)
+
+            # Add number of model parameters to trackio config
+            try:
+                self._trackio.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Trackio due to an AttributeError.")
+        self._initialized = True
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
+
+    def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
+        if state.is_world_process_zero and self._initialized:
+            self._trackio.finish()
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
+        if is_torch_available() and torch.cuda.is_available():
+            device_idx = torch.cuda.current_device()
+            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
+            memory_allocated = torch.cuda.memory_allocated(device_idx)
+            power = torch.cuda.power_draw(device_idx)
+            gpu_memory_logs = {
+                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
+                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
+                f"gpu/{device_idx}/power": power / 1000,  # Watts
+            }
+            if dist.is_available() and dist.is_initialized():
+                gathered_logs = [None] * dist.get_world_size()
+                dist.all_gather_object(gathered_logs, gpu_memory_logs)
+                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
+        else:
+            gpu_memory_logs = {}
+
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
+
+    def on_save(self, args, state, control, **kwargs):
+        return
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if self._trackio is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._trackio.log(metrics)
 
 
 class CometCallback(TrainerCallback):
@@ -2329,6 +2448,7 @@ INTEGRATION_TO_CALLBACK = {
     "mlflow": MLflowCallback,
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
+    "trackio": TrackioCallback,
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,

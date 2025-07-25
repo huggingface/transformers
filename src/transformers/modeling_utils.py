@@ -72,6 +72,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -2062,8 +2063,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support `torch.compile(fullgraph=True)`
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
@@ -2785,30 +2785,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:[^/:]+$", applicable_attn_implementation):
+        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
 
             # Extract repo_id and kernel_name from the string
-            repo_id, kernel_name = applicable_attn_implementation.split(":")
-            kernel_name = kernel_name.strip()
+            if ":" in applicable_attn_implementation:
+                repo_id, kernel_name = attn_implementation.split(":")
+                kernel_name = kernel_name.strip()
+            else:
+                repo_id = attn_implementation
+                kernel_name = None
             repo_id = repo_id.strip()
-
             try:
                 kernel = get_kernel(repo_id)
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
-                applicable_attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
+                if hasattr(kernel, "flash_attn_varlen_func"):
+                    ALL_ATTENTION_FUNCTIONS._global_mapping[repo_id] = partial(
+                        flash_attention_forward, implementation=kernel
+                    )
+                elif kernel_name is not None:
+                    ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
+                ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
+                    "flash_attention_2"
+                ]
+                applicable_attn_implementation = repo_id
             except FileNotFoundError as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            except AttributeError:
-                raise ValueError(
-                    "the kernel function name or class specified in the attn_implementation argument is not valid. Please check "
-                    "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
-                )
+            finally:
+                return applicable_attn_implementation
         if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
@@ -2958,12 +2966,41 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _init_weights(self, module):
         """
-        Initialize the weights. This method should be overridden by derived class and is
-        the only initialization method that will be called when loading a checkpoint
-        using `from_pretrained`. Any attempt to initialize outside of this function
-        will be useless as the torch.nn.init function are all replaced with skip.
+        Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
+        initialization scheme, it should be overriden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overriden in order to initialize it correctly.
         """
-        pass
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value accross the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(
+                module, (nn.LayerNorm, nn.RMSNorm, nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
+            )
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
     def _initialize_weights(self, module):
         """
@@ -4544,6 +4581,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
+                If provided, it has to contain dimension named `"tp"` which will be used for tensor parallelism
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -4681,13 +4719,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
         if tp_plan is not None:
-            if device_mesh is None and tp_plan is not None:
+            if device_mesh is None:
                 tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
-                # TODO: make device_mesh support multiple dimensions
-                if device_mesh.ndim != 1:
-                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
-                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+                if "tp" not in device_mesh.mesh_dim_names:
+                    raise ValueError(
+                        "When using `tp_plan`, the `device_mesh` must contain a 'tp' dimension. "
+                        "Please provide a valid `device_mesh`."
+                    )
+                device_mesh = device_mesh["tp"]
+                tp_size = device_mesh["tp"].size()
+                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()

@@ -63,6 +63,7 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
     FP8 = "fp8"
     QUARK = "quark"
+    FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
 
 
@@ -1547,6 +1548,67 @@ class HiggsConfig(QuantizationConfigMixin):
             raise ValueError("group_size must be 64, 128, or 256")
         if self.hadamard_size % self.group_size != 0:
             raise ValueError("hadamard_size must be divisible by group_size")
+
+
+@dataclass
+class FPQuantConfig(QuantizationConfigMixin):
+    """
+    FPQuantConfig is a configuration class for quantization using the FPQuant method.
+
+    Args:
+        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+            The dtype to use for the forward pass.
+        forward_method (`str`, *optional*, defaults to `"abs_max"`):
+            The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
+        backward_dtype (`str`, *optional*, defaults to `"bf16"`):
+            The dtype to use for the backward pass.
+        store_master_weights (`bool`, *optional*, defaults to `False`):
+            Whether to store the master weights. Needed for QAT over layer weights.
+        hadamard_group_size (`int`, *optional*, defaults to 32):
+            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
+        pseudoquantization (`bool`, *optional*, defaults to `False`):
+            Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
+        modules_to_not_convert (`list`, *optional*):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        forward_dtype: str = "mxfp4",
+        forward_method: str = "abs_max",
+        backward_dtype: str = "bf16",
+        store_master_weights: bool = False,
+        hadamard_group_size: int = 32,
+        pseudoquantization: bool = False,
+        modules_to_not_convert: Optional[list[str]] = None,
+        **kwargs,
+    ):
+        self.forward_dtype = forward_dtype
+        self.forward_method = forward_method
+        self.backward_dtype = backward_dtype
+        self.store_master_weights = store_master_weights
+        self.hadamard_group_size = hadamard_group_size
+        self.pseudoquantization = pseudoquantization
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self.quant_method = QuantizationMethod.FPQUANT
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if self.forward_dtype not in ["mxfp4"]:
+            raise ValueError("Only 'mxfp4' is supported for forward_dtype for now.")
+        if self.forward_method not in ["abs_max", "quest"]:
+            raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for now.")
+        if self.backward_dtype not in ["bf16"]:
+            raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
+        if self.hadamard_group_size not in [32]:
+            raise ValueError("Only a hadamard_group_size of 32 is supported for now.")
+        if self.modules_to_not_convert is None:
+            self.modules_to_not_convert = ["lm_head"]
 
 
 @dataclass
