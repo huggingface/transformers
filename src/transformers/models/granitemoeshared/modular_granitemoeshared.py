@@ -20,8 +20,8 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...utils import logging
 from ...processing_utils import Unpack
+from ...utils import logging
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeForCausalLM,
@@ -32,6 +32,7 @@ from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 class GraniteFlashAttentionKwargs(TypedDict, total=False):
     """
@@ -56,6 +57,7 @@ class GraniteFlashAttentionKwargs(TypedDict, total=False):
     max_length_q: int
     max_length_k: int
     seq_idx: torch.IntTensor
+
 
 class GraniteMoeSharedMLP(nn.Module):
     """
