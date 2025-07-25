@@ -103,6 +103,8 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 
 [[autodoc]] Owlv2ImageProcessor
     - preprocess
+    - post_process_object_detection
+    - post_process_image_guided_detection
 
 ## Owlv2ImageProcessorFast
 
