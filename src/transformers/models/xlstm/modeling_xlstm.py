@@ -1622,8 +1622,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         cache_params: Optional[xLSTMCache] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMCausalLMOutput]:
         r"""
@@ -1635,8 +1633,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
-            attention_mask=attention_mask,
             **kwargs,
         )
         hidden_states = xlstm_outputs[0]
