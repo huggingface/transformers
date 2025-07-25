@@ -1,4 +1,4 @@
-# Copyright 2024, 2025 NXAI GmbH. All rights reserved.
+# Copyright 2025 NXAI GmbH. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ if is_torch_available():
         xLSTMForCausalLM,
         xLSTMModel,
     )
-    from transformers.models.xlstm.modeling_xlstm import mLSTMBlock, xLSTMCache
+    from transformers.models.xlstm.modeling_xlstm import xLSTMBlock, xLSTMCache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
 else:
     is_torch_greater_or_equal_than_2_2 = False
@@ -89,14 +89,8 @@ class xLSTMModelTester:
         self.step_kernel = step_kernel
         self.tie_word_embeddings = tie_word_embeddings
 
-        # self.num_hidden_layers = self.num_blocks
-        # self.hidden_size = self.embedding_dim
-
     def get_large_model_config(self):
         cfg = xLSTMConfig.from_pretrained("NX-AI/xLSTM-7b")
-        # this is needed for compatibility with generic tests
-        # cfg.hidden_size = cfg.embedding_dim
-        # cfg.num_hidden_layers = cfg.num_blocks
         return cfg
 
     def prepare_config_and_inputs(self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False):
@@ -158,22 +152,16 @@ class xLSTMModelTester:
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_2, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (xLSTMModel, xLSTMForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (xLSTMForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # xLSTM does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @molbap
-    test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
-    test_missing_keys = False
+    fx_compatible = False
+    test_torchscript = False
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # xLSTM does not have attention heads
-    # TODO: why this still fails?
-    test_resize_embeddings = False
 
     pipeline_model_mapping = (
         {"feature-extraction": xLSTMModel, "text-generation": xLSTMForCausalLM} if is_torch_available() else {}
@@ -196,29 +184,21 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
 
-    @unittest.skip(reason="xLSTM weights are not tied")
-    def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="To fix, xLSTM cache slicing test case is an edge case")
+    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="To fix, xLSTM cache slicing test case is an edge case")
+    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
-    @unittest.skip(reason="To fix, xLSTM cache slicing test case is an edge case")
+    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip(reason="To fix, xLSTM cache slicing is interacting with beam search")
+    @unittest.skip(reason="xLSTM cache slicing is interacting with beam search")
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="A large xlstm would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -286,14 +266,6 @@ class xLSTMIntegrationTest(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
-    @require_read_token
-    @parameterized.expand(
-        [
-            (torch_device,),
-        ]
-    )
-    @slow
-    @require_torch
     def test_simple_generate(self, device):
         """
         Simple generate test to avoid regressions.
@@ -315,9 +287,6 @@ class xLSTMIntegrationTest(unittest.TestCase):
         ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)
 
-    @require_read_token
-    @slow
-    @require_torch_gpu
     def test_batched_equivalence_with_cache(self):
         """
         Verifies that batched generation matches individual generation.
@@ -346,9 +315,6 @@ class xLSTMIntegrationTest(unittest.TestCase):
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
-    @require_read_token
-    @slow
-    @require_torch_gpu
     def test_batched_equivalence_without_cache(self):
         """
         Verifies that batched generation matches individual generation without cache.
@@ -377,7 +343,6 @@ class xLSTMIntegrationTest(unittest.TestCase):
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
-    @slow
     @require_torch_gpu
     def test_xlstm_block_train_vs_eval_equivalence(self):
         # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
@@ -390,7 +355,7 @@ class xLSTMIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
         with torch.amp.autocast(device_type="cuda", dtype=dtype):
             with torch.no_grad():
-                block = mLSTMBlock(config.to_xlstm_block_config(), layer_idx=0).to("cuda")
+                block = xLSTMBlock(config.to_xlstm_block_config(), layer_idx=0).to("cuda")
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
 
                 block.train()
