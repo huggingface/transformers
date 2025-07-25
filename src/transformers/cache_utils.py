@@ -73,6 +73,8 @@ class DynamicLayer(CacheLayerMixin):
     See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
     """
 
+    is_sliding = False
+
     def update(
         self,
         key_states: torch.Tensor,
