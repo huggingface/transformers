@@ -1154,7 +1154,7 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
             if place_holder_value is not None:
                 if isinstance(place_holder_value, (list, tuple)):
                     place_holder_value = place_holder_value[0]
-                placeholders_dict[placeholder] = place_holder_value
+                placeholders_dict[placeholder] = place_holder_value if place_holder_value is not None else placeholder
             else:
                 placeholders_dict[placeholder] = placeholder
 
