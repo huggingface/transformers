@@ -236,6 +236,7 @@ if is_accelerate_available():
         save_fsdp_model,
         save_fsdp_optimizer,
     )
+    from accelerate.utils.other import is_compiled_module
 
     DATA_SAMPLERS = [RandomSampler]
     if version.parse(accelerate_version) > version.parse("1.3.0"):
@@ -2364,6 +2365,8 @@ class Trainer:
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
+        if not use_accelerator_prepare and is_compiled_module(model):
+            use_accelerator_prepare = True
 
         if use_accelerator_prepare and self.is_fsdp_enabled:
             # In case of auto_find_batch_size=True
