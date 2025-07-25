@@ -2708,7 +2708,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     ALL_ATTENTION_FUNCTIONS.register(repo_id, getattr(kernel, kernel_name))
                 ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
                 applicable_attn_implementation = repo_id
-            except FileNotFoundError as e:
+            except Exception as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
