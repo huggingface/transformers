@@ -184,6 +184,10 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
 
+    @unittest.skip(reason="xLSTM has no tied weights")
+    def test_tied_weights_keys(self):
+        pass
+
     @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_generate_without_input_ids(self):
         pass
