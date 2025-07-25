@@ -441,28 +441,6 @@ SUPPORTED_TASKS = {
     },
 }
 
-NO_FEATURE_EXTRACTOR_TASKS = set()
-NO_IMAGE_PROCESSOR_TASKS = set()
-NO_TOKENIZER_TASKS = set()
-
-# Those model configs are special, they are generic over their task, meaning
-# any tokenizer/feature_extractor might be use for a given model so we cannot
-# use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
-# see if the model defines such objects or not.
-MULTI_MODEL_AUDIO_CONFIGS = {"SpeechEncoderDecoderConfig"}
-MULTI_MODEL_VISION_CONFIGS = {"VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
-for task, values in SUPPORTED_TASKS.items():
-    if values["type"] == "text":
-        NO_FEATURE_EXTRACTOR_TASKS.add(task)
-        NO_IMAGE_PROCESSOR_TASKS.add(task)
-    elif values["type"] in {"image", "video"}:
-        NO_TOKENIZER_TASKS.add(task)
-    elif values["type"] in {"audio"}:
-        NO_TOKENIZER_TASKS.add(task)
-        NO_IMAGE_PROCESSOR_TASKS.add(task)
-    elif values["type"] != "multimodal":
-        raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
-
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
 
@@ -783,7 +761,7 @@ def pipeline(
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         device (`int` or `str` or `torch.device`):
             Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
             pipeline will be allocated.
@@ -1037,205 +1015,169 @@ def pipeline(
             **model_kwargs,
         )
 
-    model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
 
-    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
-    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
-    load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
-    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
+    # Check which preprocessing classes the pipeline uses
+    # None values indicate optional classes that the pipeline can run without, we don't raise errors if loading fails
+    load_tokenizer = pipeline_class._load_tokenizer
+    load_feature_extractor = pipeline_class._load_feature_extractor
+    load_image_processor = pipeline_class._load_image_processor
+    load_processor = pipeline_class._load_processor
 
-    # Check that pipeline class required loading
-    load_tokenizer = load_tokenizer and pipeline_class._load_tokenizer
-    load_feature_extractor = load_feature_extractor and pipeline_class._load_feature_extractor
-    load_image_processor = load_image_processor and pipeline_class._load_image_processor
-    load_processor = load_processor and pipeline_class._load_processor
+    if load_tokenizer or load_tokenizer is None:
+        try:
+            # Try to infer tokenizer from model or config name (if provided as str)
+            if tokenizer is None:
+                if isinstance(model_name, str):
+                    tokenizer = model_name
+                elif isinstance(config, str):
+                    tokenizer = config
+                else:
+                    # Impossible to guess what is the right tokenizer here
+                    raise Exception(
+                        "Impossible to guess which tokenizer to use. "
+                        "Please provide a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                    )
 
-    # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
-    # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
-    # vision tasks when calling `pipeline()` with `model` and only one of the `image_processor` and `feature_extractor`.
-    # TODO: we need to make `NO_IMAGE_PROCESSOR_TASKS` and `NO_FEATURE_EXTRACTOR_TASKS` more robust to avoid such issue.
-    # This block is only temporarily to make CI green.
-    if load_image_processor and load_feature_extractor:
-        load_feature_extractor = False
+            # Instantiate tokenizer if needed
+            if isinstance(tokenizer, (str, tuple)):
+                if isinstance(tokenizer, tuple):
+                    # For tuple we have (tokenizer name, {kwargs})
+                    use_fast = tokenizer[1].pop("use_fast", use_fast)
+                    tokenizer_identifier = tokenizer[0]
+                    tokenizer_kwargs = tokenizer[1]
+                else:
+                    tokenizer_identifier = tokenizer
+                    tokenizer_kwargs = model_kwargs.copy()
+                    tokenizer_kwargs.pop("torch_dtype", None)
 
-    if (
-        tokenizer is None
-        and not load_tokenizer
-        and normalized_task not in NO_TOKENIZER_TASKS
-        # Using class name to avoid importing the real class.
-        and (
-            model_config.__class__.__name__ in MULTI_MODEL_AUDIO_CONFIGS
-            or model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
-        )
-    ):
-        # This is a special category of models, that are fusions of multiple models
-        # so the model_config might not define a tokenizer, but it seems to be
-        # necessary for the task, so we're force-trying to load it.
-        load_tokenizer = True
-    if (
-        image_processor is None
-        and not load_image_processor
-        and normalized_task not in NO_IMAGE_PROCESSOR_TASKS
-        # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
-    ):
-        # This is a special category of models, that are fusions of multiple models
-        # so the model_config might not define a tokenizer, but it seems to be
-        # necessary for the task, so we're force-trying to load it.
-        load_image_processor = True
-    if (
-        feature_extractor is None
-        and not load_feature_extractor
-        and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
-        # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_AUDIO_CONFIGS
-    ):
-        # This is a special category of models, that are fusions of multiple models
-        # so the model_config might not define a tokenizer, but it seems to be
-        # necessary for the task, so we're force-trying to load it.
-        load_feature_extractor = True
-
-    if task in NO_TOKENIZER_TASKS:
-        # These will never require a tokenizer.
-        # the model on the other hand might have a tokenizer, but
-        # the files could be missing from the hub, instead of failing
-        # on such repos, we just force to not load it.
-        load_tokenizer = False
-
-    if task in NO_FEATURE_EXTRACTOR_TASKS:
-        load_feature_extractor = False
-    if task in NO_IMAGE_PROCESSOR_TASKS:
-        load_image_processor = False
-
-    if load_tokenizer:
-        # Try to infer tokenizer from model or config name (if provided as str)
-        if tokenizer is None:
-            if isinstance(model_name, str):
-                tokenizer = model_name
-            elif isinstance(config, str):
-                tokenizer = config
+                tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
+                )
+        except Exception as e:
+            if load_tokenizer:
+                raise e
             else:
-                # Impossible to guess what is the right tokenizer here
-                raise Exception(
-                    "Impossible to guess which tokenizer to use. "
-                    "Please provide a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                tokenizer = None
+
+    if load_image_processor or load_image_processor is None:
+        try:
+            # Try to infer image processor from model or config name (if provided as str)
+            if image_processor is None:
+                if isinstance(model_name, str):
+                    image_processor = model_name
+                elif isinstance(config, str):
+                    image_processor = config
+                # Backward compatibility, as `feature_extractor` used to be the name
+                # for `ImageProcessor`.
+                elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
+                    image_processor = feature_extractor
+                else:
+                    # Impossible to guess what is the right image_processor here
+                    raise Exception(
+                        "Impossible to guess which image processor to use. "
+                        "Please provide a PreTrainedImageProcessor class or a path/identifier "
+                        "to a pretrained image processor."
+                    )
+
+            # Instantiate image_processor if needed
+            if isinstance(image_processor, (str, tuple)):
+                image_processor = AutoImageProcessor.from_pretrained(
+                    image_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs
+                )
+        except Exception as e:
+            if load_image_processor:
+                raise e
+            else:
+                image_processor = None
+
+    if load_feature_extractor or load_feature_extractor is None:
+        try:
+            # Try to infer feature extractor from model or config name (if provided as str)
+            if feature_extractor is None:
+                if isinstance(model_name, str):
+                    feature_extractor = model_name
+                elif isinstance(config, str):
+                    feature_extractor = config
+                else:
+                    # Impossible to guess what is the right feature_extractor here
+                    raise Exception(
+                        "Impossible to guess which feature extractor to use. "
+                        "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
+                        "to a pretrained feature extractor."
+                    )
+
+            # Instantiate feature_extractor if needed
+            if isinstance(feature_extractor, (str, tuple)):
+                feature_extractor = AutoFeatureExtractor.from_pretrained(
+                    feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
                 )
 
-        # Instantiate tokenizer if needed
-        if isinstance(tokenizer, (str, tuple)):
-            if isinstance(tokenizer, tuple):
-                # For tuple we have (tokenizer name, {kwargs})
-                use_fast = tokenizer[1].pop("use_fast", use_fast)
-                tokenizer_identifier = tokenizer[0]
-                tokenizer_kwargs = tokenizer[1]
-            else:
-                tokenizer_identifier = tokenizer
-                tokenizer_kwargs = model_kwargs.copy()
-                tokenizer_kwargs.pop("torch_dtype", None)
+                if (
+                    feature_extractor._processor_class
+                    and feature_extractor._processor_class.endswith("WithLM")
+                    and isinstance(model_name, str)
+                ):
+                    try:
+                        import kenlm  # to trigger `ImportError` if not installed
+                        from pyctcdecode import BeamSearchDecoderCTC
 
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
-            )
+                        if os.path.isdir(model_name) or os.path.isfile(model_name):
+                            decoder = BeamSearchDecoderCTC.load_from_dir(model_name)
+                        else:
+                            language_model_glob = os.path.join(
+                                BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
+                            )
+                            alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
+                            allow_patterns = [language_model_glob, alphabet_filename]
+                            decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_patterns=allow_patterns)
 
-    if load_image_processor:
-        # Try to infer image processor from model or config name (if provided as str)
-        if image_processor is None:
-            if isinstance(model_name, str):
-                image_processor = model_name
-            elif isinstance(config, str):
-                image_processor = config
-            # Backward compatibility, as `feature_extractor` used to be the name
-            # for `ImageProcessor`.
-            elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
-                image_processor = feature_extractor
-            else:
-                # Impossible to guess what is the right image_processor here
-                raise Exception(
-                    "Impossible to guess which image processor to use. "
-                    "Please provide a PreTrainedImageProcessor class or a path/identifier "
-                    "to a pretrained image processor."
-                )
-
-        # Instantiate image_processor if needed
-        if isinstance(image_processor, (str, tuple)):
-            image_processor = AutoImageProcessor.from_pretrained(
-                image_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs
-            )
-
-    if load_feature_extractor:
-        # Try to infer feature extractor from model or config name (if provided as str)
-        if feature_extractor is None:
-            if isinstance(model_name, str):
-                feature_extractor = model_name
-            elif isinstance(config, str):
-                feature_extractor = config
-            else:
-                # Impossible to guess what is the right feature_extractor here
-                raise Exception(
-                    "Impossible to guess which feature extractor to use. "
-                    "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
-                    "to a pretrained feature extractor."
-                )
-
-        # Instantiate feature_extractor if needed
-        if isinstance(feature_extractor, (str, tuple)):
-            feature_extractor = AutoFeatureExtractor.from_pretrained(
-                feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
-            )
-
-            if (
-                feature_extractor._processor_class
-                and feature_extractor._processor_class.endswith("WithLM")
-                and isinstance(model_name, str)
-            ):
-                try:
-                    import kenlm  # to trigger `ImportError` if not installed
-                    from pyctcdecode import BeamSearchDecoderCTC
-
-                    if os.path.isdir(model_name) or os.path.isfile(model_name):
-                        decoder = BeamSearchDecoderCTC.load_from_dir(model_name)
-                    else:
-                        language_model_glob = os.path.join(
-                            BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
+                        kwargs["decoder"] = decoder
+                    except ImportError as e:
+                        logger.warning(
+                            f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}"
                         )
-                        alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-                        allow_patterns = [language_model_glob, alphabet_filename]
-                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_patterns=allow_patterns)
+                        if not is_kenlm_available():
+                            logger.warning("Try to install `kenlm`: `pip install kenlm")
 
-                    kwargs["decoder"] = decoder
-                except ImportError as e:
-                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
-                    if not is_kenlm_available():
-                        logger.warning("Try to install `kenlm`: `pip install kenlm")
-
-                    if not is_pyctcdecode_available():
-                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
-
-    if load_processor:
-        # Try to infer processor from model or config name (if provided as str)
-        if processor is None:
-            if isinstance(model_name, str):
-                processor = model_name
-            elif isinstance(config, str):
-                processor = config
+                        if not is_pyctcdecode_available():
+                            logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+        except Exception as e:
+            if load_feature_extractor:
+                raise e
             else:
-                # Impossible to guess what is the right processor here
-                raise Exception(
-                    "Impossible to guess which processor to use. "
-                    "Please provide a processor instance or a path/identifier "
-                    "to a processor."
-                )
+                feature_extractor = None
 
-        # Instantiate processor if needed
-        if isinstance(processor, (str, tuple)):
-            processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-            if not isinstance(processor, ProcessorMixin):
-                raise TypeError(
-                    "Processor was loaded, but it is not an instance of `ProcessorMixin`. "
-                    f"Got type `{type(processor)}` instead. Please check that you specified "
-                    "correct pipeline task for the model and model has processor implemented and saved."
-                )
+    if load_processor or load_processor is None:
+        try:
+            # Try to infer processor from model or config name (if provided as str)
+            if processor is None:
+                if isinstance(model_name, str):
+                    processor = model_name
+                elif isinstance(config, str):
+                    processor = config
+                else:
+                    # Impossible to guess what is the right processor here
+                    raise Exception(
+                        "Impossible to guess which processor to use. "
+                        "Please provide a processor instance or a path/identifier "
+                        "to a processor."
+                    )
+
+            # Instantiate processor if needed
+            if isinstance(processor, (str, tuple)):
+                processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+                if not isinstance(processor, ProcessorMixin):
+                    raise TypeError(
+                        "Processor was loaded, but it is not an instance of `ProcessorMixin`. "
+                        f"Got type `{type(processor)}` instead. Please check that you specified "
+                        "correct pipeline task for the model and model has processor implemented and saved."
+                    )
+        except Exception as e:
+            if load_processor:
+                raise e
+            else:
+                processor = None
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

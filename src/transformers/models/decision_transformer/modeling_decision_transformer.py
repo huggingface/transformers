@@ -447,13 +447,13 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
 @auto_docstring
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
-    config_class = DecisionTransformerConfig
+    config: DecisionTransformerConfig
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_static_cache = False
+
+    _can_compile_fullgraph = False
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -740,7 +740,7 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = DecisionTransformerConfig
+    config: DecisionTransformerConfig
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False

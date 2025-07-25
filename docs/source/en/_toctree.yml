@@ -72,8 +72,6 @@
       title: Caching
     - local: kv_cache
       title: KV cache strategies
-    - local: serving
-      title: Serving
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
@@ -105,6 +103,10 @@
     title: Agents
   - local: tools
     title: Tools
+  - local: serving
+    title: Serving
+  - local: transformers_as_backend
+    title: Inference server backends
   title: Inference
 - isExpanded: false
   sections:
@@ -177,6 +179,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fp_quant
+    title: FP-Quant
   - local: gguf
     title: GGUF
   - local: quantization/gptq
@@ -441,6 +445,10 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie4_5
+        title: Ernie4_5
+      - local: model_doc/ernie4_5_moe
+        title: Ernie4_5_MoE
       - local: model_doc/ernie_m
         title: ErnieM
       - local: model_doc/esm
@@ -475,6 +483,8 @@
         title: GLM
       - local: model_doc/glm4
         title: glm4
+      - local: model_doc/glm4_moe
+        title: glm4_moe
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -517,6 +527,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/lfm2
+        title: LFM2
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -561,6 +573,8 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
+      - local: model_doc/modernbert-decoder
+        title: ModernBERTDecoder
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -709,6 +723,8 @@
         title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -735,6 +751,8 @@
         title: DPT
       - local: model_doc/efficientformer
         title: EfficientFormer
+      - local: model_doc/efficientloftr
+        title: EfficientLoFTR
       - local: model_doc/efficientnet
         title: EfficientNet
       - local: model_doc/eomt
@@ -1035,6 +1053,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
       - local: model_doc/pix2struct
@@ -1087,6 +1107,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/voxtral
+        title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
