@@ -1309,7 +1309,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
                     eos_token_id = [eos_token_id]
                 eos_token_id = torch.tensor(eos_token_id)
 
-            eos_token_id_list = eos_token_id.tolist() # convert to python list before
+            eos_token_id_list = eos_token_id.tolist()  # convert to python list before
             bad_words_ids = list(
                 filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id_list), bad_words_ids)
             )
