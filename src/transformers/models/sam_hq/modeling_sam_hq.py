@@ -501,7 +501,6 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
 
     def __init__(self, config: SamHQVisionConfig):
         super().__init__(config)
-        self.config = config
         self.image_size = config.image_size
         self.patch_embed = SamHQPatchEmbeddings(config)
 
