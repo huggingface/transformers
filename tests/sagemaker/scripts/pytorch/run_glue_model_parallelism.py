@@ -180,7 +180,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+                "Will use the token generated when running `hf auth login` (necessary to use this script "
                 "with private models)."
             )
         },

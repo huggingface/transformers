@@ -725,6 +725,10 @@
         title: DAB-DETR
       - local: model_doc/deepseek_v2
         title: DeepSeek-V2
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
+      - local: model_doc/deepseek_vl_hybrid
+        title: DeepseekVLHybrid
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -975,6 +979,8 @@
         title: Donut
       - local: model_doc/emu3
         title: Emu3
+      - local: model_doc/evolla
+        title: Evolla
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/gemma3
