@@ -2094,8 +2094,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_attention_backend = False
     _can_record_outputs = None
 
-    # This attribute sets the default parameter to be
-
     @property
     @torch._dynamo.allow_in_graph
     def can_record_outputs(self) -> dict[str, OutputRecorder]:
