@@ -1468,9 +1468,6 @@ class xLSTMModel(xLSTMPreTrainedModel):
         cache_params: Optional[xLSTMCache] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, xLSTMOutput]:
         """
@@ -1481,9 +1478,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
@@ -1497,8 +1493,6 @@ class xLSTMModel(xLSTMPreTrainedModel):
                 cache_params = xLSTMCache(
                     self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
                 )
-        else:
-            cache_params = None
 
         hidden_states = inputs_embeds
 
@@ -1562,12 +1556,9 @@ class xLSTMModel(xLSTMPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(value for value in [hidden_states, cache_params, all_hidden_states] if value is not None)
-
         return xLSTMOutput(
             last_hidden_state=hidden_states,
-            cache_params=cache_params if use_cache else None,
+            cache_params=cache_params,
             hidden_states=all_hidden_states,
         )
 
@@ -1579,7 +1570,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         self.backbone = xLSTMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
-        # self.register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1593,10 +1583,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
-
-    def _init_weights(self, module):
-        self.backbone.apply(self.backbone._init_weights)
-        small_init_method(self.config.hidden_size)(self.lm_head.weight)
 
     def prepare_inputs_for_generation(
         self,
@@ -1654,31 +1640,24 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         cache_params: Optional[xLSTMCache] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        **kwargs,  # for now we need this for generation
+        **kwargs,
     ) -> Union[tuple, xLSTMCausalLMOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
-            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         xlstm_outputs = self.backbone(
             input_ids,
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             use_cache=use_cache,
             cache_position=cache_position,
             attention_mask=attention_mask,
+            **kwargs,
         )
         hidden_states = xlstm_outputs[0]
 
@@ -1706,10 +1685,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + xlstm_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return xLSTMCausalLMOutput(
             loss=loss,
