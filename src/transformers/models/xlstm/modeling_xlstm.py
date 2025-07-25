@@ -1367,6 +1367,7 @@ class xLSTMOutput(ModelOutput):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
+
     last_hidden_state: Optional[torch.FloatTensor]
     cache_params: Optional[xLSTMCache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -1503,6 +1504,7 @@ class xLSTMCausalLMOutput(ModelOutput):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
+
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     cache_params: Optional[xLSTMCache] = None
