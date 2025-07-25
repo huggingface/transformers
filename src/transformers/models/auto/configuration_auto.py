@@ -130,7 +130,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("eomt", "EomtConfig"),
         ("ernie", "ErnieConfig"),
         ("ernie4_5", "Ernie4_5Config"),
-        ("ernie4_5_moe", "Ernie4_5_MoEConfig"),
+        ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
         ("falcon", "FalconConfig"),
