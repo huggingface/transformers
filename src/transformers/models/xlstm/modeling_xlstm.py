@@ -1571,45 +1571,23 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         use_cache=None,
         cache_params: Optional[xLSTMCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
-        # Does not support using additional convolution states via inputs_embeds
-        # as opposed to Mamba, currently.
-        if use_cache:
-            if cache_position is None:
-                raise ValueError(
-                    "`cache_position` should not be None as it should have been initialized in "
-                    "`model.generate`, you are responsible for passing in a valid `cache_position` if "
-                    "you are calling `prepare_inputs_for_generation` directly with `use_cache=True`"
-                )
+        if use_cache and cache_params is not None:
             # If the first cache position is non-zero, we assume we are in generation mode.
             # Thus, the cache_params state is assumed to be the state before the last token
             # (lastly generated token), and all previous tokens are already ingested.
             # This should as well support generation from scratch with the [BOS] token inserted first.
-
-            if cache_params is not None:
-                input_ids = input_ids[:, -1:]
-                if inputs_embeds is not None:
-                    inputs_embeds = inputs_embeds[:, -1:]
-
-        attention_mask = None
+            input_ids = input_ids[:, -1:]
+            if inputs_embeds is not None:
+                inputs_embeds = inputs_embeds[:, -1:]
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update(
-            {
-                "attention_mask": attention_mask,
-                "cache_params": cache_params,
-                "use_cache": use_cache,
-                "cache_position": cache_position,
-            }
-        )
+        model_inputs.update({"cache_params": cache_params, "use_cache": use_cache})
         return model_inputs
 
     @can_return_tuple
