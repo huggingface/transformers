@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-
 Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
 vision, audio, video, and multimodal model, for both inference and training.
 
@@ -62,3 +61,4 @@ Transformers is designed for developers and machine learning engineers and resea
 ## Learn
 
 If you're new to Transformers or want to learn more about transformer models, we recommend starting with the [LLM course](https://huggingface.co/learn/llm-course/chapter1/1?fw=pt). This comprehensive course covers everything from the fundamentals of how transformer models work to practical applications across various tasks. You'll learn the complete workflow, from curating high-quality datasets to fine-tuning large language models and implementing reasoning capabilities. The course contains both theoretical and hands-on exercises to build a solid foundational knowledge of transformer models as you learn.
+
