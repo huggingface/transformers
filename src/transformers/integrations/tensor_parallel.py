@@ -1082,7 +1082,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 def distribute_model(model, distributed_config, device_mesh, tp_size):
     _plan = "_tp_plan"
     model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
-    if distributed_config.get("enable_expert_parallel", False):
+    if distributed_config is not None and distributed_config.get("enable_expert_parallel", False):
         _plan = "_ep_plan"
         model._tp_plan = getattr(model.config, "base_model_ep_plan", model._tp_plan).copy()
 
