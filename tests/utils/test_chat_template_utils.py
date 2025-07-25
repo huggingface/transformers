@@ -407,6 +407,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "type": "object",
                 "properties": {
                     "temperature_format": {
+                        "type": "string",
                         "enum": ["celsius", "fahrenheit"],
                         "description": "The temperature format to use",
                     }
