@@ -385,12 +385,16 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_literal(self):
-        def fn(temperature_format: Literal["celsius", "fahrenheit"]):
+        def fn(
+            temperature_format: Literal["celsius", "fahrenheit"],
+            booleanish: Literal[True, False, 0, 1, "y", "n"] = False,
+        ):
             """
             Test function
 
             Args:
                 temperature_format: The temperature format to use
+                booleanish: A value that can be regarded as boolean
 
 
             Returns:
@@ -410,7 +414,12 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                         "type": "string",
                         "enum": ["celsius", "fahrenheit"],
                         "description": "The temperature format to use",
-                    }
+                    },
+                    "booleanish": {
+                        "type": ["boolean", "integer", "string"],
+                        "enum": [True, False, 0, 1, "y", "n"],
+                        "description": "A value that can be regarded as boolean",
+                    },
                 },
                 "required": ["temperature_format"],
             },
