@@ -197,6 +197,11 @@ class AutoImageProcessorTest(unittest.TestCase):
             )
         self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
 
+        # Test the dynamic module is reloaded and module objects are different.
+        # The module file is not changed after dumping,
+        # but since we're loading from local file - the module code should be reloaded for the new model.
+        self.assertIsNot(image_processor.__class__, reloaded_image_processor.__class__)
+
         # Test the dynamic module is reloaded if we force it.
         reloaded_image_processor = AutoImageProcessor.from_pretrained(
             "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True, force_download=True

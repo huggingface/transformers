@@ -257,6 +257,9 @@ class ImageProcessingMixin(PushToHubMixin):
         self.to_json_file(output_image_processor_file)
         logger.info(f"Image processor saved in {output_image_processor_file}")
 
+        # Save remote code to local
+        custom_object_save(self, save_directory)
+
         if push_to_hub:
             self._upload_modified_files(
                 save_directory,
