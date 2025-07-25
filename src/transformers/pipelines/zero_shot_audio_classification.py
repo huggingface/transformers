@@ -60,6 +60,11 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-audio-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = True
+    _load_tokenizer = True
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 

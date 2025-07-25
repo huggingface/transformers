@@ -61,12 +61,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
-    config_class = SpeechEncoderDecoderConfig
+    config: SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
@@ -339,8 +339,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         r"""
         inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
-            or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile
-            library (`pip install soundfile`). To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
+            or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.*
+            via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
             [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
             `torch.FloatTensor`.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -369,15 +370,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *list[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
-            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
-            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`Speech2TextFeatureExtractor`] should be used for extracting the fbank features, padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
+            into an array of type *list[float]* or a *numpy.ndarray*, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding and conversion
+            into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
 
         Examples:
 
@@ -506,10 +502,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported. Please use the"
             " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
         )
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
 
 __all__ = ["SpeechEncoderDecoderModel"]

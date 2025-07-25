@@ -20,10 +20,10 @@ import json
 import os
 import tempfile
 import warnings
-from collections import OrderedDict, UserDict
+from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Iterable, MutableMapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
 from typing import Any, Callable, ContextManager, Optional, TypedDict
@@ -31,6 +31,7 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
+from ..utils import logging
 from .import_utils import (
     get_torch_version,
     is_flax_available,
@@ -38,8 +39,14 @@ from .import_utils import (
     is_tf_available,
     is_torch_available,
     is_torch_fx_proxy,
+    requires,
 )
 
+
+_CAN_RECORD_REGISTRY = {}
+
+
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
@@ -848,7 +855,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     return decorator
 
 
-class LossKwargs(TypedDict, total=False):
+class TransformersKwargs(TypedDict, total=False):
     """
     Keyword arguments to be passed to the loss function
 
@@ -856,9 +863,30 @@ class LossKwargs(TypedDict, total=False):
         num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
+        output_hidden_states (`Optional[bool]`, *optional*):
+            Most of the models support outputing all hidden states computed during the forward pass.
+        output_attentions (`Optional[bool]`, *optional*):
+            Turn this on to return the intermediary attention scores.
+        output_router_logits (`Optional[bool]`, *optional*):
+            For MoE models, this allows returning the router logits to compute the loss.
+        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for query state.
+        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`, *optional*):
+            Maximum sequence length for query state.
+        max_length_k (`int`, *optional*):
+            Maximum sequence length for key state.
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
+    output_hidden_states: Optional[bool]
+    output_attentions: Optional[bool]
+    output_router_logits: Optional[bool]
+    cumulative_seqlens_q: Optional["torch.LongTensor"]
+    cumulative_seqlens_k: Optional["torch.LongTensor"]
+    max_length_q: Optional[int]
+    max_length_k: Optional[int]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -926,29 +954,144 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
-        is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
-
-        # The following allows to convert output to tuple ONLY on top level forward call,
-        # while internal modules of the model will return Output objects
-        # to be able to use name-based attribute access in modeling code.
-
-        # We will check if we are on top level module, if so, turn off to tuple conversion for all
-        # underling calls.
-        is_top_level_module = getattr(self, "_is_top_level_module", True)
-        if is_configured_to_return_tuple and is_top_level_module:
-            set_attribute_for_modules(self, "_is_top_level_module", False)
-
-        try:
-            output = func(self, *args, **kwargs)
-            if is_requested_to_return_tuple or (is_configured_to_return_tuple and is_top_level_module):
-                output = output.to_tuple()
-        finally:
-            # Remove the flag after the model forward call is finished.
-            if is_configured_to_return_tuple and is_top_level_module:
-                del_attribute_from_modules(self, "_is_top_level_module")
-
+        return_dict = self.config.return_dict if hasattr(self, "config") else True
+        return_dict_passed = kwargs.pop("return_dict", return_dict)
+        if return_dict_passed is not None:
+            return_dict = return_dict_passed
+        output = func(self, *args, **kwargs)
+        if not return_dict and not isinstance(output, tuple):
+            output = output.to_tuple()
         return output
+
+    return wrapper
+
+
+# if is_torch_available():
+# @torch._dynamo.disable
+@dataclass
+@requires(backends=("torch",))
+class OutputRecorder:
+    """
+    Configuration for recording outputs from a model via hooks.
+
+    Attributes:
+        target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
+        index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
+        layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+    """
+
+    target_class: "type[torch.nn.Module]"
+    index: Optional[int] = 0
+    layer_name: Optional[str] = None
+
+
+def check_model_inputs(func):
+    """
+    Decorator to intercept specific layer outputs without using hooks.
+    Compatible with torch.compile (Dynamo tracing).
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        use_cache = kwargs.get("use_cache", None)
+        if use_cache is None:
+            use_cache = getattr(self.config, "use_cache", False)
+
+        return_dict = kwargs.pop("return_dict", None)
+        if return_dict is None:
+            return_dict = getattr(self.config, "return_dict", True)
+
+        if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        kwargs["use_cache"] = use_cache
+
+        all_args = kwargs.copy()
+        if "kwargs" in all_args:
+            for k, v in all_args["kwargs"].items():
+                all_args[k] = v
+
+        capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
+        recordable_keys = {
+            f"output_{k}": all_args.get(
+                f"output_{k}",
+                getattr(
+                    self.config,
+                    f"output_{k}",
+                    all_args.get("output_attentions", getattr(self.config, "output_attentions", False)),
+                ),
+            )
+            for k in capture_flags
+        }
+        collected_outputs = defaultdict(tuple)
+        monkey_patched_layers = []
+
+        def make_capture_wrapper(module, orig_forward, key, index):
+            @wraps(orig_forward)
+            def wrapped_forward(*args, **kwargs):
+                if key == "hidden_states" and len(collected_outputs[key]) == 0:
+                    collected_outputs[key] += (args[0],)
+                output = orig_forward(*args, **kwargs)
+                if not isinstance(output, tuple):
+                    collected_outputs[key] += (output,)
+                elif output[index] is not None:
+                    collected_outputs[key] += (output[index],)
+                return output
+
+            return wrapped_forward
+
+        if any(recordable_keys.values()):
+            capture_tasks = []
+            for key, layer_specs in capture_flags.items():
+                if not recordable_keys.get(f"output_{key}", False):
+                    continue
+                if not isinstance(layer_specs, list):
+                    layer_specs = [layer_specs]
+                for specs in layer_specs:
+                    if not isinstance(specs, OutputRecorder):
+                        index = 0 if "hidden_states" in key else 1
+                        specs = OutputRecorder(target_class=specs, index=index)
+                    capture_tasks.append((key, specs))
+
+            for name, module in self.named_modules():
+                for key, specs in capture_tasks:
+                    if isinstance(module, specs.target_class):
+                        if specs.layer_name is not None and specs.layer_name not in name:
+                            continue
+                        # Monkey patch forward
+                        original_forward = module.forward
+                        module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
+                        monkey_patched_layers.append((module, original_forward))
+
+        outputs = func(self, *args, **kwargs)
+        # Restore original forward methods
+        for module, original_forward in monkey_patched_layers:
+            module.forward = original_forward
+
+        # Inject collected outputs into model output
+        for key in collected_outputs:
+            if key == "hidden_states":
+                collected_outputs[key] = collected_outputs[key][:-1]
+                if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] += (outputs.vision_hidden_states,)
+                elif hasattr(outputs, "last_hidden_state"):
+                    collected_outputs[key] += (outputs.last_hidden_state,)
+
+                outputs[key] = collected_outputs[key]
+            elif key == "attentions":
+                if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
+                    outputs[key] = collected_outputs[key][0::2]
+                    outputs["cross_" + key] = collected_outputs[key][1::2]
+                else:
+                    outputs[key] = collected_outputs[key]
+            else:
+                outputs[key] = collected_outputs[key]
+        if return_dict is False:
+            outputs = outputs.to_tuple()
+        return outputs
 
     return wrapper
 

@@ -25,6 +25,7 @@ from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from .configuration_colqwen2 import ColQwen2Config
 
 
 if is_torch_available():
@@ -66,7 +67,7 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
-    image_processor_class = "Qwen2VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
@@ -225,9 +226,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
 
 class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
+    pass
 
 
 @dataclass
@@ -242,7 +241,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
 
@@ -272,6 +271,13 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColPaliForRetrieval):
+    _checkpoint_conversion_mapping = {}
+
+    def __init__(self, config: ColQwen2Config):
+        super().__init__(config)
+        del self._tied_weights_keys
+        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -279,7 +285,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         labels: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -322,7 +328,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.model.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.vlm.visual.get_dtype())

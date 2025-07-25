@@ -53,8 +53,6 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
-import torch.nn.functional as F
-
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     max_image_size: dict[str, int] = None
@@ -145,9 +143,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         self,
         videos: list[torch.Tensor],
         video_metadata: Optional[Union[list[VideoMetadata], list[dict]]] = None,
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: SizeDict = None,
+        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -173,7 +170,10 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                 timestamps_list.append(timestamps)
                 processed_videos.append(video)
         else:
-            raise AssertionError("Must set `do_sample_frames=True` to sample frames from GLM-4.1V Model.")
+            # Assume 24 fps by default and prepare timestamps for the whole video when all frames are sampled
+            processed_videos = videos
+            timestamps_list = [[idx // 24 for idx in range(len(video))] for video in videos]
+            timestamps_list = timestamps_list[::2]  # mrope
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}
@@ -191,8 +191,10 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     max_pixels=self.max_image_size["longest_edge"],
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
-                stacked_videos = F.interpolate(
-                    stacked_videos, size=(resized_height, resized_width), mode="bicubic", align_corners=False
+                stacked_videos = self.resize(
+                    stacked_videos,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
                 )
                 stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos
@@ -246,10 +248,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-        total_frames = video_grid_thw[0][0].item()
-        h = video_grid_thw[0][1].item()
-        w = video_grid_thw[0][2].item()
-        video_grid_thw = [[1, h, w] for _ in range(total_frames)]
         data = {
             "pixel_values_videos": pixel_values_videos,
             "video_grid_thw": video_grid_thw,

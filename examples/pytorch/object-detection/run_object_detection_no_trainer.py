@@ -11,6 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets>=4.0",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning 🤗 Transformers model for object detection with Accelerate."""
 
 import argparse
@@ -460,7 +472,10 @@ def main():
         dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
-    categories = dataset["train"].features["objects"].feature["category"].names
+    if isinstance(dataset["train"].features["objects"], dict):
+        categories = dataset["train"].features["objects"]["category"].feature.names
+    else:  # (for old versions of `datasets` that used Sequence({...}) of the objects)
+        categories = dataset["train"].features["objects"].feature["category"].names
     id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 

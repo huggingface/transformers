@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import random
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -103,7 +102,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -216,7 +215,7 @@ class TFMarianAttention(keras.layers.Layer):
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
-        training: Optional[bool] = False,
+        training: bool | None = False,
     ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -367,7 +366,7 @@ class TFMarianEncoderLayer(keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: np.ndarray | tf.Tensor | None,
         layer_head_mask: tf.Tensor | None,
-        training: Optional[bool] = False,
+        training: bool | None = False,
     ) -> tf.Tensor:
         """
         Args:
@@ -461,8 +460,8 @@ class TFMarianDecoderLayer(keras.layers.Layer):
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         cross_attn_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        training: Optional[bool] = False,
+        past_key_value: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        training: bool | None = False,
     ) -> tuple[tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
@@ -723,7 +722,7 @@ class TFMarianEncoder(keras.layers.Layer):
         config: MarianConfig
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: MarianConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = keras.layers.Dropout(config.dropout)
@@ -753,9 +752,9 @@ class TFMarianEncoder(keras.layers.Layer):
         inputs_embeds: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
     ):
         """
@@ -890,7 +889,7 @@ class TFMarianDecoder(keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: MarianConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -924,10 +923,10 @@ class TFMarianDecoder(keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
         past_key_values: tuple[tuple[tf.Tensor]] | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
     ):
         r"""
@@ -1154,14 +1153,14 @@ class TFMarianMainLayer(keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
-        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[tuple[tuple[tf.Tensor]]] = None,
+        encoder_outputs: tuple | TFBaseModelOutput | None = None,
+        past_key_values: tuple[tuple[tf.Tensor]] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
     ):

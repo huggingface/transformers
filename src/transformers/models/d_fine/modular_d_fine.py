@@ -917,7 +917,9 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         self.post_init()
 
     def forward(**super_kwargs):
-        """
+        r"""
+        Example:
+
         ```python
         >>> import torch
         >>> from transformers.image_utils import load_image

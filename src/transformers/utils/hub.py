@@ -134,10 +134,16 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 
 
 def _get_cache_file_to_return(
-    path_or_repo_id: str, full_filename: str, cache_dir: Union[str, Path, None] = None, revision: Optional[str] = None
+    path_or_repo_id: str,
+    full_filename: str,
+    cache_dir: Union[str, Path, None] = None,
+    revision: Optional[str] = None,
+    repo_type: Optional[str] = None,
 ):
     # We try to see if we have a cached version (not up to date):
-    resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+    resolved_file = try_to_load_from_cache(
+        path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision, repo_type=repo_type
+    )
     if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
         return resolved_file
     return None
@@ -280,7 +286,7 @@ def cached_file(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -357,7 +363,7 @@ def cached_files(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -502,7 +508,7 @@ def cached_files(
             raise OSError(
                 f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
                 "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
-                "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+                "having permission to this repo either by logging in with `hf auth login` or by passing "
                 "`token=<your_token>`"
             ) from e
         elif isinstance(e, RevisionNotFoundError):
@@ -520,7 +526,8 @@ def cached_files(
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
+            for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
             return resolved_files
@@ -692,7 +699,7 @@ def has_file(
         raise OSError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
-            "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+            "logging in with `hf auth login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
@@ -866,7 +873,7 @@ class PushToHubMixin:
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
             max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard

@@ -18,18 +18,24 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from transformers.models.llava.modeling_llava import (
-    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
+    TransformersKwargs,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
+from transformers.models.sam.modeling_sam import (
+    SamMLPBlock,
+    SamPreTrainedModel,
+    SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionLayer,
+)
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
@@ -242,7 +248,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.window_size = window_size
 
 
-class GotOcr2VisionEncoder(SamVisionEncoder):
+class GotOcr2PreTrainedModel(SamPreTrainedModel):
+    pass
+
+
+class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     pass
 
 
@@ -276,17 +286,13 @@ class GotOcr2ModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, GotOcr2LayerNorm)):  # noqa: F821
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, GotOcr2VisionAttention):
+    def _init_weights(self, module):
+        LlavaPreTrainedModel._init_weights(module)
+        if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
@@ -321,7 +327,7 @@ class GotOcr2Model(LlavaModel):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -339,24 +345,27 @@ class GotOcr2Model(LlavaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            n_image_tokens = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+
             image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
-            n_image_tokens = (input_ids == self.config.image_token_id).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -391,7 +400,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -400,7 +409,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, GotOcr2CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

@@ -15,7 +15,7 @@
 """PyTorch Falcon model."""
 
 import math
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -46,9 +46,6 @@ from ...utils import (
 )
 from .configuration_falcon import FalconConfig
 
-
-if TYPE_CHECKING:
-    from ...configuration_utils import PretrainedConfig
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -107,7 +104,7 @@ class FalconRotaryEmbedding(nn.Module):
     def __init__(self, config: FalconConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -228,10 +225,6 @@ class FalconAttention(nn.Module):
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
-
-        # TODO (raushan): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
-        if config.rotary:
-            self.rotary_emb = FalconRotaryEmbedding(config=self.config)
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -365,10 +358,7 @@ class FalconAttention(nn.Module):
 
             attn_output = self.dense(attn_output)
 
-            if output_attentions:
-                return attn_output, layer_past, attention_scores
-            else:
-                return attn_output, layer_past
+            return attn_output, attention_scores
 
         else:
             if self._use_sdpa and not output_attentions and head_mask is None:
@@ -383,6 +373,7 @@ class FalconAttention(nn.Module):
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
                     is_causal=is_causal,
                 )
+                attention_probs = None
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
@@ -419,10 +410,7 @@ class FalconAttention(nn.Module):
 
                 attn_output = self.dense(attn_output)
 
-            if output_attentions:
-                return attn_output, layer_past, attention_probs
-            else:
-                return attn_output, layer_past
+            return attn_output, attention_probs
 
 
 class FalconFlashAttention2(FalconAttention):
@@ -531,7 +519,7 @@ class FalconFlashAttention2(FalconAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, layer_past, attn_weights
+        return attn_output, attn_weights
 
 
 class FalconMLP(nn.Module):
@@ -606,7 +594,7 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             attention_layernorm_out = self.input_layernorm(hidden_states)
 
         # Self attention.
-        attn_outputs = self.self_attention(
+        attention_output, attn_weights = self.self_attention(
             attention_layernorm_out,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -618,8 +606,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-
-        attention_output = attn_outputs[0]
 
         if not self.config.new_decoder_architecture:
             if self.config.parallel_attn:
@@ -637,8 +623,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         ):
             mlp_layernorm_out = attention_layernorm_out
 
-        outputs = attn_outputs[1:]
-
         # MLP.
         mlp_output = self.mlp(mlp_layernorm_out)
 
@@ -647,25 +631,19 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
 
         output = dropout_add(mlp_output, residual, self.config.hidden_dropout, training=self.training)
 
-        if use_cache:
-            outputs = (output,) + outputs
-        else:
-            outputs = (output,) + outputs[1:]
-
-        return outputs  # hidden_states, past_kv, attentions
+        return output, attn_weights
 
 
 @auto_docstring
 class FalconPreTrainedModel(PreTrainedModel):
-    config_class = FalconConfig
+    config: FalconConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconDecoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -688,7 +666,7 @@ class FalconPreTrainedModel(PreTrainedModel):
 
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
         if _is_bettertransformer:
             return config
@@ -748,7 +726,7 @@ class FalconModel(FalconPreTrainedModel):
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -779,19 +757,12 @@ class FalconModel(FalconPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                )
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         alibi = None
@@ -829,7 +800,6 @@ class FalconModel(FalconPreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -851,11 +821,8 @@ class FalconModel(FalconPreTrainedModel):
             )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
@@ -863,18 +830,14 @@ class FalconModel(FalconPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -1039,9 +1002,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
@@ -1065,7 +1025,7 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1122,30 +1082,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
         )
 
-    def _reorder_cache(
-        self, past: tuple[tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-
-        Output shares the same memory storage as `past`.
-        """
-
-        # Get a copy of `beam_idx` on all the devices where we need those indices.
-        device_to_beam_idx = {
-            past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
-        }
-        reordered_past = tuple(
-            (
-                layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
-                layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
-            )
-            for layer_past in past
-        )
-        return reordered_past
-
 
 @auto_docstring(
     custom_intro="""
@@ -1187,7 +1123,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1313,7 +1249,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1392,7 +1328,7 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as

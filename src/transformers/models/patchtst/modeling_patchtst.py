@@ -28,6 +28,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_patchtst import PatchTSTConfig
 
 
@@ -100,14 +101,14 @@ class PatchTSTAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -128,42 +129,9 @@ class PatchTSTAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        current_states = key_value_states if is_cross_attention else hidden_states
+        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -185,7 +153,7 @@ class PatchTSTAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, None
 
 
 class PatchTSTBatchNorm(nn.Module):
@@ -585,29 +553,33 @@ class PatchTSTEncoderLayer(nn.Module):
 
 @auto_docstring
 class PatchTSTPreTrainedModel(PreTrainedModel):
-    config_class = PatchTSTConfig
+    config: PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """
         Initialize weights
         """
         if isinstance(module, PatchTSTPositionalEncoding):
+            # get the number of patches
+            num_patches = (
+                max(self.config.context_length, self.config.patch_length) - self.config.patch_length
+            ) // self.config.patch_stride + 1
             # initialize cls_token
             if self.config.use_cls_token:
                 nn.init.normal_(module.cls_token, std=0.02)
+                num_patches += 1
             # initialize positional encoding
-            if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+            module.position_enc = module._init_pe(self.config, num_patches)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, PatchTSTBatchNorm):
             module.batchnorm.bias.data.zero_()
             module.batchnorm.weight.data.fill_(1.0)
-        elif isinstance(module, (nn.Linear, nn.Conv1d)):
+        elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()

@@ -41,6 +41,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
+            "do_convert_rgb": True,
             "do_pan_and_scan": False,
             "pan_and_scan_min_crop_size": 256,
             "pan_and_scan_max_num_crops": 4,
@@ -96,7 +97,7 @@ class Gemma3Processor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         image_inputs = {}
         if images is not None:

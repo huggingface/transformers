@@ -311,6 +311,7 @@ class JanusConfig(PretrainedConfig):
                 f" Type found: {type(vq_config)}"
             )
 
+        self.initializer_range = self.vision_config.initializer_range
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
         # The default is only the index for the 1B model, 7B uses a different one

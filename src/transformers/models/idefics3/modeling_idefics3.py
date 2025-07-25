@@ -22,7 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -30,7 +30,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 
@@ -50,7 +50,7 @@ class Idefics3BaseModelOutputWithPast(ModelOutput):
         Sequence of hidden-states at the output of the last layer of the model.
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
         `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
@@ -83,7 +83,7 @@ class Idefics3CausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
@@ -468,15 +468,15 @@ class Idefics3Connector(nn.Module):
 
 @auto_docstring
 class Idefics3PreTrainedModel(PreTrainedModel):
-    config_class = Idefics3Config
+    config: Idefics3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -503,9 +503,9 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
-    config_class = Idefics3VisionConfig
+    config: Idefics3VisionConfig
     _supports_sdpa = True
-    _supports_flash_attention_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
 
     def __init__(self, config: Idefics3VisionConfig):
@@ -663,15 +663,18 @@ class Idefics3Model(Idefics3PreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        special_image_token_mask = input_ids == self.image_token_id
-        # Fixes RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
-        new_inputs_embeds = inputs_embeds.clone()
-        # Flatten `image_hidden_states` if not flat yet
-        image_hidden_states = image_hidden_states.view(-1, image_hidden_states.shape[-1])
-        # cast to the dtype of the input_embeds to support quantized models
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
-        new_inputs_embeds[special_image_token_mask] = image_hidden_states
-        return new_inputs_embeds
+        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
+        return inputs_embeds
 
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         """
@@ -734,7 +737,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.BoolTensor] = None,
@@ -773,11 +776,8 @@ class Idefics3Model(Idefics3PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        past_seen_tokens = 0
-        if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
@@ -790,7 +790,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
-        if past_seen_tokens == 0 and input_ids is not None and image_hidden_states is not None:
+        if image_hidden_states is not None:
             # When we generate, we don't want to replace the potential image_token_id that we generated by images
             # that simply don't exist
             inputs_embeds = self.inputs_merger(
@@ -819,9 +819,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -872,14 +869,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
 
@@ -890,7 +879,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.BoolTensor] = None,
@@ -902,7 +891,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Idefics3CausalLMOutputWithPast]:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -1042,28 +1031,11 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        # but IDEFICS requires both ids and embeds to be present
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs["input_ids"] = input_ids
-
-        if image_hidden_states is not None:
+        if image_hidden_states is not None or cache_position[0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
         return model_inputs
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration._update_model_kwargs_for_generation
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
-        model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs=outputs,
-            model_kwargs=model_kwargs,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
-        # Get the precomputed image_hidden_states
-        model_kwargs["image_hidden_states"] = outputs.image_hidden_states
-        return model_kwargs
 
 
 __all__ = ["Idefics3ForConditionalGeneration", "Idefics3PreTrainedModel", "Idefics3Model", "Idefics3VisionTransformer"]

@@ -399,12 +399,12 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         if isinstance(decoder_past_key_values, Cache):
             self.assertListEqual(
-                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-                [expected_shape] * len(decoder_past_key_values.key_cache),
+                [layer.keys.shape for layer in decoder_past_key_values.layers],
+                [expected_shape] * len(decoder_past_key_values.layers),
             )
             self.assertListEqual(
-                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
-                [expected_shape] * len(decoder_past_key_values.value_cache),
+                [layer.values.shape for layer in decoder_past_key_values.layers],
+                [expected_shape] * len(decoder_past_key_values.layers),
             )
 
     def _check_scores(self, batch_size, scores, generated_length, config):
@@ -665,8 +665,12 @@ class DiaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_dia_model_integration_generate_audio_context(self):
         text = ["[S1] Dia is an open weights text to dialogue model.", "This is a test"]
-        audio_sample_1 = torchaudio.load(self.audio_prompt_1_path, channels_first=True)[0].squeeze().numpy()
-        audio_sample_2 = torchaudio.load(self.audio_prompt_2_path, channels_first=True)[0].squeeze().numpy()
+        audio_sample_1 = (
+            torchaudio.load(self.audio_prompt_1_path, channels_first=True, backend="soundfile")[0].squeeze().numpy()
+        )
+        audio_sample_2 = (
+            torchaudio.load(self.audio_prompt_2_path, channels_first=True, backend="soundfile")[0].squeeze().numpy()
+        )
         audio = [audio_sample_1, audio_sample_2]
 
         processor = DiaProcessor.from_pretrained(self.model_checkpoint)

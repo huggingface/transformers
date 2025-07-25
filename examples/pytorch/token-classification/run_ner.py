@@ -12,6 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "accelerate >= 0.12.0",
+#     "seqeval",
+#     "datasets >= 1.8.0",
+#     "torch >= 1.3",
+#     "evaluate",
+# ]
+# ///
+
 """
 Fine-tuning the library models for token classification.
 """
@@ -83,7 +95,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -398,7 +410,7 @@ def main():
 
     # Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
-        raise ValueError(
+        raise TypeError(
             "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
             " this requirement"

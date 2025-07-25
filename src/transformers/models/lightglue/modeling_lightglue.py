@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
@@ -155,7 +155,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -419,22 +419,12 @@ class LightGluePreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = LightGlueConfig
+    config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module) -> None:
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[torch.Tensor, torch.Tensor]:
@@ -513,8 +503,9 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-
-        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(
+            config.keypoint_detector_config, trust_remote_code=config.trust_remote_code
+        )
 
         self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
         self.descriptor_dim = config.descriptor_dim

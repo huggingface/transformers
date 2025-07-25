@@ -99,8 +99,6 @@ class FalconHybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache):
         self.has_previous_state = False
         self.conv_kernel_size = config.mamba_d_conv
 
-        self._seen_tokens = 0
-
         self.intermediate_size = (
             config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
         )
@@ -157,10 +155,6 @@ class FalconHybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if len(self.key_cache) <= layer_idx:
             # There may be skipped layers, fill them with empty lists
@@ -929,14 +923,13 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class FalconH1PreTrainedModel(PreTrainedModel):
-    config_class = FalconH1Config
+    config: FalconH1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconH1DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports FalconHybridMambaAttentionDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
@@ -1022,12 +1015,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

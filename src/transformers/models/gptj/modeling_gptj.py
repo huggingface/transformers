@@ -254,11 +254,7 @@ class GPTJAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, layer_past)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs  # a, present, (attentions)
+        return attn_output, attn_weights
 
 
 class GPTJFlashAttention2(GPTJAttention):
@@ -402,12 +398,7 @@ class GPTJFlashAttention2(GPTJAttention):
         )
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
-
-        outputs = (attn_output, layer_past)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return attn_output, attn_weights
 
 
 GPTJ_ATTENTION_CLASSES = {
@@ -456,7 +447,7 @@ class GPTJBlock(GradientCheckpointingLayer):
     ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs = self.attn(
+        attn_outputs, attn_weights = self.attn(
             hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -466,32 +457,22 @@ class GPTJBlock(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attn_outputs[1:]
-
         feed_forward_hidden_states = self.mlp(hidden_states)
-        hidden_states = attn_output + feed_forward_hidden_states + residual
+        hidden_states = attn_outputs + feed_forward_hidden_states + residual
 
-        if use_cache:
-            outputs = (hidden_states,) + outputs
-        else:
-            outputs = (hidden_states,) + outputs[1:]
-
-        return outputs  # hidden_states, present, (attentions)
+        return hidden_states, attn_weights
 
 
 @auto_docstring
 class GPTJPreTrainedModel(PreTrainedModel):
-    config_class = GPTJConfig
+    config: GPTJConfig
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_flash_attn = True
+    _can_compile_fullgraph = True
     _supports_param_buffer_assignment = False
 
     def __init__(self, *inputs, **kwargs):
@@ -675,19 +656,12 @@ class GPTJModel(GPTJPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                )
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
@@ -718,7 +692,6 @@ class GPTJModel(GPTJPreTrainedModel):
         hidden_states = self.drop(hidden_states)
         output_shape = (-1, seq_length, hidden_states.size(-1))
 
-        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
@@ -728,8 +701,9 @@ class GPTJModel(GPTJPreTrainedModel):
 
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if past_key_values is not None:
-                    past_key_values.key_cache = past_key_values.key_cache.to(hidden_states.device)
-                    past_key_values.value_cache = past_key_values.value_cache.to(hidden_states.device)
+                    for layer in past_key_values.layers:
+                        layer.keys = layer.keys.to(hidden_states.device)
+                        layer.values = layer.values.to(hidden_states.device)
 
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if causal_mask is not None:
@@ -751,11 +725,8 @@ class GPTJModel(GPTJPreTrainedModel):
             )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                next_decoder_cache = outputs[1]
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -770,18 +741,14 @@ class GPTJModel(GPTJPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -961,12 +928,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         self.model_parallel = False
         torch.cuda.empty_cache()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     @auto_docstring
     def forward(
         self,
@@ -1047,20 +1008,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
-        )
-
-    @staticmethod
-    def _reorder_cache(
-        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
-        [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past_key_values
         )
 
 
