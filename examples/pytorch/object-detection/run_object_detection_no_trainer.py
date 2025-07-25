@@ -11,6 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets>=4.0",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning 🤗 Transformers model for object detection with Accelerate."""
 
 import argparse

@@ -12,6 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "torch>=1.5.0",
+#     "torchvision>=0.6.0",
+#     "datasets>=1.8.0",
+# ]
+# ///
+
 """
 Training a CLIP like dual encoder models using text and vision encoders in the library.
 

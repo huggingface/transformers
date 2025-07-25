@@ -143,6 +143,14 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 class Gemma3Vision2TextModelTester:
     def __init__(
