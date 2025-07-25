@@ -665,7 +665,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return (hidden_states,)
+        return (hidden_states, self_attn_weights)
 
 
 class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
@@ -717,7 +717,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
             hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
-        return (hidden_states,)
+        return (hidden_states, attn_weights)
 
 
 class MllamaRotaryEmbedding(nn.Module):
@@ -765,9 +765,9 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": MllamaSelfAttentionDecoderLayer,
-        "attentions": OutputRecorder(MllamaTextSelfAttention, index=1),
-        "cross_attentions": OutputRecorder(MllamaTextCrossAttention, index=1),
+        "hidden_states": [OutputRecorder(MllamaSelfAttentionDecoderLayer, index=0), OutputRecorder(MllamaCrossAttentionDecoderLayer, index=0)],
+        "attentions": [MllamaTextSelfAttention, MllamaTextCrossAttention],
+      #  "cross_attentions": OutputRecorder(MllamaCrossAttentionDecoderLayer, index=1),
     }
 
     def _init_weights(self, module):
