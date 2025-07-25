@@ -19,7 +19,7 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "configuration_utils": [
-        "DistributedConfig",
+        "DistributedConfig"
     ],
 }
 
