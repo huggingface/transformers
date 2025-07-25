@@ -1064,7 +1064,8 @@ class WhisperModel(WhisperPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1228,7 +1229,8 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1318,10 +1320,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
+            loss_fct = loss_fct or CrossEntropyLoss()
+            loss = loss_fct(
+                lm_logits.view(-1, self.config.vocab_size), labels.view(-1),**kwargs)
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
