@@ -669,7 +669,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_missing_entries=False,
                 )
                 resolved_video_processor_file = resolved_video_processor_files[0]
             except EnvironmentError:

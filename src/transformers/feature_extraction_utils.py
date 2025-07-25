@@ -508,7 +508,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_feature_extractor_files = cached_files(
                     pretrained_model_name_or_path,
-                    filesnames=[feature_extractor_file, PROCESSOR_NAME],
+                    filenames=[feature_extractor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -518,7 +518,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
-                    raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_missing_entries=False,
                 )
                 resolved_feature_extractor_file = resolved_feature_extractor_files[0]
             except OSError:

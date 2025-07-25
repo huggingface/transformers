@@ -338,7 +338,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_image_processor_files = cached_files(
                     pretrained_model_name_or_path,
-                    filesnames=[image_processor_file, PROCESSOR_NAME],
+                    filenames=[image_processor_file, PROCESSOR_NAME],
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -348,7 +348,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_missing_entries=False,
                 )
                 resolved_image_processor_file = resolved_image_processor_files[0]
             except OSError:

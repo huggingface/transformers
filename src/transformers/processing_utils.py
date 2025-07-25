@@ -601,6 +601,8 @@ class ProcessorMixin(PushToHubMixin):
 
         if "tokenizer" in output:
             del output["tokenizer"]
+        if "qformer_tokenizer" in output:
+            del output["qformer_tokenizer"]
         if "chat_template" in output:
             del output["chat_template"]
 
@@ -612,12 +614,13 @@ class ProcessorMixin(PushToHubMixin):
             # Update or overwrite, what do audio tokenizers expect when loading?
             output["audio_tokenizer"] = audio_tokenizer_dict
 
-        # Serialize attributes as a dict
-        output = {k: v.to_dict() if k in self.__class__.attributes else v for k, v in output.items()}
-
         # Some attributes have different names but containing objects that are not simple strings
         output = {k: v for k, v in output.items() if not v.__class__.__name__ == "BeamSearchDecoderCTC"}
+        if not save_attributes:
+            output = {k: v for k, v in output.items() if not isinstance(v, PushToHubMixin)}
 
+        # Serialize attributes as a dict
+        output = {k: v.to_dict() if isinstance(v, PushToHubMixin) else v for k, v in output.items()}
         return output
 
     def to_json_string(self, save_attributes=False) -> str:
@@ -806,7 +809,7 @@ class ProcessorMixin(PushToHubMixin):
         # NOTE: this will become the default way to save all processor attrbiutes in future versions. Toggled off for now to give
         # us time for smoother transition
         else:
-            self.to_json_file(output_processor_file)
+            self.to_json_file(output_processor_file, save_attributes=True)
             logger.info(f"processor saved in {output_processor_file}")
             return_files = [output_processor_file]
 
@@ -1031,20 +1034,17 @@ class ProcessorMixin(PushToHubMixin):
         if resolved_processor_file is None:
             # In any case we need to pass `chat_template` if it is available
             processor_dict = {}
-            if "chat_template" in kwargs:
-                processor_dict["chat_template"] = kwargs.pop("chat_template")
-            if "audio_tokenizer" in kwargs:
-                processor_dict["audio_tokenizer"] = kwargs.pop("audio_tokenizer")
-            return processor_dict, kwargs
+        else:
+            try:
+                # Load processor dict
+                with open(resolved_processor_file, encoding="utf-8") as reader:
+                    text = reader.read()
+                processor_dict = json.loads(text)
 
-        try:
-            # Load processor dict
-            with open(resolved_processor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            processor_dict = json.loads(text)
-
-        except json.JSONDecodeError:
-            raise OSError(f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file.")
+            except json.JSONDecodeError:
+                raise OSError(
+                    f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
+                )
 
         if is_local:
             logger.info(f"loading configuration file {resolved_processor_file}")
@@ -1063,15 +1063,22 @@ class ProcessorMixin(PushToHubMixin):
         # Audio tokenizer needs to load the model checkpoint first, because the saved
         # json file contains only references to the model path and repo id
         if resolved_audio_tokenizer_file is not None or "audio_tokenizer" in processor_dict:
-            with open(resolved_audio_tokenizer_file, "r", encoding="utf-8") as reader:
-                audio_tokenizer_references = json.load(reader)
-                audio_tokenizer_class = cls.get_possibly_dynamic_module(
-                    audio_tokenizer_references["audio_tokenizer_class"]
-                )
-                audio_tokenizer_path = audio_tokenizer_references["audio_tokenizer_name_or_path"]
+            if resolved_audio_tokenizer_file is not None:
+                reader = open(resolved_audio_tokenizer_file, "r", encoding="utf-8")
+                audio_tokenizer_dict = reader.read()
+                audio_tokenizer_dict = json.load(audio_tokenizer_dict)
+            else:
+                audio_tokenizer_dict = processor_dict["audio_tokenizer"]
+
+            audio_tokenizer_class = cls.get_possibly_dynamic_module(audio_tokenizer_dict["audio_tokenizer_class"])
+            audio_tokenizer_path = audio_tokenizer_dict["audio_tokenizer_name_or_path"]
             processor_dict["audio_tokenizer"] = audio_tokenizer_class.from_pretrained(
                 audio_tokenizer_path, **audio_tokenizer_kwargs
             )
+
+        # Pop attributes if saved in a single processor dict, they are loaded in `_get_arguments_from_pretrained`
+        for attribute in cls.attributes:
+            processor_dict.pop(attribute, None)
 
         return processor_dict, kwargs
 
@@ -1103,12 +1110,8 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
-        for attribute_name in cls.attributes:
-            if attribute_name in processor_dict:
-                del processor_dict[attribute_name]
-
-        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
-        processor = cls(*args, **processor_dict)
+        # override processor_dict with given kwargs
+        processor_dict.update(kwargs)
 
         # check if there is an overlap between args and processor_dict
         accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
@@ -1324,8 +1327,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1351,7 +1354,7 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, like image processors and
         tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
@@ -1383,8 +1386,6 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            # This means file was saved after pr #3xxxx thus all attriutes are part of the processor's config
-            # TODO @raushan check with auto models if it still works
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
         return args
