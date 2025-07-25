@@ -715,7 +715,7 @@ class KosmosTextAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
+        is_causal: Optional[bool] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
@@ -781,6 +781,7 @@ class KosmosTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
+            is_causal=is_causal,
             **kwargs,
         )
 
@@ -1495,6 +1496,7 @@ class Kosmos2ImageToTextProjection(nn.Module):
         hidden_states, attn_weights = self.x_attn(
             hidden_states=latent_query,
             encoder_hidden_states=key_value_states,
+            is_causal=False,
             past_key_value=None,
             attention_mask=None,
             output_attentions=None,
