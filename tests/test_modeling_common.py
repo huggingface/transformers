@@ -2565,7 +2565,7 @@ class ModelTesterMixin:
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
-            copied_config.tie_word_embeddings = True
+            copied_config.get_text_config().tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
