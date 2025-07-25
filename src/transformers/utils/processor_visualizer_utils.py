@@ -20,7 +20,27 @@ class ImageVisualizer:
         self.stds = getattr(self.processor.image_processor, "image_std", [0.229, 0.224, 0.225])
         self.image_token = getattr(self.processor, "image_token_index", "<image>")
         self.default_prompt = f"{self.image_token} How does it look?"
-        self.patch_size = getattr(self.config.vision_config, "patch_size", 14)
+        self.vision_config = getattr(self.config, "vision_config", None)
+        self.patch_size = getattr(self.vision_config, "patch_size",
+        getattr(self.processor.image_processor, "patch_size", 14))
+        self.merge_size = getattr(self.processor.image_processor, "merge_size", 1)
+
+    def _pixel_values_as_tensor(self, pixel_values):
+        if isinstance(pixel_values, (list, tuple)):
+            pixel_values = [pv if isinstance(pv, torch.Tensor) else torch.tensor(pv) for pv in pixel_values]
+            pixel_values = torch.stack(pixel_values, dim=0)
+        if not isinstance(pixel_values, torch.Tensor):
+            pixel_values = torch.tensor(pixel_values)
+        if pixel_values.ndim == 5:
+            b, n, c, h, w = pixel_values.shape
+            pixel_values = pixel_values.view(b * n, c, h, w)
+        elif pixel_values.ndim == 4:
+            pass
+        elif pixel_values.ndim == 3:
+            pixel_values = pixel_values.unsqueeze(0)
+        else:
+            raise ValueError(f"Unexpected pixel tensor shape {pixel_values.shape}")
+        return pixel_values
 
     def _to_pil(self, x):
         if isinstance(x, str):
@@ -30,18 +50,19 @@ class ImageVisualizer:
         return x
 
     def _unnormalize(self, pixel_values: torch.Tensor) -> np.ndarray:
-        pixel_values = pixel_values.float()
+        pixel_values = self._pixel_values_as_tensor(pixel_values).float()
         c = pixel_values.shape[-3]
         mean = torch.tensor(self.means[:c], dtype=pixel_values.dtype, device=pixel_values.device).view(-1, 1, 1)
-        std = torch.tensor(self.stds[:c],  dtype=pixel_values.dtype, device=pixel_values.device).view(-1, 1, 1)
+        std  = torch.tensor(self.stds[:c],  dtype=pixel_values.dtype, device=pixel_values.device).view(-1, 1, 1)
         pixel_values = pixel_values * std + mean
         pixel_values = pixel_values.clamp(0, 1)
-        if pixel_values.ndim == 3:
-            return pixel_values.permute(1, 2, 0).cpu().numpy()
-        elif pixel_values.ndim == 4:
+        if pixel_values.ndim == 4:
             return pixel_values.permute(0, 2, 3, 1).cpu().numpy()
+        elif pixel_values.ndim == 3:
+            return pixel_values.permute(1, 2, 0).cpu().numpy()
         else:
-            raise ValueError(f"Expected 3D or 4D, got shape {pixel_values.shape}")
+            raise ValueError(f"Expected 3D or 4D image tensor after normalization, got {pixel_values.shape}")
+
 
     def _display_single_image(self, arr: np.ndarray, add_grid: bool, figsize=(7, 7)):
         plt.figure(figsize=figsize)
@@ -127,18 +148,84 @@ class ImageVisualizer:
             plt.tight_layout()
             plt.show()
 
+
+    def default_message(self, full_output: bool = False) -> str:
+        """
+        Returns a single formatted prompt string using the processor's default chat template,
+        containing one image (hf logo) and one user text message (Please describe this image.).
+        If available, adds the generation prompt as well.
+        Falls back to a minimal `<image>` string if no template is available.
+        Args:
+            full_output (`bool`, *optional*, defaults to `False`):
+                Whether or not to expand the full message to its string form. If False, will compress the image tokens to an ellipsis form.
+        Returns:
+            `str`: The default message from this processor,
+        """
+        # ensure this is a multimodal processor with image + tokenizer
+        if not (
+            hasattr(self.processor, "attributes") and "image_processor" in self.processor.attributes and "tokenizer" in self.processor.attributes
+        ):
+            raise RuntimeError(
+                "Processor does not expose both 'image_processor' and 'tokenizer'; cannot build multimodal example."
+            )
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/hf-logo-224x224.png",
+                    },
+                    {"type": "text", "text": "Please describe this image."},
+                ],
+            }
+        ]
+
+        try:
+            print("For a 224x224 RGB png image: \n")
+            decoded_message = self.processor.batch_decode(
+                self.processor.apply_chat_template(
+                    conversation,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_dict=False,
+                    truncation=False,
+                ),
+                skip_special_tokens=False,
+            )[0]
+            image_token_string = getattr(self.processor, "image_token", "<image>")
+
+            token_escaped = re.escape(image_token_string)
+            image_token_run_pattern = re.compile(rf"(?:{token_escaped})(?:\s*{token_escaped}){{2,}}")
+
+            def replacement_function(match):
+                n_tokens = match.group(0).count(image_token_string)
+                return f"{image_token_string}[...{n_tokens} tokens...]{image_token_string}"
+
+            if full_output:
+                return decoded_message
+            else:
+                return image_token_run_pattern.sub(replacement_function, decoded_message)
+
+        except ValueError:
+            image_token_string = getattr(
+                self.processor, "image_token", getattr(getattr(self.processor, "tokenizer", None), "image_token", "<image>")
+            )
+            return f"{image_token_string} {'Please describe this image.'}"
+
     def visualize(self, images, rows=None, cols=None, add_grid=True, figsize=(12, 12)):
         if not isinstance(images, list):
             images = [images]
         else:
             if len(images) > 1:
                 raise ValueError("You passed a list of several images. Only single images are accepted by the visualizer.")
-        width, height = images[0].size
-        aspect_ratio = width / height
+
         pil_imgs = [self._to_pil(x) for x in images]
-        processed = self.processor(images=[pil_imgs], text=[self.default_prompt], return_tensors="pt")
+        width, height = pil_imgs[0].size
+        aspect_ratio = width / height
+        processed = self.processor(images=pil_imgs, text=[self.default_prompt], return_tensors="pt")
         pixel_values = processed["pixel_values"]
-        pixel_values = pixel_values.squeeze(0)
         arr = self._unnormalize(pixel_values)
         if arr.ndim == 3:
             self._display_single_image(arr, add_grid=add_grid, figsize=figsize)
