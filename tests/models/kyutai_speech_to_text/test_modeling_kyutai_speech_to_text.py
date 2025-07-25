@@ -312,6 +312,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_resize_tokens_embeddings(self):
         pass
 
+    @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
+    def test_tied_weights_keys(self):
+        pass
+
     @pytest.mark.skip(reason="Does not apply to Moshi ASR that requires input_values.")
     def test_generate_without_input_ids(self):
         pass

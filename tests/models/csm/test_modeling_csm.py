@@ -340,6 +340,10 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_parallel_beam_search(self):
         pass
 
+    @unittest.skip(reason="CSM has special embeddings that can never be tied")
+    def test_tied_weights_keys(self):
+        pass
+
     def _get_custom_4d_mask_test_data(self):
         """
         Overrides [ModelTesterMixin._get_custom_4d_mask_test_data] to handle third input_ids dimension.
