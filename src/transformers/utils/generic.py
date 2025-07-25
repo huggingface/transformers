@@ -1015,8 +1015,7 @@ def check_model_inputs(func):
                 all_args[k] = v
 
         capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
-        capture_flags_hidden_states = capture_flags.get("hidden_states")
-        capture_flags_hidden_states = (capture_flags_hidden_states,) if capture_flags_hidden_states else ()
+        capture_flags_hidden_states = (capture_flags.get("hidden_states", ()),)
         capture_flags["hidden_states"] = (self.get_input_embeddings().__class__,) + capture_flags_hidden_states
         recordable_keys = {
             f"output_{k}": all_args.get(
@@ -1076,11 +1075,13 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key] = collected_outputs[key][:-1]  # skip the pre-last for BC
                 if hasattr(outputs, "vision_hidden_states"):
                     collected_outputs[key] += (outputs.vision_hidden_states,)
                 elif hasattr(outputs, "last_hidden_state"):
                     collected_outputs[key] += (outputs.last_hidden_state,)
+                else:
+                    collected_outputs[key] = collected_outputs[key][:-1]  # skip the pre-last for BC
+
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:
