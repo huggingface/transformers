@@ -393,7 +393,9 @@ def _flash_attention_forward(
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
     )
-    use_mask = position_ids is not None or all(k is not None for k in [cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k])
+    use_mask = position_ids is not None or all(
+        k is not None for k in [cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k]
+    )
     if attention_mask is not None:
         q, k, v, idx, (cu_q, cu_k), (mq, mk) = _upad_input(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
