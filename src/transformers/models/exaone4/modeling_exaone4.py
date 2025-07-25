@@ -25,27 +25,25 @@ from typing import Callable, Optional, Union
 import torch
 from torch import nn
 
+from transformers.utils.generic import check_model_inputs
+
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
+from ...modeling_layers import (
+    GenericForQuestionAnswering,
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
 )
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_exaone4 import Exaone4Config
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -175,32 +173,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def check_is_sliding(config, layer_idx):
-    """
-    Check if the current layer is a sliding window attention (local attention) layer.
-    """
-    if config.sliding_window is None:
-        return False
-    if config.layer_types is not None:
-        return config.layer_types[layer_idx] == "sliding_attention"
-    if isinstance(config.sliding_window_pattern, int):
-        return ((layer_idx + 1) % config.sliding_window_pattern) != 0
-    elif isinstance(config.sliding_window_pattern, str):
-        assert isinstance(config.sliding_window, int), (
-            f"Sliding window must be positive integer, but got {config.sliding_window}"
-        )
-        return (
-            layer_idx != config.num_hidden_layers - 1
-            and config.sliding_window_pattern[layer_idx % len(config.sliding_window_pattern)] == "L"
-        )
-    else:
-        logger.warning_once(
-            "Sliding window is set, but none of `sliding_window_pattern` or `layer_types` is set. "
-            "Defaulting to use 'full_attention' for all layers."
-        )
-    return False
-
-
 class Exaone4Attention(nn.Module):
     def __init__(self, config: Exaone4Config, layer_idx: int):
         super().__init__()
@@ -216,7 +188,7 @@ class Exaone4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         self.sliding_window_pattern = config.sliding_window_pattern
-        self.is_sliding = check_is_sliding(config, layer_idx)
+        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -254,20 +226,8 @@ class Exaone4Attention(nn.Module):
         if past_key_value is not None:
             cache_kwargs = {
                 "cache_position": cache_position,
-                "sliding_window": self.sliding_window,
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-            # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            # attention_mask can be None, so we use cache_position rather than attention_mask's shape
-            # NOTE: seq_len can be retrieved from past_key_value.get_seq_length(),
-            # but currently, only 0th-layer is used for .get_seq_length() in HybridCache.
-            # This can cause issues when the 0th-layer is sliding window and seq_len > window_size,
-            # as it affects full attention layers by slicing KV cache improperly.
-            # Dynamic calculation of seq_len is not optimal for CUDAGraph, thus it seems to be updated later.
-            if self.config._attn_implementation == "flash_attention_2":
-                seq_len = cache_position[-1] + 1 if attention_mask is None else attention_mask.shape[1]
-                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -306,61 +266,46 @@ class Exaone4MLP(nn.Module):
         return down_proj
 
 
-class Exaone4DecoderLayer(nn.Module):
+class Exaone4DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Exaone4Config, layer_idx: int):
         super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.hidden_size = config.hidden_size
+        self.self_attn = Exaone4Attention(config=config, layer_idx=layer_idx)
 
-        self.self_attn = Exaone4Attention(config, layer_idx)
         self.mlp = Exaone4MLP(config)
-
         self.post_attention_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.is_sliding = check_is_sliding(config, layer_idx)
-        self.sliding_window = config.sliding_window
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-
-        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
-
-        # Use post-LN
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
-        residual = hidden_states
-
         # Fully Connected
+        residual = hidden_states
         hidden_states = self.mlp(hidden_states)
-
-        # Use post-LN
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
-
         return hidden_states
 
 
@@ -375,7 +320,7 @@ class Exaone4PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Exaone4DecoderLayer,
@@ -403,7 +348,6 @@ class Exaone4Model(Exaone4PreTrainedModel):
         self.post_init()
 
     @check_model_inputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -415,33 +359,14 @@ class Exaone4Model(Exaone4PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None and not self.training:
-            batch_size, seq_len, _ = inputs_embeds.shape
-            # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
-            if self.config.sliding_window is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = HybridCache(
-                    self.config,
-                    max_batch_size=batch_size,
-                    max_cache_len=seq_len,
-                    dtype=inputs_embeds.dtype,
-                    device=self.device,
-                )
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -472,7 +397,6 @@ class Exaone4Model(Exaone4PreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -592,219 +516,16 @@ class Exaone4ForCausalLM(Exaone4PreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    The Exaone4 Model transformer with a sequence classification head on top (linear layer).
-
-    [`Exaone4ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """
-)
-class Exaone4ForSequenceClassification(Exaone4PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = Exaone4Model(config)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
-        transformer_outputs: BaseModelOutputWithPast = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        hidden_states = transformer_outputs.last_hidden_state
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            last_non_pad_token = -1
-        elif input_ids is not None:
-            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
-            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
-        else:
-            last_non_pad_token = -1
-            logger.warning_once(
-                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-            )
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
+class Exaone4ForSequenceClassification(GenericForSequenceClassification, Exaone4PreTrainedModel):
+    pass
 
 
-@auto_docstring
-class Exaone4ForTokenClassification(Exaone4PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = Exaone4Model(config)
-        if getattr(config, "classifier_dropout", None) is not None:
-            classifier_dropout = config.classifier_dropout
-        elif getattr(config, "hidden_dropout", None) is not None:
-            classifier_dropout = config.hidden_dropout
-        else:
-            classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.score = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        **kwargs,
-    ) -> TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        sequence_output = outputs.last_hidden_state
-        sequence_output = self.dropout(sequence_output)
-        logits = self.score(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class Exaone4ForTokenClassification(GenericForTokenClassification, Exaone4PreTrainedModel):
+    pass
 
 
-@auto_docstring
-class Exaone4ForQuestionAnswering(Exaone4PreTrainedModel):
-    base_model_prefix = "transformer"
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.transformer = Exaone4Model(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.transformer.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> QuestionAnsweringModelOutput:
-        outputs: BaseModelOutputWithPast = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-
-        sequence_output = outputs.last_hidden_state
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-
-        loss = None
-        if start_positions is not None and end_positions is not None:
-            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
-
-        return QuestionAnsweringModelOutput(
-            loss=loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class Exaone4ForQuestionAnswering(GenericForQuestionAnswering, Exaone4PreTrainedModel):
+    base_model_prefix = "transformer"  # For BC, where `transformer` was used instead of `model`
 
 
 __all__ = [

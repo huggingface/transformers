@@ -20,36 +20,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
-
-
-def check_is_sliding(config, layer_idx):
-    """
-    Check if the current layer is a sliding window attention (local attention) layer.
-    """
-    if config.sliding_window is None:
-        return False
-    if config.layer_types is not None:
-        return config.layer_types[layer_idx] == "sliding_attention"
-    if isinstance(config.sliding_window_pattern, int):
-        return ((layer_idx + 1) % config.sliding_window_pattern) != 0
-    elif isinstance(config.sliding_window_pattern, str):
-        assert isinstance(config.sliding_window, int), (
-            f"Sliding window must be positive integer, but got {config.sliding_window}"
-        )
-        return (
-            layer_idx != config.num_hidden_layers - 1
-            and config.sliding_window_pattern[layer_idx % len(config.sliding_window_pattern)] == "L"
-        )
-    else:
-        logger.warning_once(
-            "Sliding window is set, but none of `sliding_window_pattern` or `layer_types` is set. "
-            "Defaulting to use 'full_attention' for all layers."
-        )
-    return False
 
 
 class Exaone4Config(PretrainedConfig):
@@ -194,10 +164,10 @@ class Exaone4Config(PretrainedConfig):
         self,
         vocab_size=102400,
         hidden_size=4096,
-        intermediate_size=None,
+        intermediate_size=16384,
         num_hidden_layers=32,
         num_attention_heads=32,
-        num_key_value_heads=None,
+        num_key_value_heads=32,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -210,7 +180,7 @@ class Exaone4Config(PretrainedConfig):
         rope_scaling=None,
         attention_dropout=0.0,
         sliding_window=None,
-        sliding_window_pattern=None,
+        sliding_window_pattern=4,
         layer_types=None,
         **kwargs,
     ):
@@ -218,13 +188,8 @@ class Exaone4Config(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
-        if intermediate_size:
-            self.intermediate_size = intermediate_size
-        else:
-            self.intermediate_size = hidden_size * 4
+        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
@@ -239,9 +204,13 @@ class Exaone4Config(PretrainedConfig):
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if check_is_sliding(self, i) else "full_attention"
+                "sliding_attention"
+                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
+                else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        if "sliding_window" in self.layer_types:
+            self._attn_implementation = "hybrid"
         layer_type_validation(self.layer_types)
 
         super().__init__(
