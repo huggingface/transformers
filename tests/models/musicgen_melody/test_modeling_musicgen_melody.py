@@ -279,10 +279,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip(reason="this model has multiple inputs embeds and lm heads that should not be tied")
-    def test_tied_weights_keys(self):
-        pass
-
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {}
         return logits_processor_kwargs
@@ -780,14 +776,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
     def test_tie_model_weights(self):
-        pass
-
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
-    def test_tied_model_weights_key_ignore(self):
-        pass
-
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
-    def test_tied_weights_keys(self):
         pass
 
     # override since changing `output_hidden_states` / `output_attentions` from the top-level model config won't work
