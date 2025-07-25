@@ -119,7 +119,7 @@
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     title: Trainer API
   - sections:
-    - local: in_translation
+    - local: accelerator_selection
       title: (번역중) Accelerator selection
     - local: accelerate
       title: 🤗 Accelerate로 분산 학습 구성하기
