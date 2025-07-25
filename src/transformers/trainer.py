@@ -3826,7 +3826,7 @@ class Trainer:
         else:
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient
+                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
                 loss = loss / self.current_gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
