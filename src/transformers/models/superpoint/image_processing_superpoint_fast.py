@@ -14,9 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Superpoint."""
 
-from typing import TYPE_CHECKING, Any, Optional, Union
-
-import numpy as np
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -26,11 +24,8 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
     PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -39,8 +34,6 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
-    requires_backends,
 )
 
 
@@ -50,118 +43,49 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        import torchvision.transforms.v2.functional as F
-    else:
-        import torchvision.transforms.functional as F
-
-if is_vision_available():
-    pass
+if is_torchvision_v2_available():
+    import torchvision.transforms.v2.functional as F
+elif is_torchvision_available():
+    import torchvision.transforms.functional as F
 
 
 def is_grayscale(
     image: "torch.Tensor",
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     """Checks if an image is grayscale (all RGB channels are identical)."""
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(image)
+    if image.ndim < 3 or image.shape[0 if image.ndim == 3 else 1] == 1:
+        return True
+    return torch.all(image[..., 0, :, :] == image[..., 1, :, :]) and torch.all(
+        image[..., 1, :, :] == image[..., 2, :, :]
+    )
 
-    if isinstance(image, torch.Tensor):
-        if input_data_format == ChannelDimension.FIRST:
-            if image.ndim < 3 or image.shape[0 if image.ndim == 3 else 1] == 1:
-                return True
-            return torch.all(image[0, ...] == image[1, ...]) and torch.all(image[1, ...] == image[2, ...])
-        elif input_data_format == ChannelDimension.LAST:
-            if image.ndim < 3 or image.shape[-1] == 1:
-                return True
-            return torch.all(image[..., 0] == image[..., 1]) and torch.all(image[..., 1] == image[..., 2])
-    else:
-        if input_data_format == ChannelDimension.FIRST:
-            if image.ndim < 3 or image.shape[0 if image.ndim == 3 else 1] == 1:
-                return True
-            return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
-        elif input_data_format == ChannelDimension.LAST:
-            if image.ndim < 3 or image.shape[-1] == 1:
-                return True
-            return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
-    return False
+
+class SuperPointFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: Optional[bool] = True
 
 
 def convert_to_grayscale(
     image: "torch.Tensor",
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    keep_channels: bool = True,
 ) -> "torch.Tensor":
-    """Convert a PyTorch tensor to grayscale using the NTSC formula.
+    """
+    Converts an image to grayscale format using the NTSC formula. Only support torch.Tensor.
+
+    This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
+    channel, because of an issue that is discussed in :
+    https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
     Args:
-        image: Input image tensor (3D or 4D)
-        input_data_format: Format of input tensor (channels first or last)
-        keep_channels: Whether to keep the same number of channels in output
+        image (torch.Tensor):
+            The image to convert.
     """
-    requires_backends(convert_to_grayscale, ["vision"])
-
-    # Determine channel dimension
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(image)
-
-    # If already grayscale, just return (possibly with channel duplication)
-    if (input_data_format == ChannelDimension.FIRST and image.shape[0 if image.ndim == 3 else 1] == 1) or (
-        input_data_format == ChannelDimension.LAST and image.shape[-1] == 1
-    ):
-        if (
-            keep_channels
-            and image.shape[
-                0
-                if input_data_format == ChannelDimension.FIRST and image.ndim == 3
-                else 1
-                if input_data_format == ChannelDimension.FIRST
-                else -1
-            ]
-            == 1
-        ):
-            if input_data_format == ChannelDimension.FIRST:
-                return image.repeat(3, 1, 1) if image.ndim == 3 else image.repeat(1, 3, 1, 1)
-            else:
-                return image.repeat(1, 1, 3) if image.ndim == 3 else image.repeat(1, 1, 1, 3)
+    if is_grayscale(image):
         return image
-
-    # RGB weights (NTSC formula)
-    weights = torch.tensor([0.2989, 0.5870, 0.1140], device=image.device, dtype=torch.float32)
-
-    if input_data_format == ChannelDimension.FIRST:
-        image = (
-            image[:3]
-            if image.ndim == 3 and image.shape[0] > 3
-            else image[:, :3]
-            if image.ndim == 4 and image.shape[1] > 3
-            else image
-        )
-
-        if image.ndim == 3:
-            gray = (image.to(torch.float32) * weights[:, None, None]).sum(dim=0, keepdim=True)
-            if keep_channels:
-                gray = gray.repeat(3, 1, 1)
-        else:
-            gray = (image.to(torch.float32) * weights[None, :, None, None]).sum(dim=1, keepdim=True)
-            if keep_channels:
-                gray = gray.repeat(1, 3, 1, 1)
-    else:
-        # Take first 3 channels if more than 3
-        image = image[..., :3]
-
-        # Convert to grayscale
-        gray = (image.to(torch.float32) * weights).sum(dim=-1, keepdim=True)
-        if keep_channels:
-            gray = gray.repeat(1, 1, 3) if image.ndim == 3 else gray.repeat(1, 1, 1, 3)
-
-    return gray.to(dtype=image.dtype)
-
-
-class SuperPointFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    do_grayscale: Optional[bool] = True
+    return F.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -175,136 +99,35 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
     do_normalize = None
     valid_kwargs = SuperPointFastImageProcessorKwargs
 
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """Instantiate an image processor from a python dictionary of parameters."""
-        return super().from_dict(image_processor_dict, **kwargs)
-
     def __init__(self, **kwargs: Unpack[SuperPointFastImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        result = super().to_dict()
-        result.pop("data_format", None)
-        result.pop("default_to_square", None)
-        result.pop("resample", None)
-        return result
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Optional[Union[dict[str, int], SizeDict]] = None,
-        rescale_factor: Optional[float] = None,
-        do_rescale: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        size: Union[dict[str, int], SizeDict],
+        rescale_factor: float,
+        do_rescale: bool,
+        do_resize: bool,
+        interpolation: Optional["F.InterpolationMode"],
+        do_grayscale: bool,
+        disable_grouping: bool,
+        return_tensors: Union[str, TensorType],
         **kwargs,
     ) -> BatchFeature:
-        if size is None:
-            size = self.size
-        if do_rescale is None:
-            do_rescale = self.do_rescale
-        if rescale_factor is None:
-            rescale_factor = self.rescale_factor
-        if do_resize is None:
-            do_resize = self.do_resize
-
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=False)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        do_grayscale = kwargs.get("do_grayscale", self.do_grayscale)
-        input_data_format = kwargs.get("input_data_format", ChannelDimension.FIRST)
-
         for shape, stacked_images in grouped_images.items():
             if do_grayscale:
-                stacked_images = convert_to_grayscale(
-                    stacked_images, input_data_format=input_data_format, keep_channels=True
-                )
+                stacked_images = convert_to_grayscale(stacked_images)
             if do_resize:
-                stacked_images = self.resize(stacked_images, size=size, resample=self.resample)
+                stacked_images = self.resize(stacked_images, size=size, interpolation=interpolation)
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images})
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[SuperPointFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        if kwargs.get("do_resize", self.do_resize):
-            kwargs.setdefault("size", self.size)
-            kwargs.setdefault("resample", self.resample)
-
-        self._validate_preprocess_kwargs(**kwargs)
-        input_data_format = kwargs.pop("input_data_format", None)
-        device = kwargs.pop("device", None)
-
-        if not isinstance(images, (list, tuple)):
-            images = [images]
-
-        kwargs.pop("default_to_square", None)
-        kwargs.pop("data_format", None)
-
-        processed_images = []
-        for image in images:
-            if isinstance(image, torch.Tensor):
-                if image.ndim == 2:
-                    image = image.unsqueeze(0)
-                processed_images.append(image)
-            else:
-                processed_images.append(image)
-
-        images = processed_images
-        if input_data_format is None and len(images) > 0:
-            input_data_format = ChannelDimension.FIRST
-
-        images = self._prepare_input_images(images=images, input_data_format=input_data_format, device=device)
-
-        if input_data_format is not None:
-            kwargs["input_data_format"] = input_data_format
-
-        return self._preprocess(
-            images=images,
-            **kwargs,
-        )
-
-    def resize(
-        self,
-        image: "torch.Tensor",
-        size: Union[dict[str, int], SizeDict],
-        interpolation: "F.InterpolationMode" = None,
-        antialias: bool = True,
-        **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to resize.
-            size (`Dict[str, int]` or `SizeDict`):
-                Dictionary specifying the size with height and width keys.
-            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the image.
-
-        Returns:
-            `torch.Tensor`: The resized image.
-        """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-
-        # Check if size is a dict with height and width
-        if isinstance(size, dict) and "height" in size and "width" in size:
-            new_size = (size["height"], size["width"])
-        else:
-            # Attempt to use the parent class's logic
-            return super().resize(image, size, interpolation, antialias, **kwargs)
-
-        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def post_process_keypoint_detection(
         self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, list[tuple]]
