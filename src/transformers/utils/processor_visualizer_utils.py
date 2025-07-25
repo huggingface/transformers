@@ -1,16 +1,19 @@
-import torch
+import re
+from enum import Enum
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
-
-from transformers import AutoProcessor, AutoConfig
+import torch
 from PIL import Image
-from enum import Enum
 
-import torchvision.transforms.functional as F
+from transformers import AutoConfig, AutoProcessor
+
 
 class ImageMode(Enum):
     SINGLE = "single"
     TILED = "tiled"
+
 
 class ImageVisualizer:
     def __init__(self, repo_id: str):
@@ -21,8 +24,9 @@ class ImageVisualizer:
         self.image_token = getattr(self.processor, "image_token_index", "<image>")
         self.default_prompt = f"{self.image_token} How does it look?"
         self.vision_config = getattr(self.config, "vision_config", None)
-        self.patch_size = getattr(self.vision_config, "patch_size",
-        getattr(self.processor.image_processor, "patch_size", 14))
+        self.patch_size = getattr(
+            self.vision_config, "patch_size", getattr(self.processor.image_processor, "patch_size", 14)
+        )
         self.merge_size = getattr(self.processor.image_processor, "merge_size", 1)
 
     def _pixel_values_as_tensor(self, pixel_values):
@@ -53,7 +57,7 @@ class ImageVisualizer:
         pixel_values = self._pixel_values_as_tensor(pixel_values).float()
         c = pixel_values.shape[-3]
         mean = torch.tensor(self.means[:c], dtype=pixel_values.dtype, device=pixel_values.device).view(-1, 1, 1)
-        std  = torch.tensor(self.stds[:c],  dtype=pixel_values.dtype, device=pixel_values.device).view(-1, 1, 1)
+        std = torch.tensor(self.stds[:c], dtype=pixel_values.dtype, device=pixel_values.device).view(-1, 1, 1)
         pixel_values = pixel_values * std + mean
         pixel_values = pixel_values.clamp(0, 1)
         if pixel_values.ndim == 4:
@@ -62,7 +66,6 @@ class ImageVisualizer:
             return pixel_values.permute(1, 2, 0).cpu().numpy()
         else:
             raise ValueError(f"Expected 3D or 4D image tensor after normalization, got {pixel_values.shape}")
-
 
     def _display_single_image(self, arr: np.ndarray, add_grid: bool, figsize=(7, 7)):
         plt.figure(figsize=figsize)
@@ -73,9 +76,9 @@ class ImageVisualizer:
             h, w = arr.shape[:2]
             step = max(1, min(h, w) // self.patch_size)
             for x in range(0, w, step):
-                plt.axvline(x, color='red', linewidth=0.5)
+                plt.axvline(x, color="red", linewidth=0.5)
             for y in range(0, h, step):
-                plt.axhline(y, color='red', linewidth=0.5)
+                plt.axhline(y, color="red", linewidth=0.5)
         plt.tight_layout()
         plt.show()
 
@@ -83,8 +86,8 @@ class ImageVisualizer:
         self,
         arr: np.ndarray,
         original_image: Image,
-        rows: int = None,
-        cols: int = None,
+        rows: Optional[int] = None,
+        cols: Optional[int] = None,
         aspect_ratio: float = 1.0,
         add_grid=True,
         figsize=(7, 7),
@@ -93,17 +96,16 @@ class ImageVisualizer:
         num_tiles = arr.shape[0]
         orig_patch_index = None
         if original_image is not None and num_tiles > 0:
-            resized = original_image.convert('RGB').resize(arr[0].shape[:2])
+            resized = original_image.convert("RGB").resize(arr[0].shape[:2])
             if np.allclose(arr[0], resized, atol=1e-2):
                 orig_patch_index = 0
             elif np.allclose(arr[-1], resized, atol=1e-2):
                 orig_patch_index = num_tiles - 1
         saved_orig_tile = None
 
-
         # FIXME global image detection is broken - infer from processor class/docstring?
 
-        orig_patch_index = num_tiles - 1 # Will fail in many cases
+        orig_patch_index = num_tiles - 1  # Will fail in many cases
         if orig_patch_index is not None:
             saved_orig_tile = arr[orig_patch_index]
             arr = np.delete(arr, orig_patch_index, axis=0)
@@ -131,9 +133,9 @@ class ImageVisualizer:
                         h, w = tile.shape[:2]
                         step = max(1, min(h, w) // self.patch_size)
                         for x in range(0, w, step):
-                            ax.axvline(x, color='red', linewidth=0.5)
+                            ax.axvline(x, color="red", linewidth=0.5)
                         for y in range(0, h, step):
-                            ax.axhline(y, color='red', linewidth=0.5)
+                            ax.axhline(y, color="red", linewidth=0.5)
                 else:
                     ax.axis("off")
                 idx += 1
@@ -147,7 +149,6 @@ class ImageVisualizer:
             plt.yticks([])
             plt.tight_layout()
             plt.show()
-
 
     def default_message(self, full_output: bool = False) -> str:
         """
@@ -163,7 +164,9 @@ class ImageVisualizer:
         """
         # ensure this is a multimodal processor with image + tokenizer
         if not (
-            hasattr(self.processor, "attributes") and "image_processor" in self.processor.attributes and "tokenizer" in self.processor.attributes
+            hasattr(self.processor, "attributes")
+            and "image_processor" in self.processor.attributes
+            and "tokenizer" in self.processor.attributes
         ):
             raise RuntimeError(
                 "Processor does not expose both 'image_processor' and 'tokenizer'; cannot build multimodal example."
@@ -210,7 +213,9 @@ class ImageVisualizer:
 
         except ValueError:
             image_token_string = getattr(
-                self.processor, "image_token", getattr(getattr(self.processor, "tokenizer", None), "image_token", "<image>")
+                self.processor,
+                "image_token",
+                getattr(getattr(self.processor, "tokenizer", None), "image_token", "<image>"),
             )
             return f"{image_token_string} {'Please describe this image.'}"
 
@@ -219,7 +224,9 @@ class ImageVisualizer:
             images = [images]
         else:
             if len(images) > 1:
-                raise ValueError("You passed a list of several images. Only single images are accepted by the visualizer.")
+                raise ValueError(
+                    "You passed a list of several images. Only single images are accepted by the visualizer."
+                )
 
         pil_imgs = [self._to_pil(x) for x in images]
         width, height = pil_imgs[0].size
