@@ -82,6 +82,10 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Glm4MoeForCausalLM if is_torch_available() else None
 
+    @unittest.skip("Dynamic control flow in MoE")
+    def test_torch_compile_for_training(self):
+        pass
+
 
 @require_torch_accelerator
 @require_read_token
