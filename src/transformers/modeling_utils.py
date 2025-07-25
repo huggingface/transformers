@@ -2703,9 +2703,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 kernel = get_kernel(repo_id)
                 if hasattr(kernel, "flash_attn_varlen_func"):
-                    ALL_ATTENTION_FUNCTIONS.register(repo_id, partial(flash_attention_forward, implementation=kernel))
+                    kernel_function = partial(flash_attention_forward, implementation=kernel)
                 elif kernel_name is not None:
-                    ALL_ATTENTION_FUNCTIONS.register(repo_id, getattr(kernel, kernel_name))
+                    kernel_function = getattr(kernel, kernel_name)
+                # Make it Transformers compliant
+                signature = inspect.signature(kernel_function)
+                valid_keys = [
+                    name for name, param in signature.parameters.items()
+                    if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+                    and name != 'ctx'  # exclude 'ctx' since it's auto-handled by autograd
+                ]
+                def transformers_wrapper(**kwargs):
+                    filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_keys}
+                    return kernel_function(filtered_kwargs)
+
+                # Register it
+                ALL_ATTENTION_FUNCTIONS.register(repo_id, transformers_wrapper)
                 ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
                 applicable_attn_implementation = repo_id
             except Exception as e:
