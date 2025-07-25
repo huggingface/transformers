@@ -113,6 +113,7 @@ if TYPE_CHECKING:
     from .ernie import *
     from .esm import *
     from .evolla import *
+    from .exaone4 import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
