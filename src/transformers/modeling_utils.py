@@ -6110,8 +6110,11 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     if not accelerator_device_map:
         return
 
+    tp_plan = getattr(model, "_tp_plan", None)
+    if tp_plan is None:
+        tp_plan = []
     tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in model._tp_plan]))
+        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
