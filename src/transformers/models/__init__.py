@@ -354,6 +354,7 @@ if TYPE_CHECKING:
     from .xlm_roberta import *
     from .xlm_roberta_xl import *
     from .xlnet import *
+    from .xlstm import *
     from .xmod import *
     from .yolos import *
     from .yoso import *
