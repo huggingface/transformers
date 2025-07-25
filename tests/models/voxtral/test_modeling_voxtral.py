@@ -60,6 +60,7 @@ class VoxtralModelTester:
             "use_mrope": False,
             "vocab_size": 99,
             "head_dim": 8,
+            "pad_token_id": 0,
         },
         is_training=True,
         audio_config={
