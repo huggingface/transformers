@@ -52,13 +52,13 @@ class ImageMattingOutput(ModelOutput):
 
 @auto_docstring
 class VitMattePreTrainedModel(PreTrainedModel):
-    config_class = VitMatteConfig
+    config: VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
+    def _init_weights(self, module: nn.Module):
+        if isinstance(module, (nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

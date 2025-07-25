@@ -37,6 +37,7 @@ The original code can be found [here](https://github.com/google-research/timesfm
 To use the model:
 
 ```python
+import numpy as np
 import torch
 from transformers import TimesFmModelForPrediction
 

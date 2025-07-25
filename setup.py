@@ -52,7 +52,7 @@ To create the package for pypi.
    twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
 
    Check that you can install it in a virtualenv by running:
-   pip install -i https://testpypi.python.org/pypi transformers
+   pip install -i https://test.pypi.org/simple/ transformers
 
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
@@ -103,7 +103,7 @@ _deps = [
     "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets!=2.5.0",
+    "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
@@ -137,6 +137,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
+    "openai",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
@@ -187,7 +188,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "tiktoken",
-    "timm<=1.0.11",
+    "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.21,<0.22",
     "torch>=2.1",
     "torchaudio",
@@ -204,6 +205,7 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
+    "mistral-common[opencv]>=1.6.3",
 ]
 
 
@@ -313,7 +315,7 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
-extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
@@ -334,6 +336,7 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
+extras["mistral-common"] = deps_list("mistral-common[opencv]")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -363,6 +366,7 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["mistral-common"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
@@ -384,6 +388,7 @@ extras["all"] = (
     + extras["accelerate"]
     + extras["video"]
     + extras["num2words"]
+    + extras["mistral-common"]
 )
 
 

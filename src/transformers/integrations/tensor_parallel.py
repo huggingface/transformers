@@ -18,7 +18,6 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -94,7 +93,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     return tp_device, device_map, device_mesh
 
 
-def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> list[int]:
+def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
     """
     Convert block count or proportions to block sizes.
 
@@ -120,7 +119,7 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> li
         return [single_size] * blocks
 
 
-def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> Optional[str]:
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
 
@@ -412,8 +411,8 @@ class GatherParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
     ):
         super().__init__()
@@ -488,7 +487,7 @@ class ReplicateParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
@@ -506,8 +505,8 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
     ):
@@ -557,7 +556,7 @@ class ColwiseParallel(TensorParallelLayer):
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         # back to local tensor
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
 
 class PackedColwiseParallel(ColwiseParallel):
@@ -596,8 +595,8 @@ class RowwiseParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
     ):
@@ -651,7 +650,7 @@ class RowwiseParallel(TensorParallelLayer):
         if hasattr(mod, "_bias"):
             outputs += mod._bias
         # back to local tensor if use_local_output is True
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -937,7 +936,7 @@ def shard_and_distribute_module(
     return param
 
 
-def verify_tp_plan(expected_keys: list[str], tp_plan: Optional[dict[str, str]]):
+def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
     """

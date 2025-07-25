@@ -542,6 +542,8 @@ class GPTBigCodeMQATest(unittest.TestCase):
             attn_pdrop=0,
             resid_pdrop=0,
         )
+        # We need to set it here as it's normally set by the Model's __init__
+        config._attn_implementation = "sdpa"
         return GPTBigCodeAttention(config)
 
     @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])
