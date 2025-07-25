@@ -24,7 +24,15 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+)
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -255,6 +263,13 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
             results.append({"scores": box_scores, "labels": None, "boxes": boxes})
 
         return results
+
+    def __init__(self, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
+        return super().preprocess(images, **kwargs)
 
     def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
         """

@@ -24,7 +24,15 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+)
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -68,6 +76,13 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     valid_kwargs = Owlv2FastImageProcessorKwargs
     crop_size = None
     do_center_crop = None
+
+    def __init__(self, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
+        OwlViTImageProcessorFast().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
+        return OwlViTImageProcessorFast().preprocess(images, **kwargs)
 
     def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
         """
