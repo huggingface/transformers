@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 특징 추출기[[feature-extractors]]
 
-특징 추출기는 주어진 모델에 맞는 형식으로 오디오 데이터를 전처리합니다. 원시 오디오 신호를 받아 모델에 입력할 수 있는 텐서로 변환합니다. 텐서의 형태는 모델에 따라 다르지만, 특징 추출기는 사용 중인 모델에 맞춰 오디오 데이터를 올바르게 전처리해 줍니다. 특징 추출기는 패딩, 잘라내기, 리샘플링을 위한 메서드도 포함합니다.
+특징 추출기(feature extractor)는 오디오 데이터를 주어진 모델에 맞는 형식으로 전처리합니다. 원시 오디오 신호를 받아 모델에 입력할 수 있는 텐서로 변환합니다. 텐서의 형태는 모델에 따라 다르지만, 특징 추출기는 사용 중인 모델에 맞춰 오디오 데이터를 올바르게 전처리해 줍니다. 특징 추출기는 패딩, 잘라내기, 리샘플링을 위한 메소드도 포함합니다.
 
 [`~AutoFeatureExtractor.from_pretrained`]를 호출하여 Hugging Face [Hub](https://hf.co/models) 또는 로컬 디렉토리에서 특징 추출기와 그 전처리기 설정을 로드하세요. 특징 추출기와 전처리기 설정은 [preprocessor_config.json](https://hf.co/openai/whisper-tiny/blob/main/preprocessor_config.json) 파일에 저장됩니다.
 
