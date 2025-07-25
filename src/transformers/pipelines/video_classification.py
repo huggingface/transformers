@@ -140,7 +140,7 @@ class VideoClassificationPipeline(Pipeline):
     def preprocess(self, video, num_frames=None, frame_sampling_rate=1):
         if num_frames is None:
             num_frames = self.model.config.num_frames
-
+        # add support for sending video as ndarray or tensor
         if video.startswith("http://") or video.startswith("https://"):
             video = BytesIO(requests.get(video).content)
 
