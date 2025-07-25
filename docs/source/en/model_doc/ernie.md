@@ -110,3 +110,57 @@ Model variants are available in different sizes and languages.
 You can find all the supported models from huggingface's model hub: [huggingface.co/nghuyong](https://huggingface.co/nghuyong), and model details from paddle's official
 repo: [PaddleNLP](https://paddlenlp.readthedocs.io/zh/latest/model_zoo/transformers/ERNIE/contents.html)
 and [ERNIE's legacy branch](https://github.com/PaddlePaddle/ERNIE/tree/legacy/develop).
+
+## ErnieConfig
+
+[[autodoc]] ErnieConfig
+    - all
+
+## Ernie specific outputs
+
+[[autodoc]] models.ernie.modeling_ernie.ErnieForPreTrainingOutput
+
+## ErnieModel
+
+[[autodoc]] ErnieModel
+    - forward
+
+## ErnieForPreTraining
+
+[[autodoc]] ErnieForPreTraining
+    - forward
+
+## ErnieForCausalLM
+
+[[autodoc]] ErnieForCausalLM
+    - forward
+
+## ErnieForMaskedLM
+
+[[autodoc]] ErnieForMaskedLM
+    - forward
+
+## ErnieForNextSentencePrediction
+
+[[autodoc]] ErnieForNextSentencePrediction
+    - forward
+
+## ErnieForSequenceClassification
+
+[[autodoc]] ErnieForSequenceClassification
+    - forward
+
+## ErnieForMultipleChoice
+
+[[autodoc]] ErnieForMultipleChoice
+    - forward
+
+## ErnieForTokenClassification
+
+[[autodoc]] ErnieForTokenClassification
+    - forward
+
+## ErnieForQuestionAnswering
+
+[[autodoc]] ErnieForQuestionAnswering
+    - forward
