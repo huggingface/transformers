@@ -410,7 +410,7 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3MoeSparseMoeBlock, index=1),
-        "hidden_states": [nn.Embedding, Qwen3MoeDecoderLayer],
+        "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }
 

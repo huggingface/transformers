@@ -320,7 +320,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, LlamaDecoderLayer],
+        "hidden_states": LlamaDecoderLayer,
         "attentions": LlamaAttention,
     }
 

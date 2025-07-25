@@ -387,7 +387,7 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(MixtralSparseMoeBlock, index=1),
-        "hidden_states": [nn.Embedding, MixtralDecoderLayer],
+        "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
 

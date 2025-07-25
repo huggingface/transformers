@@ -292,7 +292,7 @@ class SmolLM3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, SmolLM3DecoderLayer],
+        "hidden_states": SmolLM3DecoderLayer,
         "attentions": SmolLM3Attention,
     }
 

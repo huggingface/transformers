@@ -1289,7 +1289,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, AriaTextDecoderLayer],
+        "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
     }
 

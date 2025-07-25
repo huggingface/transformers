@@ -348,7 +348,7 @@ class CoherePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, CohereDecoderLayer],
+        "hidden_states": CohereDecoderLayer,
         "attentions": CohereAttention,
     }
 

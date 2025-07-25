@@ -367,7 +367,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, GPTNeoXDecoderLayer],
+        "hidden_states": GPTNeoXDecoderLayer,
         "attentions": GPTNeoXAttention,
     }
     _keys_to_ignore_on_load_unexpected = [r"attention.bias", r"attention.masked_bias"]

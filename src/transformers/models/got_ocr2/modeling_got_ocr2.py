@@ -407,6 +407,7 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
 
     def __init__(self, config: GotOcr2VisionConfig):
         super().__init__(config)
+        self.config = config
         self.image_size = config.image_size
         self.patch_embed = GotOcr2PatchEmbeddings(config)
 

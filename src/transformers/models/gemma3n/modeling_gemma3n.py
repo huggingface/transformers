@@ -1493,7 +1493,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, Gemma3nTextDecoderLayer],
+        "hidden_states": Gemma3nTextDecoderLayer,
         "attentions": Gemma3nTextAttention,
     }
 

@@ -288,7 +288,7 @@ class Qwen3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, Qwen3DecoderLayer],
+        "hidden_states": Qwen3DecoderLayer,
         "attentions": Qwen3Attention,
     }
 

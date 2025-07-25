@@ -290,7 +290,7 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, Phi3DecoderLayer],
+        "hidden_states": Phi3DecoderLayer,
         "attentions": Phi3Attention,
     }
     _version = "0.0.5"

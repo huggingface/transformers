@@ -104,7 +104,7 @@ class MistralDecoderLayer(LlamaDecoderLayer):
 
 class MistralPreTrainedModel(LlamaPreTrainedModel):
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, MistralDecoderLayer],
+        "hidden_states": MistralDecoderLayer,
         "attentions": MistralAttention,
     }
 

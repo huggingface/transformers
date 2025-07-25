@@ -280,7 +280,7 @@ class MixtralPreTrainedModel(MistralPreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
         "router_logits": OutputRecorder(MixtralSparseMoeBlock, index=1),
-        "hidden_states": [nn.Embedding, MixtralDecoderLayer],
+        "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
 

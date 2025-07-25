@@ -459,7 +459,7 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, DeepseekV2DecoderLayer],
+        "hidden_states": DeepseekV2DecoderLayer,
         "attentions": DeepseekV2Attention,
     }
 

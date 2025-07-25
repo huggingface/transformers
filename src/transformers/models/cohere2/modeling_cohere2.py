@@ -325,7 +325,7 @@ class Cohere2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, Cohere2DecoderLayer],
+        "hidden_states": Cohere2DecoderLayer,
         "attentions": Cohere2Attention,
     }
 

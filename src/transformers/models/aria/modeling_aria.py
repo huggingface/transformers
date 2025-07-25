@@ -634,7 +634,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, AriaTextDecoderLayer],
+        "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
     }
 
@@ -657,7 +657,7 @@ class AriaPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [nn.Embedding, AriaTextDecoderLayer],
+        "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
     }
 

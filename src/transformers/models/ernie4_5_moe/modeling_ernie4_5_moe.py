@@ -474,7 +474,7 @@ class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_MoESparseMoeBlock, index=1),
-        "hidden_states": [nn.Embedding, Ernie4_5_MoEDecoderLayer],
+        "hidden_states": Ernie4_5_MoEDecoderLayer,
         "attentions": Ernie4_5_MoEAttention,
     }
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
