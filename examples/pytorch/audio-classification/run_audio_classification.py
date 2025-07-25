@@ -13,6 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio]>=1.14.0",
+#     "evaluate",
+#     "librosa",
+#     "torchaudio",
+#     "torch>=1.6",
+# ]
+# ///
+
 import logging
 import os
 import sys

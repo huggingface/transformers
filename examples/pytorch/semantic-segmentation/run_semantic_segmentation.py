@@ -12,6 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets >= 2.0.0",
+#     "torch >= 1.3",
+#     "accelerate",
+#     "evaluate""
+#     "Pillow",
+#     "albumentations >= 1.4.16",
+# ]
+# ///
+
 import json
 import logging
 import os
