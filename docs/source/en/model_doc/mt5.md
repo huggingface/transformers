@@ -22,16 +22,16 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# MT5
+# mT5
 
-[MT5](https://huggingface.co/papers/2010.11934) is an encoder-decoder transformer model for sequence-to-sequence tasks. It follows the same architecture and training procedure as [T5](.t5), a sequence-to-sequence model trained exclusively on English examples. In contrast, MT5 was trained from scratch on a multilingual dataset, allowing it to generalize across a wide range of languages. This leads to improved performance in a multilingual setting compared to T5.
+[mT5](https://huggingface.co/papers/2010.11934) is an encoder-decoder transformer model for sequence-to-sequence tasks. It follows the same architecture and training procedure as [T5](.t5), a sequence-to-sequence model trained exclusively on English examples. In contrast, mT5 was trained from scratch on a multilingual dataset, allowing it to generalize across a wide range of languages. This leads to improved performance in a multilingual setting compared to T5.
 
-You can find all the original [MT5] checkpoints under the [MT5](https://huggingface.co/collections/google/mt5-release-65005f1a520f8d7b4d039509) collection.
+You can find all the original [mT5] checkpoints under the [mT5](https://huggingface.co/collections/google/mt5-release-65005f1a520f8d7b4d039509) collection.
 
 > [!TIP]
 > This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 >
-> Click on the MT5 models in the right sidebar for more examples of how to apply MT5 to different language tasks.
+> Click on the mT5 models in the right sidebar for more examples of how to apply mT5 to different language tasks.
 
 The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -122,7 +122,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- MT5 was only pre-trained on [mc4](https://huggingface.co/datasets/mc4), meaning it must be fine-tuned before it can be used for downstream tasks.
+- mT5 was only pre-trained on [mc4](https://huggingface.co/datasets/mc4), meaning it must be fine-tuned before it can be used for downstream tasks.
 
 ## MT5Config
 
