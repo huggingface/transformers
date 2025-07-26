@@ -332,17 +332,15 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class InstructBlipPreTrainedModel(PreTrainedModel):
-    config_class = InstructBlipConfig
+    config: InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+
+    _can_compile_fullgraph = True
 
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
@@ -454,7 +452,7 @@ class InstructBlipEncoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = InstructBlipVisionConfig
+    config: InstructBlipVisionConfig
 
     def __init__(self, config: InstructBlipVisionConfig):
         super().__init__(config)
@@ -966,7 +964,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     """
 
     _supports_attention_backend = False  # adds position on attn weights before last matmul
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
@@ -1353,11 +1351,10 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
     """
 )
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
-    config_class = InstructBlipConfig
+    config: InstructBlipConfig
     main_input_name = "pixel_values"
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+
+    _can_compile_fullgraph = True
     _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipConfig):
