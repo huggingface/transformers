@@ -267,6 +267,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         # Image processor does not support different output formats, because it returns patches.
         data_format = ChannelDimension.LAST
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):

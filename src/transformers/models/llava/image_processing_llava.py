@@ -367,6 +367,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
+        images = self.fetch_images(images)
         images = make_list_of_images(images)
 
         if not valid_images(images):

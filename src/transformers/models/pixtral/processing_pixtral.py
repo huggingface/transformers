@@ -21,7 +21,7 @@ from typing import Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, load_image
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -166,21 +166,6 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
-            if is_image_or_image_url(images):
-                images = [images]
-            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
-                pass
-            elif (
-                isinstance(images, (list, tuple))
-                and isinstance(images[0], (list, tuple))
-                and is_image_or_image_url(images[0][0])
-            ):
-                images = [image for sublist in images for image in sublist]
-            else:
-                raise ValueError(
-                    "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
-                )
-            images = [load_image(im) if isinstance(im, str) else im for im in images]
             image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
