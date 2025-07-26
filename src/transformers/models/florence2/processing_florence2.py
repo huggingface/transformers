@@ -376,7 +376,7 @@ class Quantizer:
         self.mode = mode
         self.bins = bins  # (width_bins, height_bins)
 
-    def quantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+    def quantize(self, locations: "torch.Tensor", size: tuple[int, int]) -> "torch.Tensor":
         """
         Quantize locations.
 
@@ -411,7 +411,7 @@ class Quantizer:
         else:
             raise ValueError(f"Unsupported location shape: last dim must be 2 or 4, got {locations.shape[-1]}.")
 
-    def dequantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
+    def dequantize(self, locations: "torch.Tensor", size: tuple[int, int]) -> "torch.Tensor":
         """
         Dequantize locations back to original scale.
 
