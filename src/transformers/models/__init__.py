@@ -117,6 +117,7 @@ if TYPE_CHECKING:
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
+    from .fastconformer import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
@@ -238,6 +239,7 @@ if TYPE_CHECKING:
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
+    from .parakeet_ctc import *
     from .patchtsmixer import *
     from .patchtst import *
     from .pegasus import *

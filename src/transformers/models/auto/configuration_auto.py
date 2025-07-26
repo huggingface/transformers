@@ -140,6 +140,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("falcon", "FalconConfig"),
         ("falcon_h1", "FalconH1Config"),
         ("falcon_mamba", "FalconMambaConfig"),
+        ("fastconformer", "FastConformerConfig"),
         ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGanConfig"),
         ("flaubert", "FlaubertConfig"),
@@ -276,6 +277,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
+        ("parakeet_ctc", "ParakeetCTCConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -541,6 +543,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("falcon3", "Falcon3"),
         ("falcon_h1", "FalconH1"),
         ("falcon_mamba", "FalconMamba"),
+        ("fastconformer", "FastConformer"),
         ("fastspeech2_conformer", "FastSpeech2Conformer"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("flan-t5", "FLAN-T5"),
@@ -691,6 +694,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
+        ("parakeet_ctc", "ParakeetCTC"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -910,6 +914,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
+        ("parakeet_ctc", "fastconformer"),
     ]
 )
 
