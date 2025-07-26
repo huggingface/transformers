@@ -304,16 +304,5 @@ class BridgeTowerConfig(PretrainedConfig):
         self.text_config = BridgeTowerTextConfig(**text_config)
         self.vision_config = BridgeTowerVisionConfig(**vision_config)
 
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration. Returns:
-            [`BridgeTowerConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]
