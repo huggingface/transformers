@@ -50,8 +50,8 @@
   - sections:
     - local: pipeline_tutorial
       title: Pipeline으로 추론하기
-    - local: in_translation
-      title: (번역중) Machine learning apps
+    - local: pipeline_gradio
+      title: 머신러닝 앱
     - local: pipeline_webserver
       title: 추론 웹 서버를 위한 파이프라인
     - local: add_new_pipeline
