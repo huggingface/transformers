@@ -221,6 +221,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "MMGroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "RTDetrConfig": [
         "eos_coefficient",
         "focal_loss_alpha",
