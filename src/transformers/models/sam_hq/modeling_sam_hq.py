@@ -814,7 +814,7 @@ class SamHQTwoWayTransformer(nn.Module):
                 attention_similarity=attention_similarity,
                 **kwargs,
             )
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
