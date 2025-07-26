@@ -63,8 +63,8 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
+    distribute_model,
     initialize_tensor_parallelism,
     repack_weights,
     replace_state_dict_local_with_dtensor,
@@ -2094,8 +2094,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_attention_backend = False
     _can_record_outputs = None
 
-    # This attribute sets the default parameter to be
-
     @property
     @torch._dynamo.allow_in_graph
     def can_record_outputs(self) -> dict[str, OutputRecorder]:
@@ -2220,6 +2218,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
+
+        This is also used when the user is running distributed code. We add hooks to the modules here, according to
+        the model's tp_plan!
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
@@ -2252,17 +2253,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
-        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-        for name, module in self.named_children():
-            if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-
-        if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-            for v in self._tp_plan.values():
-                if v not in ALL_PARALLEL_STYLES:
-                    raise ValueError(
-                        f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
-                    )
 
     def dequantize(self):
         """
@@ -2358,101 +2348,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             torch.set_default_dtype(dtype_orig)
 
         return model
-
-    @classmethod
-    def _check_attn_implementation(cls, attn_implementation: Union[str, dict]) -> Union[str, dict]:
-        """
-        Checks that the requested attention implementation exists and tries to get the kernel from hub
-        if `attn_implementation` matches hf kernels pattern.
-        """
-        if isinstance(attn_implementation, str) and re.match(r"^[^/:]+/[^/:]+:[^/:]+$", attn_implementation):
-            if not is_kernels_available():
-                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-
-            # Extract repo_id and kernel_name from the string
-            repo_id, kernel_name = attn_implementation.split(":")
-            kernel_name = kernel_name.strip()
-            repo_id = repo_id.strip()
-
-            try:
-                kernel = get_kernel(repo_id)
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
-                attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
-            except FileNotFoundError as e:
-                logger.warning(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your devicein the hub: {e}. Using eager attention implementation instead."
-                )
-                attn_implementation = None  # try to dispatch SDPA and fallback eager if not available
-            except AttributeError:
-                raise ValueError(
-                    "the kernel function name or class specified in the attn_implementation argument is not valid. \
-                                 Please check the documentation for the correct format, \
-                                 and check that the kernel exports the class and the function correctly."
-                )
-        if (
-            not isinstance(attn_implementation, dict)
-            and attn_implementation not in ["eager", None] + ALL_ATTENTION_FUNCTIONS.valid_keys()
-        ):
-            message = f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
-            # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
-            if cls._supports_flash_attn or getattr(cls, "_supports_flash_attn_2", False):
-                message += (
-                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
-                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
-                )
-            if cls._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
-            if cls._supports_flex_attn:
-                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
-            raise ValueError(message + ".")
-
-        return attn_implementation
-
-    def set_attention_implementation(self, attn_implementation: Union[str, dict]):
-        """
-        Checks and dispatches to the requested attention implementation.
-        """
-        requested_attn_implementation = self._check_attn_implementation(attn_implementation)
-
-        # Composite models consisting of several PretrainedModels can specify attention implementation as a dict where
-        # keys are sub-config names. But most people will specify one `str` which means that should dispatch it for all sub-models.
-        # See https://github.com/huggingface/transformers/pull/32238
-        for key in self.config.sub_configs.keys():
-            sub_config = getattr(self.config, key)
-            curr_attn_implementation = (
-                requested_attn_implementation
-                if not isinstance(requested_attn_implementation, dict)
-                else requested_attn_implementation.get(key, None)
-            )
-            # For models with backbone sub-config might be not initialized. Set the requested att
-            # if the config hasn't got any attn pre-set and the requested attn in not `None` (i.e not the default attn)
-            if (
-                sub_config is not None
-                and sub_config._attn_implementation_internal is None
-                and curr_attn_implementation is not None
-            ):
-                sub_config._attn_implementation_internal = curr_attn_implementation
-
-        if requested_attn_implementation == "flash_attention_3" and self._flash_attn_3_can_dispatch():
-            self.config._attn_implementation = "flash_attention_3"
-        if requested_attn_implementation == "flash_attention_2" and self._flash_attn_2_can_dispatch():
-            self.config._attn_implementation = "flash_attention_2"
-        elif requested_attn_implementation == "flex_attention" and self._flex_attn_can_dispatch():
-            self.config._attn_implementation = "flex_attention"
-        elif (
-            requested_attn_implementation in [None, "sdpa"]
-            and not is_torch_xla_available()
-            and self._sdpa_can_dispatch(hard_check_only=requested_attn_implementation is not None)
-        ):
-            self.config._attn_implementation = "sdpa"
-        elif requested_attn_implementation in ALL_ATTENTION_FUNCTIONS.valid_keys():
-            self.config._attn_implementation = requested_attn_implementation
-        elif isinstance(requested_attn_implementation, dict):
-            self.config._attn_implementation = requested_attn_implementation.get("", None)
-        else:
-            self.config._attn_implementation = "eager"
-
-        self.config._attn_implementation_autoset = True
 
     @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
@@ -2800,23 +2695,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 kernel = get_kernel(repo_id)
                 if hasattr(kernel, "flash_attn_varlen_func"):
-                    ALL_ATTENTION_FUNCTIONS._global_mapping[repo_id] = partial(
-                        flash_attention_forward, implementation=kernel
-                    )
+                    kernel_function = partial(flash_attention_forward, implementation=kernel)
                 elif kernel_name is not None:
-                    ALL_ATTENTION_FUNCTIONS[repo_id] = getattr(kernel, kernel_name)
-                ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[repo_id] = ALL_MASK_ATTENTION_FUNCTIONS[
-                    "flash_attention_2"
-                ]
+                    kernel_function = getattr(kernel, kernel_name)
+                # Register it
+                ALL_ATTENTION_FUNCTIONS.register(repo_id, kernel_function)
+                ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
                 applicable_attn_implementation = repo_id
-            except FileNotFoundError as e:
+            except Exception as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            finally:
-                return applicable_attn_implementation
         if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
@@ -4669,6 +4560,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
+        distributed_config = kwargs.pop("distributed_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -4688,6 +4580,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
         ):
             key_mapping = cls._checkpoint_conversion_mapping
+
+        if distributed_config is not None:
+            tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -4720,16 +4615,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `device_map` pointing to the correct device
         if tp_plan is not None:
             if device_mesh is None:
-                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
-                if "tp" not in device_mesh.mesh_dim_names:
-                    raise ValueError(
-                        "When using `tp_plan`, the `device_mesh` must contain a 'tp' dimension. "
-                        "Please provide a valid `device_mesh`."
-                    )
-                device_mesh = device_mesh["tp"]
-                tp_size = device_mesh["tp"].size()
-                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+                # TODO: make device_mesh support multiple dimensions
+                if device_mesh.ndim > 1:
+                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
+                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
@@ -5029,22 +4920,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         config.name_or_path = pretrained_model_name_or_path
-
-        # Instantiate model.
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
-
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        if _torch_distributed_available and device_mesh is not None:
+            model = distribute_model(model, distributed_config, device_mesh, tp_size)
+
         # Make sure to tie the weights correctly
         model.tie_weights()
-
-        # Last check for tp
-        if device_mesh is not None and not model.supports_tp_plan:
-            if config.base_model_tp_plan is None and config.get_text_config().base_model_tp_plan is None:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
@@ -5126,11 +5012,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
-
-        # record tp degree the model sharded to
-        model._tp_size = tp_size
-        model._device_mesh = device_mesh
-
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -6110,8 +5991,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     if not accelerator_device_map:
         return
 
+    tp_plan = getattr(model, "_tp_plan", []) or []
     tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in model._tp_plan]))
+        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
