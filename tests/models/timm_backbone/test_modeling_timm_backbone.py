@@ -176,10 +176,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
-    def test_tied_model_weights_key_ignore(self):
-        pass
-
     @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
     def test_load_save_without_tied_weights(self):
         pass

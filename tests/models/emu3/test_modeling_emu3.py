@@ -89,7 +89,7 @@ class Emu3Text2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         config = self.get_config()
 
@@ -234,9 +234,9 @@ class Emu3Vision2TextModelTester:
         config = self.get_config()
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         pixel_values = floats_tensor(
             [
