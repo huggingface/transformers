@@ -261,6 +261,17 @@ class RoFormerSelfAttention(nn.Module):
                 .transpose(1, 2)
             )
 
+            # Apply RoPE if self attention
+            if not is_cross_attention and sinusoidal_pos is not None:
+                if self.rotary_value:
+                    query_layer, key_layer, value_layer = self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer, value_layer
+                    )
+                else:
+                    query_layer, key_layer = self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer
+                    )
+
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
@@ -381,13 +392,13 @@ class RoFormerAttention(nn.Module):
     ):
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            sinusoidal_pos,
-            head_mask,
-            encoder_hidden_states,
-            past_key_value,
-            output_attentions,
-            cache_position,
+            attention_mask=attention_mask,
+            sinusoidal_pos=sinusoidal_pos,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them

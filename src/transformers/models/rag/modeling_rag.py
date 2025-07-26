@@ -1204,8 +1204,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         if isinstance(past_key_values, EncoderDecoderCache):
             reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
-        if isinstance(past_key_values, EncoderDecoderCache):
-            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
         return reordered_past
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
@@ -1593,13 +1591,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
-            # 11. interleave input_ids with `num_beams` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
             return self._beam_search(
                 input_ids,
                 logits_processor=pre_processor,

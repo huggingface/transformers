@@ -274,7 +274,7 @@ class SuperGlueSelfAttention(nn.Module):
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        attention_mask = encoder_attention_mask if is_cross_attention else encoder_attention_mask
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
         batch_size = hidden_states.shape[0]
         key_layer = (
