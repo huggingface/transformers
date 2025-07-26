@@ -93,6 +93,8 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "EvollaSaProtPreTrainedModel",
+    "KeyeSiglipVisionModel",
+    "KeyeModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
