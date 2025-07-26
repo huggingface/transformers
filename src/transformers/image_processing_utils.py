@@ -39,6 +39,13 @@ class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
+        """
+        return False
+
     def __call__(self, images, **kwargs) -> BatchFeature:
         """Preprocess an image or a batch of images."""
         return self.preprocess(images, **kwargs)
