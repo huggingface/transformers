@@ -4179,9 +4179,8 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
             return_intermediate_token_ids (`bool`, *optional*):
-                If `True`, also returns the intermediate generated text and unit tokens. Set to `True` if you also want
-                to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be
-                ignored.
+                If `True` and `generate_speech=True`, also returns the intermediate generated text and unit tokens. Set to `True` if you also want
+                to get translated text alongside the audio.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
             speaker_id (`int`, *optional*, defaults to 0):
