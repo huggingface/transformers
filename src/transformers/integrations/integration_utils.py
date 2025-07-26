@@ -1085,7 +1085,7 @@ class TrackioCallback(TrainerCallback):
                 project=os.getenv("TRACKIO_PROJECT", "huggingface"),
                 name=args.run_name,
                 space_id=os.getenv("TRACKIO_SPACE_ID", None),
-                resume="never",
+                resume="allow",
             )
 
             # Add config parameters (run may have been created manually)
