@@ -27,6 +27,10 @@ The `.optimization` module provides:
 
 [[autodoc]] Adafactor
 
+## Muon (PyTorch)
+
+[[autodoc]] Muon
+
 ## AdamWeightDecay (TensorFlow)
 
 [[autodoc]] AdamWeightDecay
