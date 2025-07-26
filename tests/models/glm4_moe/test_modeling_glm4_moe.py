@@ -79,8 +79,8 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = Glm4MoeModelTester
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = Glm4MoeForCausalLM if is_torch_available() else None
+    # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
+    _torch_compile_train_cls = None
 
 
 @require_torch_accelerator
