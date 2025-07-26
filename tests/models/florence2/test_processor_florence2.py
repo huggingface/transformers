@@ -57,7 +57,6 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-
     def test_construct_prompts(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
 
@@ -69,13 +68,13 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Test list of texts with task without input
         texts = ["<OCR>", "<CAPTION>"]
         prompts = processor._construct_prompts(texts)
-        EXPECTED_PROMPTS_WITHOUT_INPUT = ['What is the text in the image?', 'What does the image describe?']
+        EXPECTED_PROMPTS_WITHOUT_INPUT = ["What is the text in the image?", "What does the image describe?"]
         self.assertEqual(prompts, EXPECTED_PROMPTS_WITHOUT_INPUT)
 
         # Test task with input
         texts = ["<CAPTION_TO_PHRASE_GROUNDING> a red car"]
         prompts = processor._construct_prompts(texts)
-        EXPECTED_PROMPTS_WITH_INPUT = ['Locate the phrases in the caption: a red car']
+        EXPECTED_PROMPTS_WITH_INPUT = ["Locate the phrases in the caption: a red car"]
         self.assertEqual(prompts, EXPECTED_PROMPTS_WITH_INPUT)
 
         # Test invalid prompt with task token not alone
@@ -87,15 +86,13 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         quantizer = processor.post_processor.box_quantizer
 
         # Test bounding box quantization and dequantization
-        boxes = torch.tensor([[   0,    0,   30,   40],
-                              [ 500,  550,  600,  690],
-                              [ 750, 1121,  851, 1239]], dtype=torch.int32)
+        boxes = torch.tensor([[0, 0, 30, 40], [500, 550, 600, 690], [750, 1121, 851, 1239]], dtype=torch.int32)
         size = (800, 1200)
         quantized_boxes = quantizer.quantize(boxes, size)
         dequantized_boxes = quantizer.dequantize(quantized_boxes, size)
-        EXPECTED_DEQUANTIZED_BBOX = torch.tensor([[   0,    0,   30,   40],
-                                                  [ 500,  550,  600,  690],
-                                                  [ 750, 1121,  799, 1199]], dtype=torch.int32)
+        EXPECTED_DEQUANTIZED_BBOX = torch.tensor(
+            [[0, 0, 30, 40], [500, 550, 600, 690], [750, 1121, 799, 1199]], dtype=torch.int32
+        )
         self.assertTrue(torch.allclose(dequantized_boxes, EXPECTED_DEQUANTIZED_BBOX))
 
         # Test points quantization and dequantization
@@ -174,9 +171,9 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text, pattern=None, image_size=image_size, area_threshold=0.0
         )
         EXPECTED_PARSED_OCR = [
-            {'quad_box': [100, 100, 200, 100, 200, 200, 100, 200], 'text': 'Hello'},
-            {'quad_box': [300, 300, 400, 300, 400, 400, 300, 400], 'text': 'World'}
-                               ]
+            {"quad_box": [100, 100, 200, 100, 200, 200, 100, 200], "text": "Hello"},
+            {"quad_box": [300, 300, 400, 300, 400, 400, 300, 400], "text": "World"},
+        ]
         self.assertEqual(parsed, EXPECTED_PARSED_OCR)
 
         # Test with area threshold filtering
@@ -192,7 +189,10 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text = "</s><s>red car<loc_53><loc_334><loc_933><loc_775><loc_711><loc_203><loc_906><loc_546>sky<loc_0><loc_0><loc_1000><loc_300></s>"
         image_size = (1000, 1000)
         parsed = processor.post_processor.parse_phrase_grounding_from_text_and_spans(text, image_size=image_size)
-        EXPECTED_PARSED_PHRASE_GROUNDING = [{'bbox': [[53, 334, 933, 775], [711, 203, 906, 546]], 'cat_name': 'red car'}, {'bbox': [[0, 0, 1000, 300]], 'cat_name': 'sky'}]
+        EXPECTED_PARSED_PHRASE_GROUNDING = [
+            {"bbox": [[53, 334, 933, 775], [711, 203, 906, 546]], "cat_name": "red car"},
+            {"bbox": [[0, 0, 1000, 300]], "cat_name": "sky"},
+        ]
         self.assertEqual(parsed, EXPECTED_PARSED_PHRASE_GROUNDING)
 
         # Test with blacklisted phrase
@@ -209,18 +209,19 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Test pure_text task
         text = "<s>Hello world</s>"
         cap_result = processor.post_process_generation(text=text, task="<CAPTION>", image_size=None)
-        EXPECTED_PURE_TEXT_RESULT = {'<CAPTION>': 'Hello world'}
+        EXPECTED_PURE_TEXT_RESULT = {"<CAPTION>": "Hello world"}
         self.assertEqual(cap_result, EXPECTED_PURE_TEXT_RESULT)
 
         # Test description_with_bboxes task
         text = "car<loc_53><loc_334><loc_933><loc_775>"
         od_result = processor.post_process_generation(text=text, task="<OD>", image_size=(1000, 1000))
-        EXPECTED_BBOXES_RESULT = {'<OD>': {'bboxes': [[53, 334, 933, 775]], 'labels': ['car']}}
+        EXPECTED_BBOXES_RESULT = {"<OD>": {"bboxes": [[53, 334, 933, 775]], "labels": ["car"]}}
         self.assertEqual(od_result, EXPECTED_BBOXES_RESULT)
 
         # Test OCR task
         text = "Hello<loc_100><loc_100><loc_200><loc_100><loc_200><loc_200><loc_100><loc_200>"
         ocr_result = processor.post_process_generation(text=text, task="<OCR_WITH_REGION>", image_size=(1000, 1000))
-        EXPECTED_OCR_RESULT = {'<OCR_WITH_REGION>': {'quad_boxes': [[100, 100, 200, 100, 200, 200, 100, 200]], 'labels': ['Hello']}}
+        EXPECTED_OCR_RESULT = {
+            "<OCR_WITH_REGION>": {"quad_boxes": [[100, 100, 200, 100, 200, 200, 100, 200]], "labels": ["Hello"]}
+        }
         self.assertEqual(ocr_result, EXPECTED_OCR_RESULT)
-
