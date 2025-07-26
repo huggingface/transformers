@@ -68,7 +68,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
             The generated audio.
     """
 
-    audio: Optional[list[torch.Tensor]] = None
+    waveform: Optional[list[torch.Tensor]] = None
 
 
 class CsmGenerationMixin(GenerationMixin):
@@ -484,7 +484,7 @@ class CsmGenerationMixin(GenerationMixin):
                 # =======================================
 
         if generate_returned_dict:
-            return CsmGenerateOutput(audio=audio, **generate_output)
+            return CsmGenerateOutput(waveform=audio, **generate_output)
         elif output_audio:
             return audio
         else:
