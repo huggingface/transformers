@@ -351,7 +351,7 @@ class Pix2StructVisionEncoder(nn.Module):
 class Pix2StructPreTrainedModel(PreTrainedModel):
     config: Pix2StructConfig
 
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     @property
     def dummy_inputs(self):
@@ -773,8 +773,8 @@ class Pix2StructTextAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.key(current_states)
             value_states = self.value(current_states)

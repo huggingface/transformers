@@ -317,6 +317,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
                 ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
+                ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -363,6 +364,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
                 ("cuda", 8): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
+                ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
