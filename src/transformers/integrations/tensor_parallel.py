@@ -1104,11 +1104,14 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
         for v in model._tp_plan.values():
             if v not in ALL_PARALLEL_STYLES:
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
-        for name, module in model.named_modules():
+        for name in model.state_dict().keys():
+            param_name = name.rsplit(".", 1)[0] if "." in name else name
+            module = model.get_submodule(param_name)
             if not getattr(module, "_is_hooked", False):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
-                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
+                plan = _get_parameter_tp_plan(parameter_name=param_name, tp_plan=model._tp_plan, is_weight=False)
+                plan = plan or "replicate"
                 add_tensor_parallel_hooks_to_module(
                     model=model,
                     module=module,
