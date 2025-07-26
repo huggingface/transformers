@@ -4799,8 +4799,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         pre_quantized = hasattr(config, "quantization_config")
         if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
             pre_quantized = False
-
-        if pre_quantized or quantization_config is not None:
+        
+        hf_quantizer = kwargs.pop("hf_quantizer", None)
+        if hf_quantizer is not None:
+            pass
+        elif pre_quantized or quantization_config is not None:
             if pre_quantized:
                 config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                     config.quantization_config, quantization_config
