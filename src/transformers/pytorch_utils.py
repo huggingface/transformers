@@ -299,7 +299,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
 
         if isinstance(tensor, DTensor):
             local_tensor = tensor.to_local()
-            return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
+            return tensor.device, local_tensor.untyped_storage().data_ptr(), tensor.nbytes
 
     if tensor.device.type == "xla" and is_torch_xla_available():
         # NOTE: xla tensors dont have storage
