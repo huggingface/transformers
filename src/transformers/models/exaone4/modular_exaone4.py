@@ -247,8 +247,7 @@ class Exaone4Config(PretrainedConfig):
                 # String pattern, e.g. "LLLG"
                 if isinstance(pattern_spec, str) and pattern_spec:
                     layer_pattern_template = [
-                        "sliding_attention" if ch.upper() == "L" else "full_attention"
-                        for ch in pattern_spec
+                        "sliding_attention" if ch.upper() == "L" else "full_attention" for ch in pattern_spec
                     ]
                     # Repeat the template to cover all layers; force the last layer to full_attention
                     self.layer_types = [
@@ -259,17 +258,12 @@ class Exaone4Config(PretrainedConfig):
                 # Integer pattern (e.g., 4) or anything else -> use periodic rule
                 else:
                     # Avoid modulo-by-zero and invalid types
-                    repeat_period = (
-                        pattern_spec
-                        if isinstance(pattern_spec, int) and pattern_spec > 0
-                        else 1
-                    )
+                    repeat_period = pattern_spec if isinstance(pattern_spec, int) and pattern_spec > 0 else 1
                     # Every 'repeat_period'-th layer is full, others are sliding; last layer forced to full
                     self.layer_types = [
                         (
                             "sliding_attention"
-                            if ((i + 1) % repeat_period) != 0
-                            and i < self.num_hidden_layers - 1
+                            if ((i + 1) % repeat_period) != 0 and i < self.num_hidden_layers - 1
                             else "full_attention"
                         )
                         for i in range(self.num_hidden_layers)
@@ -301,12 +295,8 @@ class Exaone4Attention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.hidden_size = config.hidden_size
-        self.head_dim = getattr(
-            config, "head_dim", config.hidden_size // config.num_attention_heads
-        )
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.num_key_value_heads
-        )
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
         self.scaling = self.head_dim**-0.5
@@ -314,18 +304,10 @@ class Exaone4Attention(nn.Module):
         self.sliding_window_pattern = config.sliding_window_pattern
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
 
-        self.q_proj = nn.Linear(
-            self.hidden_size, self.num_attention_heads * self.head_dim, bias=False
-        )
-        self.k_proj = nn.Linear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False
-        )
-        self.v_proj = nn.Linear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False
-        )
-        self.o_proj = nn.Linear(
-            self.num_attention_heads * self.head_dim, self.hidden_size, bias=False
-        )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -353,23 +335,17 @@ class Exaone4Attention(nn.Module):
         cos, sin = position_embeddings
         # We use global NoPE for hybrid attention model
         if self.sliding_window is None or self.is_sliding:
-            query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin
-            )
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
             cache_kwargs = {
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[
-                self.config._attn_implementation
-            ]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -405,10 +381,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
     def __init__(self, config: Exaone4Config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [
-                Exaone4DecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [Exaone4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -428,9 +401,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -439,9 +410,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
                 past_seen_tokens + inputs_embeds.shape[1],
@@ -467,9 +436,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
                 "full_attention": create_causal_mask(**mask_kwargs),
             }
             if "sliding_attention" in self.config.layer_types:
-                causal_mask_mapping["sliding_attention"] = (
-                    create_sliding_window_causal_mask(**mask_kwargs)
-                )
+                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 
