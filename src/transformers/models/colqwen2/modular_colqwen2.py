@@ -67,7 +67,7 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
-    image_processor_class = "Qwen2VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
@@ -226,8 +226,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
 
 class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
-    _supports_flash_attn = True
-    _supports_sdpa = True
+    pass
 
 
 @dataclass

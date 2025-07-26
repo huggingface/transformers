@@ -1790,7 +1790,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -2184,7 +2184,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tokens_decoder[int(idx)] = token
                     added_tokens_map[str(token)] = token
                 else:
-                    raise ValueError(
+                    raise TypeError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or an AddedToken instance"
                     )
         else:

@@ -44,7 +44,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-CACHE_CONFIG_MAPPING = {}
 NEED_SETUP_CACHE_CLASSES_MAPPING = {}
 QUANT_BACKEND_CLASSES_MAPPING = {}
 ALL_CACHE_IMPLEMENTATIONS = []
@@ -54,19 +53,14 @@ if is_torch_available():
         HQQQuantizedCache,
         HybridCache,
         HybridChunkedCache,
-        MambaCache,
         OffloadedHybridCache,
         OffloadedStaticCache,
-        QuantizedCacheConfig,
         QuantoQuantizedCache,
         SlidingWindowCache,
         StaticCache,
-        StaticCacheConfig,
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
-    CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
-    CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
@@ -75,12 +69,9 @@ if is_torch_available():
         "hybrid_chunked": HybridChunkedCache,
         "offloaded_hybrid": OffloadedHybridCache,
         "offloaded_hybrid_chunked": OffloadedHybridCache,
-        "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded", "dynamic"]
-    )
+    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
@@ -186,15 +177,12 @@ class GenerationConfig(PushToHubMixin):
             - `"offloaded_static"`: [`OffloadedStaticCache`]
             - `"sliding_window"`: [`SlidingWindowCache`]
             - `"hybrid"`: [`HybridCache`]
-            - `"mamba"`: [`MambaCache`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
-        cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
-            Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
-            it will be converted to its respective `CacheConfig` internally.
-            Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
+        cache_config (`dict`, *optional*, default to `None`):
+            Arguments used in the key-value cache class can be passed in `cache_config`.
         return_legacy_cache (`bool`, *optional*, default to `True`):
             Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
@@ -409,10 +397,16 @@ class GenerationConfig(PushToHubMixin):
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation is not None and self.cache_implementation in CACHE_CONFIG_MAPPING:
-            cache_config_class = CACHE_CONFIG_MAPPING[self.cache_implementation]
-            if isinstance(self.cache_config, dict):
-                self.cache_config = cache_config_class.from_dict(self.cache_config)
+        if self.cache_config is not None and not isinstance(self.cache_config, dict):
+            warnings.warn(
+                (
+                    "Passing a CacheConfig object is deprecated and will be removed in v4.55.0 in favor of a simpler dictionary."
+                ),
+                FutureWarning,
+                stacklevel=2,
+            )
+            self.cache_config = self.cache_config.to_dict()
+
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
@@ -614,17 +608,6 @@ class GenerationConfig(PushToHubMixin):
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
                 f"{ALL_CACHE_IMPLEMENTATIONS}"
             )
-        if self.cache_config is not None:
-            cache_class = CACHE_CONFIG_MAPPING.get(self.cache_implementation)
-            if cache_class is None:
-                raise ValueError(
-                    "You provided a `cache_config` but the cache implementation you are using "
-                    f"({self.cache_implementation}) does not require any config. Make sure to use the "
-                    "correct cache implementation matching your cache config."
-                )
-            if not isinstance(self.cache_config, cache_class):
-                self.cache_config = cache_class.from_dict(self.cache_config)
-            self.cache_config.validate()
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
             raise ValueError(
@@ -938,7 +921,7 @@ class GenerationConfig(PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
