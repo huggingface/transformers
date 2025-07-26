@@ -381,10 +381,10 @@ class Florence2VisionWindowAttention(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         batch_size, height, width, embed_dim = hidden_states.shape
 
+        # Pad the input if necessary
         pad_left = pad_top = 0
         pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        # Pad the input if necessary
         hidden_states = F.pad(hidden_states, (0, 0, pad_left, pad_right, pad_top, pad_bottom))
         _, padded_height, padded_width, _ = hidden_states.shape
 
@@ -413,7 +413,6 @@ class Florence2VisionWindowAttention(nn.Module):
             scaling=self.scale,
         )
         windowed_hidden_states = windowed_hidden_states.view(num_windows_per_batch, num_tokens_per_window, embed_dim)
-        # Apply output projection
         windowed_hidden_states = self.proj(windowed_hidden_states)
 
         # Merge windows back to original spatial layout

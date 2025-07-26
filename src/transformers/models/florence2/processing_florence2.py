@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 import re
 from typing import Any, Optional, Union
 
@@ -288,7 +287,7 @@ class Florence2Processor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
     def post_process_generation(
-        self, text=None, sequence=None, transition_scores=None, task=None, image_size=None
+        self, text=None, sequence=None, task=None, image_size=None
     ) -> dict[str, Any]:
         """
         Post-process generation outputs based on the task.
@@ -298,8 +297,6 @@ class Florence2Processor(ProcessorMixin):
                 Generated text.
             sequence (`Union[List[int], torch.Tensor]`, *optional*):
                 Generated token sequence.
-            transition_scores (`Union[List[float], torch.Tensor]`, *optional*):
-                Transition scores.
             task (`str`, *optional*):
                 The task for post-processing.
             image_size (`Tuple[int, int]`, *optional*):
@@ -315,7 +312,6 @@ class Florence2Processor(ProcessorMixin):
         parsed = self.post_processor(
             text=text,
             sequence=sequence,
-            transition_scores=transition_scores,
             image_size=image_size,
             parse_tasks=[post_proc_type],
         )[post_proc_type]
@@ -483,7 +479,6 @@ class Florence2PostProcessor:
             "COORDINATES_WIDTH_BINS": 1000,
             "COORDINATES_QUANTIZATION_MODE": "floor",
             "PARSE_TASKS": [
-                {"TASK_NAME": "od", "PATTERN": r"([a-zA-Z0-9 ]+)<loc_(\\d+)><loc_(\\d+)><loc_(\\d+)><loc_(\\d+)>"},
                 {
                     "TASK_NAME": "ocr",
                     "PATTERN": r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>",
@@ -645,40 +640,8 @@ class Florence2PostProcessor:
             spans.append(span)
         return text, spans
 
-    def parse_od_from_text_and_spans(
-        self, text: str, pattern: str, image_size: tuple[int, int], phrase_centric: bool = False
-    ) -> list[dict[str, Any]]:
-        """
-        Parse object detection results from text.
-
-        Args:
-            text (`str`):
-                The generated text.
-            pattern (`str`):
-                Regex pattern for matching.
-            image_size (`tuple[int, int]`):
-                Image size (width, height).
-            phrase_centric (`bool`, *optional*, defaults to `False`):
-                Whether parsing is phrase-centric.
-
-        Returns:
-            `list[dict[str, Any]]`: list of instances with 'bbox' and 'cat_name'.
-        """
-        matches = list(re.finditer(pattern, text))
-        instances = []
-        for match in matches:
-            if phrase_centric:
-                bbox_bins = [int(match.group(j)) for j in range(2, 6)]
-                cat_name = match.group(1).lower().strip()
-            else:
-                bbox_bins = [int(match.group(j)) for j in range(1, 5)]
-                cat_name = match.group(5).lower().strip()
-            bbox = self.box_quantizer.dequantize(torch.tensor([bbox_bins]), size=image_size)[0].tolist()
-            instances.append({"bbox": bbox, "cat_name": cat_name})
-        return instances
-
     def parse_ocr_from_text_and_spans(
-        self, text: str, pattern: str, image_size: tuple[int, int], area_threshold: float = 0.0
+        self, text: str, pattern: Optional[str], image_size: tuple[int, int], area_threshold: float = 0.0
     ) -> list[dict[str, Any]]:
         """
         Parse OCR results with quadrilateral boxes.
@@ -697,6 +660,8 @@ class Florence2PostProcessor:
             `list[dict[str, Any]]`: list of instances with 'quad_box' and 'text'.
         """
         text = text.replace("<s>", "")
+        if pattern is None:
+            pattern = r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>"
         matches = re.findall(pattern, text)
         instances = []
         width, height = image_size
@@ -768,9 +733,6 @@ class Florence2PostProcessor:
         self,
         text: str,
         image_size: tuple[int, int],
-        spans: Optional[list[tuple[int, int]]] = None,
-        scores: Optional[list[float]] = None,
-        score_mode: Optional[str] = None,
         allow_empty_phrase: bool = False,
     ) -> list[dict[str, Any]]:
         """
@@ -781,23 +743,20 @@ class Florence2PostProcessor:
                 The generated text.
             image_size (`tuple[int, int]`):
                 Image size (width, height).
-            spans (`Optional[list[tuple[int, int]]]`, *optional*):
-                Token spans for scoring.
-            scores (`Optional[list[float]]`, *optional*):
-                Transition scores for scoring.
-            score_mode (`Optional[str]`, *optional*):
-                Scoring mode ('avg_loc_scores' or 'avg_cat_name_scores').
             allow_empty_phrase (`bool`, *optional*, defaults to `False`):
                 Allow phrases without text.
 
         Returns:
             `list[dict[str, Any]]`: list of instances with 'bbox', 'cat_name', and optional 'score'.
         """
-        cur_span = 3 if text.startswith("<s>") else 0
         text = text.replace("<s>", "").replace("</s>", "").replace("<pad>", "")
 
-        pattern = r"(?:(?:<loc_\d+>){4,})" if allow_empty_phrase else r"([^<]+(?:<loc_\d+>){4,})"
+        if allow_empty_phrase:
+            pattern = r"(?:(?:<loc_\d+>){4,})"
+        else:
+            pattern = r"([^<]+(?:<loc_\d+>){4,})"
         phrases = re.findall(pattern, text)
+
         text_pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_)"
         box_pattern = r"<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>"
 
@@ -805,45 +764,22 @@ class Florence2PostProcessor:
         for phrase_text in phrases:
             phrase_text = phrase_text.replace("<ground>", "", 1).replace("<obj>", "", 1)
             if not phrase_text and not allow_empty_phrase:
-                cur_span += len(phrase_text)
                 continue
             match = re.search(text_pattern, phrase_text)
             if not match:
-                cur_span += len(phrase_text)
                 continue
-            phrase_span = match.span()
             phrase = match.group().strip()
             boxes_matches = list(re.finditer(box_pattern, phrase_text))
             if not boxes_matches:
-                cur_span += len(phrase_text)
                 continue
             bbox_bins = [[int(m.group(j)) for j in range(1, 5)] for m in boxes_matches]
             bboxes = self.box_quantizer.dequantize(torch.tensor(bbox_bins), size=image_size).tolist()
 
-            all_scores = None
-            if score_mode == "avg_loc_scores" and spans and scores:
-                bbox_spans = [m.span(0) for m in boxes_matches]
-                all_scores = []
-                for b_span in bbox_spans:
-                    token_inds = self._find_matched_token_indices((b_span[0] + cur_span, b_span[1] + cur_span), spans)
-                    loc_scores = [scores[i] for i in token_inds]
-                    all_scores.append(sum(loc_scores) / len(loc_scores) if loc_scores else 0)
-            elif score_mode == "avg_cat_name_scores" and spans and scores:
-                token_inds = self._find_matched_token_indices(
-                    (phrase_span[0] + cur_span, phrase_span[1] + cur_span), spans
-                )
-                cat_scores = [scores[i] for i in token_inds]
-                score = sum(cat_scores) / len(cat_scores) if cat_scores else 0
-                all_scores = [score] * len(bboxes)
-
             phrase = phrase.encode("ascii", "ignore").decode("ascii")
-            for idx, bbox in enumerate(bboxes):
+            for bbox in bboxes:
                 instance = {"bbox": bbox, "cat_name": phrase}
-                if all_scores is not None:
-                    instance["score"] = math.exp(all_scores[idx])
                 instances.append(instance)
 
-            cur_span += len(phrase_text)
         return instances
 
     def parse_description_with_polygons_from_text_and_spans(
@@ -880,11 +816,10 @@ class Florence2PostProcessor:
         """
         text = text.replace("<s>", "").replace("</s>", "").replace("<pad>", "")
 
-        pattern = (
-            rf"(?:(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
-            if allow_empty_phrase
-            else rf"([^<]+(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
-        )
+        if allow_empty_phrase:
+            pattern = rf"(?:(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
+        else:
+            pattern = rf"([^<]+(?:<loc_\d+>|{re.escape(polygon_sep_token)}|{re.escape(polygon_start_token)}|{re.escape(polygon_end_token)}){{4,}})"
         phrases = re.findall(pattern, text)
         phrase_pattern = r"^\s*(.*?)(?=<od>|</od>|<box>|</box>|<bbox>|</bbox>|<loc_|<poly>)"
         poly_instance_pattern = rf"{re.escape(polygon_start_token)}(.*?){re.escape(polygon_end_token)}"
@@ -892,23 +827,22 @@ class Florence2PostProcessor:
 
         instances = []
         for phrase_text in phrases:
-            phrase_text = re.sub(r"<loc_\d+>", "", phrase_text, count=1)  # Remove potential leading loc
-            if not phrase_text and not allow_empty_phrase:
+            phrase_text_strip = re.sub(r"^<loc_\d+>", "", phrase_text, count=1)
+            if not phrase_text_strip and not allow_empty_phrase:
                 continue
-            match = re.search(phrase_pattern, phrase_text)
+            match = re.search(phrase_pattern, phrase_text_strip)
             if not match:
                 continue
             phrase = match.group().strip()
 
-            poly_instances = (
-                re.findall(poly_instance_pattern, phrase_text)
-                if polygon_start_token in phrase_text and polygon_end_token in phrase_text
-                else [phrase_text]
-            )
+            if polygon_start_token in phrase_text and polygon_end_token in phrase_text:
+                poly_instances = [m.group(1) for m in re.finditer(poly_instance_pattern, phrase_text)]
+            else:
+                poly_instances = [phrase_text]
 
             for poly_inst in poly_instances:
-                poly_matches = re.finditer(box_pattern, poly_inst)
-                if not poly_matches:
+                poly_matches = list(re.finditer(box_pattern, poly_inst))
+                if len(poly_matches) == 0:
                     continue
                 bbox = []
                 polygons = []
@@ -936,9 +870,7 @@ class Florence2PostProcessor:
                 instances.append(instance)
         return instances
 
-    def __call__(
-        self, text=None, sequence=None, transition_scores=None, image_size=None, parse_tasks=None
-    ) -> dict[str, Any]:
+    def __call__(self, text=None, sequence=None, image_size=None, parse_tasks=None) -> dict[str, Any]:
         """
         Process model output and parse into task-specific results.
 
@@ -947,8 +879,6 @@ class Florence2PostProcessor:
                 Generated text. Either this or `sequence` must be provided.
             sequence (`Optional[Union[list[int], torch.Tensor]]`, *optional*):
                 Token sequence. Either this or `text` must be provided.
-            transition_scores (`Optional[Union[list[float], torch.Tensor]]`, *optional*):
-                Transition scores for computing instance scores.
             image_size (`Optional[tuple[int, int]]`, *optional*):
                 Image size (width, height) required for dequantization.
             parse_tasks (`Optional[Union[str, list[str]]]`, *optional*):
@@ -966,19 +896,11 @@ class Florence2PostProcessor:
         if (text is None and sequence is None) or (text is not None and sequence is not None):
             raise ValueError("Exactly one of 'text' or 'sequence' must be provided.")
 
-        spans = None
-        scores = None
         if sequence is not None:
             if isinstance(sequence, torch.Tensor):
                 sequence = sequence.tolist()
             sequence = sequence[1:] if sequence[0] == self.tokenizer.bos_token_id else sequence  # Skip BOS if present
-            text, spans = self.decode_with_spans(sequence)
-            if transition_scores is not None:
-                if isinstance(transition_scores, torch.Tensor):
-                    transition_scores = transition_scores.tolist()
-                if len(sequence) != len(transition_scores):
-                    raise ValueError("Sequence and transition_scores must have the same length.")
-                scores = transition_scores
+            text, _ = self.decode_with_spans(sequence)
 
         parsed_dict = {"text": text}
 
@@ -999,7 +921,7 @@ class Florence2PostProcessor:
                 parsed_dict["pure_text"] = text
             elif task == "description_with_bboxes":
                 parsed_dict["description_with_bboxes"] = self.parse_description_with_bboxes_from_text_and_spans(
-                    text, image_size=image_size, spans=spans, scores=scores, score_mode=config.get("SCORE_MODE")
+                    text, image_size=image_size
                 )
             elif task == "description_with_polygons":
                 parsed_dict["description_with_polygons"] = self.parse_description_with_polygons_from_text_and_spans(
@@ -1019,8 +941,8 @@ class Florence2PostProcessor:
                 else:
                     instances = self.parse_description_with_bboxes_from_text_and_spans(text, image_size=image_size)
                 parsed_dict["description_with_bboxes_or_polygons"] = instances
-            elif task == "od":
-                parsed_dict["od"] = self.parse_od_from_text_and_spans(text, pattern=pattern, image_size=image_size)
+            else:
+                raise ValueError("task {} is not supported".format(task))
 
         return parsed_dict
 
