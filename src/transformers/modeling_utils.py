@@ -4617,10 +4617,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if device_mesh is None:
                 tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
-                # TODO: make device_mesh support multiple dimensions
-                if device_mesh.ndim > 1:
-                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
-                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+                if "tp" not in device_mesh.mesh_dim_names:
+                    raise ValueError(
+                        "When using `tp_plan`, the `device_mesh` must contain a 'tp' dimension. "
+                        "Please provide a valid `device_mesh`."
+                    )
+                device_mesh = device_mesh["tp"]
+                tp_size = device_mesh["tp"].size()
+                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
