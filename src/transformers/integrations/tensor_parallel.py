@@ -1024,6 +1024,7 @@ def shard_and_distribute_module(
             logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
         else:
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
+    current_shard_plan = current_shard_plan or "replicate"
 
     if current_shard_plan is not None:
         try:
