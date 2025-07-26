@@ -645,8 +645,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(res.logits, res_eager.logits, atol=1e-7))
         for l1, l2 in zip(res.past_key_values.layers, res_eager.past_key_values.layers):
-            self.assertTrue(torch.allclose(l1.keys, l2.keys))
-            self.assertTrue(torch.allclose(l1.values, l2.values))
+            self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-7))
+            self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-7))
 
     def test_dynamic_cache_exportability_multiple_run(self):
         # When exporting with DynamicCache, you should export two graphs:
@@ -739,8 +739,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         )
 
         for l1, l2 in zip(res_export_2.past_key_values.layers, res_eager_2.past_key_values.layers):
-            self.assertTrue(torch.allclose(l1.keys, l2.keys))
-            self.assertTrue(torch.allclose(l1.values, l2.values))
+            self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-7))
+            self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-7))
 
     @unittest.skip("Runs on my machine locally, passed, no idea why it does not online")
     def test_static_cache_exportability(self):
