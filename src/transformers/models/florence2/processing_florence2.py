@@ -192,10 +192,9 @@ class Florence2Processor(ProcessorMixin):
             **kwargs,
         )
 
+        image_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            image_inputs = {}
 
         if text is None:
             logger.warning_once("You are using Florence-2 without a text prefix.")
@@ -210,7 +209,8 @@ class Florence2Processor(ProcessorMixin):
             raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
         prompt_strings = self._construct_prompts(text)
-        # try to expand inputs in processing if we have the necessary parts
+
+        # Add image tokens and special tokens if images are provided
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
             expanded_image_prompts = []
@@ -286,9 +286,7 @@ class Florence2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def post_process_generation(
-        self, text=None, sequence=None, task=None, image_size=None
-    ) -> dict[str, Any]:
+    def post_process_generation(self, text=None, sequence=None, task=None, image_size=None) -> dict[str, Any]:
         """
         Post-process generation outputs based on the task.
 
@@ -378,7 +376,7 @@ class Quantizer:
         self.mode = mode
         self.bins = bins  # (width_bins, height_bins)
 
-    def quantize(self, locations, size: tuple[int, int]):
+    def quantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         """
         Quantize locations.
 
@@ -413,7 +411,7 @@ class Quantizer:
         else:
             raise ValueError(f"Unsupported location shape: last dim must be 2 or 4, got {locations.shape[-1]}.")
 
-    def dequantize(self, locations, size: tuple[int, int]):
+    def dequantize(self, locations: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         """
         Dequantize locations back to original scale.
 
@@ -431,19 +429,20 @@ class Quantizer:
         per_bin_w = size_w / bins_w
         per_bin_h = size_h / bins_h
 
+        # Add 0.5 to use the center position of the bin as the coordinate.
         if locations.shape[-1] == 4:  # Bounding boxes
             xmin, ymin, xmax, ymax = locations.split(1, dim=-1)
             dq_xmin = (xmin + 0.5) * per_bin_w
             dq_ymin = (ymin + 0.5) * per_bin_h
             dq_xmax = (xmax + 0.5) * per_bin_w
             dq_ymax = (ymax + 0.5) * per_bin_h
-            return torch.cat([dq_xmin, dq_ymin, dq_xmax, dq_ymax], dim=-1)
+            return torch.cat([dq_xmin, dq_ymin, dq_xmax, dq_ymax], dim=-1).int()
 
         elif locations.shape[-1] == 2:  # Points/coordinates
             x, y = locations.split(1, dim=-1)
             dq_x = (x + 0.5) * per_bin_w
             dq_y = (y + 0.5) * per_bin_h
-            return torch.cat([dq_x, dq_y], dim=-1)
+            return torch.cat([dq_x, dq_y], dim=-1).int()
 
         else:
             raise ValueError(f"Unsupported location shape: last dim must be 2 or 4, got {locations.shape[-1]}.")
@@ -494,7 +493,7 @@ class Florence2PostProcessor:
             ],
         }
 
-    def _create_black_list_of_phrase_grounding(self) -> set:
+    def _create_black_list_of_phrase_grounding(self) -> set[str]:
         black_list = set()
         if "phrase_grounding" in self.parse_tasks and self.parse_task_configs["phrase_grounding"].get(
             "FILTER_BY_BLACK_LIST", False
@@ -659,12 +658,14 @@ class Florence2PostProcessor:
         Returns:
             `list[dict[str, Any]]`: list of instances with 'quad_box' and 'text'.
         """
-        text = text.replace("<s>", "")
+        text = text.replace("<s>", "").replace("</s>", "").replace("<pad>", "")
         if pattern is None:
             pattern = r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>"
+
         matches = re.findall(pattern, text)
         instances = []
         width, height = image_size
+
         for content, *quad_str in matches:
             quad_bins = [int(i) for i in quad_str]
             quad_box = (
@@ -676,13 +677,15 @@ class Florence2PostProcessor:
             if area_threshold > 0:
                 x_coords = quad_box[0::2]
                 y_coords = quad_box[1::2]
+                # Apply the Shoelace formula
                 area = 0.5 * abs(
-                    sum(x_coords[i] * y_coords[(i + 1) % 4] - x_coords[(i + 1) % 4] * y_coords[i] for i in range(4))
+                    sum(x_coords[i] * y_coords[i + 1] - x_coords[i + 1] * y_coords[i] for i in range(4 - 1))
                 )
+
                 if area < (width * height) * area_threshold:
                     continue
 
-            instances.append({"quad_box": quad_box, "text": content})
+            instances.append({"quad_box": quad_box, "text": content.strip()})
         return instances
 
     def parse_phrase_grounding_from_text_and_spans(
