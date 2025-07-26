@@ -51,6 +51,10 @@ def extract_classes_and_imports(file_path):
             module = node.module if isinstance(node, ast.ImportFrom) else None
             if module and (".modeling_" in module or "transformers.models" in module):
                 imports.add(module)
+                
+    if len(imports) == 0:
+        raise Exception(f"No imports from the modeling files found in {file_path}. Please check your imports in the modular file.")
+
     return imports
 
 
