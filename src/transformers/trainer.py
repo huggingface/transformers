@@ -3953,6 +3953,9 @@ class Trainer:
             if IS_SAGEMAKER_MP_POST_1_10:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
+        elif self.model._tp_size and self.model._tp_size > 1:
+            if self.accelerator.process_index < self.accelerator.state.device_mesh[("tp",)].size():
+                self._save(output_dir)
         elif self.is_fsdp_enabled:
             if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
                 version.parse(accelerate_version) > version.parse("0.24.1")
@@ -3975,9 +3978,6 @@ class Trainer:
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
-        elif self.model._tp_size and self.model._tp_size > 1:
-            if self.accelerator.process_index < self.accelerator.state.device_mesh[("tp",)].size():
-                self._save(output_dir)
         elif self.args.should_save:
             self._save(output_dir)
 
