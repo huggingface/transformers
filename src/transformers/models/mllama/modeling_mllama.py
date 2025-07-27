@@ -496,8 +496,8 @@ class MllamaTextCrossAttention(nn.Module):
                 )
         elif cache_position[0] != 0:
             key_states, value_states = (
-                past_key_value.key_cache[self.layer_idx],
-                past_key_value.value_cache[self.layer_idx],
+                past_key_value.layers[self.layer_idx].keys,
+                past_key_value.layers[self.layer_idx].values,
             )
         else:
             raise ValueError(
@@ -850,7 +850,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaSelfAttentionDecoderLayer",
     ]
 
-    _supports_static_cache = False  # static cache cannot have different shapes for each layer
+    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1273,12 +1273,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -1455,7 +1449,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
 )
 class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config: MllamaTextConfig
-    _supports_static_cache = True  # only the LLM without cross attn can do compile
+    _can_compile_fullgraph = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1467,18 +1461,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1774,12 +1756,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)

@@ -1119,7 +1119,8 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
-        self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
+        generation_config = model.generation_config if generation_config is None else generation_config
+        self.logit_processor = self.model._get_logits_processor(generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
         self.profile = getattr(generation_config, "profile", False)
         self.manual_eviction = manual_eviction
@@ -1271,6 +1272,11 @@ class ContinuousBatchingManager:
 
     @traced(span_name="logit_processing")
     def _process_logit(self, batch_data, logits):
+        # Pass continuous batching context to logits processor if it supports it. TODO we should find a way to make this a little bit cleaner!
+        if hasattr(self.logit_processor, "set_continuous_batching_context"):
+            self.logit_processor.set_continuous_batching_context(
+                batch_data["logits_indices"], batch_data["cumulative_seqlens_q"]
+            )
         return self.logit_processor(batch_data["input_ids"], logits)
 
     @traced(span_name="sampling")
