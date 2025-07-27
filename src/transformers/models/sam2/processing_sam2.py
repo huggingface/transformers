@@ -609,7 +609,7 @@ class Sam2Processor(ProcessorMixin):
         self,
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
-        obj_ids: Union[list[int], int],
+        obj_ids: list[int],
         input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
         input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
