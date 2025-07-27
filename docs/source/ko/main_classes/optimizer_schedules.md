@@ -18,24 +18,24 @@ rendered properly in your Markdown viewer.
 
 `.optimization` 모듈은 다음을 제공합니다:
 
-- 파인튜닝된 모델에 사용할 수 있는 가중치 감쇠가 고정된 옵티마이저, 그리고
-- `_LRSchedule`을 상속받는 스케줄 객체 형태의 여러 스케줄:
+- 파인튜닝된 모델에 사용할 수 있는 가중치 감쇠가 수정된 옵티마이저
+- `_LRSchedule`에서 상속받는 스케줄 객체 형태의 여러 스케줄들
 - 여러 배치의 그래디언트를 누적하는 그래디언트 누적 클래스
 
 
-## AdaFactor (PyTorch)
+## AdaFactor (PyTorch)[[transformers.Adafactor]]
 
 [[autodoc]] Adafactor
 
-## AdamWeightDecay (TensorFlow)
+## AdamWeightDecay (TensorFlow)[[transformers.AdamWeightDecay]]
 
 [[autodoc]] AdamWeightDecay
 
 [[autodoc]] create_optimizer
 
-## 스케줄
+## 스케줄[[schedules]]
 
-### 학습률 스케줄 (PyTorch)
+### 학습률 스케줄 (PyTorch)[[transformers.SchedulerType]]
 
 [[autodoc]] SchedulerType
 
@@ -65,12 +65,12 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] get_wsd_schedule
 
-### 워밍업 (TensorFlow)
+### 웜업 (TensorFlow)[[transformers.WarmUp]]
 
 [[autodoc]] WarmUp
 
-## 그래디언트 전략
+## 그래디언트 전략[[gradient-strategies]]
 
-### GradientAccumulator (TensorFlow)
+### GradientAccumulator (TensorFlow)[[transformers.GradientAccumulator]]
 
 [[autodoc]] GradientAccumulator
