@@ -101,7 +101,7 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y torch torchvision torchaudio codecarbon torchcodec
-          python3 -m pip install --no-cache-dir torch torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/test/cu126
+          python3 -m pip install --no-cache-dir torch==2.8.0 torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/test/cu126
           python3 -m pip install --no-cache-dir codecarbon==3.0.2
 
       - name: Show installed libraries and their versions
