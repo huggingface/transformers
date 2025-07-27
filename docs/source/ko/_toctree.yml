@@ -328,8 +328,8 @@
       title: 텍스트 생성
     - local: main_classes/onnx
       title: ONNX
-    - local: in_translation
-      title: (번역중) Optimization
+    - local: main_classes/optimizer_schedules
+      title: 최적화
     - local: main_classes/output
       title: 모델 출력
     - local: in_translation
