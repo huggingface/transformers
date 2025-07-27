@@ -113,6 +113,7 @@ class TrainerState:
     trial_name: Optional[str] = None
     trial_params: dict[str, Union[str, float, int, bool]] = None
     stateful_callbacks: list["TrainerCallback"] = None
+    steps_trained_in_current_epoch: Optional[int] = None
 
     def __post_init__(self):
         if self.log_history is None:

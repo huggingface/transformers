@@ -2454,9 +2454,11 @@ class Trainer:
             self.compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
             epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
-            if not args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
-                steps_trained_in_current_epoch *= args.gradient_accumulation_steps
+            if (
+                hasattr(self.state, "steps_trained_in_current_epoch")
+                and self.state.steps_trained_in_current_epoch is not None
+            ):
+                steps_trained_in_current_epoch = self.state.steps_trained_in_current_epoch
             else:
                 steps_trained_in_current_epoch = 0
 
@@ -2555,6 +2557,7 @@ class Trainer:
                     # Skip past any already trained steps if resuming training
                     if steps_trained_in_current_epoch > 0:
                         steps_trained_in_current_epoch -= 1
+                        self.state.steps_trained_in_current_epoch = steps_trained_in_current_epoch
                         if steps_trained_progress_bar is not None:
                             steps_trained_progress_bar.update(1)
                         if steps_trained_in_current_epoch == 0:
