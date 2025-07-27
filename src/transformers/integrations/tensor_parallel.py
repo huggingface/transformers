@@ -1081,6 +1081,8 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 def distribute_model(model, distributed_config, device_mesh, tp_size):
     _plan = "_tp_plan"
     model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
+    model._tp_size = tp_size
+    model._device_mesh = device_mesh
     if distributed_config is not None:
         distributed_config = DistributedConfig.from_config(distributed_config)
         if distributed_config.enable_expert_parallel:
