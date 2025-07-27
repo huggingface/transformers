@@ -781,11 +781,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
-    def test_tied_model_weights_key_ignore(self):
-        pass
-
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
 
