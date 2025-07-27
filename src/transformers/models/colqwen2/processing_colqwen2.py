@@ -66,7 +66,7 @@ class ColQwen2Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
 
-    image_processor_class = "Qwen2VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(

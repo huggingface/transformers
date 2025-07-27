@@ -11,27 +11,48 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import base64
 import copy
+import datetime
+import enum
 import functools
+import gc
+import io
 import json
 import re
+import tempfile
+import threading
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
+from io import BytesIO
 from threading import Thread
-from typing import Generator, Optional
+from typing import Generator, Iterable, Optional, Union
 
-from huggingface_hub import ModelInfo, model_info
+from huggingface_hub import model_info
+from huggingface_hub.constants import HF_HUB_OFFLINE
+from PIL import Image
 
+import transformers
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+)
 from transformers.utils.import_utils import (
     is_fastapi_available,
+    is_librosa_available,
     is_openai_available,
     is_pydantic_available,
     is_uvicorn_available,
 )
 
-from .. import LogitsProcessorList, PreTrainedTokenizerFast, TextIteratorStreamer
+from .. import (
+    AutoConfig,
+    LogitsProcessorList,
+    PreTrainedTokenizerFast,
+    ProcessorMixin,
+    TextIteratorStreamer,
+)
 from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
 from ..utils import is_torch_available, logging
 from . import BaseTransformersCLICommand
@@ -41,12 +62,14 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
+        AutoProcessor,
         BitsAndBytesConfig,
         GenerationConfig,
         PreTrainedModel,
     )
+
+if is_librosa_available():
+    import librosa
 
 serve_dependencies_available = (
     is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
@@ -56,6 +79,9 @@ if serve_dependencies_available:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types.audio.transcription import Transcription
+    from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
+    from openai.types.chat import ChatCompletionMessageParam
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         Choice,
@@ -90,20 +116,28 @@ if serve_dependencies_available:
         OpenAI's ResponseCreateParamsStreaming with an additional field for the generation config (as a json string).
         """
 
-        generation_config: Optional[str]
+        generation_config: str
 
     class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
         """
-        OpenAI's CompletionCreateParamsStreaming with additional fields for the generation config (as a json string)
-        and the request ID to re-use the previous KV cache.
+        OpenAI's CompletionCreateParamsStreaming with an additional field for the generation config (as a json string).
         """
 
-        generation_config: Optional[str]
-        request_id: Optional[str]
+        generation_config: str
 
-    # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have validation
+    class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
+        """
+        OpenAI's TranscriptionCreateParamsBase with an additional field for the generation config (as a json string).
+        """
+
+        file: bytes  # Overwritten -- pydantic isn't happy with `typing.IO[bytes]`, present in the original type
+        generation_config: str
+        stream: Optional[bool] = False
+
+    # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
     completion_validator = TypeAdapter(TransformersCompletionCreateParamsStreaming)
+    transcription_validator = TypeAdapter(TransformersTranscriptionCreateParams)
 
     # Define request fields that are not yet used in `transformers serve`. Receiving these fields will raise an
     # HTTPException.
@@ -146,6 +180,14 @@ if serve_dependencies_available:
         "user",
         "web_search_options",
     }
+    UNUSED_TRANSCRIPTION_FIELDS = {
+        "chunking_strategy",
+        "include",
+        "language",
+        "prompt",
+        "response_format",
+        "timestamp_granularities",
+    }
 
 
 logger = logging.get_logger(__name__)
@@ -159,6 +201,13 @@ _TOOL_CALL_TOKENS = {
     },
 }
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
+
+
+class Modality(enum.Enum):
+    LLM = "LLM"
+    VLM = "VLM"
+    STT = "STT"
+    TTS = "TTS"
 
 
 def serve_command_factory(args: Namespace):
@@ -226,10 +275,6 @@ def create_generation_config_from_req(
     if req.get("seed") is not None:
         torch.manual_seed(req["seed"])
 
-    # Sets server-specific defaults, if unset
-    if generation_config.max_new_tokens is None:
-        generation_config.max_new_tokens = 1024
-
     return generation_config
 
 
@@ -247,6 +292,53 @@ class ToolState:
         self.buffer = ""
 
 
+class TimedModel:
+    """
+    A class that holds a PreTrainedModel instance and its associated processor.
+    Automatically deletes the instances after a specified timeout.
+    """
+
+    def __init__(
+        self,
+        model: "PreTrainedModel",
+        timeout_seconds: int,
+        processor: Optional[Union["ProcessorMixin", "PreTrainedTokenizerFast"]] = None,
+    ):
+        self.model = model
+        self._name_or_path = str(model.name_or_path)
+        self.processor = processor
+        self.timeout_seconds = timeout_seconds
+        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer.start()
+
+    def reset_timer(self):
+        """Reset the timer for the deletion of the instances."""
+        self._timer.cancel()
+        self._timer = threading.Timer(self.timeout_seconds, self._delete_model)
+        self._timer.start()
+
+    def _delete_model(self):
+        """Delete the wrapped model and processor and clean up resources."""
+        if hasattr(self, "model") and self.model is not None:
+            del self.model
+            del self.processor
+            self.model = None
+            self.processor = None
+            gc.collect()
+
+            # Clear CUDA cache if available
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            logger.info(
+                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
+            )
+
+    def is_deleted(self):
+        """Check if the instances have been deleted."""
+        return not hasattr(self, "model") or self.model is None
+
+
 @dataclass
 class ServeArguments:
     r"""
@@ -256,7 +348,13 @@ class ServeArguments:
     `transformers serve --help`
     """
 
-    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    device: str = field(
+        default="auto",
+        metadata={
+            "help": "Device to use for inference; will default to `auto` and"
+            "place the model on an accelerator if available."
+        },
+    )
     torch_dtype: Optional[str] = field(
         default="auto",
         metadata={
@@ -289,6 +387,10 @@ class ServeArguments:
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
+    model_timeout: int = field(
+        default=300,
+        metadata={"help": "Time in seconds after which a model will be removed from memory."},
+    )
 
     # Other settings
     log_level: str = field(
@@ -357,16 +459,15 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
         # Internal state:
-        # 1. Tracks the most recently used model, to prevent reloading the model unnecessarily
-        self.loaded_model: Optional[str] = None
+        # 1. Tracks models in memory, to prevent reloading the model unnecessarily
+        self.loaded_models: dict[str, TimedModel] = {}
         self.running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
-        self.model: PreTrainedModel
-        self.tokenizer: PreTrainedTokenizerFast
 
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefil
         self.last_messages = None
         self.last_kv_cache = None
+        self.last_model = None
 
     def _validate_request(
         self,
@@ -433,10 +534,19 @@ class ServeCommand(BaseTransformersCLICommand):
             unused_fields=UNUSED_CHAT_COMPLETION_FIELDS,
         )
 
+    def validate_transcription_request(self, request: dict):
+        self._validate_request(
+            request=request,
+            schema=TransformersTranscriptionCreateParams,
+            validator=transcription_validator,
+            unused_fields=UNUSED_TRANSCRIPTION_FIELDS,
+        )
+
     def build_chat_completion_chunk(
         self,
         request_id: Optional[str] = "",
         content: Optional[str] = None,
+        model: Optional[str] = None,
         role: Optional[str] = None,
         finish_reason: Optional[str] = None,
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
@@ -452,6 +562,8 @@ class ServeCommand(BaseTransformersCLICommand):
                 The request ID.
             content (`str`, *optional*):
                 Content of the response from the model.
+            model (`str`, *optional*):
+                The model that generated the content.
             role (`str`, *optional*):
                 The role of the next content, until a new role is defined.
             finish_reason (`str`, *optional*):
@@ -465,7 +577,7 @@ class ServeCommand(BaseTransformersCLICommand):
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
-            model=self.loaded_model,
+            model=model,
             choices=[
                 Choice(
                     delta=ChoiceDelta(
@@ -529,27 +641,35 @@ class ServeCommand(BaseTransformersCLICommand):
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
 
+        from fastapi import Request
+
+        @app.post("/v1/audio/transcriptions")
+        async def audio_transcriptions(request: Request):
+            # Parses the multipart/form-data request into the request format used by other endpoints
+            async with request.form() as form:
+                parsed_request = TransformersTranscriptionCreateParams(
+                    file=await form["file"].read(),
+                    model=form["model"],
+                    # TODO: add other fields
+                )
+                logger.debug(
+                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
+                    f"size: {form['file'].size / 1024:.2f} KiB"
+                )
+            self.validate_transcription_request(request=parsed_request)
+
+            output = self.generate_transcription(parsed_request)
+            return StreamingResponse(output, media_type="text/event-stream")
+
+        @app.options("/v1/models")
         @app.get("/v1/models")
         def get_all_models():
-            return JSONResponse(
-                {
-                    "object": "list",
-                    "data": [
-                        {
-                            "id": model.id,
-                            "object": "model",
-                            "created": model.created_at.timestamp(),
-                            "owned_by": model.author,
-                        }
-                        for model in self.get_text_gen_models()
-                    ],
-                }
-            )
+            return JSONResponse({"object": "list", "data": self.get_gen_models()})
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
     @functools.lru_cache(maxsize=None)
-    def get_text_gen_models(self) -> list[ModelInfo]:
+    def get_gen_models(self) -> list[dict[str, any]]:
         """
         This is by no means a limit to which models may be instantiated with `transformers serve`: any chat-based
         model working with generate can work.
@@ -557,17 +677,43 @@ class ServeCommand(BaseTransformersCLICommand):
         This is a limited list of models to ensure we have a discoverable /v1/models endpoint for third-party
         integrations.
         """
-        return [
-            model_info("Menlo/Jan-nano"),
-            model_info("Menlo/Jan-nano-128k"),
-            model_info("Qwen/Qwen2.5-0.5B-Instruct"),
-            model_info("Qwen/Qwen2.5-3B-Instruct"),
-            model_info("Qwen/Qwen2.5-7B-Instruct"),
-            model_info("Qwen/Qwen2.5-14B-Instruct"),
-            model_info("meta-llama/Llama-3.1-8B-Instruct"),
-            model_info("meta-llama/Llama-3.2-1B-Instruct"),
-            model_info("meta-llama/Llama-3.3-70B-Instruct"),
+        models = [
+            "Menlo/Jan-nano",
+            "Menlo/Jan-nano-128k",
+            "Qwen/Qwen2.5-0.5B-Instruct",
+            "Qwen/Qwen2.5-3B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct",
+            "Qwen/Qwen2.5-14B-Instruct",
+            "meta-llama/Llama-3.1-8B-Instruct",
+            "meta-llama/Llama-3.2-1B-Instruct",
+            "meta-llama/Llama-3.3-70B-Instruct",
+            "HuggingFaceTB/SmolVLM-Instruct",
+            "ibm-granite/granite-vision-3.2-2b",
+            "Qwen/Qwen2.5-VL-7B-Instruct",
+            "OpenGVLab/InternVL3-1B",
         ]
+
+        if HF_HUB_OFFLINE:
+            return [
+                {
+                    "id": model,
+                    "object": "model",
+                    "created": datetime.datetime.now().timestamp(),
+                    "owned_by": model.split("/")[0],
+                }
+                for model in models
+            ]
+        else:
+            model_infos = [model_info(model) for model in models]
+            return [
+                {
+                    "id": model.id,
+                    "object": "model",
+                    "created": model.created_at.timestamp(),
+                    "owned_by": model.author,
+                }
+                for model in model_infos
+            ]
 
     def continuous_batching_chat_completion(self, req: dict) -> Generator[str, None, None]:
         """
@@ -579,22 +725,24 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
         """
-        if self.args.force_model is not None:
-            req["model"] = self.args.force_model
 
-        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
-        if update_model:
+        model_id_and_revision = self.process_model_name(req["model"])
+        must_discard_cache = model_id_and_revision != self.last_model
+        self.last_model = model_id_and_revision
+        if must_discard_cache:
             # When switching models, terminate a continuous batching manager if it is running.
             if self.running_continuous_batching_manager is not None:
                 self.running_continuous_batching_manager.stop(block=True, timeout=2)
                 self.running_continuous_batching_manager = None
-            self.load_model_and_tokenizer(req["model"], self.args)
+        model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
             req,
-            model_generation_config=self.model.generation_config,
-            eos_token_id=self.tokenizer.eos_token_id,
-            pad_token_id=self.tokenizer.pad_token_id,
+            model_generation_config=model.generation_config,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
             use_cache=False,
             num_blocks=1,
             block_size=1024,
@@ -604,7 +752,7 @@ class ServeCommand(BaseTransformersCLICommand):
         )
 
         if self.running_continuous_batching_manager is None:
-            self.running_continuous_batching_manager = self.model.init_continuous_batching(
+            self.running_continuous_batching_manager = model.init_continuous_batching(
                 generation_config=generation_config, streaming=True
             )
 
@@ -614,9 +762,9 @@ class ServeCommand(BaseTransformersCLICommand):
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = self.tokenizer.apply_chat_template(
-            req["messages"], return_tensors="pt", add_generation_prompt=True
-        ).to(self.model.device)
+        inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
+            model.device
+        )
 
         def stream_chat_completion(_inputs):
             try:
@@ -628,7 +776,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant")
+                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 for result in self.running_continuous_batching_manager:
                     if result.request_id != request_id:
@@ -641,16 +789,64 @@ class ServeCommand(BaseTransformersCLICommand):
 
                     finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
                     if result.status == RequestStatus.FINISHED:
-                        yield self.build_chat_completion_chunk(request_id, finish_reason=finish_reason)
+                        yield self.build_chat_completion_chunk(
+                            request_id, finish_reason=finish_reason, model=model_id_and_revision
+                        )
                         break
                     else:
-                        yield self.build_chat_completion_chunk(request_id=request_id, content=result.next_token)
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id, content=result.next_token, model=model_id_and_revision
+                        )
 
             except Exception as e:
                 logger.error(str(e))
                 yield f'data: {{"error": "{str(e)}"}}'
 
         return stream_chat_completion(inputs[0])
+
+    @staticmethod
+    def get_model_modality(model: PreTrainedModel) -> Modality:
+        model_classname = model.__class__.__name__
+        if model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
+            modality = Modality.VLM
+        elif model_classname in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            modality = Modality.LLM
+        else:
+            raise ValueError(f"Unknown modality: {model_classname}")
+
+        return modality
+
+    @staticmethod
+    def get_processor_inputs_from_inbound_messages(messages, modality: Modality):
+        processor_inputs = []
+
+        for message in messages:
+            parsed_message = {"role": message["role"], "content": []}
+
+            if modality == Modality.LLM:
+                # If we're working with LLMs, then "content" is a single string.
+                content = message["content"] if isinstance(message["content"], str) else message["content"]["text"]
+                parsed_message["content"] = content
+
+            elif modality == Modality.VLM:
+                # If we're working with VLMs, then "content" is a dictionary, containing a "type" key indicating
+                # which other key will be present and the type of the value of said key.
+                if isinstance(message["content"], str):
+                    parsed_message["content"].append({"type": "text", "text": message["content"]})
+                else:
+                    for content in message["content"]:
+                        if content["type"] == "text":
+                            parsed_message["content"].append(content)
+                        elif content["type"] == "image_url":
+                            image_data = re.sub("^data:image/.+;base64,", "", content["image_url"]["url"])
+                            image = Image.open(BytesIO(base64.b64decode(image_data)))
+
+                            file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                            image.save(file.name)
+
+                            parsed_message["content"].append({"type": "image", "url": file.name})
+            processor_inputs.append(parsed_message)
+        return processor_inputs
 
     def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
         """
@@ -665,19 +861,26 @@ class ServeCommand(BaseTransformersCLICommand):
         if self.args.force_model is not None:
             req["model"] = self.args.force_model
 
-        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
-        if update_model:
-            self.load_model_and_tokenizer(req["model"], self.args)
+        messages: Iterable[ChatCompletionMessageParam] = req["messages"]
 
         # HACK for tiny-agents: it sends a request after the assistant message (???). Let's assume we can't have a
         # request whose last message is from the assistant.
-        if req["messages"][-1]["role"] == "assistant":
+        if messages[-1]["role"] == "assistant":
             return
+
+        model_id_and_revision = self.process_model_name(req["model"])
+        must_discard_cache = model_id_and_revision != self.last_model
+
+        self.last_model = model_id_and_revision
+        model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        modality = self.get_model_modality(model)
+        processor_inputs = self.get_processor_inputs_from_inbound_messages(messages, modality)
 
         # ====== TOOL PREPROCESSING LOGIC ======
         tool_model_family = None
         for supported_model_families in _MODELS_WITH_TOOL_SUPPORT:
-            if supported_model_families in self.model.config.architectures[0].lower():
+            if supported_model_families in model.config.architectures[0].lower():
                 tool_model_family = supported_model_families
                 break
         # TODO: trigger 2 constrained generations after the tool call start token is emitted:
@@ -685,27 +888,26 @@ class ServeCommand(BaseTransformersCLICommand):
         # 2. force generation to pick from that tool's arguments
         # ====== END OF TOOL PREPROCESSING LOGIC ======
 
-        if tool_model_family is not None:
-            text = self.tokenizer.apply_chat_template(
-                req["messages"], add_generation_prompt=True, tokenize=False, tools=req.get("tools")
-            )
-        else:
-            text = self.tokenizer.apply_chat_template(req["messages"], add_generation_prompt=True, tokenize=False)
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
+        inputs = processor.apply_chat_template(
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=req.get("tools", None),
+            return_tensors="pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        inputs = inputs.to(model.device)
         request_id = req.get("request_id", "req_0")
 
-        generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config = create_generation_config_from_req(
-            req, model_generation_config=self.model.generation_config
-        )
+        generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
+        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
-        if self.is_continuation(req) and not update_model:
+        if self.is_continuation(req) and not must_discard_cache:
             last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
-            "inputs": inputs,
-            "attention_mask": torch.ones_like(inputs),
+            **inputs,
             "streamer": generation_streamer,
             "generation_config": generation_config,
             "return_dict_in_generate": True,
@@ -715,7 +917,7 @@ class ServeCommand(BaseTransformersCLICommand):
         def stream_chat_completion(streamer, _request_id):
             # Thin wrapper to save the KV cache after generation
             def generate_with_cache(**kwargs):
-                generate_output = self.model.generate(**kwargs)
+                generate_output = model.generate(**kwargs)
                 self.last_kv_cache = generate_output.past_key_values
 
             thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
@@ -726,7 +928,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant")
+                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 for result in streamer:
                     # ====== TOOL CALL LOGIC ======
@@ -740,10 +942,13 @@ class ServeCommand(BaseTransformersCLICommand):
                         if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
                             tool_state.reset()
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, finish_reason="tool_calls"
+                                request_id=_request_id,
+                                role=None,
+                                finish_reason="tool_calls",
+                                model=model_id_and_revision,
                             )
-                            continue
 
+                            continue
                         # Inside a tool call
                         if tool_state.inside_tool_call:
                             tool_state.buffer += result
@@ -789,15 +994,17 @@ class ServeCommand(BaseTransformersCLICommand):
                                 )
 
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, tool_calls=[tool]
+                                request_id=_request_id, role=None, tool_calls=[tool], model=model_id_and_revision
                             )
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
 
                     # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
                     if result != "":
-                        yield self.build_chat_completion_chunk(_request_id, content=result)
-                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop")
+                        yield self.build_chat_completion_chunk(
+                            _request_id, content=result, model=model_id_and_revision
+                        )
+                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop", model=model_id_and_revision)
 
                 thread.join()
             except Exception as e:
@@ -820,24 +1027,19 @@ class ServeCommand(BaseTransformersCLICommand):
             `Generator[str, None, None]`: A generator that yields the OpenAI Response events.
         """
         # TODO -- Implement non-streaming mode
-        if self.args.force_model is not None:
-            req["model"] = self.args.force_model
+        model_id_and_revision = self.process_model_name(req["model"])
+        must_discard_cache = model_id_and_revision != self.last_model
+        self.last_model = model_id_and_revision
+        model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        update_model = self.canonicalized_model_name(req["model"]) != self.loaded_model
-        if update_model:
-            self.load_model_and_tokenizer(req["model"], self.args)
-
-        text = self.tokenizer.apply_chat_template(req["input"], add_generation_prompt=True, tokenize=False)
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
+        inputs = processor.apply_chat_template(req["input"], add_generation_prompt=True).to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
-        generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config = create_generation_config_from_req(
-            req, model_generation_config=self.model.generation_config
-        )
+        generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
+        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
-        if self.is_continuation(req) and not update_model:
+        if self.is_continuation(req) and not must_discard_cache:
             last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
@@ -850,7 +1052,12 @@ class ServeCommand(BaseTransformersCLICommand):
         }
 
         def stream_response(streamer, _request_id):
-            thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+            # Thin wrapper to save the KV cache after generation
+            def generate_with_cache(**kwargs):
+                generate_output = model.generate(**kwargs)
+                self.last_kv_cache = generate_output.past_key_values
+
+            thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
             sequence_number = 0
             output_index = 0
             content_index = 0
@@ -868,7 +1075,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="queued",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         object="response",
@@ -889,7 +1096,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="in_progress",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         object="response",
@@ -994,7 +1201,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="completed",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         output=[response_output_item_done.item],
@@ -1026,7 +1233,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         id=f"resp_{request_id}",
                         created_at=created_at,
                         status="failed",
-                        model=self.loaded_model,
+                        model=model_id_and_revision,
                         instructions=req.get("instructions"),
                         text={"format": {"type": "text"}},
                         output=[],
@@ -1048,6 +1255,54 @@ class ServeCommand(BaseTransformersCLICommand):
                 thread.join()
 
         return stream_response(generation_streamer, request_id)
+
+    def generate_transcription(self, req: dict) -> Generator[str, None, None]:
+        """
+        Generates an OpenAI Transcription using the audio file.
+
+        Args:
+            req (`dict`): The request containing the audio file and model information.
+
+        Returns:
+            `Generator[str, None, None]`: A generator that yields the transcription result.
+        """
+        # TODO: implement streaming transcription (currently, it's not streaming)
+        if not is_librosa_available():
+            raise ImportError(
+                "Missing librosa dependency for audio transcription. Please install with `pip install librosa`"
+            )
+        model_id_and_revision = self.process_model_name(req["model"])
+        audio_model, audio_processor = self.load_audio_model_and_processor(model_id_and_revision)
+
+        generation_streamer = TextIteratorStreamer(
+            audio_processor.tokenizer, skip_special_tokens=True, skip_prompt=True
+        )
+        generation_config = create_generation_config_from_req(
+            req, model_generation_config=audio_model.generation_config
+        )
+
+        # Read the binary audio file using librosa
+        model_sampling_rate = audio_processor.feature_extractor.sampling_rate
+        audio_bytes = io.BytesIO(req["file"])
+        audio_array, _ = librosa.load(audio_bytes, sr=model_sampling_rate, mono=True)
+        audio_inputs = audio_processor(audio_array, sampling_rate=model_sampling_rate, return_tensors="pt").to(
+            audio_model.device
+        )
+        audio_inputs["input_features"] = audio_inputs["input_features"].to(audio_model.dtype)
+
+        generation_kwargs = {
+            "streamer": generation_streamer,
+            "generation_config": generation_config,
+            "return_dict_in_generate": True,
+        }
+
+        def _generate_transcription():
+            generated_ids = audio_model.generate(**audio_inputs, **generation_kwargs)
+            transcription_text = audio_processor.batch_decode(generated_ids.sequences, skip_special_tokens=True)[0]
+            transcription = Transcription(text=transcription_text)
+            yield f"{transcription.model_dump_json(exclude_none=True)}"
+
+        return _generate_transcription()
 
     def is_continuation(self, req: dict) -> bool:
         """
@@ -1108,39 +1363,47 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return quantization_config
 
-    def canonicalized_model_name(self, model_id: str) -> str:
+    def process_model_name(self, model_id: str) -> str:
         """
-        Canonicalizes the model name to the format "model_id@revision". If the model_id DOESN'T contain an @, it
-        defaults to "model_id@main".
+        Applies the `force_model` CLI argument and canonicalizes the model name to the format "model_id@revision".
+        If the model_id DOESN'T contain an @, it defaults to "model_id@main".
 
         Args:
             model_id (`str`): The model ID.
 
         Returns:
-            `str`: The canonicalized model name.
+            `str`: The canonicalized model name to be used
         """
+        if self.args.force_model is not None:
+            model_id = self.args.force_model
         if "@" in model_id:
             return model_id
         return f"{model_id}@main"
 
-    def load_model_and_tokenizer(self, model_id_and_revision: str, args: ServeArguments):
+    def _load_model_and_data_processor(self, model_id_and_revision: str):
         """
-        Loads the model and tokenizer from the given model ID and revision into the ServeCommand instance.
+        Generic method to load a model and a data processor from a model ID and revision, making use of the serve CLI
+        arguments.
 
         Args:
             model_id_and_revision (`str`):
                 The model ID and revision to load.
-            args (`ServeArguments`):
-                The serve arguments. May contain quantization settings, device, etc.
+            model_cls (`type[PreTrainedModel]`):
+                The model class to load.
+
+        Returns:
+            `tuple[PreTrainedModel, Union[ProcessorMixin, PreTrainedTokenizerFast]]`: The loaded model and
+            data processor (tokenizer, audio processor, etc.).
         """
-        logger.warning(f"Loading {model_id_and_revision}")
+        args = self.args
+        logger.info(f"Loading {model_id_and_revision}")
 
         if "@" in model_id_and_revision:
             model_id, revision = model_id_and_revision.split("@", 1)
         else:
             model_id, revision = model_id_and_revision, "main"
 
-        tokenizer = AutoTokenizer.from_pretrained(
+        data_processor = AutoProcessor.from_pretrained(
             model_id,
             revision=revision,
             trust_remote_code=args.trust_remote_code,
@@ -1158,19 +1421,74 @@ class ServeCommand(BaseTransformersCLICommand):
             "trust_remote_code": args.trust_remote_code,
         }
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
-
-        if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 1024:
-            model.generation_config.max_new_tokens = 1024
+        config = AutoConfig.from_pretrained(model_id, **model_kwargs)
+        architecture = getattr(transformers, config.architectures[0])
+        model = architecture.from_pretrained(model_id, **model_kwargs)
 
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
 
-        self.loaded_model = f"{model_id}@{revision}"
+        has_default_max_length = (
+            model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
+        )
+        has_short_max_new_tokens = (
+            model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 1024
+        )
+        if has_default_max_length or has_short_max_new_tokens:
+            model.generation_config.max_new_tokens = 1024
 
-        logger.warning(f"Loaded model {self.loaded_model}")
-        self.model = model
-        self.tokenizer = tokenizer
+        logger.info(f"Loaded model {model_id_and_revision}")
+        return model, data_processor
+
+    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+        """
+        Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
+
+        Args:
+            model_id_and_revision (`str`):
+                The model ID and revision to load.
+
+        Returns:
+            `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
+        """
+        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
+            model, processor = self._load_model_and_data_processor(model_id_and_revision)
+            self.loaded_models[model_id_and_revision] = TimedModel(
+                model,
+                timeout_seconds=self.args.model_timeout,
+                processor=processor,
+            )
+        else:
+            self.loaded_models[model_id_and_revision].reset_timer()
+            model = self.loaded_models[model_id_and_revision].model
+            processor = self.loaded_models[model_id_and_revision].processor
+
+        return model, processor
+
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
+        """
+        Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
+
+        Args:
+            model_id_and_revision (`str`):
+                The model ID and revision to load.
+
+        Returns:
+            `tuple[PreTrainedModel, ProcessorMixin]`: The loaded audio model and processor.
+        """
+        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
+            audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
+            self.loaded_models[model_id_and_revision] = TimedModel(
+                audio_model,
+                timeout_seconds=self.args.model_timeout,
+                processor=audio_processor,
+            )
+        else:
+            self.loaded_models[model_id_and_revision].reset_timer()
+            audio_model = self.loaded_models[model_id_and_revision].model
+            audio_processor = self.loaded_models[model_id_and_revision].processor
+
+        return audio_model, audio_processor
 
 
 if __name__ == "__main__":

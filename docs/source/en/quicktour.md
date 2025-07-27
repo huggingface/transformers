@@ -49,7 +49,7 @@ notebook_login()
 Make sure the [huggingface_hub[cli]](https://huggingface.co/docs/huggingface_hub/guides/cli#getting-started) package is installed and run the command below. Paste your User Access Token when prompted to log in.
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 </hfoption>
