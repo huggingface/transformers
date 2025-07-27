@@ -92,6 +92,7 @@ PRIVATE_MODELS = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
+    "EvollaSaProtPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
