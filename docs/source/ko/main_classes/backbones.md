@@ -39,22 +39,22 @@ rendered properly in your Markdown viewer.
 * [Swin Transformer v2](../model_doc/swinv2)
 * [ViTDet](../model_doc/vitdet)
 
-## AutoBackbone
+## AutoBackbone[[transformers.AutoBackbone]]
 
 [[autodoc]] AutoBackbone
 
-## BackboneMixin
+## BackboneMixin[[transformers.utils.BackboneMixin]]
 
 [[autodoc]] utils.BackboneMixin
 
-## BackboneConfigMixin
+## BackboneConfigMixin[[transformers.utils.BackboneConfigMixin]]
 
 [[autodoc]] utils.BackboneConfigMixin
 
-## TimmBackbone
+## TimmBackbone[[transformers.TimmBackbone]]
 
 [[autodoc]] models.timm_backbone.TimmBackbone
 
-## TimmBackboneConfig
+## TimmBackboneConfig[[transformers.TimmBackboneConfig]]
 
 [[autodoc]] models.timm_backbone.TimmBackboneConfig
