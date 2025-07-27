@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-SAM2 (Segment Anything Model 2) was proposed in [Segment Anything in Images and Videos](https://scontent-ssn1-1.xx.fbcdn.net/v/t39.2365-6/453323338_287900751050452_6064535069828837026_n.pdf?_nc_cat=107&ccb=1-7&_nc_sid=3c67a6&_nc_ohc=TnvI-AaGawoQ7kNvgEl0dlN&_nc_ht=scontent-ssn1-1.xx&gid=AX-dMq559vcArFkUSUxhQLn&oh=00_AYD10LO4L0BLTWS7vaKw_fnxjCb8G4q2cGjlCf1EDcfShQ&oe=66ADE939) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
+SAM2 (Segment Anything Model 2) was proposed in [Segment Anything in Images and Videos](https://ai.meta.com/research/publications/sam-2-segment-anything-in-images-and-videos/) by Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer.
 
 The model can be used to predict segmentation masks of any object of interest given an input image.
 
@@ -26,18 +26,14 @@ The model can be used to predict segmentation masks of any object of interest gi
 
 The abstract from the paper is the following:
 
-*We introduce the Segment Anything (SA) project: a new task, model, and dataset for image segmentation. Using our efficient model in a data collection loop, we built the largest segmentation dataset to date (by far), with over 1 billion masks on 11M licensed and privacy respecting images. The model is designed and trained to be promptable, so it can transfer zero-shot to new image distributions and tasks. We evaluate its capabilities on numerous tasks and find that its zero-shot performance is impressive -- often competitive with or even superior to prior fully supervised results. We are releasing the Segment Anything Model (SAM) and corresponding dataset (SA-1B) of 1B masks and 11M images at [https://segment-anything.com](https://segment-anything.com) to foster research into foundation models for computer vision.*
+*We present Segment Anything Model 2 (SAM 2), a foundation model towards solving promptable visual segmentation in images and videos. We build a data engine, which improves model and data via user interaction, to collect the largest video segmentation dataset to date. Our model is a simple transformer architecture with streaming memory for real-time video processing. SAM 2 trained on our data provides strong performance across a wide range of tasks. In video segmentation, we observe better accuracy, using 3x fewer interactions than prior approaches. In image segmentation, our model is more accurate and 6x faster than the Segment Anything Model (SAM). We believe that our data, model, and insights will serve as a significant milestone for video segmentation and related perception tasks. We are releasing a version of our model, the dataset and an interactive demo.*
 
 Tips:
 
-- The model predicts binary masks that states the presence or not of the object of interest given an image.
-- The model predicts much better results if input 2D points and/or input bounding boxes are provided
-- You can prompt multiple points for the same image, and predict a single mask.
-- Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844).
+- Batch & Video Support: SAM2 natively supports batch processing and seamless video segmentation, while original SAM is designed for static images and simpler one-image-at-a-time workflows.
+- Accuracy & Generalization: SAM2 shows improved segmentation quality, robustness, and zero-shot generalization to new domains compared to the original SAM, especially with mixed prompts.
 
-
-This model was contributed by [sangbumchoi](https://github.com/SangbumChoi).
+This model was contributed by [sangbumchoi](https://github.com/SangbumChoi) and [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/facebookresearch/sam2/tree/main).
 
 Below is an example on how to run mask generation given an image and a 2D point:
@@ -49,12 +45,12 @@ import requests
 from transformers import Sam2Model, Sam2Processor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamModel.from_pretrained("danelcsb/sam2.1_heira_tiny").to(device)
-processor = SamProcessor.from_pretrained("danelcsb/sam2.1_heira_tiny")
+model = Sam2Model.from_pretrained("danelcsb/sam2.1_hiera_tiny").to(device)
+processor = Sam2Processor.from_pretrained("danelcsb/sam2.1_hiera_tiny")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-input_points = [[[450, 600]]]  # 2D location of a window in the image
+input_points = [[[[450, 600]]]]  # 2D location of a window in the image
 
 inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(device)
 with torch.no_grad():
@@ -63,45 +59,68 @@ with torch.no_grad():
 masks = processor.image_processor.post_process_masks(
     outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
 )
-scores = outputs.iou_scores
+pred_masks = outputs.pred_masks
 ```
 
-You can also process your own masks alongside the input images in the processor to be passed to the model.
+You can also process input ivdeos in the processor to be passed to the model.
 
 ```python
-import torch
-from PIL import Image
-import requests
-from transformers import Sam2Model, Sam2Processor
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = Sam2odel.from_pretrained("danelcsb/sam2.1_heira_tiny").to(device)
-processor = Sam2Processor.from_pretrained("fdanelcsb/sam2.1_heira_tiny")
-
-img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
-input_points = [[[450, 600]]]  # 2D location of a window in the image
-
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
-with torch.no_grad():
-    outputs = model(**inputs)
-
-masks = processor.image_processor.post_process_masks(
-    outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
+from transformers import (
+    Sam2Config,
+    Sam2ImageProcessorFast,
+    Sam2Model,
+    Sam2VideoModel,
+    Sam2Processor,
+    Sam2VideoProcessor,
 )
-scores = outputs.iou_scores
+
+image_processor = Sam2ImageProcessorFast()
+video_processor = Sam2VideoProcessor()
+processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
+
+sam2model = Sam2VideoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny").to("cuda")
+
+# Use your custom video path
+video_dir = "./videos/bedroom"
+
+# scan all the JPEG frame names in this directory
+frame_names = [
+    p for p in os.listdir(video_dir)
+    if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
+]
+frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
+
+videos = []
+for frame_name in frame_names:
+    videos.append(Image.open(os.path.join(video_dir, frame_name)))
+inference_session = processor.init_video_session(video=videos, inference_device="cuda")
+
+ann_frame_idx = 0  # the frame index we interact with
+ann_obj_id = [1]  # give a unique id to each object we interact with (it can be any integers)
+points = np.array([[[[210, 350]]]], dtype=np.float32)
+# for labels, `1` means positive click and `0` means negative click
+labels = np.array([[[1]]], np.int32)
+
+# Let's add a positive click at (x, y) = (210, 350) to get started
+processor.process_new_points_or_boxes_for_video_frame(
+    inference_session=inference_session,
+    frame_idx=ann_frame_idx,
+    obj_ids=ann_obj_id,
+    input_points=points,
+    input_labels=labels
+)
+
+Sam2VideoSegmentationOutput = sam2model(
+    inference_session=inference_session,
+    frame_idx=ann_frame_idx,
+)
 ```
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM2.
 
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything.ipynb) for using the model.
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/automatic_mask_generation.ipynb) for using the automatic mask generation pipeline.
-- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Run_inference_with_MedSAM_using_HuggingFace_Transformers.ipynb) for inference with MedSAM, a fine-tuned version of SAM on the medical domain. 🌎
-- [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Fine_tune_SAM_(segment_anything)_on_a_custom_dataset.ipynb) for fine-tuning the model on custom data. 🌎
+- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model.
 
 ## Sam2Config
 
