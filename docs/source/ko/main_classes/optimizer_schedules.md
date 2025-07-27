@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 `.optimization` 모듈은 다음을 제공합니다:
 
 - 파인튜닝된 모델에 사용할 수 있는 가중치 감쇠가 적용된 옵티마이저
-- `_LRSchedule`에서 상속받는 스케줄 객체 형태의 여러 스케줄들
+- `_LRSchedule`을 상속받는 스케줄 객체 형태의 여러 스케줄
 - 여러 배치의 그래디언트를 누적하는 그래디언트 누적 클래스
 
 
