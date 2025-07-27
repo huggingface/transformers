@@ -34,14 +34,24 @@ def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
 
 
 def run_benchmark(
-    logger: Logger, repository: str, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100
+    logger: Logger, repository: str, branch: str, commit_id: str, commit_msg: str, metrics_recorder=None, num_tokens_to_generate=100
 ):
     continue_metric_collection = Event()
     metrics_thread = None
     model_id = "meta-llama/Llama-2-7b-hf"
-    metrics_recorder = MetricsRecorder(
-        psycopg2.connect("dbname=metrics"), logger, repository, branch, commit_id, commit_msg
-    )
+    
+    # If no metrics_recorder is provided, create one for backward compatibility
+    if metrics_recorder is None:
+        try:
+            metrics_recorder = MetricsRecorder(
+                psycopg2.connect("dbname=metrics"), logger, repository, branch, commit_id, commit_msg
+            )
+            should_close_recorder = True
+        except Exception as e:
+            logger.error(f"Failed to create metrics recorder: {e}")
+            return
+    else:
+        should_close_recorder = False
     try:
         gpu_stats = gpustat.GPUStatCollection.new_query()
         gpu_name = gpu_stats[0]["name"]
@@ -343,4 +353,7 @@ def run_benchmark(
     continue_metric_collection.set()
     if metrics_thread is not None:
         metrics_thread.join()
-    metrics_recorder.close()
+    
+    # Only close the recorder if we created it locally
+    if should_close_recorder:
+        metrics_recorder.close()
