@@ -14,16 +14,16 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Backbone
+# 백본[[backbone]]
 
-A backbone is a model used for feature extraction for higher level computer vision tasks such as object detection and image classification. Transformers provides an [`AutoBackbone`] class for initializing a Transformers backbone from pretrained model weights, and two utility classes:
+백본은 객체 탐지 및 이미지 분류와 같은 고수준 컴퓨터 비전 작업을 위한 특징 추출에 사용되는 모델입니다. Transformers는 사전 학습된 모델 가중치로부터 Transformers 백본을 초기화하기 위한 [`AutoBackbone`] 클래스와 두 가지 유틸리티 클래스를 제공합니다:
 
-* [`~utils.BackboneMixin`] enables initializing a backbone from Transformers or [timm](https://hf.co/docs/timm/index) and includes functions for returning the output features and indices.
-* [`~utils.BackboneConfigMixin`] sets the output features and indices of the backbone configuration.
+* [`~utils.BackboneMixin`]은 Transformers 또는 [timm](https://hf.co/docs/timm/index)에서 백본을 초기화할 수 있게 하며, 출력 특징과 인덱스를 반환하는 함수들을 포함합니다.
+* [`~utils.BackboneConfigMixin`]은 백본 구성의 출력 특징과 인덱스를 설정합니다.
 
-[timm](https://hf.co/docs/timm/index) models are loaded with the [`TimmBackbone`] and [`TimmBackboneConfig`] classes.
+[timm](https://hf.co/docs/timm/index) 모델들은 [`TimmBackbone`]과 [`TimmBackboneConfig`] 클래스로 로드됩니다.
 
-Backbones are supported for the following models:
+백본은 다음 모델들에서 지원됩니다:
 
 * [BEiT](../model_doc/beit)
 * [BiT](../model_doc/bit)
