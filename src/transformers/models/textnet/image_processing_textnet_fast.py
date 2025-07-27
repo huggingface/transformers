@@ -15,6 +15,7 @@
 """Fast Image processor class for TextNet."""
 
 from typing import Optional
+import enum
 from ...image_processing_utils import get_size_dict, BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict, ChannelDimension, ImageInput
@@ -109,5 +110,24 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
+
+    def to_dict(self) -> dict:
+        """
+        Return a dict that will yield the same config as the slow processor.
+        
+        This ensures serialization compatibility between slow and fast versions by:
+        1. Using the slow processor name in image_processor_type
+        2. Converting resample from enum to int value
+        """
+        config = super().to_dict()
+        
+        # Use slow processor name for compatibility
+        config["image_processor_type"] = "TextNetImageProcessor"
+        
+        # Convert enum to int for resample
+        if isinstance(config.get("resample"), enum.Enum):
+            config["resample"] = config["resample"].value
+            
+        return config
 
 __all__ = ["TextNetImageProcessorFast"]
