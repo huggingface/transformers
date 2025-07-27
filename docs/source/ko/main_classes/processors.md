@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 - [Wav2Vec2](../model_doc/wav2vec2)(음성과 텍스트) 또는 [CLIP](../model_doc/clip)(텍스트와 비전)과 같은 멀티모달 모델을 위한 입력을 전처리하는 객체
 - GLUE나 SQUAD를 위한 데이터 전처리에 사용되었던 라이브러리의 이전 버전에서 사용된 더 이상 사용되지 않는 객체
 
-## 멀티모달 프로세서[[multi-modal-processors]]
+## 멀티모달 프로세서[[transformers.ProcessorMixin]]
 
 모든 멀티모달 모델은 여러 양식(텍스트, 비전, 오디오 등)을 그룹화하는 데이터를 인코딩하거나 디코딩하는 객체가 필요합니다. 이는 토크나이저(텍스트 양식용), 이미지 프로세서(비전용), 특징 추출기(오디오용)와 같은 두 개 이상의 처리 객체를 함께 그룹화하는 프로세서라고 불리는 객체에 의해 처리됩니다.
 
@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] ProcessorMixin
 
-## 더 이상 사용되지 않는 프로세서[[deprecated-processors]]
+## 더 이상 사용되지 않는 프로세서[[transformers.DataProcessor]]
 
 모든 프로세서는 [`~data.processors.utils.DataProcessor`]와 동일한 아키텍처를 따릅니다. 프로세서는 [`~data.processors.utils.InputExample`]의 목록을 반환합니다. 이러한 [`~data.processors.utils.InputExample`]은 모델에 입력하기 위해 [`~data.processors.utils.InputFeatures`]로 변환될 수 있습니다.
 
@@ -38,7 +38,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] data.processors.utils.InputFeatures
 
-## GLUE
+## GLUE[[transformers.glue_convert_examples_to_features]]
 
 [General Language Understanding Evaluation (GLUE)](https://gluebenchmark.com/)는 기존의 다양한 NLU 작업에서 모델의 성능을 평가하는 벤치마크입니다. 이는 논문 [GLUE: A multi-task benchmark and analysis platform for natural language understanding](https://openreview.net/pdf?id=rJ4km2R5t7)과 함께 발표되었습니다.
 
@@ -61,7 +61,7 @@ rendered properly in your Markdown viewer.
 [[autodoc]] data.processors.glue.glue_convert_examples_to_features
 
 
-## XNLI
+## XNLI[[xnli]]
 
 [The Cross-Lingual NLI Corpus (XNLI)](https://www.nyu.edu/projects/bowman/xnli/)는 교차 언어 텍스트 표현의 품질을 평가하는 벤치마크입니다. XNLI는 [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)를 기반으로 한 크라우드소싱 데이터셋입니다: 텍스트 쌍은 15개의 다른 언어(영어와 같은 고자원 언어와 스와힐리어와 같은 저자원 언어 모두 포함)에 대해 텍스트 함의 주석으로 레이블링됩니다.
 
@@ -76,13 +76,13 @@ rendered properly in your Markdown viewer.
 이러한 프로세서를 사용하는 예제는 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 스크립트에서 제공됩니다.
 
 
-## SQuAD
+## SQuAD[[squad]]
 
 [The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//)는 질의응답에서 모델의 성능을 평가하는 벤치마크입니다. v1.1과 v2.0 두 가지 버전이 사용 가능합니다. 첫 번째 버전(v1.1)은 논문 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250)과 함께 발표되었습니다. 두 번째 버전(v2.0)은 논문 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://huggingface.co/papers/1806.03822)와 함께 발표되었습니다.
 
 이 라이브러리는 두 버전 각각에 대한 프로세서를 호스팅합니다:
 
-### 프로세서[[processors]]
+### 프로세서[[transformers.data.processors.squad.SquadProcessor]]
 
 해당 프로세서들은 다음과 같습니다:
 
