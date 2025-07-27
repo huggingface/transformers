@@ -132,6 +132,29 @@ for _ in range(max_new_tokens):
 print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
 ```
+
+캐시 위치[[cache-position]]
+캐시 위치는 어텐션 캐시에서 새로운 토큰을 삽입할 위치를 추적합니다. 이는 패딩이나 배치 구조와 무관하게 컨텍스트 내에서 각 토큰의 절대적 위치를 나타냅니다. 이미 `N`개의 토큰을 캐시했고 현재 `K`개의 새로운 토큰을 처리하고 있다고 가정하겠습니다. 새로운 토큰에 대한 캐시 위치는 `N`부터 `N + K - 1`까지의 범위가 됩니다. 즉, `[N, N + 1, N + 2, ..., N + K - 1]` 위치의 토큰들을 처리하는 것입니다.
+캐시 위치는 내부적으로 두 가지 목적으로 사용됩니다:
+
+1. 입력 시퀀스에서 처리할 새로운 토큰을 선택하고, 아직 캐시되지 않은 토큰만 모델의 `forward`에 전달되도록 보장합니다.
+2. 키/값 쌍을 캐시의 올바른 위치에 저장합니다. 이는 특정 캐시 길이를 미리 할당하는 [`StaticCache`]와 같은 고정 크기 캐시에서 특히 중요합니다.
+생성 루프는 일반적으로 캐시 위치를 관리하지만, 사용자 정의 생성 메소드를 작성할 때는 캐시 위치가 정확해야 합니다. 캐시 위치는 고정된 슬롯에 키/값 상태를 읽고 쓰는 데 사용되기 때문입니다.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+model_id = "meta-llama/Llama-2-7b-chat-hf"
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+messages = [{"role": "user", "content": "You are a helpful assistant."}]
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
+```
+
+
 ## 레거시 캐시 형식[[legacy-cache-format]]
 
 [`Cache`] 클래스 이전에는 캐시가 텐서의 튜플의 튜플로 저장되었습니다. 이 형식은 텍스트가 생성됨에 따라 증가하기 때문에 동적이며, [`DynamicCache`]와 유사합니다.
