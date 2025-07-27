@@ -71,7 +71,7 @@ rendered properly in your Markdown viewer.
 
 - [`~data.processors.utils.XnliProcessor`]
 
-골드 레이블이 테스트 세트에서 사용 가능하므로, 평가는 테스트 세트에서 수행됩니다.
+정답 레이블이 테스트 세트에서 사용 가능하므로, 평가는 테스트 세트에서 수행됩니다.
 
 이러한 프로세서를 사용하는 예제는 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 스크립트에서 제공됩니다.
 
