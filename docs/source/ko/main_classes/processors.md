@@ -14,30 +14,23 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Processors
+# 프로세서[[processors]]
 
-Processors can mean two different things in the Transformers library:
-- the objects that pre-process inputs for multi-modal models such as [Wav2Vec2](../model_doc/wav2vec2) (speech and text)
-  or [CLIP](../model_doc/clip) (text and vision)
-- deprecated objects that were used in older versions of the library to preprocess data for GLUE or SQUAD.
+프로세서는 Transformers 라이브러리에서 두 가지 다른 의미를 가질 수 있습니다:
+- [Wav2Vec2](../model_doc/wav2vec2)(음성과 텍스트) 또는 [CLIP](../model_doc/clip)(텍스트와 비전)과 같은 멀티모달 모델을 위한 입력을 전처리하는 객체
+- GLUE나 SQUAD를 위한 데이터 전처리에 사용되었던 라이브러리의 이전 버전에서 사용된 더 이상 사용되지 않는 객체
 
-## Multi-modal processors
+## 멀티모달 프로세서[[multi-modal-processors]]
 
-Any multi-modal model will require an object to encode or decode the data that groups several modalities (among text,
-vision and audio). This is handled by objects called processors, which group together two or more processing objects
-such as tokenizers (for the text modality), image processors (for vision) and feature extractors (for audio).
+모든 멀티모달 모델은 여러 양식(텍스트, 비전, 오디오 등)을 그룹화하는 데이터를 인코딩하거나 디코딩하는 객체가 필요합니다. 이는 토크나이저(텍스트 양식용), 이미지 프로세서(비전용), 특징 추출기(오디오용)와 같은 두 개 이상의 처리 객체를 함께 그룹화하는 프로세서라고 불리는 객체에 의해 처리됩니다.
 
-Those processors inherit from the following base class that implements the saving and loading functionality:
+이러한 프로세서들은 저장 및 로딩 기능을 구현하는 다음 기본 클래스를 상속받습니다:
 
 [[autodoc]] ProcessorMixin
 
-## Deprecated processors
+## 더 이상 사용되지 않는 프로세서[[deprecated-processors]]
 
-All processors follow the same architecture which is that of the
-[`~data.processors.utils.DataProcessor`]. The processor returns a list of
-[`~data.processors.utils.InputExample`]. These
-[`~data.processors.utils.InputExample`] can be converted to
-[`~data.processors.utils.InputFeatures`] in order to be fed to the model.
+모든 프로세서는 [`~data.processors.utils.DataProcessor`]와 동일한 아키텍처를 따릅니다. 프로세서는 [`~data.processors.utils.InputExample`]의 목록을 반환합니다. 이러한 [`~data.processors.utils.InputExample`]은 모델에 입력하기 위해 [`~data.processors.utils.InputFeatures`]로 변환될 수 있습니다.
 
 [[autodoc]] data.processors.utils.DataProcessor
 
@@ -47,14 +40,11 @@ All processors follow the same architecture which is that of the
 
 ## GLUE
 
-[General Language Understanding Evaluation (GLUE)](https://gluebenchmark.com/) is a benchmark that evaluates the
-performance of models across a diverse set of existing NLU tasks. It was released together with the paper [GLUE: A
-multi-task benchmark and analysis platform for natural language understanding](https://openreview.net/pdf?id=rJ4km2R5t7)
+[General Language Understanding Evaluation (GLUE)](https://gluebenchmark.com/)는 기존의 다양한 NLU 작업에서 모델의 성능을 평가하는 벤치마크입니다. 이는 논문 [GLUE: A multi-task benchmark and analysis platform for natural language understanding](https://openreview.net/pdf?id=rJ4km2R5t7)과 함께 발표되었습니다.
 
-This library hosts a total of 10 processors for the following tasks: MRPC, MNLI, MNLI (mismatched), CoLA, SST2, STSB,
-QQP, QNLI, RTE and WNLI.
+이 라이브러리는 MRPC, MNLI, MNLI (mismatched), CoLA, SST2, STSB, QQP, QNLI, RTE, WNLI와 같은 작업에 대해 총 10개의 프로세서를 호스팅합니다.
 
-Those processors are:
+해당 프로세서들은 다음과 같습니다:
 
 - [`~data.processors.utils.MrpcProcessor`]
 - [`~data.processors.utils.MnliProcessor`]
@@ -66,70 +56,62 @@ Those processors are:
 - [`~data.processors.utils.RteProcessor`]
 - [`~data.processors.utils.WnliProcessor`]
 
-Additionally, the following method can be used to load values from a data file and convert them to a list of
-[`~data.processors.utils.InputExample`].
+또한, 다음 메서드를 사용하여 데이터 파일에서 값을 로드하고 [`~data.processors.utils.InputExample`] 목록으로 변환할 수 있습니다.
 
 [[autodoc]] data.processors.glue.glue_convert_examples_to_features
 
 
 ## XNLI
 
-[The Cross-Lingual NLI Corpus (XNLI)](https://www.nyu.edu/projects/bowman/xnli/) is a benchmark that evaluates the
-quality of cross-lingual text representations. XNLI is crowd-sourced dataset based on [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/): pairs of text are labeled with textual entailment annotations for 15
-different languages (including both high-resource language such as English and low-resource languages such as Swahili).
+[The Cross-Lingual NLI Corpus (XNLI)](https://www.nyu.edu/projects/bowman/xnli/)는 교차 언어 텍스트 표현의 품질을 평가하는 벤치마크입니다. XNLI는 [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)를 기반으로 한 크라우드소싱 데이터셋입니다: 텍스트 쌍은 15개의 다른 언어(영어와 같은 고자원 언어와 스와힐리어와 같은 저자원 언어 모두 포함)에 대해 텍스트 함의 주석으로 레이블링됩니다.
 
-It was released together with the paper [XNLI: Evaluating Cross-lingual Sentence Representations](https://huggingface.co/papers/1809.05053)
+이는 논문 [XNLI: Evaluating Cross-lingual Sentence Representations](https://huggingface.co/papers/1809.05053)과 함께 발표되었습니다.
 
-This library hosts the processor to load the XNLI data:
+이 라이브러리는 XNLI 데이터를 로드하는 프로세서를 호스팅합니다:
 
 - [`~data.processors.utils.XnliProcessor`]
 
-Please note that since the gold labels are available on the test set, evaluation is performed on the test set.
+골드 레이블이 테스트 세트에서 사용 가능하므로, 평가는 테스트 세트에서 수행됩니다.
 
-An example using these processors is given in the [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) script.
+이러한 프로세서를 사용하는 예제는 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 스크립트에서 제공됩니다.
 
 
 ## SQuAD
 
-[The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//) is a benchmark that
-evaluates the performance of models on question answering. Two versions are available, v1.1 and v2.0. The first version
-(v1.1) was released together with the paper [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250). The second version (v2.0) was released alongside the paper [Know What You Don't
-Know: Unanswerable Questions for SQuAD](https://huggingface.co/papers/1806.03822).
+[The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//)는 질의응답에서 모델의 성능을 평가하는 벤치마크입니다. v1.1과 v2.0 두 가지 버전이 사용 가능합니다. 첫 번째 버전(v1.1)은 논문 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250)과 함께 발표되었습니다. 두 번째 버전(v2.0)은 논문 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://huggingface.co/papers/1806.03822)와 함께 발표되었습니다.
 
-This library hosts a processor for each of the two versions:
+이 라이브러리는 두 버전 각각에 대한 프로세서를 호스팅합니다:
 
-### Processors
+### 프로세서[[processors]]
 
-Those processors are:
+해당 프로세서들은 다음과 같습니다:
 
 - [`~data.processors.utils.SquadV1Processor`]
 - [`~data.processors.utils.SquadV2Processor`]
 
-They both inherit from the abstract class [`~data.processors.utils.SquadProcessor`]
+둘 다 추상 클래스 [`~data.processors.utils.SquadProcessor`]를 상속받습니다.
 
 [[autodoc]] data.processors.squad.SquadProcessor
     - all
 
-Additionally, the following method can be used to convert SQuAD examples into
-[`~data.processors.utils.SquadFeatures`] that can be used as model inputs.
+또한, 다음 메서드를 사용하여 SQuAD 예제를 모델 입력으로 사용할 수 있는 [`~data.processors.utils.SquadFeatures`]로 변환할 수 있습니다.
 
 [[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
 
-These processors as well as the aforementioned method can be used with files containing the data as well as with the
-*tensorflow_datasets* package. Examples are given below.
+이러한 프로세서들과 앞서 언급한 메서드는 데이터를 포함하는 파일뿐만 아니라 *tensorflow_datasets* 패키지와도 함께 사용할 수 있습니다. 아래에 예제가 제공됩니다.
 
 
-### Example usage
+### 사용 예시[[example-usage]]
 
-Here is an example using the processors as well as the conversion method using data files:
+다음은 데이터 파일을 사용하여 프로세서와 변환 메서드를 사용하는 예제입니다:
 
 ```python
-# Loading a V2 processor
+# V2 프로세서 로딩
 processor = SquadV2Processor()
 examples = processor.get_dev_examples(squad_v2_data_dir)
 
-# Loading a V1 processor
+# V1 프로세서 로딩
 processor = SquadV1Processor()
 examples = processor.get_dev_examples(squad_v1_data_dir)
 
@@ -143,10 +125,10 @@ features = squad_convert_examples_to_features(
 )
 ```
 
-Using *tensorflow_datasets* is as easy as using a data file:
+*tensorflow_datasets* 사용은 데이터 파일 사용만큼 쉽습니다:
 
 ```python
-# tensorflow_datasets only handle Squad V1.
+# tensorflow_datasets는 Squad V1만 처리합니다.
 tfds_examples = tfds.load("squad")
 examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=evaluate)
 
@@ -160,4 +142,4 @@ features = squad_convert_examples_to_features(
 )
 ```
 
-Another example using these processors is given in the [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) script.
+이러한 프로세서를 사용하는 또 다른 예제는 [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) 스크립트에서 제공됩니다.
