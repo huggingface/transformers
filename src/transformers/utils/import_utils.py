@@ -588,6 +588,12 @@ def is_causal_conv1d_available():
     return False
 
 
+def is_xlstm_available():
+    if is_torch_available():
+        return _is_package_available("xlstm")
+    return False
+
+
 def is_mambapy_available():
     if is_torch_available():
         return _is_package_available("mambapy")
