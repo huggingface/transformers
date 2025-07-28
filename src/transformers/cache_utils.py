@@ -1253,9 +1253,7 @@ class Cache:
     def max_cache_len(self) -> int:
         """Return the maximum cache length of the cache"""
         values = [layer.max_cache_len for layer in self.layers]
-        if len(set(values)) > 1:
-            raise ValueError(f"Max cache length is not consistent across layers: {values}")
-        return values[0]
+        return max(values)
 
     @property
     def is_compileable(self) -> bool:
