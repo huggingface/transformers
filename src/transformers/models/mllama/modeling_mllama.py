@@ -1582,7 +1582,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def vision_model(self):
         return self.model.vision_model
 
-    @check_model_inputs
     @can_return_tuple
     @auto_docstring
     def forward(
