@@ -82,22 +82,18 @@ Transformers의 [`Cache`] 클래스를 사용할 때, 셀프 어텐션 모듈은
 
 ## 캐시 저장소 구현[[cache-storage-implementation]]
 
-키-값 쌍의 실제 저장소는 캐시 구현에 따라 다릅니다. 예시로 [`DynamicCache`]를 고려해 보겠습니다.
+캐시는 각 레이어가 key와 value 캐시를 포함하는 레이어 목록 형태로 구성되어 있습니다. key 및 value 캐시는 `[batch_size, num_heads, seq_len, head_dim]` 형태의 텐서입니다.
 
+레이어는 서로 다른 타입일 수 있으며(예: `DynamicLayer`, `StaticLayer`, `SlidingWindowLayer`), 이는 주로 시퀀스 길이를 어떻게 처리하고 캐시를 어떻게 갱신하는지에 따라 달라집니다.
 
-[`DynamicCache`]에서 키-값 쌍은 두 개의 텐서 리스트로 저장됩니다. 리스트의 각 텐서는 `[batch_size, num_heads, seq_len, head_dim]` 형태를 갖습니다.
-- `key_cache`: 각 레이어에 대한 텐서 리스트.
-- `value_cache`: 각 레이어에 대한 텐서 리스트.
+가장 단순한 형태는 `DynamicLayer`로, 더 많은 토큰이 처리됨에 따라 점진적으로 확장됩니다. 시퀀스 길이 차원(`seq_len`)은 새로운 토큰이 추가될 때마다 증가합니다:
 
-새로운 토큰이 처리될 때:
-
-1. 각 레이어에 대해, 새로운 키와 값 상태가 기존 캐시와 연결됩니다.
 ```py
-self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
+cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
 ```
 
-2. 캐시는 더 많은 토큰이 처리됨에 따라 동적으로 증가합니다. 시퀀스 길이 차원(`seq_len`)은 각 새로운 토큰과 함께 증가합니다.
+`StaticLayer`나 `SlidingWindowLayer`와 같은 다른 레이어 타입은 캐시가 생성될 때 고정된 시퀀스 길이를 가지며, 이는 `torch.compile`과 호환되도록 만듭니다. `SlidingWindowLayer`의 경우, 새로운 토큰이 추가되면 기존 토큰은 캐시에서 제거됩니다.
 
 아래 예제는 [`DynamicCache`]로 생성 루프를 만드는 방법을 보여줍니다. 논의된 바와 같이, 어텐션 마스크는 과거와 현재 토큰값의 연결이며 다음 토큰을 위해 캐시 위치에 `1`이 추가됩니다.
 
@@ -134,12 +130,16 @@ print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 캐시 위치[[cache-position]]
+
 캐시 위치는 어텐션 캐시에서 새로운 토큰을 삽입할 위치를 추적합니다. 이는 패딩이나 배치 구조와 무관하게 컨텍스트 내에서 각 토큰의 절대적 위치를 나타냅니다. 이미 `N`개의 토큰을 캐시했고 현재 `K`개의 새로운 토큰을 처리하고 있다고 가정하겠습니다. 새로운 토큰에 대한 캐시 위치는 `N`부터 `N + K - 1`까지의 범위가 됩니다. 즉, `[N, N + 1, N + 2, ..., N + K - 1]` 위치의 토큰들을 처리하는 것입니다.
+
 캐시 위치는 내부적으로 두 가지 목적으로 사용됩니다:
 
 1. 입력 시퀀스에서 처리할 새로운 토큰을 선택하고, 아직 캐시되지 않은 토큰만 모델의 `forward`에 전달되도록 보장합니다.
 2. 키/값 쌍을 캐시의 올바른 위치에 저장합니다. 이는 특정 캐시 길이를 미리 할당하는 [`StaticCache`]와 같은 고정 크기 캐시에서 특히 중요합니다.
+
 생성 루프는 일반적으로 캐시 위치를 관리하지만, 사용자 정의 생성 메소드를 작성할 때는 캐시 위치가 정확해야 합니다. 캐시 위치는 고정된 슬롯에 키/값 상태를 읽고 쓰는 데 사용되기 때문입니다.
+
 
 ```py
 import torch
@@ -152,6 +152,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 messages = [{"role": "user", "content": "You are a helpful assistant."}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
 generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
+
 ```
 
 
