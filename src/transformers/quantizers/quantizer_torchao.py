@@ -104,7 +104,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 if self.pre_quantized:
                     raise ValueError(
                         "You are attempting to perform disk offload with a pre-quantized torchao model "
-                        "This is not supported yet . Please remove the CPU or disk device from the device_map."
+                        "This is not supported yet . Please remove the disk device from the device_map."
                     )
                 else:
                     self.offload = True
