@@ -30,9 +30,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
+    MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
-    MultipleChoiceModelOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -804,7 +804,12 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.decoder, stds["out"])
         elif isinstance(
             module,
-            (ModernBertForSequenceClassification, ModernBertForMultipleChoice, ModernBertForTokenClassification, ModernBertForQuestionAnswering),
+            (
+                ModernBertForSequenceClassification,
+                ModernBertForMultipleChoice,
+                ModernBertForTokenClassification,
+                ModernBertForQuestionAnswering,
+            ),
         ):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
@@ -1516,6 +1521,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The ModernBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a softmax) e.g. for RocStories/SWAG tasks.
@@ -1631,6 +1637,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 __all__ = [
     "ModernBertConfig",
