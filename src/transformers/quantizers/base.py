@@ -237,14 +237,10 @@ class HfQuantizer(ABC):
         """
         return self._process_model_after_weight_loading(model, **kwargs)
 
-    def dequantize(self, model):
+    def remove_quantization_config(self, model):
         """
-        Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
-        Note not all quantization schemes support this.
+        Remove the quantization config from the model.
         """
-        model = self._dequantize(model)
-
-        # Delete quantizer and quantization config
         if hasattr(model, "hf_quantizer"):
             del model.hf_quantizer
         if hasattr(model.config, "quantization_config"):
@@ -253,6 +249,20 @@ class HfQuantizer(ABC):
             del model.config._pre_quantization_dtype
         if hasattr(model, "quantization_method"):
             del model.quantization_method
+        model.is_quantized = False
+
+    def dequantize(self, model):
+        """
+        Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
+        Note not all quantization schemes support this.
+        """
+        model = self._dequantize(model)
+
+        # Delete quantizer and quantization config
+        del model.hf_quantizer
+        del model.config.quantization_config
+        del model.config._pre_quantization_dtype
+        del model.quantization_method
         model.is_quantized = False
 
         return model

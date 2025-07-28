@@ -177,13 +177,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                                 (0, right_pad, 0, bottom_pad, 0, 0),
                                                 mode="constant",
                                                 value=0)
-                        torch.cuda.empty_cache()
                         loaded_weight, flex, mx = quantize_to_mxfp4(
                             loaded_weight,
                             self.swizzle_mx_value,
                             self.swizzle_mx_scale
                         )
-                        torch.cuda.empty_cache()
                         module.gate_up_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                         module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
                     elif "down_proj" in param_name:
@@ -193,16 +191,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                                 (0, right_pad, 0, bottom_pad, 0, 0),
                                                 mode="constant",
                                                 value=0).to(target_device)
-                        torch.cuda.empty_cache()
                         loaded_weight, flex, mx = quantize_to_mxfp4(
                             loaded_weight,
                             self.swizzle_mx_value,
                             self.swizzle_mx_scale
                         )
-                        torch.cuda.empty_cache()
                         module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                         module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
-        # we take this path if already quantized but not in a compatible way:
+        # we take this path if already quantized but not in a compatible way
+        # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
             empty_param = kwargs.get("empty_param", None)
             casting_dtype = kwargs.get("casting_dtype", None)
@@ -214,48 +211,44 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 module, _ = get_module_from_name(model, param_name[:-len("_blocks")])
             else:
                 module, _ = get_module_from_name(model, param_name)
+
+            shard_kwargs = {
+                        "empty_param": empty_param,
+                        "casting_dtype": casting_dtype,
+                        "to_contiguous": to_contiguous,
+                        "rank": rank,
+                        "device_mesh": device_mesh,
+                        "model": model,
+            }
+
             if isinstance(module, Mxfp4OpenAIMoeExperts) or (isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize):
-                tp_mode = kwargs.get("device_mesh", None) is not None
                 if self.quantization_config.dequantize:
-                    # neutral_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
+                    # dq_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
                     # so we only have the original param name
-                    neutral_param_name = param_name[:-len("_blocks")] if "blocks" in param_name else param_name[:-len("_scales")]
+                    dq_param_name = param_name[:-len("_blocks")]
                     dequantize(
                         module,
                         param_name,
-                        model,
                         param_value,
-                        neutral_param_name,
                         target_device,
-                        empty_param,
-                        casting_dtype,
-                        to_contiguous,
-                        rank,
-                        device_mesh
+                        dq_param_name,
+                        **shard_kwargs
                     )
                 else:
                     dequantize_and_quantize(
                         module,
                         param_name,
-                        tp_mode,
-                        model,
                         param_value,
                         target_device,
-                        empty_param,
-                        casting_dtype,
-                        to_contiguous,
-                        rank,
-                        device_mesh,
                         self.swizzle_mx_value,
-                        self.swizzle_mx_scale
+                        self.swizzle_mx_scale,
+                        **shard_kwargs
                 )
-
-    def _dequantize(self, model):
-        return model
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         # we are not really dequantizing, we are just removing everthing related to quantization here
-        self.dequantize(model)
+        if self.quantization_config.dequantize:
+            self.remove_quantization_config(model)
 
     def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
         # Replace expected_keys for experts' gate_up_proj and down_proj with their _blocks and _scales variants
@@ -312,10 +305,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def update_tp_plan(self, config):
         if "OpenAIMoeConfig" in config.__class__.__name__:
-            if not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None:
-                config.base_model_tp_plan = {}
-            if not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None:
-                config.base_model_ep_plan = {}
+            if (not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None) or (not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None):
+                return config
 
             # Update TP plan with scales and blocks
             config.base_model_tp_plan.update({
@@ -337,10 +328,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
 
     def update_param_name(self, param_name: str) -> str:
-        if "_blocks" in param_name:
-            return param_name.replace("_blocks", "")
-        elif "_scales" in param_name:
-            return param_name.replace("_scales", "")
+        if self.quantization_config.dequantize:
+            if "_blocks" in param_name:
+                return param_name.replace("_blocks", "")
+            elif "_scales" in param_name:
+                return param_name.replace("_scales", "")
         return param_name
 
     def is_serializable(self, safe_serialization=None):
