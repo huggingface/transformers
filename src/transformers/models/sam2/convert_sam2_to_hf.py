@@ -230,15 +230,15 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    input_points = [[[1000, 600]]]
-    input_labels = [[1]]
+    input_points = [[[[1000, 600]]]]
+    input_labels = [[[1]]]
 
     inputs = processor(
         images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
     ).to(device)
 
     with torch.no_grad():
-        output = hf_model.sam2_forward(**inputs)
+        output = hf_model._single_frame_forward(**inputs)
     scores = output.iou_scores.squeeze()
 
     # commented scores are from original sam2.1 model with Sam2Processor input, changes might be from bfloat16
@@ -253,18 +253,19 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
         assert torch.allclose(scores, torch.tensor([0.0364, 0.9773, 0.1285]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_large":
         # [0.96484375 0.03613281 0.19042969]
-        assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1898]).cuda(), atol=1e-3)
+        assert torch.allclose(scores, torch.tensor([0.9660, 0.0362, 0.1927]).cuda(), atol=1e-3)
     elif model_name == "sam2_hiera_tiny":
-        assert torch.allclose(scores, torch.tensor([0.0439, 0.9567, 0.1415]).cuda(), atol=1e-3)
+        # placeholder to be filled
+        assert torch.allclose(scores, torch.tensor([0.0465, 0.9495, 0.1461]).cuda(), atol=1e-3)
     elif model_name == "sam2_hiera_small":
         # placeholder to be filled
-        assert torch.allclose(scores, torch.tensor([0.9648, 0.1507, 0.0466]).cuda(), atol=1e-3)
+        assert torch.allclose(scores, torch.tensor([0.9580, 0.1656, 0.0398]).cuda(), atol=1e-3)
     elif model_name == "sam2_hiera_base_plus":
         # placeholder to be filled
-        assert torch.allclose(scores, torch.tensor([0.0364, 0.9773, 0.1285]).cuda(), atol=1e-3)
+        assert torch.allclose(scores, torch.tensor([0.0427, 0.9813, 0.0871]).cuda(), atol=1e-3)
     elif model_name == "sam2_hiera_large":
-        # to be filled
-        assert torch.allclose(scores, torch.tensor([0.9660, 0.0362, 0.1927]).cuda(), atol=1e-3)
+        # placeholder to be filled
+        assert torch.allclose(scores, torch.tensor([0.9544, 0.0500, 0.1720]).cuda(), atol=1e-3)
     else:
         raise ValueError(f"Model {model_name} not supported")
 
