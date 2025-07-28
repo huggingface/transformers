@@ -335,11 +335,12 @@ def create_modular_file(
             all_public_classes.extend(public_classes)
 
     # Create the __all__ assignment
+    public_classes_formatted = "\n            ".join(f"{public_class}," for public_class in all_public_classes)
     all_statement = textwrap.dedent(
         f"""
 
         __all__ = [
-            {"\n            ".join(f"{public_class}," for public_class in all_public_classes)}
+            {public_classes_formatted}
         ]
         """
     )
