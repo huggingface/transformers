@@ -17,7 +17,11 @@
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import (
+  BaseImageProcessorFast,
+  DefaultFastImageProcessorKwargs
+)
+from ...processing_utils import Unpack
 from ...image_utils import PILImageResampling
 from ...utils import (
     auto_docstring,
@@ -40,6 +44,11 @@ def color_quantize_fast(x, clusters):
     d = squared_euclidean_distance_fast(x, clusters)
     return np.argmin(d, axis=1)
 
+class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    do_color_quantize: Optional[bool] = True
+    clusters: Optional[np.ndarray] = None
+    resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
+
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
@@ -56,10 +65,15 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 256, "width": 256} # import get_size_dict?
     do_resize = True
     do_normalize = True
-    # need:
-        # clusters, resample, do_color_quantize
+
+    # Specific Kwargs
+    do_color_quantize = True
+    clusters = None
+    resample = PILImageResampling.BILINEAR
 
     # initialize these arguments, pass it into super constructor
+    def __init__(self, **kwargs: Unpack[ImageGPTFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     # not in base:
     image_mean = None # not in base, normalize uses a constant factor to divide pixel values
