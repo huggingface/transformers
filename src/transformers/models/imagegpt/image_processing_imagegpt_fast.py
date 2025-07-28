@@ -56,7 +56,7 @@ class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
     return_tensors: Optional[Union[str, TensorType]] = None,
     data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None
 
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
@@ -80,7 +80,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     clusters = None
     resample = PILImageResampling.BILINEAR
 
-    # not in base:
+    # not in base ##########
     image_mean = None # not in base, normalize uses a constant factor to divide pixel values
     image_std = None # not in base, normalize uses a constant factor to divide pixel values
     default_to_square = None # not in base
@@ -88,6 +88,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = None # not in base
     do_rescale = None # not in base
     do_convert_rgb = None # not in base
+    ############
 
     # initialize these arguments, pass it into super constructor
     def __init__(self, **kwargs: Unpack[ImageGPTFastImageProcessorKwargs]):
