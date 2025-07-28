@@ -286,6 +286,7 @@ class OwlViTConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
+
 class OwlViTOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

@@ -279,4 +279,5 @@ class Owlv2Config(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
+
 __all__ = ["Owlv2Config", "Owlv2TextConfig", "Owlv2VisionConfig"]
