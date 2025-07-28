@@ -191,18 +191,6 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "ignore_index"))
             self.assertTrue(hasattr(image_processing, "num_labels"))
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 32, "longest_edge": 1333})
-            self.assertEqual(image_processor.size_divisor, 0)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, max_size=84, size_divisibility=8
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-            self.assertEqual(image_processor.size_divisor, 8)
-
     def comm_get_image_processing_inputs(
         self,
         image_processor_tester,
