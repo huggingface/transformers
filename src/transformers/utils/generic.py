@@ -993,16 +993,23 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache", getattr(self.config, "use_cache", False))
-        return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
-        all_args = kwargs.copy()
+        use_cache = kwargs.get("use_cache", None)
+        if use_cache is None:
+            use_cache = getattr(self.config, "use_cache", False)
+
+        return_dict = kwargs.pop("return_dict", None)
+        if return_dict is None:
+            return_dict = getattr(self.config, "return_dict", True)
 
         if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
-            kwargs["use_cache"] = False
+            use_cache = False
 
+        kwargs["use_cache"] = use_cache
+
+        all_args = kwargs.copy()
         if "kwargs" in all_args:
             for k, v in all_args["kwargs"].items():
                 all_args[k] = v
@@ -1025,6 +1032,8 @@ def check_model_inputs(func):
         def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
             def wrapped_forward(*args, **kwargs):
+                if key == "hidden_states" and len(collected_outputs[key]) == 0:
+                    collected_outputs[key] += (args[0],)
                 output = orig_forward(*args, **kwargs)
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
@@ -1061,7 +1070,6 @@ def check_model_inputs(func):
                         monkey_patched_layers.append((module, original_forward))
 
         outputs = func(self, *args, **kwargs)
-
         # Restore original forward methods
         for module, original_forward in monkey_patched_layers:
             module.forward = original_forward
@@ -1069,10 +1077,12 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
+                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
                     collected_outputs[key] += (outputs.vision_hidden_states,)
-                else:
+                elif hasattr(outputs, "last_hidden_state"):
                     collected_outputs[key] += (outputs.last_hidden_state,)
+
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:

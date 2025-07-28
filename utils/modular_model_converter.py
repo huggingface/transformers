@@ -141,7 +141,12 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node
 
     def leave_ImportFrom(self, original_node, updated_node):
-        """The imports from other file types (configuration, processing etc) should use original model name."""
+        """
+        The imports from other file types (configuration, processing etc) should use original model name.
+        Also, no replaces on absolute imports (e.g. `from mamba_ssm import ...`)
+        """
+        if len(original_node.relative) == 0:  # no replaces on absolute imports
+            return original_node
         if self.original_new_model_name != self.new_name and m.matches(updated_node.module, m.Name()):
             patterns = "|".join(ALL_FILE_TYPES)
             regex = rf"({patterns})_{self.new_name}"
@@ -945,30 +950,20 @@ def replace_class_node(
     new_class_docstring = modular_docstring if len(modular_docstring) > 0 else original_modeling_docstring
 
     # Compute new class attributes
-    original_modeling_class_attributes = {
-        node.body[0].targets[0].target.value: node
-        for node in original_modeling_node.body.body
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
-    }
-    original_modeling_class_attributes.update(
-        {
-            node.body[0].target.value: node
-            for node in original_modeling_node.body.body
-            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
-        }
-    )
-    modular_class_attributes = {
-        node.body[0].targets[0].target.value: node
-        for node in modular_class_node.body.body
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
-    }
-    modular_class_attributes.update(
-        {
-            node.body[0].target.value: node
-            for node in modular_class_node.body.body
-            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
-        }
-    )
+    original_modeling_class_attributes = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            original_modeling_class_attributes[node.body[0].targets[0].target.value] = node
+        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            original_modeling_class_attributes[node.body[0].target.value] = node
+
+    modular_class_attributes = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            modular_class_attributes[node.body[0].targets[0].target.value] = node
+        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            modular_class_attributes[node.body[0].target.value] = node
+
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 

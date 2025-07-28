@@ -26,7 +26,7 @@ from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations.hub_kernels import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -35,6 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -65,7 +66,7 @@ class Llama4TextExperts(nn.Module):
         Returns:
             torch.Tensor
         """
-        hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+        hidden_states = hidden_states.view(self.gate_up_proj.shape[0], -1, self.hidden_size)
         gate_up = torch.bmm(hidden_states, self.gate_up_proj)
         gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
         next_states = torch.bmm((up * self.act_fn(gate)), self.down_proj)
@@ -127,6 +128,20 @@ class Llama4TextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+class Llama4Router(nn.Linear):
+    def __init__(self, config):
+        super().__init__(config.hidden_size, config.num_local_experts, bias=False)
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
+
+    def forward(self, hidden_states):
+        router_logits = super().forward(hidden_states)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+        router_scores = torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value)
+        router_scores = torch.nn.functional.sigmoid(router_scores.float()).to(router_scores.dtype)
+        return router_scores, router_logits
+
+
 @use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
@@ -135,28 +150,18 @@ class Llama4TextMoe(nn.Module):
         self.hidden_dim = config.hidden_size
         self.num_experts = config.num_local_experts
         self.experts = Llama4TextExperts(config)
-        self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
+        self.router = Llama4Router(config)
         self.shared_expert = Llama4TextMLP(config)
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = self.router(hidden_states)
-
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
-
-        router_scores = (
-            torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value).transpose(0, 1)
-        )
-        router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
-
-        routed_in = hidden_states.repeat(self.num_experts, 1)
+        router_scores, router_logits = self.router(hidden_states)
+        routed_in = hidden_states.repeat(router_scores.shape[1], 1)
         routed_in = routed_in * router_scores.reshape(-1, 1)
         routed_out = self.experts(routed_in)
-
         out = self.shared_expert(hidden_states)
-        out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
-
-        return out, router_scores
+        out.add_(routed_out.reshape(router_scores.shape[1], -1, routed_out.shape[-1]).sum(dim=0))
+        return out, router_logits
 
 
 class Llama4TextRotaryEmbedding(nn.Module):
@@ -383,8 +388,6 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
@@ -395,12 +398,11 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        attention_states, self_attn_weights = self.self_attn(
+        attention_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -409,36 +411,24 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.feed_forward(hidden_states)
         if self.is_moe_layer:
-            hidden_states, router_logits = hidden_states
-        else:
-            router_logits = None
+            hidden_states, _ = hidden_states
         hidden_states = residual + hidden_states.view(residual.shape)
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if output_router_logits:
-            outputs += (router_logits,)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
-    config_class = Llama4Config
+    config: Llama4Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -472,7 +462,12 @@ class Llama4PreTrainedModel(PreTrainedModel):
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
-    config_class = Llama4TextConfig
+    config: Llama4TextConfig
+    _can_record_outputs = {
+        "attentions": Llama4TextAttention,
+        "hidden_states": Llama4TextDecoderLayer,
+        "router_logits": Llama4TextMoe,
+    }
 
     def __init__(self, config: Llama4TextConfig):
         super().__init__(config)
@@ -490,13 +485,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -506,27 +495,11 @@ class Llama4TextModel(Llama4PreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
@@ -565,42 +538,22 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         freq_cis = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=freq_cis,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
         hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
@@ -609,7 +562,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
-    config_class = Llama4TextConfig
+    config: Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
         super().__init__(config)
@@ -619,18 +572,6 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -649,9 +590,6 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -678,13 +616,6 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -692,9 +623,6 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1077,7 +1005,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
     _no_split_modules = ["Llama4VisionEncoderLayer"]
-    config_class = Llama4VisionConfig
+    config: Llama4VisionConfig
 
     def __init__(self, config: Llama4VisionConfig):
         super().__init__(config)
@@ -1212,7 +1140,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
     base_model_prefix = ""
-    config_class = Llama4Config
+    config: Llama4Config
 
     def __init__(self, config: Llama4Config):
         super().__init__(config)

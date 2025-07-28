@@ -327,9 +327,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
-            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
         vision_data = {}
         if image_sizes is not None:
