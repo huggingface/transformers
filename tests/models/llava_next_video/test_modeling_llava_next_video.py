@@ -467,7 +467,9 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
-        inputs_single = self.processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
+        inputs_single = self.processor(text=self.prompt_video, videos=[self.video], return_tensors="pt").to(
+            torch_device
+        )
 
         # verify generation
         output_batched = model.generate(**inputs_batched, do_sample=False, max_new_tokens=50)
