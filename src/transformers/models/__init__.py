@@ -84,6 +84,8 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_vl import *
+    from .deepseek_vl_hybrid import *
     from .deformable_detr import *
     from .deit import *
     from .deprecated import *
@@ -102,6 +104,7 @@ if TYPE_CHECKING:
     from .dots1 import *
     from .dpr import *
     from .dpt import *
+    from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
     from .emu3 import *
@@ -109,6 +112,8 @@ if TYPE_CHECKING:
     from .encoder_decoder import *
     from .ernie import *
     from .esm import *
+    from .evolla import *
+    from .exaone4 import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
@@ -349,6 +354,7 @@ if TYPE_CHECKING:
     from .xlm_roberta import *
     from .xlm_roberta_xl import *
     from .xlnet import *
+    from .xlstm import *
     from .xmod import *
     from .yolos import *
     from .yoso import *
