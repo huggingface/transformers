@@ -20,7 +20,6 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class ArceeConfig(PretrainedConfig):
@@ -162,6 +161,8 @@ class ArceeConfig(PretrainedConfig):
         head_dim=None,
         **kwargs,
     ):
+        # rope_config_validation(self)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -185,17 +186,26 @@ class ArceeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        # If the config was saved with a simple rope scaling dict, we need to convert to nested structure
+        # per RoPE type and raise a warning
+        if rope_scaling is not None and ("type" in rope_scaling or "rope_type" in rope_scaling):
+            # if there is a 'type' field, copy it it to 'rope_type'.
+            if "type" in rope_scaling:
+                rope_scaling["rope_type"] = rope_scaling.pop("type")
+            rope_scaling["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
+            rope_scaling = {"full_attention": rope_scaling}
+        elif rope_scaling is None:
+            rope_scaling = {
+                "full_attention": {"rope_type": "default", "rope_theta": kwargs.pop("rope_theta", 10000.0)}
+            }
+
+        self.rope_scaling = rope_scaling
 
 
 __all__ = ["ArceeConfig"]

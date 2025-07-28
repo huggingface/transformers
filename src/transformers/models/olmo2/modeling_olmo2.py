@@ -18,7 +18,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_type_from_config
+from ...modeling_rope_utils import compute_rope_parameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
@@ -256,21 +256,21 @@ class Olmo2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Olmo2RotaryEmbedding(nn.Module):
-    def __init__(self, config: Olmo2Config, device=None, is_global=True):
+    def __init__(self, config: Olmo2Config, device=None):
         super().__init__()
-        self.rope_type = extract_rope_type_from_config(config, is_global=is_global)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, is_global=is_global)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        inv_freqs_dict, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_types = rope_types
+        self.rope_keys = inv_freqs_dict.keys()
+        for key in inv_freqs_dict:
+            self.register_buffer(f"{key}_inv_freq", inv_freqs_dict[key][0], persistent=False)
+            setattr(self, f"{key}_original_inv_freq", inv_freqs_dict[key][0])
+            setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -282,6 +282,22 @@ class Olmo2RotaryEmbedding(nn.Module):
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
             return cos, sin
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, rope_key):
+        inv_freq = getattr(self, f"{rope_key}_inv_freq")
+        attention_scaling = getattr(self, f"{rope_key}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -364,14 +380,15 @@ class Olmo2Model(Olmo2PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
 

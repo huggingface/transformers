@@ -27,17 +27,8 @@ if is_torch_available():
     import torch
 
 
-def extract_rope_type_from_config(config, is_global: Optional[bool] = True):
-    "Helper to extract the rope type from config, while handling BC and local/global keys"
-    # BC: "rope_type" was originally "type"
-    rope_scaling_dict = (
-        getattr(config, "rope_scaling", None) if is_global else getattr(config, "local_rope_scaling", None)
-    )
-    if rope_scaling_dict is not None and isinstance(config.rope_scaling, dict):
-        rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type"))
-    else:
-        rope_type = "default"
-    return rope_type
+def extract_rope_type_from_config(*args, **kwargs):
+    pass
 
 
 def dynamic_rope_update(rope_forward):
@@ -53,7 +44,7 @@ def dynamic_rope_update(rope_forward):
         The decorated forward pass.
     """
 
-    def longrope_frequency_update(self, position_ids, device):
+    def longrope_frequency_update(self, position_ids, device, rope_key):
         """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
         seq_len = torch.max(position_ids) + 1
         if hasattr(self.config, "original_max_position_embeddings"):
@@ -61,18 +52,17 @@ def dynamic_rope_update(rope_forward):
         else:
             original_max_position_embeddings = self.config.max_position_embeddings
         if seq_len > original_max_position_embeddings:
-            if not hasattr(self, "long_inv_freq"):
-                self.long_inv_freq, _ = self.rope_init_fn(
-                    self.config, device, seq_len=original_max_position_embeddings + 1
-                )
-            self.register_buffer("inv_freq", self.long_inv_freq, persistent=False)
+            if not hasattr(self, f"{rope_key}_long_inv_freq"):
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_types[rope_key]]
+                self.long_inv_freq, _ = rope_init_fn(self.config, device, seq_len=original_max_position_embeddings + 1)
+            self.register_buffer(f"{rope_key}_inv_freq", self.long_inv_freq, persistent=False)
         else:
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.register_buffer(f"{rope_key}_inv_freq", self.original_inv_freq, persistent=False)
 
-    def dynamic_frequency_update(self, position_ids, device):
+    def dynamic_frequency_update(self, position_ids, device, rope_key):
         """
         dynamic RoPE layers should recompute `inv_freq` in the following situations:
         1 - growing beyond the cached sequence length (allow scaling)
@@ -80,24 +70,27 @@ def dynamic_rope_update(rope_forward):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_types[rope_key]]
+            inv_freq, self.attention_scaling = rope_init_fn(self.config, device, seq_len=seq_len)
+            self.register_buffer(
+                f"{rope_key}_inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.register_buffer(f"{rope_key}_inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
     @wraps(rope_forward)
-    def wrapper(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            dynamic_frequency_update(self, position_ids, device=x.device)
-        elif self.rope_type == "longrope":
-            longrope_frequency_update(self, position_ids, device=x.device)
-        return rope_forward(self, x, position_ids)
+    def wrapper(self, x, position_ids, rope_key):
+        if "dynamic" in self.rope_types[rope_key]:
+            dynamic_frequency_update(self, position_ids, device=x.device, rope_key=rope_key)
+        elif self.rope_types[rope_key] == "longrope":
+            longrope_frequency_update(self, position_ids, device=x.device, rope_key=rope_key)
+        return rope_forward(self, x, position_ids, rope_key=rope_key)
 
     return wrapper
 
@@ -106,7 +99,8 @@ def _compute_default_rope_parameters(
     config: Optional[PretrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
-    is_global: Optional[bool] = True,
+    rope_scaling_dict: Optional[dict] = None,
+    rope_config_key: Optional[str] = "global",
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
@@ -124,8 +118,8 @@ def _compute_default_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    base = config.rope_theta if is_global else config.local_rope_theta
-    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    base = rope_scaling_dict["rope_theta"]
+    partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
     dim = int(head_dim * partial_rotary_factor)
 
@@ -437,6 +431,58 @@ ROPE_INIT_FUNCTIONS = {
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
 }
+
+
+def extract_rope_scaling_dict_from_config(config):
+    "Helper to extract the rope type from config, while handling BC and local/global keys"
+
+    # The RoPE scaling dict might be serialized differently in older versions, which we need to support.
+    # Case 1: `config.rope_scaling` is a simple dict with values to configure RoPE type. Deprecated.
+    # Case 2: `config.rope_scaling` is a dict where keys define different RoPE configurations used by the model.
+    # For example `rope_scaling={"global": {}, "local": {}}` to alternate between global and local attention layers.
+    rope_scaling_dict = getattr(config, "rope_scaling", None)
+
+    if rope_scaling_dict is not None and ("type" in rope_scaling_dict or "rope_type" in rope_scaling_dict):
+        # if there is a 'type' field, copy it it to 'rope_type'.
+        if "type" in rope_scaling_dict:
+            rope_scaling_dict["rope_type"] = rope_scaling_dict.pop("type")
+        rope_scaling_dict["rope_theta"] = config.rope_theta
+        rope_scaling_dict = {"full_attention": rope_scaling_dict}
+    elif rope_scaling_dict is None:
+        rope_scaling_dict = {"full_attention": {"rope_type": "default", "rope_theta": config.rope_theta}}
+
+    return rope_scaling_dict
+
+
+def compute_rope_parameters(
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    rope_config_key: Optional[str] = "global",
+) -> tuple["torch.Tensor", float]:
+    """
+    Extracts requested RoPE type from the config (e.g. "dynamic") and computes inverse frequencies.
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        rope_config_key (`str`, *optional*, defaults to `"global"`):
+            RoPE type key
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    rope_scaling_dicts = extract_rope_scaling_dict_from_config(config)
+    rope_inv_freqs = {}
+    rope_types = {}
+    for rope_key in rope_scaling_dicts:
+        rope_scaling_dict = rope_scaling_dicts[rope_key]
+        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dict["rope_type"]]
+        inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dict, device=device)
+        rope_inv_freqs[rope_key] = (inv_freq, attention_scaling)
+        rope_types[rope_key] = rope_scaling_dict["rope_type"]
+    return rope_inv_freqs, rope_types
 
 
 def _check_received_keys(

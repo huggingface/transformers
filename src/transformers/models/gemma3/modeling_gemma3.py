@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask, create_masks_for_generate, crea
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_type_from_config
+from ...modeling_rope_utils import compute_rope_parameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -159,29 +159,38 @@ class Gemma3RMSNorm(nn.Module):
 class Gemma3RotaryEmbedding(nn.Module):
     def __init__(self, config: Gemma3TextConfig, device=None, is_global=True):
         super().__init__()
-        self.rope_type = extract_rope_type_from_config(config, is_global=is_global)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, is_global=is_global)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        inv_freqs_dict, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_types = rope_types
+        self.rope_keys = inv_freqs_dict.keys()
+        for key in inv_freqs_dict:
+            self.register_buffer(f"{key}_inv_freq", inv_freqs_dict[key][0], persistent=False)
+            setattr(self, f"{key}_original_inv_freq", inv_freqs_dict[key][0])
+            setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_embeddings = {}
+        for rope_key in self.rope_keys:
+            position_embeddings[rope_key] = self.apply_rope(x, position_ids, rope_key=rope_key)
+        return position_embeddings
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, rope_key):
+        inv_freq = getattr(self, f"{rope_key}_inv_freq")
+        attention_scaling = getattr(self, f"{rope_key}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -365,8 +374,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings_global: torch.Tensor,
-        position_embeddings_local: torch.Tensor,
+        position_embeddings: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -378,12 +386,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
-        # apply global RoPE to non-sliding layer only
-        if self.self_attn.is_sliding:
-            position_embeddings = position_embeddings_local
-        else:
-            position_embeddings = position_embeddings_global
 
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -462,8 +464,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         self.rotary_emb = Gemma3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
-        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config, is_global=False)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -535,8 +535,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings_global = self.rotary_emb(hidden_states, position_ids)
-        position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -548,8 +547,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings_global=position_embeddings_global,
-                position_embeddings_local=position_embeddings_local,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
