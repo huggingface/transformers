@@ -191,14 +191,14 @@ else:
         ]
     )
 
-for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
-    slow_image_processor_class, fast_image_processor_class = image_processors
+# Override to None if the packages are not available
+for model_type, (slow_class, fast_class) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
     if not is_vision_available():
-        slow_image_processor_class = None
+        slow_class = None
     if not is_torchvision_available():
-        fast_image_processor_class = None
+        fast_class = None
 
-    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
+    IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_class, fast_class)
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
