@@ -261,17 +261,5 @@ class Siglip2Config(PretrainedConfig):
 
         self.initializer_factor = 1.0
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: Siglip2TextConfig, vision_config: Siglip2VisionConfig, **kwargs):
-        r"""
-        Instantiate a [`Siglip2Config`] (or a derived class) from siglip2 text model configuration and siglip2 vision
-        model configuration.
-
-        Returns:
-            [`Siglip2Config`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 __all__ = ["Siglip2Config", "Siglip2TextConfig", "Siglip2VisionConfig"]
