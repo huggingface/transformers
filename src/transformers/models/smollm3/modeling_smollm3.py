@@ -418,7 +418,7 @@ class SmolLM3Model(SmolLM3PreTrainedModel):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 **kwargs,
             )
 

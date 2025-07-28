@@ -1384,6 +1384,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             is_cross_attention_cache_empty = past_key_values is None or (
                 past_key_values is not None and past_key_values.get_seq_length(idx) == 0
             )
+            layer_type = self.config.layer_types[idx] if hasattr(self.config, "layer_types") else "full_attention"
 
             if is_cross_attention_layer and cross_attention_states is None and is_cross_attention_cache_empty:
                 continue
@@ -1401,7 +1402,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
-                    position_embeddings,
+                    position_embeddings[layer_type],
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1415,7 +1416,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    position_embeddings=position_embeddings,
+                    position_embeddings=position_embeddings[layer_type],
                     **kwargs,
                 )
 

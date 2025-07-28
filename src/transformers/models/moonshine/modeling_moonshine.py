@@ -675,7 +675,8 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                     encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
                 )
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
                 causal_mask,
@@ -685,7 +686,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
 

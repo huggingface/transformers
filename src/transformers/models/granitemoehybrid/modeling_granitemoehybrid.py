@@ -1354,9 +1354,10 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
             layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1369,7 +1370,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
             )
 
             hidden_states = layer_outputs[0]

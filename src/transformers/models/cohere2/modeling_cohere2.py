@@ -408,10 +408,11 @@ class Cohere2Model(Cohere2PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 past_key_value=past_key_values,
                 use_cache=use_cache,

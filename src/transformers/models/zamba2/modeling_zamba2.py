@@ -1331,6 +1331,9 @@ class Zamba2Model(Zamba2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            layer_type = (
+                self.config.layer_types[layer_idx] if hasattr(self.config, "layer_types") else "full_attention"
+            )
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer.__call__,
@@ -1342,7 +1345,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     past_key_values,
                     output_attentions,
                     use_cache,
-                    position_embeddings,
+                    position_embeddings[layer_type],
                 )
             else:
                 layer_outputs = layer(
@@ -1354,7 +1357,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    position_embeddings=position_embeddings,
+                    position_embeddings=position_embeddings[layer_type],
                 )
             hidden_states = layer_outputs[0]
 

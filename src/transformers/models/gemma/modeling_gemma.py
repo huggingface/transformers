@@ -393,7 +393,8 @@ class GemmaModel(GemmaPreTrainedModel):
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -401,7 +402,7 @@ class GemmaModel(GemmaPreTrainedModel):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

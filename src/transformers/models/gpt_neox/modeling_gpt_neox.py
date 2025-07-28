@@ -477,6 +477,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             outputs = layer(
                 hidden_states,
                 attention_mask=causal_mask,
@@ -486,7 +487,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
             hidden_states = outputs[0]

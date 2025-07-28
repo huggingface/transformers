@@ -460,13 +460,14 @@ class DiaEncoder(DiaPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        for encoder_layer in self.layers:
+        for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
 
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             layer_outputs = encoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 attention_mask=attention_mask,
                 **kwargs,
             )

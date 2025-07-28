@@ -706,7 +706,7 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.layer_type],
                 attention_mask=input_attention_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,

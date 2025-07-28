@@ -1256,10 +1256,12 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
+
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 reference_points=reference_points,
                 spatial_shapes=spatial_shapes,
                 level_start_index=level_start_index,
