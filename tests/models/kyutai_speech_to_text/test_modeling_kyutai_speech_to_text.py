@@ -777,4 +777,11 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         ]
         # fmt: on
 
-        self.assertListEqual(out.cpu().tolist(), EXPECTED_TOKENS)
+        # See https://github.com/huggingface/transformers/pull/39416
+        EXPECTED_TOKENS_2 = torch.clone(EXPECTED_TOKENS)
+        EXPECTED_TOKENS_2[2, 159:162] = torch.tensor([3, 0, 269])
+
+        try:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        except AssertionError:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS_2)

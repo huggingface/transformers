@@ -966,14 +966,18 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.LayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-key, b=key)
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_()
             if module.padding_idx is not None:
