@@ -32,7 +32,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mas
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_tapas import TapasConfig
 
 
@@ -301,7 +300,6 @@ class TapasSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states,
@@ -436,7 +434,6 @@ class TapasAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,

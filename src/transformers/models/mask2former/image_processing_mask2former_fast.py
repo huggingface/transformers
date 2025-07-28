@@ -47,7 +47,6 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .image_processing_mask2former import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -155,9 +154,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = False
     valid_kwargs = Mask2FormerFastImageProcessorKwargs
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     def __init__(self, **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")

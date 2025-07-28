@@ -41,7 +41,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, get_torch_version, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_xlm_roberta_xl import XLMRobertaXLConfig
 
 
@@ -165,7 +164,6 @@ class XLMRobertaXLSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -284,7 +282,7 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from XLMRobertaXLSelfAttention
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -447,7 +445,6 @@ class XLMRobertaXLAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states,
