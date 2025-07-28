@@ -384,7 +384,7 @@ class Phi3IntegrationTest(unittest.TestCase):
             config.rope_scaling["type"] = "default"
 
         # Load model
-        device = torch_device
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
