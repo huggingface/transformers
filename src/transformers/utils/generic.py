@@ -1032,6 +1032,8 @@ def check_model_inputs(func):
         def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
             def wrapped_forward(*args, **kwargs):
+                if key == "hidden_states" and len(collected_outputs[key]) == 0:
+                    collected_outputs[key] += (args[0],)
                 output = orig_forward(*args, **kwargs)
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
@@ -1065,7 +1067,6 @@ def check_model_inputs(func):
                         monkey_patched_layers.append((module, original_forward))
 
         outputs = func(self, *args, **kwargs)
-
         # Restore original forward methods
         for module, original_forward in monkey_patched_layers:
             module.forward = original_forward
@@ -1073,10 +1074,12 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
+                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
                     collected_outputs[key] += (outputs.vision_hidden_states,)
-                else:
+                elif hasattr(outputs, "last_hidden_state"):
                     collected_outputs[key] += (outputs.last_hidden_state,)
+
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:

@@ -93,7 +93,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class ZambaHybridDynamicCache(DynamicCache):
+class ZambaHybridDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -107,8 +107,13 @@ class ZambaHybridDynamicCache(DynamicCache):
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
+    key_cache = None
+    value_cache = None
+    is_compileable = False
+
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
+        self.is_compileable = False
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         self.intermediate_size = config.mamba_expand * config.hidden_size
@@ -137,6 +142,12 @@ class ZambaHybridDynamicCache(DynamicCache):
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+
+    def __len__(self):
+        return len(self.key_cache)
+
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.update
     def update(
@@ -880,12 +891,6 @@ class ZambaModel(ZambaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -1044,18 +1049,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1229,12 +1222,6 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @auto_docstring
     def forward(
