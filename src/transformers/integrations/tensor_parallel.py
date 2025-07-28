@@ -1087,7 +1087,7 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
-        if isinstance(DistributedConfig, dict):
+        if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
         if distributed_config.enable_expert_parallel:
             _plan = "_ep_plan"
