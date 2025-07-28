@@ -377,20 +377,6 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             self.assertEqual(image_processor.metadata, metadata)
 
-    def test_removed_deprecated_kwargs(self):
-        image_processor_dict = dict(self.image_processor_dict)
-        image_processor_dict.pop("do_reduce_labels", None)
-        image_processor_dict["reduce_labels"] = True
-        # Only test for OneFormerImageProcessor
-        image_processing_class = self.image_processing_class
-        # test we are able to create the image processor with the deprecated kwargs
-        image_processor = image_processing_class(**image_processor_dict)
-        self.assertEqual(image_processor.do_reduce_labels, True)
-
-        # test we still support reduce_labels with config
-        image_processor = image_processing_class.from_dict(image_processor_dict)
-        self.assertEqual(image_processor.do_reduce_labels, True)
-
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")

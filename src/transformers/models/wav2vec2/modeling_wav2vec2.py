@@ -55,7 +55,6 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
@@ -525,7 +524,6 @@ class Wav2Vec2Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1175,7 +1173,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

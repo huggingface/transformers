@@ -313,17 +313,5 @@ class BlipConfig(PretrainedConfig):
         self.image_text_hidden_size = image_text_hidden_size
         self.label_smoothing = label_smoothing
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`BlipConfig`] (or a derived class) from blip text model configuration and blip vision model
-        configuration.
-
-        Returns:
-            [`BlipConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 __all__ = ["BlipConfig", "BlipTextConfig", "BlipVisionConfig"]
