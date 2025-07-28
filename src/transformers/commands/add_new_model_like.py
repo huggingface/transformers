@@ -621,7 +621,7 @@ def get_user_input():
     valid_model_type = False
     while not valid_model_type:
         old_model_type = input(
-            "What is the model you would like to duplicate? Please provide the lowercase `model_name` (e.g. llama): "
+            "What model would you like to duplicate? Please provide it as lowercase, e.g. `llama`):"
         )
         if old_model_type in model_types:
             valid_model_type = True
@@ -636,9 +636,11 @@ def get_user_input():
     old_model_infos = ModelInfos(old_model_type)
 
     # Ask for the new model name
-    new_lowercase_name = get_user_field("What is the snake case name of the new model (e.g. `new_model`)? ")
+    new_lowercase_name = get_user_field(
+        "What is the new model name? Please provide it as snake lowercase, e.g. `new_model`?"
+    )
     new_model_paper_name = get_user_field(
-        "What is the full name (with no special casing) for your new model in the paper (e.g. `LlaMa`)? ",
+        "What is the fully cased name you would like to appear in the doc (e.g. `NeW ModEl`)? ",
         default_value="".join(x.title() for x in new_lowercase_name.split("_")),
     )
 
@@ -651,44 +653,44 @@ def get_user_input():
     add_feature_extractor = False
     add_processor = False
     if old_model_infos.tokenizer_class is not None:
-        add_tokenizer = not get_user_field(
-            f"Will your new model use the same tokenizer class as {old_model_type} (yes/no)? ",
+        add_tokenizer = get_user_field(
+            f"Do you want to create a new tokenizer? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.fast_tokenizer_class is not None:
-        add_fast_tokenizer = not get_user_field(
-            f"Will your new model use the same fast tokenizer class as {old_model_type} (yes/no)? ",
+        add_fast_tokenizer = get_user_field(
+            f"Do you want to create a new fast tokenizer class? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.image_processor_class is not None:
-        add_image_processor = not get_user_field(
-            f"Will your new model use the same image processor class as {old_model_type} (yes/no)? ",
+        add_image_processor = get_user_field(
+            f"Do you want to create a new image processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.fast_image_processor_class is not None:
-        add_fast_image_processor = not get_user_field(
-            f"Will your new model use the same fast image processor class as {old_model_type} (yes/no)? ",
+        add_fast_image_processor = get_user_field(
+            f"Do you want to create a new fast image processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.video_processor_class is not None:
-        add_video_processor = not get_user_field(
-            f"Will your new model use the same video processor class as {old_model_type} (yes/no)? ",
+        add_video_processor = get_user_field(
+            f"Do you want to create a new video processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.feature_extractor_class is not None:
-        add_feature_extractor = not get_user_field(
-            f"Will your new model use the same feature extractor class as {old_model_type} (yes/no)? ",
+        add_feature_extractor = get_user_field(
+            f"Do you want to create a new feature extractor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.processor_class is not None:
-        add_processor = not get_user_field(
-            f"Will your new model use the same processor class as {old_model_type} (yes/no)? ",
+        add_processor = get_user_field(
+            f"Do you want to create a new processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
