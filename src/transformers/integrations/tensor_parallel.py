@@ -525,12 +525,12 @@ class ReplicateParallel(TensorParallelLayer):
         param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
         return param
 
-class VocabParallel(TensorParallelLayer):
 
+class VocabParallel(TensorParallelLayer):
     """
     VocabParallel is a tensor parallel layer that shards the embedding table along the last dimension.
     No need to do input masking as embedding would be stored in `_MaskPartial` which handles it (https://github.com/pytorch/pytorch/blob/main/torch/distributed/tensor/_ops/_embedding_ops.py#L70)
-    
+
     This is useful if you want to train with long sequence length!
     """
 
@@ -581,6 +581,7 @@ class VocabParallel(TensorParallelLayer):
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         return outputs.to_local() if use_local_output else outputs
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -1143,12 +1144,12 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
-        distributed_config = DistributedConfig.from_config(distributed_config)
+        if isinstance(DistributedConfig, dict):
+            distributed_config = DistributedConfig.from_dict(distributed_config)
         if distributed_config.enable_expert_parallel:
             _plan = "_ep_plan"
             model._tp_plan = getattr(model.config, "base_model_ep_plan", model._tp_plan).copy()
 
-    # now fetch my childrens
     for name, module in model.named_children():
         if plan := getattr(module, _plan, getattr(module, "tp_plan", None)):
             model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
