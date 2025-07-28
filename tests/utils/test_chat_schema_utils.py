@@ -15,6 +15,7 @@
 from transformers.utils.chat_parsing_utils import recursive_parse
 from transformers.utils.chat_template_utils import get_json_schema
 from transformers import AutoTokenizer
+from typing import Optional, Union
 
 import unittest
 
@@ -109,6 +110,28 @@ tools_schema_with_named_groups = {
     "x-regex": r"(?:<\|tools\|>\n(?P<tools>.*?)\n<\|endtools\|>\n)?(?P<messages>.*)",
 }
 
+cohere_schema = {
+    "type": "object",
+    "properties": {
+        "tools": {
+            "type": "string",
+            "x-regex": "\n## Available Tools\nHere is a list of tools that you have available to you:\n\n```python\n(.*?)[\n]+```\n",
+        },  # Coming later
+        "messages": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "role": {"type": "string", "enum": ["user", "assistant", "system"]},
+                    "content": {"type": "string"}
+                },
+                "required": ["role", "content"]
+            },
+            "x-regex-iterator": "<\|START_OF_TURN_TOKEN\|>(?P<role><\(?SYSTEM|USER|CHATBOT)_TOKEN\|>)(?P<content>.*?)(?<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools)",
+        }
+    }
+}
+
 class ChatSchemaParserTest(unittest.TestCase):
     def setUp(self):
         # This tokenizer has no chat template by default
@@ -170,3 +193,48 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
         # Test we still extract messages
         self.assertEqual(parsed_chat['messages'], chat)
+
+    def test_horrific_template(self):
+        def simple_tool(temperature_format: str):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use (Choices: ["celsius", "fahrenheit"])
+
+
+            Returns:
+                The temperature
+            """
+            return -40.0
+
+        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.) -> float:
+            """
+            Test function with multiple args, and docstring args that we have to strip out.
+
+            Args:
+                x: The first input. It's got a big multiline
+                   description and also contains
+                   (choices: ["a", "b", "c"])
+
+                y: The second input. It's a big list with a single-line description.
+
+                z: The third input. It's some kind of tuple with a default arg.
+
+            Returns:
+                The output. The return description is also a big multiline
+                description that spans multiple lines.
+            """
+            return -40.0
+
+        # Command-R is a real workout because it converts tools to Python function defs in the template
+        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-plus")
+        chat = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "Hi there! How can I help you today?"},
+        ]
+        formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use")
+        breakpoint()
+        parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
+        self.assertEqual(parsed_chat['messages'], chat)
+        self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), tool_with_everything_all_at_once])
