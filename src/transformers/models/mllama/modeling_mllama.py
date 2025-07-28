@@ -764,8 +764,8 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": [
-            OutputRecorder(MllamaTextSelfAttention, index=0),
-            OutputRecorder(MllamaTextCrossAttention, index=0),
+            OutputRecorder(MllamaSelfAttentionDecoderLayer, index=0),
+            OutputRecorder(MllamaCrossAttentionDecoderLayer, index=0),
         ],
         "attentions": [
             OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="self_attn"),
@@ -1273,8 +1273,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            # hidden_states=None,
-            # attentions=None,
         )
 
 
