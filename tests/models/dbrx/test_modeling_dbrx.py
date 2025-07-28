@@ -108,10 +108,6 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Dbrx models have weight tying disabled.")
-    def test_tied_weights_keys(self):
-        pass
-
     # Offload does not work with Dbrx models because of the forward of DbrxExperts where we chunk the experts.
     # The issue is that the offloaded weights of the mlp layer are still on meta device (w1_chunked, v1_chunked, w2_chunked)
     @unittest.skip(reason="Dbrx models do not work with offload")

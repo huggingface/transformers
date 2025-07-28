@@ -19,22 +19,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from typing import Any, Callable, Optional, TypedDict, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -219,11 +219,10 @@ class GraniteMoeHybridAttention(nn.Module):
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
-# Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache for the v2 mixer
-class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynamicCache):
+class HybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -237,8 +236,12 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
+    key_cache = None
+    value_cache = None
+    is_compileable = False
+
     def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__(config, batch_size, dtype, device)
+        super().__init__(layer_classes=DynamicLayer)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
@@ -275,6 +278,51 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Update the cache
+        if self.key_cache[layer_idx].shape[-1] == 0:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+
+            device = self.conv_states[layer_idx].device
+            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.ssm_states[layer_idx].device
+            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # take any layer that contains cache and not empty tensor
+        layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
+
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
 # Helper methods for segment sum computation
@@ -871,6 +919,31 @@ class GraniteMoeHybridMLP(nn.Module):
         return hidden_states
 
 
+class GraniteFlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
+    Use cases include padding-free training and fewer `torch.compile` graph breaks.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`):
+            Maximum sequence length for query state.
+        max_length_k (`int`):
+            Maximum sequence length for key state.
+        seq_idx (`torch.IntTensor):
+            Index of each packed sequence.
+    """
+
+    cu_seq_lens_q: torch.LongTensor
+    cu_seq_lens_k: torch.LongTensor
+    max_length_q: int
+    max_length_k: int
+    seq_idx: torch.IntTensor
+
+
 class GraniteMoeHybridRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1078,7 +1151,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1102,8 +1175,8 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
+                Arbitrary kwargs.Can be used to provide `GraniteFlashAttentionKwargs` for
+                padding-free training and/or improve torch.compile performance.
         """
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -1114,11 +1187,12 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 cache_position=cache_position,
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
+                **kwargs,
             )
             # No attention weights for state space layers
             self_attn_weights = None
         else:
-            hidden_states, self_attn_weights, _ = self.self_attn(
+            hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 past_key_value=past_key_value,
@@ -1149,9 +1223,6 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (past_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
@@ -1160,37 +1231,22 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
-    config_class = GraniteMoeHybridConfig
+    config: GraniteMoeHybridConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _is_stateful = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeHybridParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GraniteMoeHybridRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GraniteMoeHybridParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        # Initialize Mamba modules
-        if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, GraniteMoeHybridMambaLayer):
+        if isinstance(module, GraniteMoeHybridMambaLayer):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
             module.D.data.fill_(1.0)
@@ -1202,7 +1258,7 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
     def __init__(self, config: GraniteMoeHybridConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -1259,12 +1315,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1280,6 +1330,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1334,7 +1385,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
@@ -1352,12 +1402,10 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 if layer_outputs[1] is not None:
@@ -1378,11 +1426,9 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         if past_key_values and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
 
-        next_cache = next_decoder_cache if use_cache else None
-
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
@@ -1621,18 +1667,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1701,6 +1735,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             output_router_logits=output_router_logits,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         # Only compute necessary logits
@@ -1748,15 +1783,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             router_logits=outputs.router_logits,
         )
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1785,7 +1811,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
-        else:
+        elif use_cache:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
@@ -1813,15 +1839,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             }
         )
         return model_inputs
-
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
-        and do not need to initialize the Cache in advance in order to save memory
-        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
 
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

@@ -271,7 +271,7 @@ class Gemma3nTextConfig(PretrainedConfig):
 
         if layer_types is None:
             self.layer_types = [
-                "full_attention" if i % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
+                "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
         else:
             self.layer_types = layer_types
@@ -301,10 +301,10 @@ class Gemma3nTextConfig(PretrainedConfig):
 
 class Gemma3nAudioConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3nAudioEncoder`], based on Gogole's
-    [Universal Speech Model](). It is used to instantiate an Gemma3nAudioEncoder model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the Gemma 3n E4B, e.g. [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B).
+    This is the configuration class to store the configuration of a [`Gemma3nAudioEncoder`]. It is used to instantiate
+    an `Gemma3nAudioEncoder` model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the Gemma 3n E4B, e.g.,
+    [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B).
 
     Configuration objects that inherit from [`Gemma3nAudioConfig`] and can be used to control the model outputs. Read
     the documentation from [`Gemma3nAudioConfig`] for more information.

@@ -49,7 +49,7 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
-from transformers.utils.args_doc import (
+from transformers.utils.auto_docstring import (
     ImageProcessorArgs,
     ModelArgs,
     ModelOutputArgs,
@@ -79,6 +79,8 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = [
+    "Exaone4Config",
+    "SmolLM3Config",
     "Gemma3nVisionConfig",
     "Llama4Processor",
     # Deprecated
@@ -680,8 +682,8 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
 
 def eval_node(node):
-    if isinstance(node, ast.Num):  # <number>
-        return node.n
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float, complex):
+        return node.value
     elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
@@ -940,7 +942,8 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         idx += 1
 
     if idx == len(source):
-        # Args are not defined in the docstring of this object
+        # Args are not defined in the docstring of this object. This can happen when the docstring is inherited.
+        # In this case, we are not trying to fix it on the child object.
         return
 
     # Get to the line where we stop documenting arguments
@@ -957,7 +960,21 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     if "".join(source[start_idx:idx])[:-1] != old_doc_args:
         # Args are not fully defined in the docstring of this object
-        return
+        # This can happen due to a mismatch in indentation calculation where the docstring parsing
+        # in match_docstring_with_signature uses obj.__doc__.split("\n") while here we use
+        # inspect.getsourcelines(obj) which can have different line endings or indentation.
+        # See https://github.com/huggingface/transformers/pull/38915/files#r2200675302 for more details.
+        obj_file = find_source_file(obj)
+        actual_args_section = "".join(source[start_idx:idx])[:-1]
+        raise ValueError(
+            f"Cannot fix docstring of {obj.__name__} in {obj_file} because the argument section in the source code "
+            f"does not match the expected format. This usually happens when:\n"
+            f"1. The argument section is not properly indented\n"
+            f"2. The argument section contains unexpected formatting\n"
+            f"3. The docstring parsing failed to correctly identify the argument boundaries\n\n"
+            f"Expected argument section:\n{repr(old_doc_args)}\n\n"
+            f"Actual argument section found:\n{repr(actual_args_section)}\n\n"
+        )
 
     obj_file = find_source_file(obj)
     with open(obj_file, "r", encoding="utf-8") as f:
@@ -1471,7 +1488,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         if docstring_args_ro_remove_warnings:
             if not overwrite:
                 print(
-                    "Some docstrings are redundant with the ones in `args_doc.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
             print(f"🚨 Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:

@@ -19,6 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -145,10 +146,6 @@ class Gemma3TextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-        rope_local_base_freq (float, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings for local attention.
-        sliding_window_pattern (`int`, *optional*, defaults to 6):
-            Pattern for the sliding window attention.
     """
 
     model_type = "gemma3_text"
@@ -230,14 +227,27 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
+
         if self.layer_types is None:
-            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-            sliding_window_pattern = getattr(self, "sliding_window_pattern", 6)
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+    @property
+    def sliding_window_pattern(self):
+        warnings.warn(
+            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
+            FutureWarning,
+        )
+        return self._sliding_window_pattern
+
+    @sliding_window_pattern.setter
+    def sliding_window_pattern(self, value):
+        self._sliding_window_pattern = value
 
 
 class Gemma3Config(PretrainedConfig):

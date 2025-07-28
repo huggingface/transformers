@@ -124,7 +124,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def load_balancing_loss_func(
-    gate_logits: torch.Tensor,
+    gate_probabilities: torch.Tensor,
     num_experts: int,
     top_k: int,
     attention_mask: Optional[torch.Tensor],
@@ -150,14 +150,12 @@ def load_balancing_loss_func(
     Returns:
         The auxiliary loss.
     """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
+    if gate_probabilities is None or not isinstance(gate_probabilities, tuple):
         return torch.tensor(0.0)
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
-
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if isinstance(gate_probabilities, tuple):
+        compute_device = gate_probabilities[0].device
+        routing_weights = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_probabilities], dim=0)
 
     _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
@@ -171,7 +169,7 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        num_hidden_layers = routing_weights.shape[0] // (batch_size * sequence_length)
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
@@ -305,7 +303,7 @@ class DbrxAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class DbrxFlashAttention2(DbrxAttention):
@@ -430,7 +428,7 @@ class DbrxFlashAttention2(DbrxAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class DbrxSdpaAttention(DbrxAttention):
@@ -525,7 +523,7 @@ class DbrxSdpaAttention(DbrxAttention):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None
 
 
 DBRX_ATTENTION_CLASSES = {
@@ -561,7 +559,7 @@ class DbrxNormAttentionNorm(nn.Module):
         residual_states = hidden_states
         hidden_states = self.norm_1(hidden_states).to(hidden_states.dtype)
 
-        hidden_states, attn_weights, past_key_value = self.attn(
+        hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -578,7 +576,7 @@ class DbrxNormAttentionNorm(nn.Module):
         residual_states = hidden_states
         hidden_states = self.norm_2(hidden_states).to(hidden_states.dtype)
 
-        return residual_states, hidden_states, attn_weights, past_key_value
+        return residual_states, hidden_states, attn_weights
 
 
 class DbrxRouter(nn.Module):
@@ -775,7 +773,7 @@ class DbrxBlock(GradientCheckpointingLayer):
         """
 
         # Norm + Attention + Norm
-        resid_states, hidden_states, self_attn_weights, present_key_value = self.norm_attn_norm(
+        resid_states, hidden_states, self_attn_weights = self.norm_attn_norm(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -796,9 +794,6 @@ class DbrxBlock(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
@@ -807,16 +802,15 @@ class DbrxBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
-    config_class = DbrxConfig
+    config: DbrxConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
@@ -908,19 +902,12 @@ class DbrxModel(DbrxPreTrainedModel):
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                )
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -942,7 +929,6 @@ class DbrxModel(DbrxPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for block in self.blocks:
             if output_hidden_states:
@@ -961,9 +947,6 @@ class DbrxModel(DbrxPreTrainedModel):
 
             hidden_states = block_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = block_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (block_outputs[1],)
 
@@ -976,19 +959,15 @@ class DbrxModel(DbrxPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_router_logits]
                 if v is not None
             )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,

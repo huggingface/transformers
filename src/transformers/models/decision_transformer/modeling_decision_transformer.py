@@ -34,7 +34,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -256,7 +255,6 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.53.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -380,7 +378,6 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
         self.mlp = DecisionTransformerGPT2MLP(inner_dim, config)
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.53.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -447,13 +444,13 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
 @auto_docstring
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
-    config_class = DecisionTransformerConfig
+    config: DecisionTransformerConfig
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_static_cache = False
+
+    _can_compile_fullgraph = False
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -740,7 +737,7 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = DecisionTransformerConfig
+    config: DecisionTransformerConfig
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False

@@ -79,6 +79,8 @@ class LightGlueConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        trust_remote_code (`bool`, *optional*, defaults to `False`):
+            Whether to trust remote code when using other models than SuperPoint as keypoint detector.
 
     Examples:
         ```python
@@ -112,8 +114,14 @@ class LightGlueConfig(PretrainedConfig):
         hidden_act: str = "gelu",
         attention_dropout=0.0,
         attention_bias=True,
+        trust_remote_code: bool = False,
         **kwargs,
     ):
+        # LightGlue can be used with other models than SuperPoint as keypoint detector
+        # We provide the trust_remote_code argument to allow the use of other models
+        # that are not registered in the CONFIG_MAPPING dictionary (for example DISK)
+        self.trust_remote_code = trust_remote_code
+
         if descriptor_dim % num_attention_heads != 0:
             raise ValueError("descriptor_dim % num_heads is different from zero")
 
@@ -138,9 +146,15 @@ class LightGlueConfig(PretrainedConfig):
             keypoint_detector_config["model_type"] = (
                 keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
             )
-            keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config, attn_implementation="eager"
-            )
+            if keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
+                keypoint_detector_config = AutoConfig.from_pretrained(
+                    keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
+                )
+            else:
+                keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
+                    **keypoint_detector_config, attn_implementation="eager"
+                )
+
         if keypoint_detector_config is None:
             keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
@@ -490,22 +504,12 @@ class LightGluePreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = LightGlueConfig
+    config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module) -> None:
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[torch.Tensor, torch.Tensor]:
@@ -584,8 +588,9 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-
-        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(
+            config.keypoint_detector_config, trust_remote_code=config.trust_remote_code
+        )
 
         self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
         self.descriptor_dim = config.descriptor_dim
