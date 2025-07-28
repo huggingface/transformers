@@ -476,6 +476,7 @@ class InternS1PreTrainedModel(LlavaPreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+
 class InternS1MultiModalProjector(nn.Module):
     def __init__(self, config: InternS1Config):
         super().__init__()
@@ -543,6 +544,7 @@ class InternS1ModelOutputWithPast(ModelOutput):
 
 
 class InternS1Model(LlavaModel):
+    _checkpoint_conversion_mapping = {}
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
 
@@ -862,6 +864,8 @@ def load_balancing_loss_func(
 
 
 class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -893,9 +897,9 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
         >>> torch_device = "cuda"
-        >>> processor = AutoProcessor.from_pretrained("InternLM/InternS1") # todo
+        >>> processor = AutoProcessor.from_pretrained("internlm/Intern-S1")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "InternLM/InternS1", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "internlm/Intern-S1", torch_dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [
@@ -918,7 +922,6 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
         >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
-        The images depict the Statue of Liberty and the Golden Gate Bridge.
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
