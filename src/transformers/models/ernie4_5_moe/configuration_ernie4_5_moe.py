@@ -21,9 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_MoEConfig(PretrainedConfig):
+class Ernie4_5_MoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_MoEModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Ernie4_5_MoeModel`]. It is used to instantiate a
     Ernie 4.5 MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [baidu/ERNIE-4.5-21B-A3B-PT](https://huggingface.co/baidu/ERNIE-4.5-21B-A3B-PT).
 
@@ -34,7 +34,7 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 103424):
             Vocabulary size of the Ernie 4.5 MoE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Ernie4_5_MoEModel`]
+            `inputs_ids` passed when calling [`Ernie4_5_MoeModel`]
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -133,13 +133,13 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
             The aux loss factor for the total loss.
 
     ```python
-    >>> from transformers import Ernie4_5_MoEModel, Ernie4_5_MoEConfig
+    >>> from transformers import Ernie4_5_MoeModel, Ernie4_5_MoEConfig
 
     >>> # Initializing a Ernie4_5_MoE style configuration
     >>> configuration = Ernie4_5_MoEConfig()
 
     >>> # Initializing a model from the ERNIE-4.5-21B-A3B style configuration
-    >>> model = Ernie4_5_MoEModel(configuration)
+    >>> model = Ernie4_5_MoeModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -251,4 +251,4 @@ class Ernie4_5_MoEConfig(PretrainedConfig):
         )
 
 
-__all__ = ["Ernie4_5_MoEConfig"]
+__all__ = ["Ernie4_5_MoeConfig"]

@@ -48,6 +48,32 @@ for i in output:
 
 This HF implementation is contributed by [Sukriti Sharma](https://huggingface.co/SukritiSharma) and [Alexander Brooks](https://huggingface.co/abrooks9944).
 
+## Notes
+
+- `GraniteMoeHybridForCausalLM` supports padding-free training which concatenates distinct training examples while still processing inputs as separate batches. It can significantly accelerate inference by [~2x](https://github.com/huggingface/transformers/pull/35861#issue-2807873129) (depending on model and data distribution) and reduce memory-usage if there are examples of varying lengths by avoiding unnecessary compute and memory overhead from padding tokens.
+
+  Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
+
+  - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
+  - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
+  - Each of the [`FlashAttentionKwargs`]
+    - `cu_seq_lens_q: torch.LongTensor`: the cumulative sequence lengths of all queries.
+    - `cu_seq_lens_k: torch.LongTensor`: the cumulative sequence lengths of all keys.
+    - `max_length_q: int`: the longest query length in the batch.
+    - `max_length_k: int`: the longest key length in the batch.
+
+  The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] programmatically generates the set of additional arguments above using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-with-FA2) blog post for additional information.
+
+  ```python
+  from transformers import DataCollatorWithFlattening
+
+  # Example of using padding-free training
+  data_collator = DataCollatorWithFlattening(
+      tokenizer=tokenizer,
+      return_seq_idx=True,
+      return_flash_attn_kwargs=True
+  )
+  ```
 
 ## GraniteMoeHybridConfig
 
