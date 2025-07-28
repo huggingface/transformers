@@ -446,7 +446,11 @@ def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames
     for new_file, to_add in filenames_to_add:
         if to_add:
             original_test_file = new_file.replace(new_lowercase_name, old_lowercase_name)
-            with open(REPO_PATH / "tests" / "models" / old_lowercase_name / original_test_file, "r") as f:
+            original_test_path = REPO_PATH / "tests" / "models" / old_lowercase_name / original_test_file
+            # Sometimes, tests may not exist
+            if not original_test_path.is_file():
+                continue
+            with open(original_test_path, "r") as f:
                 test_code = f.read()
             # Remove old copyright and add new one
             test_lines = test_code.split("\n")
