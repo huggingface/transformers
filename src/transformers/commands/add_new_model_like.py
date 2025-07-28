@@ -660,37 +660,37 @@ def get_user_input():
         )
     if old_model_infos.fast_tokenizer_class is not None:
         add_fast_tokenizer = get_user_field(
-            f"Do you want to create a new fast tokenizer class? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new fast tokenizer? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.image_processor_class is not None:
         add_image_processor = get_user_field(
-            f"Do you want to create a new image processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new image processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.fast_image_processor_class is not None:
         add_fast_image_processor = get_user_field(
-            f"Do you want to create a new fast image processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new fast image processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.video_processor_class is not None:
         add_video_processor = get_user_field(
-            f"Do you want to create a new video processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new video processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.feature_extractor_class is not None:
         add_feature_extractor = get_user_field(
-            f"Do you want to create a new feature extractor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new feature extractor? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.processor_class is not None:
         add_processor = get_user_field(
-            f"Do you want to create a new processor class? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
