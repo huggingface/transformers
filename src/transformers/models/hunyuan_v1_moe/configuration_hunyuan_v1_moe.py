@@ -11,7 +11,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-class HunYuanMoeV1Config(PretrainedConfig):
+class HunYuanMoEV1Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HunYuanMoEV1Model`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -125,7 +125,7 @@ class HunYuanMoeV1Config(PretrainedConfig):
             The attention head dimension.
     """
 
-    model_type = "hunyuan"
+    model_type = "hunyuan_v1_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -257,4 +257,4 @@ class HunYuanMoeV1Config(PretrainedConfig):
                 raise ValueError(f"`rope_scaling`'s alpha field must be a float > 1.0, got {rope_scaling_alpha}")
 
 
-__all__ = ["HunYuanMoeV1Config"]
+__all__ = ["HunYuanMoEV1Config"]

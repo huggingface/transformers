@@ -29,9 +29,9 @@ To be released with the official model launch.
 
 To be released with the official model launch.
 
-## HunYuanMoeV1Config
+## HunYuanMoEV1Config
 
-[[autodoc]] HunYuanMoeV1Config
+[[autodoc]] HunYuanMoEV1Config
 
 ## HunYuanMoEV1Model
 

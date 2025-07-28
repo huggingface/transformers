@@ -187,7 +187,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Config"),
-        ("hunyuan_v1_moe", "HunYuanMoeV1Config"),
+        ("hunyuan_v1_moe", "HunYuanMoEV1Config"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("idefics2", "Idefics2Config"),

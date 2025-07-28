@@ -52,7 +52,7 @@ from transformers.utils.import_utils import is_torch_fx_available
 from ...generation import GenerationMixin
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
-from .configuration_hunyuan_v1_moe import HunYuanMoeV1Config
+from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
 
 
 if is_flash_attn_2_available():
@@ -71,7 +71,7 @@ if is_torch_fx_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "HunYuanMoeV1Config"
+_CONFIG_FOR_DOC = "HunYuanMoEV1Config"
 
 
 def topkgating(logits: Tensor, topk: int):
@@ -494,7 +494,7 @@ class HunYuanMLP(nn.Module):
     使用 SwiGLU 的 MLP
     """
 
-    def __init__(self, config: HunYuanMoeV1Config, layer_idx=None, is_shared_mlp=False):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx=None, is_shared_mlp=False):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -515,7 +515,7 @@ class HunYuanMLP(nn.Module):
 
 
 class HunYuanTopKGate(nn.Module):
-    def __init__(self, config: HunYuanMoeV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -540,7 +540,7 @@ class HunYuanTopKGate(nn.Module):
 
 
 class HunYuanMoE(nn.Module):
-    def __init__(self, config: HunYuanMoeV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -597,7 +597,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class HunYuanAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: HunYuanMoeV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1113,7 +1113,7 @@ HUNYUAN_ATTENTION_CLASSES = {
 
 
 class HunYuanDecoderLayer(nn.Module):
-    def __init__(self, config: HunYuanMoeV1Config, layer_idx: int):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
@@ -1210,7 +1210,7 @@ HUNYUAN_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`HunYuanMoeV1Config`]):
+        config ([`HunYuanMoEV1Config`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1222,7 +1222,7 @@ HUNYUAN_START_DOCSTRING = r"""
     HUNYUAN_START_DOCSTRING,
 )
 class HunYuanMoEPreTrainedModel(PreTrainedModel):
-    config_class = HunYuanMoeV1Config
+    config_class = HunYuanMoEV1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HunYuanDecoderLayer"]
@@ -1322,10 +1322,10 @@ class HunYuanMoEV1Model(HunYuanMoEPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`HunYuanDecoderLayer`]
 
     Args:
-        config: HunYuanMoeV1Config
+        config: HunYuanMoEV1Config
     """
 
-    def __init__(self, config: HunYuanMoeV1Config):
+    def __init__(self, config: HunYuanMoEV1Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1499,7 +1499,7 @@ class HunYuanMoEV1Model(HunYuanMoEPreTrainedModel):
 class HunYuanMoEV1ForCausalLM(HunYuanMoEPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: HunYuanMoeV1Config):
+    def __init__(self, config: HunYuanMoEV1Config):
         super().__init__(config)
         self.config = config
         self.model = HunYuanMoEV1Model(config)
