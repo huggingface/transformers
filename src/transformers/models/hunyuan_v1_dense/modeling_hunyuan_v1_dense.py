@@ -5,14 +5,14 @@
 
 import math
 import warnings
-from typing import Optional, Union
+from typing import Optional, Union, Unpack
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
+from ...utils import TransformersKwargs
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import (
@@ -1329,6 +1329,7 @@ class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **super_kwargs: Unpack[TransformersKwargs]
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         Args:
