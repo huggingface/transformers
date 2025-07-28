@@ -529,7 +529,7 @@ class Trainer:
                 kernel_config = self.args.liger_kernel_config if self.args.liger_kernel_config is not None else {}
 
                 if isinstance(model, PreTrainedModel):
-                    # Patch the model with liger kernels. Use the the specified or default kernel configurations.
+                    # Patch the model with liger kernels. Use the specified or default kernel configurations.
                     _apply_liger_kernel_to_instance(model=model, **kernel_config)
                 elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
                     # Patch the base model with liger kernels where model is a PeftModel. Use the specified or default kernel configurations.
@@ -2634,7 +2634,14 @@ class Trainer:
 
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
-                        self.optimizer.step()
+                        context = contextlib.nullcontext
+                        if self.is_tp_enabled:
+                            from torch.distributed._tensor.experimental import implicit_replication
+
+                            context = implicit_replication
+
+                        with context():
+                            self.optimizer.step()
 
                         self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
 

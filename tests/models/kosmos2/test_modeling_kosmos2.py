@@ -465,6 +465,14 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     ):
         pass
 
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite because Kosmos-2 need to padd pixel values and pad image-attn-mask
