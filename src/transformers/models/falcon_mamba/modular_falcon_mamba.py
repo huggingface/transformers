@@ -192,6 +192,8 @@ class FalconMambaConfig(MambaConfig):
             **kwargs,
         )
         self.mixer_rms_eps = mixer_rms_eps
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 class FalconMambaCache(MambaCache):

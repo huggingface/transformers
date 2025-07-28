@@ -160,6 +160,8 @@ class FalconMambaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.use_falcon_mambapy = use_falcon_mambapy
         self.mixer_rms_eps = mixer_rms_eps
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 __all__ = ["FalconMambaConfig"]
