@@ -223,7 +223,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     dequantize(
                         module,
                         param_name,
-                        tp_mode,
                         model,
                         param_value,
                         neutral_param_name,

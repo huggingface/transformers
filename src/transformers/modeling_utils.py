@@ -6176,7 +6176,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
 
         # Exception in the case of MXFP4 quantization, we need to update the param name to the original param name
         # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
-        if hf_quantizer.quantization_config.quant_method in {QuantizationMethod.MXFP4} and hf_quantizer.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
+        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {QuantizationMethod.MXFP4} and hf_quantizer.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
             param_name = hf_quantizer.update_param_name(param_name)
 
         try:

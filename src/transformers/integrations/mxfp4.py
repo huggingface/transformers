@@ -137,9 +137,6 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         self.hidden_size_pad = 0 #smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
-        """
-        To update with moe mxfp4 kernels, for now we just upcast the weights in torch.bfloat16
-        """
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
         from triton_kernels.swiglu import swiglu_fn
         with torch.cuda.device(hidden_states.device):
@@ -256,20 +253,17 @@ def should_convert_module(current_key_name, patterns):
         return True
     return False
 
-def dequantize(module,param_name, tp_mode, model, param_value, neutral_param_name, target_device, empty_param, casting_dtype, to_contiguous, rank, device_mesh):
+def dequantize(module,param_name, model, param_value, neutral_param_name, target_device, empty_param, casting_dtype, to_contiguous, rank, device_mesh):
     from ..integrations.tensor_parallel import shard_and_distribute_module
-
+    
     if "gate_up_proj" in param_name:
+        if device_mesh is not None:
+            param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
         if not hasattr(module, "gate_up_proj_blocks") and not hasattr(module, "gate_up_proj_scales"):
-            if tp_mode:
-                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             return
         else:
-            if tp_mode:
-                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
-
             dequantized_gate_up_proj = convert_moe_packed_tensors(module.gate_up_proj_blocks, module.gate_up_proj_scales)
             dequantized_gate_up_proj = dequantized_gate_up_proj.transpose(1,2).to(target_device)
             module.gate_up_proj = torch.nn.Parameter(dequantized_gate_up_proj, requires_grad=False)
@@ -277,16 +271,13 @@ def dequantize(module,param_name, tp_mode, model, param_value, neutral_param_nam
             del module.gate_up_proj_scales
             return
     elif "down_proj" in param_name:
+        if device_mesh is not None:
+            param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
         if not hasattr(module, "down_proj_blocks") and not hasattr(module, "down_proj_scales"):
-            if tp_mode:
-                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             return
         else:
-            if tp_mode:
-                param_value = shard_and_distribute_module(model, param_value, empty_param, neutral_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param_inside=False)
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
-
             dequantized_down_proj = convert_moe_packed_tensors(module.down_proj_blocks, module.down_proj_scales)
             dequantized_down_proj = dequantized_down_proj.transpose(1,2).to(target_device)
             module.down_proj = torch.nn.Parameter(dequantized_down_proj, requires_grad=False)
