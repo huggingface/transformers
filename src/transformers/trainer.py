@@ -529,7 +529,7 @@ class Trainer:
                 kernel_config = self.args.liger_kernel_config if self.args.liger_kernel_config is not None else {}
 
                 if isinstance(model, PreTrainedModel):
-                    # Patch the model with liger kernels. Use the the specified or default kernel configurations.
+                    # Patch the model with liger kernels. Use the specified or default kernel configurations.
                     _apply_liger_kernel_to_instance(model=model, **kernel_config)
                 elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
                     # Patch the base model with liger kernels where model is a PeftModel. Use the specified or default kernel configurations.
@@ -631,7 +631,12 @@ class Trainer:
         unwrapped_model = self.accelerator.unwrap_model(model)
         # We also unwrap peft model
         if _is_peft_model(unwrapped_model):
-            unwrapped_model = unwrapped_model.get_base_model()
+            if hasattr(unwrapped_model, "get_base_model"):
+                unwrapped_model = unwrapped_model.get_base_model()
+            elif hasattr(unwrapped_model, "base_model") and hasattr(unwrapped_model.base_model, "model"):
+                unwrapped_model = unwrapped_model.base_model.model
+            else:
+                raise AttributeError("Cannot extract base model safely from this PEFT wrapper.")
 
         # Check if the model has explicit setup for loss kwargs,
         # if not, check if `**kwargs` are in model.forward
@@ -696,7 +701,7 @@ class Trainer:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
-            raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
+            raise TypeError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
         if args.max_steps > 0 and args.num_train_epochs > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
@@ -1341,7 +1346,7 @@ class Trainer:
                 raise ValueError(f"You need to define `optim_target_modules` to use {optimizer_name} optimizers")
 
             if not isinstance(args.optim_target_modules, (list, str)):
-                raise ValueError(
+                raise TypeError(
                     f"`optim_target_modules` must be a list of strings, a regex string, or 'all-linear'. Got: {args.optim_target_modules}"
                 )
 
@@ -2629,7 +2634,14 @@ class Trainer:
 
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
-                        self.optimizer.step()
+                        context = contextlib.nullcontext
+                        if self.is_tp_enabled:
+                            from torch.distributed._tensor.experimental import implicit_replication
+
+                            context = implicit_replication
+
+                        with context():
+                            self.optimizer.step()
 
                         self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
 
@@ -3721,7 +3733,13 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return self.autocast_smart_context_manager()
+        ctx_stack = contextlib.ExitStack()
+
+        autocast_ctx = self.autocast_smart_context_manager()
+        if not isinstance(autocast_ctx, contextlib.nullcontext):
+            ctx_stack.enter_context(autocast_ctx)
+
+        return ctx_stack
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
@@ -3935,6 +3953,13 @@ class Trainer:
             if IS_SAGEMAKER_MP_POST_1_10:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
+        # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
+        elif getattr(self.accelerator, "parallelism_config", None) is not None:
+            if self.accelerator.should_save_model:
+                self._save(output_dir)
+        # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
+        elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
+            self._save(output_dir)
         elif self.is_fsdp_enabled:
             if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
                 version.parse(accelerate_version) > version.parse("0.24.1")

@@ -552,7 +552,7 @@ class GPT2SequenceSummary(nn.Module):
 
 @auto_docstring
 class GPT2PreTrainedModel(PreTrainedModel):
-    config_class = GPT2Config
+    config: GPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
     is_parallelizable = True
@@ -563,7 +563,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_attention_backend = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -1139,12 +1139,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         self.model_parallel = False
         torch.cuda.empty_cache()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     @auto_docstring
     def forward(
         self,
@@ -1293,12 +1287,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         self.multiple_choice_head = self.multiple_choice_head.to("cpu")
         self.model_parallel = False
         torch.cuda.empty_cache()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

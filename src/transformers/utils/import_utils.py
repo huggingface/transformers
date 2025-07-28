@@ -172,6 +172,8 @@ _auto_round_available, _auto_round_version = _is_package_available("auto_round",
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
+_fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
+_qutlass_available = _is_package_available("qutlass")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -515,6 +517,10 @@ def is_uvicorn_available():
     return _uvicorn_available
 
 
+def is_openai_available():
+    return _openai_available
+
+
 def is_pretty_midi_available():
     return _pretty_midi_available
 
@@ -579,6 +585,12 @@ def is_causal_conv1d_available():
         if not torch.cuda.is_available():
             return False
         return _is_package_available("causal_conv1d")
+    return False
+
+
+def is_xlstm_available():
+    if is_torch_available():
+        return _is_package_available("xlstm")
     return False
 
 
@@ -728,10 +740,6 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
-
-
-def is_openai_available():
-    return _openai_available
 
 
 def is_flax_available():
@@ -1312,6 +1320,14 @@ def is_optimum_quanto_available():
 
 def is_quark_available():
     return _quark_available
+
+
+def is_fp_quant_available():
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
+
+
+def is_qutlass_available():
+    return _qutlass_available
 
 
 def is_compressed_tensors_available():
@@ -1917,6 +1933,12 @@ UVICORN_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+OPENAI_IMPORT_ERROR = """
+{0} requires the openai library but it was not found in your environment. You can install it with pip:
+`pip install openai`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
 `pip install pytesseract`. Please note that you may need to restart your runtime after installation.
@@ -2046,6 +2068,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
         ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
+        ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
         ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
     ]
 )
@@ -2176,12 +2199,12 @@ class _LazyModule(ModuleType):
                 self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
-                    if len(missing_backends):
+                    if missing_backends:
                         self._object_missing_backend[key] = missing_backends
 
                     for value in values:
                         self._class_to_module[value] = key
-                        if len(missing_backends):
+                        if missing_backends:
                             self._object_missing_backend[value] = missing_backends
                     _import_structure.setdefault(key, []).extend(values)
 
@@ -2376,7 +2399,7 @@ def requires(*, backends=()):
     """
 
     if not isinstance(backends, tuple):
-        raise ValueError("Backends should be a tuple.")
+        raise TypeError("Backends should be a tuple.")
 
     applied_backends = []
     for backend in backends:

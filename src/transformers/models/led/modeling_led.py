@@ -1107,7 +1107,7 @@ class LEDClassificationHead(nn.Module):
 
 @auto_docstring
 class LEDPreTrainedModel(PreTrainedModel):
-    config_class = LEDConfig
+    config: LEDConfig
     base_model_prefix = "led"
     supports_gradient_checkpointing = True
 
@@ -2053,12 +2053,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

@@ -504,7 +504,7 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
-    config_class = RecurrentGemmaConfig
+    config: RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
@@ -586,14 +586,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         )
         # Initialize weights and apply final processing
         self.post_init()
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @auto_docstring
     def forward(
@@ -704,18 +696,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder

@@ -923,7 +923,7 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class FalconH1PreTrainedModel(PreTrainedModel):
-    config_class = FalconH1Config
+    config: FalconH1Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconH1DecoderLayer"]
@@ -1015,12 +1015,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring

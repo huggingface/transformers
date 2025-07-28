@@ -409,7 +409,7 @@ class GLPNEncoder(nn.Module):
 
 @auto_docstring
 class GLPNPreTrainedModel(PreTrainedModel):
-    config_class = GLPNConfig
+    config: GLPNConfig
     base_model_prefix = "glpn"
     main_input_name = "pixel_values"
     _no_split_modules = []

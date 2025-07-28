@@ -49,7 +49,7 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
-from transformers.utils.args_doc import (
+from transformers.utils.auto_docstring import (
     ImageProcessorArgs,
     ModelArgs,
     ModelOutputArgs,
@@ -79,6 +79,7 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = [
+    "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
     "Llama4Processor",
@@ -1487,7 +1488,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         if docstring_args_ro_remove_warnings:
             if not overwrite:
                 print(
-                    "Some docstrings are redundant with the ones in `args_doc.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
             print(f"🚨 Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:

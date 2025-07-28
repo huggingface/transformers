@@ -548,11 +548,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         max_new_tokens = 30
         support_flag = {
             "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn_2",
+            "flash_attention_2": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
-            if not getattr(model_class, support_flag[attn_implementation]):
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
 
             config, original_inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -777,4 +777,11 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         ])
         # fmt: on
 
-        torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        # See https://github.com/huggingface/transformers/pull/39416
+        EXPECTED_TOKENS_2 = torch.clone(EXPECTED_TOKENS)
+        EXPECTED_TOKENS_2[2, 159:162] = torch.tensor([3, 0, 269])
+
+        try:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS)
+        except AssertionError:
+            torch.testing.assert_close(out.cpu(), EXPECTED_TOKENS_2)

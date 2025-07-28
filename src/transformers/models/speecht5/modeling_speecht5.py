@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqSpectrogramOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import EmbeddingAccessMixin, PreTrainedModel
 from ...utils import auto_docstring, logging
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
@@ -414,7 +414,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         self.register_buffer("pe", pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
-        self.alpha = torch.nn.Parameter(torch.tensor(1.0))
+        self.alpha = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, emb):
         emb = emb + self.alpha * self.pe[:, : emb.size(1)]
@@ -762,7 +762,7 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         return hidden_states + layer_output.transpose(1, 2)
 
 
-class SpeechT5TextEncoderPrenet(nn.Module):
+class SpeechT5TextEncoderPrenet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -773,19 +773,13 @@ class SpeechT5TextEncoderPrenet(nn.Module):
             config.max_text_positions,
         )
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(self, input_ids: torch.Tensor):
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = self.encode_positions(inputs_embeds)
         return inputs_embeds
 
 
-class SpeechT5TextDecoderPrenet(nn.Module):
+class SpeechT5TextDecoderPrenet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -799,12 +793,6 @@ class SpeechT5TextDecoderPrenet(nn.Module):
             config.hidden_size,
             config.pad_token_id,
         )
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -835,7 +823,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         return inputs_embeds, attention_mask
 
 
-class SpeechT5TextDecoderPostnet(nn.Module):
+class SpeechT5TextDecoderPostnet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -845,6 +833,8 @@ class SpeechT5TextDecoderPostnet(nn.Module):
         return self.lm_head(hidden_states)
 
     def get_output_embeddings(self):
+        # Post-net has no token embeddings, but its lm_head must still be
+        # tied to the decoder weights when `tie_word_embeddings=True`.
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
@@ -1203,13 +1193,14 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class SpeechT5PreTrainedModel(PreTrainedModel):
-    config_class = SpeechT5Config
+    config: SpeechT5Config
     base_model_prefix = "speecht5"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, SpeechT5PositionalConvEmbedding):
             nn.init.normal_(
                 module.conv.weight,
@@ -1217,15 +1208,17 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, SpeechT5ScaledPositionalEncoding):
+            module.alpha.data.fill_(1.0)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -1234,9 +1227,12 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+        if hasattr(module, "masked_spec_embed"):
+            nn.init.uniform_(module.masked_spec_embed)
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
@@ -3123,7 +3119,7 @@ class HifiGanResidualBlock(nn.Module):
     """
 )
 class SpeechT5HifiGan(PreTrainedModel):
-    config_class = SpeechT5HifiGanConfig
+    config: SpeechT5HifiGanConfig
     main_input_name = "spectrogram"
 
     def __init__(self, config: SpeechT5HifiGanConfig):
@@ -3164,9 +3160,9 @@ class SpeechT5HifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

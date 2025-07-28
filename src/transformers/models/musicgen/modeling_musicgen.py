@@ -419,7 +419,7 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class MusicgenPreTrainedModel(PreTrainedModel):
-    config_class = MusicgenDecoderConfig
+    config: MusicgenDecoderConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
@@ -475,12 +475,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @auto_docstring
     def forward(
@@ -1339,14 +1333,11 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,
     """
 )
-class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
-    config_class = MusicgenConfig
+class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin):
+    config: MusicgenConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
 
     def __init__(
         self,

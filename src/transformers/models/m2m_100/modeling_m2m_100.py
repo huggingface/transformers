@@ -294,8 +294,8 @@ class M2M100Attention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -516,7 +516,7 @@ class M2M100DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class M2M100PreTrainedModel(PreTrainedModel):
-    config_class = M2M100Config
+    config: M2M100Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["M2M100EncoderLayer", "M2M100DecoderLayer"]
@@ -525,7 +525,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     # Doesn't support `compile` (dynamic control flow). Can be fixed but low usage model
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1329,12 +1329,6 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

@@ -504,8 +504,8 @@ class T5Attention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
@@ -766,12 +766,12 @@ class T5ClassificationHead(nn.Module):
 
 @auto_docstring
 class T5PreTrainedModel(PreTrainedModel):
-    config_class = T5Config
+    config: T5Config
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
@@ -939,9 +939,6 @@ class T5Stack(T5PreTrainedModel):
         self.embed_tokens = self.embed_tokens.to("cpu")
         self.final_layer_norm = self.final_layer_norm.to("cpu")
         torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -1619,12 +1616,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def get_encoder(self):
         return self.encoder
 
@@ -1836,7 +1827,7 @@ class T5EncoderModel(T5PreTrainedModel):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
-        encoder_config = copy.deepcopy(config)
+        encoder_config = config
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)

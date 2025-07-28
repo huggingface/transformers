@@ -43,12 +43,12 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
-    config_class = GPTNeoXJapaneseConfig
+    config: GPTNeoXJapaneseConfig
     base_model_prefix = "gpt_neox_japanese"
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

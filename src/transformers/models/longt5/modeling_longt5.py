@@ -481,8 +481,8 @@ class LongT5Attention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
@@ -1245,12 +1245,12 @@ class LongT5Block(GradientCheckpointingLayer):
 
 @auto_docstring
 class LongT5PreTrainedModel(PreTrainedModel):
-    config_class = LongT5Config
+    config: LongT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LongT5Block"]
 
-    _supports_static_cache = False  # TODO: @raushan more involved due to local/global attn
+    _can_compile_fullgraph = False  # TODO: @raushan more involved due to local/global attn
 
     @property
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs
@@ -1366,10 +1366,6 @@ class LongT5Stack(LongT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
-    def get_input_embeddings(self):
-        return self.embed_tokens
 
     # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
@@ -1928,12 +1924,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def get_encoder(self):
         return self.encoder

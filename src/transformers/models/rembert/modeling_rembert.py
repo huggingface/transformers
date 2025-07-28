@@ -626,7 +626,7 @@ class RemBertOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class RemBertPreTrainedModel(PreTrainedModel):
-    config_class = RemBertConfig
+    config: RemBertConfig
     load_tf_weights = load_tf_weights_in_rembert
     base_model_prefix = "rembert"
     supports_gradient_checkpointing = True

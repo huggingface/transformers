@@ -332,7 +332,7 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class InstructBlipPreTrainedModel(PreTrainedModel):
-    config_class = InstructBlipConfig
+    config: InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
@@ -340,7 +340,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     _no_split_modules = [
         "InstructBlipQFormerEmbeddings",
@@ -452,7 +452,7 @@ class InstructBlipEncoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = InstructBlipVisionConfig
+    config: InstructBlipVisionConfig
 
     def __init__(self, config: InstructBlipVisionConfig):
         super().__init__(config)
@@ -1351,10 +1351,10 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
     """
 )
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
-    config_class = InstructBlipConfig
+    config: InstructBlipConfig
     main_input_name = "pixel_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipConfig):

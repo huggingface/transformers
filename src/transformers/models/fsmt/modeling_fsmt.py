@@ -217,7 +217,7 @@ def _prepare_fsmt_decoder_inputs(
 
 @auto_docstring
 class PretrainedFSMTModel(PreTrainedModel):
-    config_class = FSMTConfig
+    config: FSMTConfig
     base_model_prefix = "model"
 
     def _init_weights(self, module):

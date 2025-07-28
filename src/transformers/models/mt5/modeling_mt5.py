@@ -379,8 +379,8 @@ class MT5Attention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
@@ -752,12 +752,12 @@ class MT5ClassificationHead(nn.Module):
 @auto_docstring
 # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class MT5PreTrainedModel(PreTrainedModel):
-    config_class = MT5Config
+    config: MT5Config
     load_tf_weights = load_tf_weights_in_mt5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]
@@ -926,9 +926,6 @@ class MT5Stack(MT5PreTrainedModel):
         self.embed_tokens = self.embed_tokens.to("cpu")
         self.final_layer_norm = self.final_layer_norm.to("cpu")
         torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -1297,7 +1294,7 @@ class MT5Model(MT5PreTrainedModel):
     ```"""
 
     model_type = "mt5"
-    config_class = MT5Config
+    config: MT5Config
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1564,7 +1561,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
     ```"""
 
     model_type = "mt5"
-    config_class = MT5Config
+    config: MT5Config
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1633,23 +1630,13 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         self.device_map = None
         torch.cuda.empty_cache()
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.shared
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.set_output_embeddings
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_output_embeddings
-    def get_output_embeddings(self):
-        return self.lm_head
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
     def get_encoder(self):
@@ -1874,7 +1861,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
     ```"""
 
     model_type = "mt5"
-    config_class = MT5Config
+    config: MT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
 
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.__init__ with T5->MT5
@@ -1882,7 +1869,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
-        encoder_config = copy.deepcopy(config)
+        encoder_config = config
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = MT5Stack(encoder_config, self.shared)

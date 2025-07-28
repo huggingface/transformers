@@ -786,7 +786,7 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
 
 @auto_docstring
 class UniSpeechSatPreTrainedModel(PreTrainedModel):
-    config_class = UniSpeechSatConfig
+    config: UniSpeechSatConfig
     base_model_prefix = "unispeech_sat"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True

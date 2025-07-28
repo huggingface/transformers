@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Speech2Text2 model."""
 
-import copy
 import math
 from typing import Optional, Union
 
@@ -385,7 +384,7 @@ class Speech2Text2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Speech2Text2PreTrainedModel(PreTrainedModel):
-    config_class = Speech2Text2Config
+    config: Speech2Text2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
@@ -453,12 +452,6 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -682,7 +675,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
-        config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
@@ -698,12 +690,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.decoder = decoder

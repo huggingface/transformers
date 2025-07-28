@@ -738,7 +738,7 @@ class EsmPooler(nn.Module):
 
 @auto_docstring
 class EsmPreTrainedModel(PreTrainedModel):
-    config_class = EsmConfig
+    config: EsmConfig
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
@@ -763,6 +763,11 @@ class EsmPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, EsmLMHead):
             module.bias.data.zero_()
+
+    def get_output_embeddings(self):
+        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
+        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
+        return None
 
 
 @auto_docstring

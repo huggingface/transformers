@@ -438,9 +438,9 @@ class TrainingArguments:
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
-            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/),
-            [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and [swanlab](https://swanlab.cn)
-            logging. If not specified, will be the same as `output_dir`.
+            A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
+            [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
+            [swanlab](https://swanlab.cn) logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -626,8 +626,8 @@ class TrainingArguments:
         report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
-            for no integrations.
+            `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
+            installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -690,7 +690,7 @@ class TrainingArguments:
 
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            `huggingface-cli login`.
+            `hf auth login`.
         hub_private_repo (`bool`, *optional*):
             Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
         hub_always_push (`bool`, *optional*, defaults to `False`):
@@ -800,7 +800,7 @@ class TrainingArguments:
             `_apply_liger_kernel_to_instance` function, which specifies which kernels to apply. Available options vary by model but typically
             include: 'rope', 'swiglu', 'cross_entropy', 'fused_linear_cross_entropy', 'rms_norm', etc. If `None`, use the default kernel configurations.
 
-        average_tokens_across_devices (`bool`, *optional*, defaults to `False`):
+        average_tokens_across_devices (`bool`, *optional*, defaults to `True`):
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
@@ -1182,7 +1182,10 @@ class TrainingArguments:
     run_name: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional descriptor for the run. Notably used for wandb, mlflow comet and swanlab logging."
+            "help": (
+                "An optional descriptor for the run. Notably used for trackio, wandb, mlflow comet and swanlab "
+                "logging."
+            )
         },
     )
     disable_tqdm: Optional[bool] = field(
@@ -1553,7 +1556,7 @@ class TrainingArguments:
     )
 
     average_tokens_across_devices: Optional[bool] = field(
-        default=False,
+        default=True,
         metadata={
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
             "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
@@ -2838,8 +2841,8 @@ class TrainingArguments:
             report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations
-                installed, `"none"` for no integrations.
+                `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all
+                integrations installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
@@ -2927,7 +2930,7 @@ class TrainingArguments:
 
             token (`str`, *optional*):
                 The token to use to push the model to the Hub. Will default to the token in the cache folder obtained
-                with `huggingface-cli login`.
+                with `hf auth login`.
             private_repo (`bool`, *optional*, defaults to `False`):
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             always_push (`bool`, *optional*, defaults to `False`):

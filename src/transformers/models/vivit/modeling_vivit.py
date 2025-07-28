@@ -453,7 +453,7 @@ class VivitPooler(nn.Module):
 
 @auto_docstring
 class VivitPreTrainedModel(PreTrainedModel):
-    config_class = VivitConfig
+    config: VivitConfig
     base_model_prefix = "vivit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

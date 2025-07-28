@@ -210,7 +210,7 @@ class EncoderLayer(nn.Module):
 
 @auto_docstring
 class CTRLPreTrainedModel(PreTrainedModel):
-    config_class = CTRLConfig
+    config: CTRLConfig
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):
@@ -454,12 +454,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(

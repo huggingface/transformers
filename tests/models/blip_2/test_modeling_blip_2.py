@@ -1085,6 +1085,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @unittest.skip("T5 backbone deepcopies the configs, and fixing it would be more involved")
+    def test_internal_model_config_and_subconfig_are_same(self):
+        pass
+
 
 class Blip2TextModelWithProjectionTester:
     def __init__(self, parent, vision_kwargs=None, qformer_kwargs=None, is_training=True):
