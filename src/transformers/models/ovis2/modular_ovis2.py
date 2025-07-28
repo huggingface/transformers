@@ -190,7 +190,7 @@ class Ovis2VisionModel(nn.Module):
 
 
 class Ovis2PreTrainedModel(PreTrainedModel):
-    config_class = Ovis2Config
+    config_class: Ovis2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
@@ -199,6 +199,9 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_static_cache = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = (
