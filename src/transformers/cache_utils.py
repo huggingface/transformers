@@ -347,7 +347,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
-        
+
         # This may be needed if the Layer was not created with the right device at the beginning. However, if it
         # is the case, it should only run once, because then the new states receive will always have the same device
         if self.device != key_states.device:
@@ -424,7 +424,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
-        
+
         # This may be needed if the Layer was not created with the right device at the beginning. However, if it
         # is the case, it should only run once, because then the new states receive will always have the same device
         if self.device != key_states.device:
