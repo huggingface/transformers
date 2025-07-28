@@ -29,7 +29,15 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging, torch_int, ModelOutput, TransformersKwargs
+from ...utils import (
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+    torch_int,
+    ModelOutput,
+    TransformersKwargs,
+)
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -411,7 +419,6 @@ class InternS1VisionEncoder(nn.Module):
 
 @auto_docstring
 class InternS1VisionModel(InternS1VisionPreTrainedModel):
-
     def __init__(self, config: InternS1VisionConfig) -> None:
         super().__init__(config)
         self.config = config
@@ -545,6 +552,7 @@ class InternS1ModelOutputWithPast(ModelOutput):
 
 class InternS1Model(LlavaModel):
     _checkpoint_conversion_mapping = {}
+
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
 

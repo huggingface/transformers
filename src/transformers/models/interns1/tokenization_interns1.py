@@ -61,6 +61,7 @@ class InternS1CheckModuleMixin(ABC):
 
     Note that short strings are ignored by this module.
     """
+
     def __init__(self, *, min_length: int):
         self.min_length = min_length
         self.REGEX = self._build_regex()
@@ -123,6 +124,7 @@ class FastaCheckModule(InternS1CheckModuleMixin):
 
     Automatically detects protein sequence using regex patterns.
     """
+
     def __init__(self, *, min_length: int = 27):
         super().__init__(min_length=min_length)
         self.auto_detect_token = ["<FASTA_AUTO_DETECT>", "</FASTA_AUTO_DETECT>"]
@@ -135,6 +137,7 @@ class FastaCheckModule(InternS1CheckModuleMixin):
         return True
 
 
+# fmt: off
 bonds = ["-", "=", "#", ":", "/", "\\", ".", "$"]
 organic_symbols = ["B", "C", "N", "O", "P", "S", "F", "Cl", "Br", "I"]
 other_allows = bonds + ["[", "]", "(", ")", ";"]
@@ -153,6 +156,7 @@ elements = [
     "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds",
     "Rg", "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og"
 ]
+# fmt: on
 
 
 class SmilesCheckModule(InternS1CheckModuleMixin):
@@ -163,13 +167,15 @@ class SmilesCheckModule(InternS1CheckModuleMixin):
     or chemical syntax rules. Uses RDKit for precise validation when available,
     otherwise falls back to rule-based validation.
     """
+
     def __init__(self, *, min_length: int = 10):
         super().__init__(min_length=min_length)
         self.auto_detect_token = ["<SMILES_AUTO_DETECT>", "</SMILES_AUTO_DETECT>"]
-        self._SQ_BRACKET_BAN_1 = re.compile(r'(?:[A-GI-Z]|[a-z]){3,}')
-        self._SQ_BRACKET_BAN_2 = re.compile(r'\d{4,}')
+        self._SQ_BRACKET_BAN_1 = re.compile(r"(?:[A-GI-Z]|[a-z]){3,}")
+        self._SQ_BRACKET_BAN_2 = re.compile(r"\d{4,}")
 
     def _build_regex(self):
+        # fmt: off
         _two_letter_elements = [
             'Ac', 'Ag', 'Al', 'Am', 'Ar', 'As', 'At', 'Au', 'Ba', 'Be', 'Bh', 'Bi', 'Bk', 'Br', 'Ca', 'Cd',
             'Ce', 'Cf', 'Cl', 'Cm', 'Cn', 'Co', 'Cr', 'Cs', 'Cu', 'Db', 'Ds', 'Dy', 'Er', 'Es', 'Eu', 'Fe',
@@ -182,6 +188,7 @@ class SmilesCheckModule(InternS1CheckModuleMixin):
         _single_letter_elements = [
             "B", "C", "F", "H", "I", "K", "N", "O", "P", "S", "U", "V", "W", "Y", 'b', 'c', 'n', 'o', 'p', 's'
         ]
+        # fmt: on
         all_elements_sorted = sorted(_two_letter_elements + _single_letter_elements, key=lambda x: (-len(x), x))
         elements_pattern_str = "|".join(all_elements_sorted)
 
@@ -263,17 +270,17 @@ class SmilesCheckModule(InternS1CheckModuleMixin):
                 left_sq_bracket += 1
                 if left_sq_bracket > right_sq_bracket + 1:
                     return False
-                if pos == len(text)-1:
+                if pos == len(text) - 1:
                     return False
-                if ']' not in text[pos+1:]:
+                if "]" not in text[pos + 1 :]:
                     return False
-                bracket_span = text[pos+1:text.find(']')]
+                bracket_span = text[pos + 1 : text.find("]")]
 
                 if self._SQ_BRACKET_BAN_1.search(bracket_span) or self._SQ_BRACKET_BAN_2.search(bracket_span):
                     return False
 
-                matches = re.findall(r'\d+', bracket_span)
-                if len(matches)>2:
+                matches = re.findall(r"\d+", bracket_span)
+                if len(matches) > 2:
                     return False
             if c == "]":
                 step = 1
@@ -477,7 +484,9 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         for token in self.protect_end_sp_tokens:
             self.tokens_trie.add(token)
 
-        self.new_sp_token_offset.append(len(self._added_tokens_decoder) - sum(self.new_sp_token_offset) + len(self._extra_special_tokens))
+        self.new_sp_token_offset.append(
+            len(self._added_tokens_decoder) - sum(self.new_sp_token_offset) + len(self._extra_special_tokens)
+        )
         self.check_module_list = [SmilesCheckModule(), FastaCheckModule()]
 
     @property
