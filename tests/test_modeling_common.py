@@ -3484,6 +3484,7 @@ class ModelTesterMixin:
             model = model_class(config)
 
             model.to(torch_device)
+            model.half()
             dummy_input = inputs_dict[model.main_input_name][:1]
             if dummy_input.dtype in [torch.float32, torch.float16]:
                 dummy_input = dummy_input.to(torch.bfloat16)
