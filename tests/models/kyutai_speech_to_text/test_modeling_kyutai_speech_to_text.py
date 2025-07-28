@@ -777,4 +777,4 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         ]
         # fmt: on
 
-        self.assertListEqual(out.cpu().tolist*(), EXPECTED_TOKENS)
+        self.assertListEqual(out.cpu().tolist(), EXPECTED_TOKENS)
