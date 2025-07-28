@@ -84,6 +84,19 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"image_seq_len": 2}
 
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
+
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
         for n_h in range(image_rows):
