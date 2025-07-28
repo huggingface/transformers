@@ -73,6 +73,8 @@ class DynamicLayer(CacheLayerMixin):
     See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
     """
 
+    is_sliding = False
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -261,6 +263,14 @@ class StaticLayer(CacheLayerMixin):
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
+        if self.device != key_states.device:
+            self.device = key_states.device
+            self.keys = self.keys.to(self.device)
+            self.values = self.values.to(self.device)
+
         if cache_position is None:
             # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
             self.keys.copy_(key_states)
@@ -307,6 +317,8 @@ class SlidingWindowLayer(StaticLayer):
     See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
     """
 
+    is_sliding = True
+
     def __init__(self, sliding_window, *args, **kwargs):
         """
         Args:
@@ -337,6 +349,14 @@ class SlidingWindowLayer(StaticLayer):
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
 
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
+        if self.device != key_states.device:
+            self.device = key_states.device
+            self.keys = self.keys.to(self.device)
+            self.values = self.values.to(self.device)
+
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
@@ -350,7 +370,7 @@ class SlidingWindowLayer(StaticLayer):
             return key_states, value_states
 
         # Sliding window logic for generation phase or prefill < window
-        slicing = torch.arange(self.max_cache_len, device=value_states.device)
+        slicing = torch.arange(self.max_cache_len, device=self.device)
         current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
         to_shift = current_seq_len > self.max_cache_len
         indices = (slicing + to_shift.sum()) % self.max_cache_len
@@ -406,6 +426,14 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
+
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
+        if self.device != key_states.device:
+            self.device = key_states.device
+            self.keys = self.keys.to(self.device)
+            self.values = self.values.to(self.device)
 
         cumulative_length = self.cumulative_length
         self.cumulative_length += key_states.shape[-2]
