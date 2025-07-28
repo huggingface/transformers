@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Beit."""
 
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -79,16 +79,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
         for idx in range(len(labels)):
