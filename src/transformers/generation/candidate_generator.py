@@ -709,6 +709,7 @@ class AssistantToTargetTranslator:
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: Optional[LogitsProcessorList] = None
         self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
+        self._assistant_model_device = assistant_model.device if assistant_model is not None else "cpu"
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
             if self.assistant_prune_lm_head:
