@@ -347,14 +347,10 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(LlamaModel):
-    _can_compile_fullgraph = False
-
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):
-    _can_compile_fullgraph = False
-
     pass
 
 
