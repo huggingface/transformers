@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""BLT model configuration"""
+"""Blt model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,9 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class BLTLocalEncoderConfig(PretrainedConfig):
+class BltLocalEncoderConfig(PretrainedConfig):
     """
-    Configuration class for the BLT Local Encoder component.
+    Configuration class for the Blt Local Encoder component.
     """
 
     model_type = "blt_local_encoder"
@@ -69,9 +69,9 @@ class BLTLocalEncoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class BLTLocalDecoderConfig(PretrainedConfig):
+class BltLocalDecoderConfig(PretrainedConfig):
     """
-    Configuration class for the BLT Local Decoder component.
+    Configuration class for the Blt Local Decoder component.
     """
 
     model_type = "blt_local_decoder"
@@ -115,9 +115,9 @@ class BLTLocalDecoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class BLTGlobalTransformerConfig(PretrainedConfig):
+class BltGlobalTransformerConfig(PretrainedConfig):
     """
-    Configuration class for the BLT Global Transformer component.
+    Configuration class for the Blt Global Transformer component.
     """
 
     model_type = "blt_global_transformer"
@@ -153,9 +153,9 @@ class BLTGlobalTransformerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class BLTPatcherConfig(PretrainedConfig):
+class BltPatcherConfig(PretrainedConfig):
     r"""
-    Configuration class for the BLT Patcher/Entropy model component.
+    Configuration class for the Blt Patcher/Entropy model component.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
@@ -215,24 +215,24 @@ class BLTPatcherConfig(PretrainedConfig):
         self.dropout = dropout
         self.rope_theta = rope_theta
         self.attn_bias_type = attn_bias_type
-        self.hidden_act = "silu"  # BLT uses silu activation
+        self.hidden_act = "silu"  # Blt uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.rope_scaling = rope_scaling
 
         super().__init__(**kwargs)
 
 
-class BLTConfig(PretrainedConfig):
+class BltConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BLTModel`]. It is used to instantiate a
-    BLT model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`BltModel`]. It is used to instantiate a
+    Blt model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size of the BLT model. Defines the number of different tokens (bytes) that can be represented.
+            Vocabulary size of the Blt model. Defines the number of different tokens (bytes) that can be represented.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can handle.
         # Patching configuration
@@ -264,23 +264,23 @@ class BLTConfig(PretrainedConfig):
             Number of hash functions for byte groups.
 
         # Component configurations
-        patcher_config (`Union[BLTPatcherConfig, dict]`, *optional*):
-            Configuration for the BLT patcher/entropy model component.
-        encoder_config (`Union[BLTLocalEncoderConfig, dict]`, *optional*):
-            Configuration for the BLT local encoder component.
-        decoder_config (`Union[BLTLocalDecoderConfig, dict]`, *optional*):
-            Configuration for the BLT local decoder component.
-        global_config (`Union[BLTGlobalTransformerConfig, dict]`, *optional*):
-            Configuration for the BLT global transformer component.
+        patcher_config (`Union[BltPatcherConfig, dict]`, *optional*):
+            Configuration for the Blt patcher/entropy model component.
+        encoder_config (`Union[BltLocalEncoderConfig, dict]`, *optional*):
+            Configuration for the Blt local encoder component.
+        decoder_config (`Union[BltLocalDecoderConfig, dict]`, *optional*):
+            Configuration for the Blt local decoder component.
+        global_config (`Union[BltGlobalTransformerConfig, dict]`, *optional*):
+            Configuration for the Blt global transformer component.
 
     ```python
-    >>> from transformers import BLTModel, BLTConfig
+    >>> from transformers import BltModel, BltConfig
 
-    >>> # Initializing a BLT configuration
-    >>> configuration = BLTConfig()
+    >>> # Initializing a Blt configuration
+    >>> configuration = BltConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = BLTModel(configuration)
+    >>> model = BltModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -289,10 +289,10 @@ class BLTConfig(PretrainedConfig):
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {
-        "patcher_config": BLTPatcherConfig,
-        "encoder_config": BLTLocalEncoderConfig,
-        "decoder_config": BLTLocalDecoderConfig,
-        "global_config": BLTGlobalTransformerConfig,
+        "patcher_config": BltPatcherConfig,
+        "encoder_config": BltLocalEncoderConfig,
+        "decoder_config": BltLocalDecoderConfig,
+        "global_config": BltGlobalTransformerConfig,
     }
 
     def __init__(
@@ -350,44 +350,44 @@ class BLTConfig(PretrainedConfig):
 
         # Initialize component configurations
         if patcher_config is None:
-            self.patcher_config = BLTPatcherConfig()
-            logger.info("patcher_config is None, using default BLT patcher config")
+            self.patcher_config = BltPatcherConfig()
+            logger.info("patcher_config is None, using default Blt patcher config")
         elif isinstance(patcher_config, dict):
-            self.patcher_config = BLTPatcherConfig(**patcher_config)
-        elif isinstance(patcher_config, BLTPatcherConfig):
+            self.patcher_config = BltPatcherConfig(**patcher_config)
+        elif isinstance(patcher_config, BltPatcherConfig):
             self.patcher_config = patcher_config
 
         if encoder_config is None:
-            self.encoder_config = BLTLocalEncoderConfig()
-            logger.info("encoder_config is None, using default BLT encoder config")
+            self.encoder_config = BltLocalEncoderConfig()
+            logger.info("encoder_config is None, using default Blt encoder config")
         elif isinstance(encoder_config, dict):
-            self.encoder_config = BLTLocalEncoderConfig(**encoder_config)
-        elif isinstance(encoder_config, BLTLocalEncoderConfig):
+            self.encoder_config = BltLocalEncoderConfig(**encoder_config)
+        elif isinstance(encoder_config, BltLocalEncoderConfig):
             self.encoder_config = encoder_config
 
         if decoder_config is None:
-            self.decoder_config = BLTLocalDecoderConfig()
-            logger.info("decoder_config is None, using default BLT decoder config")
+            self.decoder_config = BltLocalDecoderConfig()
+            logger.info("decoder_config is None, using default Blt decoder config")
         elif isinstance(decoder_config, dict):
-            self.decoder_config = BLTLocalDecoderConfig(**decoder_config)
-        elif isinstance(decoder_config, BLTLocalDecoderConfig):
+            self.decoder_config = BltLocalDecoderConfig(**decoder_config)
+        elif isinstance(decoder_config, BltLocalDecoderConfig):
             self.decoder_config = decoder_config
 
         if global_config is None:
-            self.global_config = BLTGlobalTransformerConfig()
-            logger.info("global_config is None, using default BLT global config")
+            self.global_config = BltGlobalTransformerConfig()
+            logger.info("global_config is None, using default Blt global config")
         elif isinstance(global_config, dict):
-            self.global_config = BLTGlobalTransformerConfig(**global_config)
-        elif isinstance(global_config, BLTGlobalTransformerConfig):
+            self.global_config = BltGlobalTransformerConfig(**global_config)
+        elif isinstance(global_config, BltGlobalTransformerConfig):
             self.global_config = global_config
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 __all__ = [
-    "BLTConfig",
-    "BLTPatcherConfig",
-    "BLTLocalEncoderConfig",
-    "BLTLocalDecoderConfig",
-    "BLTGlobalTransformerConfig",
+    "BltConfig",
+    "BltPatcherConfig",
+    "BltLocalEncoderConfig",
+    "BltLocalDecoderConfig",
+    "BltGlobalTransformerConfig",
 ]

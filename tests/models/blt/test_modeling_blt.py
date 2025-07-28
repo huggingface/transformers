@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch BLT model."""
+"""Testing suite for the PyTorch Blt model."""
 
 import unittest
 
@@ -41,15 +41,15 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import BLTConfig, BLTForCausalLM, BLTModel
-    from transformers.models.blt.modeling_blt import BLTRotaryEmbedding
+    from transformers import BltConfig, BltForCausalLM, BltModel
+from transformers.models.blt.modeling_blt import BltRotaryEmbedding
 
 
-class BLTModelTester(CausalLMModelTester):
+class BltModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = BLTConfig
-        base_model_class = BLTModel
-        causal_lm_class = BLTForCausalLM
+        config_class = BltConfig
+        base_model_class = BltModel
+        causal_lm_class = BltForCausalLM
 
     def __init__(
         self,
@@ -143,7 +143,7 @@ class BLTModelTester(CausalLMModelTester):
         self.num_hidden_layers = self.encoder_config["num_hidden_layers"]
 
     def get_config(self):
-        config = BLTConfig(
+        config = BltConfig(
             vocab_size=self.vocab_size,
             max_position_embeddings=self.max_position_embeddings,
             patch_in_forward=False,  # Disable patching for tests
@@ -172,19 +172,19 @@ class BLTModelTester(CausalLMModelTester):
 
 
 @require_torch
-class BLTModelTest(CausalLMModelTest, unittest.TestCase):
+class BltModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
-            BLTModel,
-            BLTForCausalLM,
+            BltModel,
+            BltForCausalLM,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BLTModel,
-            "text-generation": BLTForCausalLM,
+            "feature-extraction": BltModel,
+            "text-generation": BltForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -192,29 +192,29 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
-    model_tester_class = BLTModelTester
-    rotary_embedding_layer = BLTRotaryEmbedding  # Enables RoPE tests if set
+    model_tester_class = BltModelTester
+    rotary_embedding_layer = BltRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = BLTForCausalLM if is_torch_available() else None
+    _torch_compile_train_cls = BltForCausalLM if is_torch_available() else None
 
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     def test_generate_from_inputs_embeds(self, _, num_beams):
-        """Skip this test for BLT as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
+        """Skip this test for Blt as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
         self.skipTest(
-            "BLT requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
+            "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
         )
 
     @pytest.mark.generate
     def test_inputs_embeds_matches_input_ids(self):
-        """Skip this test for BLT as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
+        """Skip this test for Blt as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
         self.skipTest(
-            "BLT requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
+            "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
         )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
@@ -248,16 +248,16 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
     def test_torchscript_simple(self):
-        """Skip torchscript test for BLT as it has complex patching logic that's not compatible."""
-        self.skipTest("BLT has complex patching logic that's not compatible with torchscript")
+        """Skip torchscript test for Blt as it has complex patching logic that's not compatible."""
+        self.skipTest("Blt has complex patching logic that's not compatible with torchscript")
 
     def test_torchscript_output_hidden_state(self):
-        """Skip torchscript test for BLT as it has complex patching logic that's not compatible."""
-        self.skipTest("BLT has complex patching logic that's not compatible with torchscript")
+        """Skip torchscript test for Blt as it has complex patching logic that's not compatible."""
+        self.skipTest("Blt has complex patching logic that's not compatible with torchscript")
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
-        """Override rope scaling from config test to handle BLT's sub-config structure."""
+        """Override rope scaling from config test to handle Blt's sub-config structure."""
         if self.rotary_embedding_layer is None:
             self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -273,7 +273,7 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0}
-        # Propagate rope_scaling to sub-configs for BLT
+        # Propagate rope_scaling to sub-configs for Blt
         config.encoder_config.rope_scaling = config.rope_scaling
         config.decoder_config.rope_scaling = config.rope_scaling
         config.global_config.rope_scaling = config.rope_scaling
@@ -332,7 +332,7 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            # For BLT, check separate attention outputs from each component
+            # For Blt, check separate attention outputs from each component
             attentions = outputs.attentions
             encoder_attentions = outputs.encoder_attentions  
             global_attentions = outputs.global_attentions
@@ -344,7 +344,7 @@ class BLTModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-class BLTIntegrationTest(unittest.TestCase):
+class BltIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
         # some memory allocated in the cache, which means some object is not being released properly. This causes some
@@ -360,7 +360,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained(
+        model = BltForCausalLM.from_pretrained(
             "itazap/blt-1b-testing",
             device_map="auto",
             attn_implementation="sdpa"
@@ -449,7 +449,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BLTForCausalLM.from_pretrained("itazap/blt-1b-testing", attn_implementation="sdpa", device_map="auto")
+        model = BltForCausalLM.from_pretrained("itazap/blt-1b-testing", attn_implementation="sdpa", device_map="auto")
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
@@ -460,13 +460,13 @@ class BLTIntegrationTest(unittest.TestCase):
     @require_read_token
     @require_torch_bf16
     def test_model_bf16(self):
-        """Test BLT model with bfloat16 precision."""
+        """Test Blt model with bfloat16 precision."""
         NUM_TOKENS_TO_GENERATE = 200
         EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained(
+        model = BltForCausalLM.from_pretrained(
             "itazap/blt-1b-testing", 
             device_map="auto",
             attn_implementation="sdpa",
@@ -485,7 +485,7 @@ class BLTIntegrationTest(unittest.TestCase):
     @require_read_token
     @require_torch_bf16
     def test_model_logits_bf16(self):
-        """Test BLT model logits with bfloat16 precision."""
+        """Test Blt model logits with bfloat16 precision."""
         EXPECTED_OUTPUT = torch.tensor(
             [
                 [
@@ -558,7 +558,7 @@ class BLTIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BLTForCausalLM.from_pretrained(
+        model = BltForCausalLM.from_pretrained(
             "itazap/blt-1b-testing", 
             device_map="auto",
             attn_implementation="sdpa",
@@ -574,13 +574,13 @@ class BLTIntegrationTest(unittest.TestCase):
     @slow
     @require_read_token
     def test_model_eager(self):
-        """Test BLT model with bfloat16 precision using eager attention implementation."""
+        """Test Blt model with bfloat16 precision using eager attention implementation."""
         NUM_TOKENS_TO_GENERATE = 200
         EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained(
+        model = BltForCausalLM.from_pretrained(
             "itazap/blt-1b-testing", 
             device_map="auto",
             attn_implementation="eager")
@@ -598,13 +598,13 @@ class BLTIntegrationTest(unittest.TestCase):
     @require_read_token
     @require_torch_bf16
     def test_model_bf16_static_cache(self):
-        """Test BLT model with bfloat16 precision and static cache."""
+        """Test Blt model with bfloat16 precision and static cache."""
         NUM_TOKENS_TO_GENERATE = 200
         EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
 
         prompt = "my name is"
 
-        model = BLTForCausalLM.from_pretrained(
+        model = BltForCausalLM.from_pretrained(
             "itazap/blt-1b-testing",
              device_map="auto",
             attn_implementation="sdpa",

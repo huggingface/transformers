@@ -261,7 +261,7 @@ def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
 def push_to_hub(
     local_dir: str,
     repo_id: str,
-    commit_message: str = "Upload converted BLT model",
+    commit_message: str = "Upload converted Blt model",
     private: bool = False,
     token: Optional[str] = None,
 ) -> None:
@@ -321,7 +321,7 @@ def convert_hf_blt_to_unified(
         push_to_hub(
             local_dir=output_dir,
             repo_id=push_to_hub_repo,
-            commit_message="Upload BLT model converted",
+            commit_message="Upload Blt model converted",
             private=hub_private,
             token=hub_token,
         )
@@ -329,7 +329,7 @@ def convert_hf_blt_to_unified(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert BLT models from HuggingFace Hub format to unified format",
+        description="Convert Blt models from HuggingFace Hub format to unified format",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 

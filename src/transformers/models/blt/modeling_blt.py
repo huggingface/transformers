@@ -33,11 +33,11 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_to
 from ...utils.generic import check_model_inputs, OutputRecorder
 
 from .configuration_blt import (
-    BLTConfig,
-    BLTGlobalTransformerConfig,
-    BLTLocalDecoderConfig,
-    BLTLocalEncoderConfig,
-    BLTPatcherConfig,
+    BltConfig,
+    BltGlobalTransformerConfig,
+    BltLocalDecoderConfig,
+    BltLocalEncoderConfig,
+    BltPatcherConfig,
 )
 
 
@@ -52,7 +52,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-class BLTMLP(nn.Module):
+class BltMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -69,10 +69,10 @@ class BLTMLP(nn.Module):
         return down_proj
 
 
-class BLTRMSNorm(nn.Module):
+class BltRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        BLTRMSNorm is equivalent to T5LayerNorm
+        BltRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -89,8 +89,8 @@ class BLTRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class BLTRotaryEmbedding(nn.Module):
-    def __init__(self, config: BLTConfig, device=None):
+class BltRotaryEmbedding(nn.Module):
+    def __init__(self, config: BltConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         self.rope_type = (
@@ -124,14 +124,14 @@ class BLTRotaryEmbedding(nn.Module):
 
 
 # Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
-class BLTTransformerLayer(nn.Module):
+class BltTransformerLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = BLTSelfAttention(config=config, layer_idx=layer_idx)
-        self.mlp = BLTMLP(config)
-        self.input_layernorm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = BltSelfAttention(config=config, layer_idx=layer_idx)
+        self.mlp = BltMLP(config)
+        self.input_layernorm = BltRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = BltRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
     def forward(
@@ -202,7 +202,7 @@ def eager_attention_forward(
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     # TODO: not exactly equivalent to other transformers implementations,, need feedback
     # Extract first head_dim//2 elements which correspond to the unique frequencies
-    # This matches the original BLT approach which uses head_dim//2 frequency pairs
+    # This matches the original Blt approach which uses head_dim//2 frequency pairs
     head_dim = q.shape[-1]
     cos_freqs = cos[..., : head_dim // 2]  # [B, S, D/2]
     sin_freqs = sin[..., : head_dim // 2]  # [B, S, D/2]
@@ -232,10 +232,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_rot.type_as(q), k_rot.type_as(k)
 
 
-class BLTSelfAttention(nn.Module):
-    """BLT variant of MllamaTextSelfAttention. Inherits all logic directly."""
+class BltSelfAttention(nn.Module):
+    """Blt variant of MllamaTextSelfAttention. Inherits all logic directly."""
 
-    def __init__(self, config: BLTConfig, layer_idx: int):
+    def __init__(self, config: BltConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.num_heads = config.num_attention_heads
@@ -297,18 +297,18 @@ class BLTSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# BLT-SPECIFIC COMPONENTS (no Mllama equivalent)
+# Blt-SPECIFIC COMPONENTS (no Mllama equivalent)
 
 
-class BLTLocalEncoder(nn.Module):
-    def __init__(self, config: BLTLocalEncoderConfig):
+class BltLocalEncoder(nn.Module):
+    def __init__(self, config: BltLocalEncoderConfig):
         super().__init__()
         self.gradient_checkpointing = False
         self.config = config
         self.layers = nn.ModuleList(
-            [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [BltTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = BLTRotaryEmbedding(config=config)
+        self.rotary_emb = BltRotaryEmbedding(config=config)
         self.patch_embedding_projection = nn.Linear(
             in_features=config.hidden_size,
             out_features=config.hidden_size * config.cross_attn_k,
@@ -319,7 +319,7 @@ class BLTLocalEncoder(nn.Module):
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
-                BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
+                BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
 
     def forward(
@@ -339,7 +339,7 @@ class BLTLocalEncoder(nn.Module):
     ):
         if input_embeds is None:
             input_embeds = self.embed_tokens(input_ids)
-        batch_size, _, _ = input_embeds.shape
+        batch_size = input_embeds.shape[0]
         hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training)
         if position_ids is None:
             position_ids = (
@@ -387,7 +387,8 @@ class BLTLocalEncoder(nn.Module):
         (i.e. if the sum(patch_lengths[i]) < seq_len for any i)
         will be sent to a dummy patch, which is trimmed before returning.
         """
-        batch_size, _, embedding_dim = hidden_states.shape
+        batch_size = hidden_states.shape[0]
+        embedding_dim = hidden_states.shape[-1]
 
         patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
 
@@ -406,27 +407,27 @@ class BLTLocalEncoder(nn.Module):
         return reduced_embeddings
 
 
-class BLTLocalDecoder(nn.Module):
-    def __init__(self, config: BLTLocalDecoderConfig):
+class BltLocalDecoder(nn.Module):
+    def __init__(self, config: BltLocalDecoderConfig):
         super().__init__()
         self.gradient_checkpointing = False
         self.config = config
         self.cross_attn_decoder = True
         self.layers = nn.ModuleList(
-            [BLTTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [BltTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = BLTRotaryEmbedding(config=config)
+        self.rotary_emb = BltRotaryEmbedding(config=config)
         self.patch_embedding_projection = nn.Linear(
             in_features=config.hidden_size_global,
             out_features=config.hidden_size * config.cross_attn_k,
             bias=False,
         )
-        self.norm = BLTRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = BltRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_layers = nn.ModuleList()
         layers_to_add = config.num_hidden_layers if config.cross_attn_all_layers else 1
         for layer_idx in range(layers_to_add):
             self.cross_attn_layers.append(
-                BLTCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
+                BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
 
     @check_model_inputs
@@ -444,7 +445,7 @@ class BLTLocalDecoder(nn.Module):
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, _, _ = embeds.shape
+        batch_size = embeds.shape[0]
         hidden_states = embeds
         patch_embeds = self.patch_embedding_projection(patch_embeds)
         patch_embeds = patch_embeds.reshape(
@@ -482,10 +483,10 @@ class BLTLocalDecoder(nn.Module):
         return logits
 
 
-class BLTCrossAttention(nn.Module):
-    """Cross-attention module for BLT, following transformers style"""
+class BltCrossAttention(nn.Module):
+    """Cross-attention module for Blt, following transformers style"""
 
-    def __init__(self, config: BLTConfig, layer_idx: int, hidden_size: Optional[int] = None):
+    def __init__(self, config: BltConfig, layer_idx: int, hidden_size: Optional[int] = None):
         super().__init__()
         self.config = config
         self.num_heads = self.config.num_attention_heads
@@ -502,8 +503,8 @@ class BLTCrossAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         # needs to stay hidden_size, NOT head_dim
-        self.q_norm = BLTRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = BLTRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.q_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.is_causal = False
 
     def forward(
@@ -559,14 +560,14 @@ class BLTCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class BLTGlobalTransformer(nn.Module):
-    def __init__(self, config: BLTGlobalTransformerConfig):
+class BltGlobalTransformer(nn.Module):
+    def __init__(self, config: BltGlobalTransformerConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList()
         for layer_idx in range(config.num_hidden_layers):
-            self.layers.append(BLTTransformerLayer(config, layer_idx))
-        self.rotary_emb = BLTRotaryEmbedding(config=config)
+            self.layers.append(BltTransformerLayer(config, layer_idx))
+        self.rotary_emb = BltRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -791,13 +792,13 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optiona
 
 
 @auto_docstring
-class BLTPreTrainedModel(PreTrainedModel):
-    """BLT PreTrainedModel inheriting from Mllama but with BLT-specific init."""
+class BltPreTrainedModel(PreTrainedModel):
+    """Blt PreTrainedModel inheriting from Mllama but with Blt-specific init."""
 
-    config: BLTConfig
+    config: BltConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BLTTransformerLayer", "BLTLocalEncoder", "BLTLocalDecoder", "BLTGlobalTransformer"]
+    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
@@ -805,16 +806,16 @@ class BLTPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    config_class = BLTConfig
+    config_class = BltConfig
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = False
     _supports_cache_class = False
 
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(BLTTransformerLayer, index=0, layer_name="local_decoder"),
-        "attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="local_decoder"),
-        "encoder_attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="local_encoder"),
-        "global_attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="global_transformer"),
+        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
+        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
+        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
+        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
     }
 
     def _init_weights(self, module):
@@ -831,7 +832,7 @@ class BLTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
-        elif isinstance(module, BLTRMSNorm):
+        elif isinstance(module, BltRMSNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.RMSNorm):
             module.weight.data.fill_(1.0)
@@ -959,14 +960,14 @@ class BLTPreTrainedModel(PreTrainedModel):
 
 
 # Top-level model classes
-class BLTModel(BLTPreTrainedModel):
-    def __init__(self, config: BLTConfig):
+class BltModel(BltPreTrainedModel):
+    def __init__(self, config: BltConfig):
         super().__init__(config)
         self.gradient_checkpointing = False
         self.config = config
-        self.local_encoder = BLTLocalEncoder(config.encoder_config)
-        self.global_transformer = BLTGlobalTransformer(config.global_config)
-        self.local_decoder = BLTLocalDecoder(config.decoder_config)
+        self.local_encoder = BltLocalEncoder(config.encoder_config)
+        self.global_transformer = BltGlobalTransformer(config.global_config)
+        self.local_decoder = BltLocalDecoder(config.decoder_config)
         num_embeddings = config.encoder_hash_byte_group_nb_functions * len(config.encoder_hash_byte_group_size)
         embeddings = [
             nn.Embedding(config.encoder_hash_byte_group_vocab, config.encoder_config.hidden_size)
@@ -974,7 +975,7 @@ class BLTModel(BLTPreTrainedModel):
         ]
         self.encoder_hash_tok_embedding = nn.ModuleList(embeddings)
         if self.config.patch_in_forward:
-            self.patcher = BLTPatcher(config.patcher_config)
+            self.patcher = BltPatcher(config.patcher_config)
             self.patcher.eval()
             for param in self.patcher.parameters():
                 param.requires_grad = False
@@ -1125,15 +1126,15 @@ class BLTModel(BLTPreTrainedModel):
         return (patch_starts.unsqueeze(1) <= token_positions.unsqueeze(0).unsqueeze(-1)).sum(dim=-1) - 1
 
 
-class BLTPatcher(BLTPreTrainedModel):
-    def __init__(self, config: BLTPatcherConfig):
+class BltPatcher(BltPreTrainedModel):
+    def __init__(self, config: BltPatcherConfig):
         super().__init__(config)
-        self.rotary_emb = BLTRotaryEmbedding(config=self.config)
+        self.rotary_emb = BltRotaryEmbedding(config=self.config)
         self.layers = nn.ModuleList()
         for layer_idx in range(self.config.num_hidden_layers):
-            self.layers.append(BLTTransformerLayer(self.config, layer_idx))
+            self.layers.append(BltTransformerLayer(self.config, layer_idx))
         self.embed_tokens = nn.Embedding(self.config.vocab_size, self.config.hidden_size)
-        self.norm = BLTRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+        self.norm = BltRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.lm_head = nn.Linear(
             self.config.hidden_size,
             self.config.vocab_size,
@@ -1165,7 +1166,7 @@ class BLTPatcher(BLTPreTrainedModel):
             batch_size, sequence_length = split.shape
             input_embeds = self.embed_tokens(split)
             hidden_states = input_embeds
-            batch_size, _, _ = input_embeds.shape
+            batch_size = input_embeds.shape[0]
             position_ids = torch.arange(split.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -1267,22 +1268,22 @@ class BLTPatcher(BLTPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The BLT Text Model with a language modeling head on top.
+    The Blt Text Model with a language modeling head on top.
     """
 )
-class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
-    config: BLTConfig
+class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
+    config: BltConfig
     _supports_static_cache = True  # only the LLM without cross attn can do compile
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BLTTransformerLayer", "BLTLocalEncoder", "BLTLocalDecoder", "BLTGlobalTransformer"]
+    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
     def __init__(self, config):
         super().__init__(config.get_text_config())
         self.text_config = config.get_text_config()
         self.vocab_size = config.vocab_size
-        self.model = BLTModel(config)
+        self.model = BltModel(config)
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
@@ -1351,9 +1352,9 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, BLTForCausalLM
+        >>> from transformers import AutoTokenizer, BltForCausalLM
 
-        >>> model = BLTForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
+        >>> model = BltForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
         >>> tokenizer = AutoTokenizer.from_pretrained("Llama-3.2-11B-Vision")
 
         >>> prompt = "If I had to write a haiku, it would be:"
@@ -1398,7 +1399,7 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
         
-       # Add BLT-specific attention outputs
+               # Add Blt-specific attention outputs
         if hasattr(outputs, 'encoder_attentions'):
             output.encoder_attentions = outputs.encoder_attentions
         if hasattr(outputs, 'global_attentions'):
@@ -1408,8 +1409,8 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
 
 
 __all__ = [
-    "BLTPreTrainedModel",
-    "BLTModel",
-    "BLTPatcher",
-    "BLTForCausalLM",
+    "BltPreTrainedModel",
+    "BltModel",
+    "BltPatcher",
+    "BltForCausalLM",
 ]

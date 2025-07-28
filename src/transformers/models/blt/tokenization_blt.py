@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for BLT."""
+"""Tokenization classes for Blt."""
 
 from typing import TYPE_CHECKING, Optional
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# BLT tokenizer constants
+# Blt tokenizer constants
 SEP = " "
 BOS_ID: int = 1
 EOS_ID: int = 2
@@ -35,12 +35,12 @@ BPE_ID: int = 3
 OFFSET: int = 4
 BYTE_UNITS: int = 256
 
-VOCAB_FILES_NAMES = {}  # BLT doesn't require external vocab files
+VOCAB_FILES_NAMES = {}  # Blt doesn't require external vocab files
 
 
-class BLTTokenizer(PreTrainedTokenizer):
+class BltTokenizer(PreTrainedTokenizer):
     """
-    Construct a BLT tokenizer. Based on byte-level tokenization where each byte is treated as a token.
+    Construct a Blt tokenizer. Based on byte-level tokenization where each byte is treated as a token.
 
     This tokenizer converts text to UTF-8 bytes and then maps each byte to a token ID with an offset.
     It supports special tokens for beginning of sequence (BOS), end of sequence (EOS),
@@ -54,9 +54,9 @@ class BLTTokenizer(PreTrainedTokenizer):
         pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
             The padding token.
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
-            The unknown token. Not used in BLT but kept for compatibility.
+            The unknown token. Not used in Blt but kept for compatibility.
         boe_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<boe>"`):
-            The beginning of example token, specific to BLT.
+            The beginning of example token, specific to Blt.
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether or not to add a `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `True`):
@@ -83,13 +83,13 @@ class BLTTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens=False,
         **kwargs,
     ):
-        # Store BLT-specific parameters first
+        # Store Blt-specific parameters first
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.vocab_size_unit_1 = BYTE_UNITS
         self.offsetting_special_char = OFFSET
 
-        # BLT token IDs (exactly like original)
+        # Blt token IDs (exactly like original)
         self.boe_id = BOE_ID
         self.bos_id = BOS_ID
         self.eos_id = EOS_ID
@@ -174,7 +174,7 @@ class BLTTokenizer(PreTrainedTokenizer):
         return bytes(byte_values).decode("utf-8", errors="ignore")
 
     def _tokenize(self, text: str, **kwargs) -> list[str]:
-        """Converts a string to a list of tokens. For BLT, we work directly with byte values."""
+        """Converts a string to a list of tokens. For Blt, we work directly with byte values."""
         return [str(byte_val) for byte_val in text.encode("utf-8", errors="ignore")]
 
     def build_inputs_with_special_tokens(
@@ -182,7 +182,7 @@ class BLTTokenizer(PreTrainedTokenizer):
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating and
-        adding special tokens. A BLT sequence has the following format:
+        adding special tokens. A Blt sequence has the following format:
 
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s> B </s>`
@@ -238,8 +238,8 @@ class BLTTokenizer(PreTrainedTokenizer):
         return self.vocab_size
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        # BLT doesn't require external vocabulary files since it uses byte-level tokenization
+        # Blt doesn't require external vocabulary files since it uses byte-level tokenization
         return ()
 
 
-__all__ = ["BLTTokenizer"]
+__all__ = ["BltTokenizer"]
