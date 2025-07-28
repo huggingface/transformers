@@ -171,8 +171,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
 
         super().__init__(**kwargs)
 
-    classmethod
-
+    @classmethod
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
