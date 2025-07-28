@@ -361,7 +361,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             # high_res_image: resize (high) -> rescale -> normalize (high)
             # low_res_image:  resize (high) -> rescale -> resize (low) -> normalize (low)
             high_res_image = image
-
             if do_resize:
                 high_res_image = self.resize(
                     image=high_res_image,
@@ -474,10 +473,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 result[:, start : start + width, :] = image
 
         return result
-
-    def postprocess(self):
-        """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
-        raise AttributeError("Not needed for DeepseekVLHybrid")
 
 
 __all__ = ["DeepseekVLHybridImageProcessor"]

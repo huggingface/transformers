@@ -406,9 +406,5 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
 
         return result
 
-    def postprocess(self):
-        """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
-        raise AttributeError("Not needed for DeepseekVL")
-
 
 __all__ = ["DeepseekVLImageProcessor"]

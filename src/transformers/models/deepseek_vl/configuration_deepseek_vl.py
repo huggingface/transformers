@@ -20,7 +20,9 @@
 
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import (
+    logging,
+)
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
