@@ -31,16 +31,21 @@ import numpy as np
 import typing_extensions
 from huggingface_hub.errors import EntryNotFoundError
 
+from transformers.utils import is_torch_available
+
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata, load_video
+from .video_utils import VideoMetadata, convert_pil_frames_to_video, load_video
 
 
 if is_vision_available():
     from .image_utils import PILImageResampling
+
+if is_torch_available():
+    import torch
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -1555,22 +1560,38 @@ class ProcessorMixin(PushToHubMixin):
                             batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
                     else:
                         for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            if fname in ["path", "url"]:
+                                # If the video is a file path or URL, we load the audio from the video
+                                # and append it to the batch_audios list
+                                batch_audios.append(load_audio(fname, sampling_rate=mm_load_kwargs["sampling_rate"]))
+                            else:
+                                raise ValueError(
+                                    f"To load audio from video, you must provide video as a file path or URL, but got {fname}."
+                                )
 
                     for fname in video_fnames:
                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            # Case 1(a): Video is provided as a list of image file names
                             video = [np.array(load_image(image_fname)) for image_fname in fname]
-                            # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
                             metadata = None
                             logger.warning(
                                 "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
                                 "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
                             )
-                        else:
+                        elif isinstance(fname, dict):
+                            # Case 1(b): Video is provided as a dictionary with frames, fps, duration, metadata etc.
+                            video, metadata = self._validate_video_content(fname)
+                        elif isinstance(fname, str):
+                            # Case 1(c): Video is provided as a single file path or URL
                             video, metadata = load_video(
                                 fname,
                                 backend=mm_load_kwargs["video_load_backend"],
+                            )
+                        else:
+                            raise ValueError(
+                                f"Expected video data to be a file path or URL or "
+                                f"a list of image file names or a dictionary with 'frames' key and 'metadata' key, but got {type(fname)}."
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
@@ -1681,6 +1702,56 @@ class ProcessorMixin(PushToHubMixin):
                     f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
                     "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
                 )
+
+    def _validate_video_content(self, video_data: dict) -> dict:
+        if "frames" not in video_data:
+            raise ValueError(
+                "Expected video data to contain 'frames' key with a list of PIL.images or numpy arrays or torch tensors."
+            )
+        frames = video_data["frames"]
+        if isinstance(frames, (list, tuple)):
+            video = convert_pil_frames_to_video(frames)
+        elif isinstance(frames, np.ndarray) and frames.ndim == 4:
+            video = frames
+        elif isinstance(frames, torch.Tensor) and frames.ndim == 4:
+            video = frames.numpy()
+        else:
+            raise ValueError(
+                f"Expected video frames to be a list of PIL images, numpy arrays or torch tensors, but got {type(frames)}."
+            )
+
+        total_num_frames = video.shape[0]
+        if "metadata" not in video_data:
+            logger.warning(
+                "When loading the video from list of images or ndarray or tensors, we cannot infer metadata such as `fps` or `duration`. "
+                "If your model requires metadata, please provide either metadata or atleast one of 'fps' or 'duration'"
+            )
+            metadata = None
+        elif isinstance(video_data["metadata"], VideoMetadata):
+            metadata = video_data["metadata"]
+        elif isinstance(video_data["metadata"], dict):
+            if "fps" not in video_data["metadata"] and "duration" not in video_data:
+                logger.warning(
+                    "When loading the video from list of images or ndarray or tensors, we cannot infer metadata such as `fps` or `duration`. "
+                    "Video metadata dictionary should have atleast one of 'fps' or 'duration'. "
+                )
+                metadata = None
+            else:
+                if "fps" in video_data["metadata"] and video_data["metadata"]["fps"] > float(0):
+                    fps = video_data["metadata"]["fps"]
+                    duration = total_num_frames / fps
+                elif "duration" in video_data and video_data["duration"] > float(0):
+                    duration = video_data["duration"]
+                    fps = total_num_frames / duration
+                video_backend = video_data["metadata"].get("video_backend", "pyav")
+                metadata = VideoMetadata(
+                    total_num_frames=total_num_frames, fps=fps, duration=duration, video_backend=video_backend
+                )
+        else:
+            raise ValueError(
+                f"Expected video metadata to be a VideoMetadata object or a dictionary with 'fps' or 'duration' keys, but got {type(video_data['metadata'])}."
+            )
+        return video, metadata
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
