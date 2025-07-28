@@ -33,6 +33,7 @@ from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from . import BaseTransformersCLICommand
+from .add_fast_image_processor import add_fast_image_processor
 
 
 CURRENT_YEAR = date.today().year
@@ -91,19 +92,17 @@ class ModelInfos(object):
         self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
 
 
-def add_content_to_file(
-    file_name: Union[str, os.PathLike],
-    new_content: str,
-    add_after: str,
-):
+def add_content_to_file(file_name: Union[str, os.PathLike], new_content: str, add_after: str):
     """
     A utility to add some content inside a given file.
 
     Args:
-       file_name (`str` or `os.PathLike`): The name of the file in which we want to insert some content.
-       content (`str`): The content to add.
-       add_after (`str` or `Pattern`):
-           The pattern to test on a line of `text`, the new content is added after the first instance matching it.
+        file_name (`str` or `os.PathLike`):
+            The name of the file in which we want to insert some content.
+        new_content (`str`):
+            The content to add.
+       add_after (`str`):
+           The new content is added just after the first instance matching it.
     """
     with open(file_name, "r", encoding="utf-8") as f:
         old_content = f.read()
@@ -116,32 +115,41 @@ def add_content_to_file(
 
 
 def add_model_to_auto_mappings(
-    old_model_infos: ModelInfos, new_model_lowercase, new_model_paper_name, filenames_to_add
+    old_model_infos: ModelInfos,
+    new_lowercase_name: str,
+    new_model_paper_name: str,
+    filenames_to_add: list[tuple[str, bool]],
 ):
     """
-    Add a model to the relevant mappings in the auto module.
+    Add a model to all the relevant mappings in the auto module.
 
     Args:
-        old_model_patterns (`ModelPatterns`): The patterns for the old model.
-        new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        model_classes (`list[str]`): A list of model classes implemented.
+        old_model_infos (`ModelInfos`):
+            The structure containing the class informations of the old model.
+        new_lowercase_name (`str`):
+            The new lowercase model name.
+        new_model_paper_name (`str`):
+            The fully cased name (as in the official paper name) of the new model.
+        filenames_to_add (`list[tuple[str, bool]]`):
+            A list of tuples of all potential filenames to add for a new model, along a boolean flag describing if we
+            should add this file or not. For example, [(`modeling_xxx.px`, True), (`configuration_xxx.py`, True), (`tokenization_xxx.py`, False),...]
     """
-    new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
-    old_model_lowercase = old_model_infos.lowercase_name
+    new_cased_name = "".join(x.title() for x in new_lowercase_name.replace("-", "_").split("_"))
+    old_lowercase_name = old_model_infos.lowercase_name
     old_cased_name = old_model_infos.camelcase_name
     filenames_to_add = [
-        (filename.replace(old_model_lowercase, "auto"), to_add) for filename, to_add in filenames_to_add[1:]
+        (filename.replace(old_lowercase_name, "auto"), to_add) for filename, to_add in filenames_to_add[1:]
     ]
 
     # Add the config mappings directly as the handling for config is a bit different
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_model_lowercase}", "{new_cased_name}Config"),\n',
+        new_content=f'        ("{new_lowercase_name}", "{new_cased_name}Config"),\n',
         add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
     )
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_model_lowercase}", "{new_model_paper_name}"),\n',
+        new_content=f'        ("{new_lowercase_name}", "{new_model_paper_name}"),\n',
         add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
     )
 
@@ -151,12 +159,12 @@ def add_model_to_auto_mappings(
                 file = f.read()
             # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
             matching_lines = re.findall(
-                rf'( {{8,12}}\(\s*"{old_model_lowercase}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
+                rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
             )
             for match in matching_lines:
                 add_content_to_file(
                     TRANSFORMERS_PATH / "models" / "auto" / filename,
-                    new_content=match.replace(old_model_lowercase, new_model_lowercase).replace(
+                    new_content=match.replace(old_lowercase_name, new_lowercase_name).replace(
                         old_cased_name, new_cased_name
                     ),
                     add_after=match,
@@ -165,7 +173,13 @@ def add_model_to_auto_mappings(
 
 def create_doc_file(new_paper_name: str, public_classes: list[str]):
     """
-    TO FILL
+    Create a new doc file to fill for the new model.
+
+    Args:
+        new_paper_name (`str`):
+            The fully cased name (as in the official paper name) of the new model.
+        public_classes (`list[str]`):
+            A list of all the public classes that the model will have in the library.
     """
     added_note = (
         "\n\n⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that "
@@ -213,19 +227,24 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
     return copyright_for_markdown + doc_template + class_doc
 
 
-def insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_paper_name):
+def insert_model_in_doc_toc(old_lowercase_name: str, new_lowercase_name: str, new_model_paper_name: str):
     """
-    Insert the new model in the doc TOC, in the same section as the old model.
+    Insert the new model in the doc `_toctree.yaml`, in the same section as the old model.
 
     Args:
-        TO FILL
+        old_lowercase_name (`str`):
+            The old lowercase model name.
+        new_lowercase_name (`str`):
+            The old lowercase model name.
+        new_model_paper_name (`str`):
+            The fully cased name (as in the official paper name) of the new model.
     """
     toc_file = REPO_PATH / "docs" / "source" / "en" / "_toctree.yml"
     with open(toc_file, "r") as f:
         content = f.read()
 
-    old_model_toc = re.search(rf"- local: model_doc/{old_model_lowercase}\n {{8}}title: \w+\n", content).group(0)
-    new_toc = f"      - local: model_doc/{new_model_lowercase}\n        title: {new_model_paper_name}\n"
+    old_model_toc = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: \w+\n", content).group(0)
+    new_toc = f"      - local: model_doc/{new_lowercase_name}\n        title: {new_model_paper_name}\n"
     add_content_to_file(
         REPO_PATH / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
     )
@@ -233,7 +252,16 @@ def insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_
 
 def create_init_file(old_lowercase_name: str, new_lowercase_name: str, filenames_to_add: list[tuple[str, bool]]):
     """
-    TO FILL
+    Create the `__init__.py` file to add in the new model folder.
+
+    Args:
+        old_lowercase_name (`str`):
+            The old lowercase model name.
+        new_lowercase_name (`str`):
+            The new lowercase model name.
+        filenames_to_add (`list[tuple[str, bool]]`):
+            A list of tuples of all potential filenames to add for a new model, along a boolean flag describing if we
+            should add this file or not. For example, [(`modeling_xxx.px`, True), (`configuration_xxx.py`, True), (`tokenization_xxx.py`, False),...]
     """
     filenames_to_add = [
         (filename.replace(old_lowercase_name, new_lowercase_name).replace(".py", ""), to_add)
@@ -261,8 +289,11 @@ def create_init_file(old_lowercase_name: str, new_lowercase_name: str, filenames
 
 
 class ClassFinder(CSTVisitor):
-    def __init__(self, python_module: cst.Module):
-        self.python_module: cst.Module = python_module
+    """
+    A visitor to find all classes in a python module.
+    """
+
+    def __init__(self):
         self.classes: list = []
         self.public_classes: list = []
         self.is_in_class = False
@@ -287,14 +318,18 @@ class ClassFinder(CSTVisitor):
                 self.public_classes = [element.value.value for element in elements]
 
 
-def find_all_classes_from_file(file: str) -> set:
+def find_all_classes_from_file(module_name: str) -> set:
     """
-    Find the name of all classes defined in `file`.
+    Find the name of all classes defined in `module_name`, including public ones (defined in `__all__`).
+
+    Args:
+        module_name (`str`):
+            The full path to the python module from which to extract classes.
     """
-    with open(file, "r", encoding="utf-8") as file:
+    with open(module_name, "r", encoding="utf-8") as file:
         source_code = file.read()
     module = cst.parse_module(source_code)
-    visitor = ClassFinder(source_code)
+    visitor = ClassFinder()
     module.visit(visitor)
     return visitor.classes, visitor.public_classes
 
@@ -302,6 +337,17 @@ def find_all_classes_from_file(file: str) -> set:
 def find_modular_structure(
     module_name: str, old_model_infos: ModelInfos, new_cased_name: str
 ) -> tuple[str, str, list]:
+    """
+    Extract the modular structure that will be needed to copy a file `module_name` using modular.
+
+    Args:
+        module_name (`str`):
+            The full path to the python module to copy with modular.
+        old_model_infos (`ModelInfos`):
+            The structure containing the class informations of the old model.
+        new_cased_name (`str`):
+            The new cased model name.
+    """
     all_classes, public_classes = find_all_classes_from_file(module_name)
     import_location = ".".join(module_name.parts[-2:]).replace(".py", "")
     old_cased_name = old_model_infos.camelcase_name
@@ -314,12 +360,25 @@ def find_modular_structure(
 
 def create_modular_file(
     old_model_infos: ModelInfos,
-    new_model_lowercase: str,
+    new_lowercase_name: str,
     filenames_to_add: list[tuple[str, bool]],
 ) -> str:
-    new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
-    old_model_lowercase = old_model_infos.lowercase_name
-    old_folder_root = TRANSFORMERS_PATH / "models" / old_model_lowercase
+    """
+    Create a new modular file which will copy the old model, based on the new name and the different filenames
+    (modules) to add.
+
+    Args:
+        old_model_infos (`ModelInfos`):
+            The structure containing the class informations of the old model.
+        new_lowercase_name (`str`):
+            The new lowercase model name.
+        filenames_to_add (`list[tuple[str, bool]]`):
+            A list of tuples of all potential filenames to add for a new model, along a boolean flag describing if we
+            should add this file or not. For example, [(`modeling_xxx.px`, True), (`configuration_xxx.py`, True), (`tokenization_xxx.py`, False),...]
+    """
+    new_cased_name = "".join(x.title() for x in new_lowercase_name.replace("-", "_").split("_"))
+    old_lowercase_name = old_model_infos.lowercase_name
+    old_folder_root = TRANSFORMERS_PATH / "models" / old_lowercase_name
 
     # Construct the modular file from the original (old) model, by subclassing each class
     all_imports = ""
@@ -351,12 +410,21 @@ def create_modular_file(
     return modular_file, all_public_classes
 
 
-def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filenames_to_add: list[tuple[str, bool]]):
+def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames_to_add: list[tuple[str, bool]]):
     """
-    TO_FILL
+    Create the test files for the new model. It basically copies over the old test files and adjust the class names.
+
+    Args:
+        old_model_infos (`ModelInfos`):
+            The structure containing the class informations of the old model.
+        new_lowercase_name (`str`):
+            The new lowercase model name.
+        filenames_to_add (`list[tuple[str, bool]]`):
+            A list of tuples of all potential filenames to add for a new model, along a boolean flag describing if we
+            should add this file or not. For example, [(`modeling_xxx.px`, True), (`configuration_xxx.py`, True), (`tokenization_xxx.py`, False),...]
     """
-    new_cased_name = "".join(x.title() for x in new_model_lowercase.replace("-", "_").split("_"))
-    old_model_lowercase = old_model_infos.lowercase_name
+    new_cased_name = "".join(x.title() for x in new_lowercase_name.replace("-", "_").split("_"))
+    old_lowercase_name = old_model_infos.lowercase_name
     old_cased_name = old_model_infos.camelcase_name
 
     test_tokenization = filenames_to_add[2][1] or filenames_to_add[3][1]
@@ -366,19 +434,19 @@ def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filename
     test_processor = filenames_to_add[8][1]
 
     filenames_to_add = (
-        (f"test_modeling_{new_model_lowercase}.py", True),
-        (f"test_tokenization_{new_model_lowercase}.py", test_tokenization),
-        (f"test_image_processing_{new_model_lowercase}.py", test_image_processing),
-        (f"test_video_processing_{new_model_lowercase}.py", test_video_processor),
-        (f"test_feature_extraction_{new_model_lowercase}.py", test_feature_extractor),
-        (f"test_processing_{new_model_lowercase}.py", test_processor),
+        (f"test_modeling_{new_lowercase_name}.py", True),
+        (f"test_tokenization_{new_lowercase_name}.py", test_tokenization),
+        (f"test_image_processing_{new_lowercase_name}.py", test_image_processing),
+        (f"test_video_processing_{new_lowercase_name}.py", test_video_processor),
+        (f"test_feature_extraction_{new_lowercase_name}.py", test_feature_extractor),
+        (f"test_processing_{new_lowercase_name}.py", test_processor),
     )
 
     test_files = {}
     for new_file, to_add in filenames_to_add:
         if to_add:
-            original_test_file = new_file.replace(new_model_lowercase, old_model_lowercase)
-            with open(REPO_PATH / "tests" / "models" / old_model_lowercase / original_test_file, "r") as f:
+            original_test_file = new_file.replace(new_lowercase_name, old_lowercase_name)
+            with open(REPO_PATH / "tests" / "models" / old_lowercase_name / original_test_file, "r") as f:
                 test_code = f.read()
             # Remove old copyright and add new one
             test_lines = test_code.split("\n")
@@ -393,81 +461,73 @@ def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filename
 
 def create_new_model_like(
     old_model_infos: ModelInfos,
-    new_model_lowercase: str,
+    new_lowercase_name: str,
     new_model_paper_name: str,
-    add_tokenizer: bool,
-    add_fast_tokenizer: bool,
-    add_image_processor: bool,
-    add_fast_image_processor: bool,
-    add_video_processor: bool,
-    add_feature_extractor: bool,
-    add_processor: bool,
+    filenames_to_add: list[tuple[str, bool]],
     create_fast_image_processor: bool,
 ):
     """
     Creates a new model module like a given model of the Transformers library.
 
     Args:
-        FILL
+        old_model_infos (`ModelInfos`):
+            The structure containing the class informations of the old model.
+        new_lowercase_name (`str`):
+            The new lowercase model name.
+        new_model_paper_name (`str`):
+            The fully cased name (as in the official paper name) of the new model.
+        filenames_to_add (`list[tuple[str, bool]]`):
+            A list of tuples of all potential filenames to add for a new model, along a boolean flag describing if we
+            should add this file or not. For example, [(`modeling_xxx.px`, True), (`configuration_xxx.py`, True), (`tokenization_xxx.py`, False),...]
+        create_fast_image_processor (`bool`):
+            If it makes sense, whether to add a fast processor as well, even if the old model does not have one.
     """
-    old_model_lowercase = old_model_infos.lowercase_name
-    # A list of the old filenames, along whether we should copy them or not
-    filenames_to_add = (
-        (f"configuration_{old_model_lowercase}.py", True),
-        (f"modeling_{old_model_lowercase}.py", True),
-        (f"tokenization_{old_model_lowercase}.py", add_tokenizer),
-        (f"tokenization_{old_model_lowercase}_fast.py", add_fast_tokenizer),
-        (f"image_processing_{old_model_lowercase}.py", add_image_processor),
-        (f"image_processing_{old_model_lowercase}_fast.py", add_fast_image_processor),
-        (f"video_processing_{old_model_lowercase}.py", add_video_processor),
-        (f"feature_extraction_{old_model_lowercase}.py", add_feature_extractor),
-        (f"processing_{old_model_lowercase}.py", add_processor),
-    )
+    old_lowercase_name = old_model_infos.lowercase_name
 
     # 1. We create the folder for our new model
-    new_module_folder = TRANSFORMERS_PATH / "models" / new_model_lowercase
+    new_module_folder = TRANSFORMERS_PATH / "models" / new_lowercase_name
     os.makedirs(new_module_folder, exist_ok=True)
 
     # 2. Create and add the modular file
-    modular_file, public_classes = create_modular_file(old_model_infos, new_model_lowercase, filenames_to_add)
-    with open(new_module_folder / f"modular_{new_model_lowercase}.py", "w") as f:
+    modular_file, public_classes = create_modular_file(old_model_infos, new_lowercase_name, filenames_to_add)
+    with open(new_module_folder / f"modular_{new_lowercase_name}.py", "w") as f:
         f.write(modular_file)
 
     # 3. Create and add the __init__.py
-    init_file = create_init_file(old_model_lowercase, new_model_lowercase, filenames_to_add)
+    init_file = create_init_file(old_lowercase_name, new_lowercase_name, filenames_to_add)
     with open(new_module_folder / "__init__.py", "w") as f:
         f.write(init_file)
 
     # 4. Add new model to the models init
     add_content_to_file(
         TRANSFORMERS_PATH / "models" / "__init__.py",
-        new_content=f"    from .{new_model_lowercase} import *\n",
+        new_content=f"    from .{new_lowercase_name} import *\n",
         add_after="if TYPE_CHECKING:\n",
     )
 
     # 5. Add model to auto mappings
-    add_model_to_auto_mappings(old_model_infos, new_model_lowercase, new_model_paper_name, filenames_to_add)
+    add_model_to_auto_mappings(old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add)
 
     # 6. Add test files
-    tests_folder = REPO_PATH / "tests" / "models" / new_model_lowercase
+    tests_folder = REPO_PATH / "tests" / "models" / new_lowercase_name
     os.makedirs(tests_folder, exist_ok=True)
     # Add empty __init__.py
     with open(tests_folder / "__init__.py", "w"):
         pass
-    test_files = create_test_files(old_model_infos, new_model_lowercase, filenames_to_add)
+    test_files = create_test_files(old_model_infos, new_lowercase_name, filenames_to_add)
     for filename, content in test_files.items():
         with open(tests_folder / filename, "w") as f:
             f.write(content)
 
     # 7. Add doc file
     doc_file = create_doc_file(new_model_paper_name, public_classes)
-    with open(REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{new_model_lowercase}.md", "w") as f:
+    with open(REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w") as f:
         f.write(doc_file)
-    insert_model_in_doc_toc(old_model_lowercase, new_model_lowercase, new_model_paper_name)
+    insert_model_in_doc_toc(old_lowercase_name, new_lowercase_name, new_model_paper_name)
 
     # 8. Add additional fast image processor if necessary
     if create_fast_image_processor:
-        add_fast_image_processor(model_name=new_model_lowercase)
+        add_fast_image_processor(model_name=new_lowercase_name)
 
     # 9. Run linters
     model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
@@ -483,14 +543,13 @@ def create_new_model_like(
 
     # 10. Run the modular conversion
     subprocess.run(
-        ["python", "utils/modular_model_converter.py", new_model_lowercase], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+        ["python", "utils/modular_model_converter.py", new_lowercase_name], cwd=REPO_PATH, stdout=subprocess.DEVNULL
     )
 
 
 def get_user_field(
     question: str,
     default_value: Optional[str] = None,
-    is_valid_answer: Optional[Callable] = None,
     convert_to: Optional[Callable] = None,
     fallback_message: Optional[str] = None,
 ) -> Any:
@@ -499,10 +558,10 @@ def get_user_field(
     answer.
 
     Args:
-        question (`str`): The question to ask the user.
-        default_value (`str`, *optional*): A potential default value that will be used when the answer is empty.
-        is_valid_answer (`Callable`, *optional*):
-            If set, the question will be asked until this function returns `True` on the provided answer.
+        question (`str`):
+            The question to ask the user.
+        default_value (`str`, *optional*):
+            A potential default value that will be used when the answer is empty.
         convert_to (`Callable`, *optional*):
             If set, the answer will be passed to this function. If this function raises an error on the provided
             answer, the question will be asked again.
@@ -522,9 +581,7 @@ def get_user_field(
         answer = input(question)
         if default_value is not None and len(answer) == 0:
             answer = default_value
-        if is_valid_answer is not None:
-            valid_answer = is_valid_answer(answer)
-        elif convert_to is not None:
+        if convert_to is not None:
             try:
                 answer = convert_to(answer)
                 valid_answer = True
@@ -572,13 +629,13 @@ def get_user_input():
                     near_choices = " or ".join(near_choices)
                 print(f"Did you mean {near_choices}?")
 
-    old_model_info = ModelInfos(old_model_type)
+    old_model_infos = ModelInfos(old_model_type)
 
     # Ask for the new model name
-    new_model_lowercase = get_user_field("What is the snake case name of the new model (e.g. `new_model`)? ")
+    new_lowercase_name = get_user_field("What is the snake case name of the new model (e.g. `new_model`)? ")
     new_model_paper_name = get_user_field(
         "What is the full name (with no special casing) for your new model in the paper (e.g. `LlaMa`)? ",
-        default_value="".join(x.title() for x in new_model_lowercase.split("_")),
+        default_value="".join(x.title() for x in new_lowercase_name.split("_")),
     )
 
     # Ask if we want to add individual processor classes as well
@@ -589,48 +646,62 @@ def get_user_input():
     add_video_processor = False
     add_feature_extractor = False
     add_processor = False
-    if old_model_info.tokenizer_class is not None:
+    if old_model_infos.tokenizer_class is not None:
         add_tokenizer = not get_user_field(
             f"Will your new model use the same tokenizer class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_info.fast_tokenizer_class is not None:
+    if old_model_infos.fast_tokenizer_class is not None:
         add_fast_tokenizer = not get_user_field(
             f"Will your new model use the same fast tokenizer class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_info.image_processor_class is not None:
+    if old_model_infos.image_processor_class is not None:
         add_image_processor = not get_user_field(
             f"Will your new model use the same image processor class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_info.fast_image_processor_class is not None:
+    if old_model_infos.fast_image_processor_class is not None:
         add_fast_image_processor = not get_user_field(
             f"Will your new model use the same fast image processor class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_info.video_processor_class is not None:
+    if old_model_infos.video_processor_class is not None:
         add_video_processor = not get_user_field(
             f"Will your new model use the same video processor class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_info.feature_extractor_class is not None:
+    if old_model_infos.feature_extractor_class is not None:
         add_feature_extractor = not get_user_field(
             f"Will your new model use the same feature extractor class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_info.processor_class is not None:
+    if old_model_infos.processor_class is not None:
         add_processor = not get_user_field(
             f"Will your new model use the same processor class as {old_model_type} (yes/no)? ",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
+
+    old_lowercase_name = old_model_infos.lowercase_name
+    # A list of the old filenames, along whether we should copy them or not
+    filenames_to_add = (
+        (f"configuration_{old_lowercase_name}.py", True),
+        (f"modeling_{old_lowercase_name}.py", True),
+        (f"tokenization_{old_lowercase_name}.py", add_tokenizer),
+        (f"tokenization_{old_lowercase_name}_fast.py", add_fast_tokenizer),
+        (f"image_processing_{old_lowercase_name}.py", add_image_processor),
+        (f"image_processing_{old_lowercase_name}_fast.py", add_fast_image_processor),
+        (f"video_processing_{old_lowercase_name}.py", add_video_processor),
+        (f"feature_extraction_{old_lowercase_name}.py", add_feature_extractor),
+        (f"processing_{old_lowercase_name}.py", add_processor),
+    )
 
     create_fast_image_processor = False
     if add_image_processor and not add_fast_image_processor:
@@ -642,19 +713,7 @@ def get_user_input():
             fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
         )
 
-    return (
-        old_model_info,
-        new_model_lowercase,
-        new_model_paper_name,
-        add_tokenizer,
-        add_fast_tokenizer,
-        add_image_processor,
-        add_fast_image_processor,
-        add_video_processor,
-        add_feature_extractor,
-        add_processor,
-        create_fast_image_processor,
-    )
+    return old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add, create_fast_image_processor
 
 
 def add_new_model_like_command_factory(args: Namespace):
@@ -673,15 +732,9 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
     def __init__(self, path_to_repo=None, *args):
         (
             self.old_model_infos,
-            self.new_model_lowercase,
+            self.new_lowercase_name,
             self.new_model_paper_name,
-            self.add_tokenizer,
-            self.add_fast_tokenizer,
-            self.add_image_processor,
-            self.add_fast_image_processor,
-            self.add_video_processor,
-            self.add_feature_extractor,
-            self.add_processor,
+            self.filenames_to_add,
             self.create_fast_image_processor,
         ) = get_user_input()
 
@@ -698,14 +751,8 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
 
         create_new_model_like(
             old_model_infos=self.old_model_infos,
-            new_model_lowercase=self.new_model_lowercase,
+            new_lowercase_name=self.new_lowercase_name,
             new_model_paper_name=self.new_model_paper_name,
-            add_tokenizer=self.add_tokenizer,
-            add_fast_tokenizer=self.add_fast_tokenizer,
-            add_image_processor=self.add_image_processor,
-            add_fast_image_processor=self.add_fast_image_processor,
-            add_video_processor=self.add_video_processor,
-            add_feature_extractor=self.add_feature_extractor,
-            add_processor=self.add_processor,
+            filenames_to_add=self.filenames_to_add,
             create_fast_image_processor=self.create_fast_image_processor,
         )
