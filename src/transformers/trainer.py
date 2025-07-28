@@ -3953,6 +3953,9 @@ class Trainer:
             if IS_SAGEMAKER_MP_POST_1_10:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
+        elif (pc := getattr(self.accelerator, "parallelism_config")) is not None:
+            if pc.should_save_model_rank:
+                self._save(output_dir)
         elif self.is_fsdp_enabled:
             if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
                 version.parse(accelerate_version) > version.parse("0.24.1")
