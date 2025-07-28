@@ -917,7 +917,7 @@ def load_shard_file(args):
             or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
         )
     ):
-        map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+        map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
