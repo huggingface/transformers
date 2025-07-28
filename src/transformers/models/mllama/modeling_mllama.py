@@ -311,7 +311,7 @@ class MllamaVisionEncoderLayer(nn.Module):
             hidden_state = self.gate_ffn.tanh() * hidden_state
         hidden_state = residual + hidden_state
 
-        return (hidden_state,)
+        return hidden_state
 
 
 class MllamaVisionEncoder(nn.Module):
@@ -351,11 +351,10 @@ class MllamaVisionEncoder(nn.Module):
 
         """
         for encoder_layer in self.layers:
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_state=hidden_states,
                 attention_mask=attention_mask,
             )
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -663,7 +662,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return (hidden_states, self_attn_weights)
+        return hidden_states, self_attn_weights
 
 
 class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
@@ -715,7 +714,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
             hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
-        return (hidden_states, attn_weights)
+        return hidden_states, attn_weights
 
 
 class MllamaRotaryEmbedding(nn.Module):
@@ -763,10 +762,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": [
-            OutputRecorder(MllamaSelfAttentionDecoderLayer, index=0),
-            OutputRecorder(MllamaCrossAttentionDecoderLayer, index=0),
-        ],
+        "hidden_states": [MllamaSelfAttentionDecoderLayer, MllamaCrossAttentionDecoderLayer],
         "attentions": [
             OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="self_attn"),
             OutputRecorder(MllamaTextSelfAttention, index=1, layer_name="cross_attn"),
