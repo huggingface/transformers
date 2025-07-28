@@ -285,7 +285,6 @@ class XLMRobertaSdpaSelfAttention(XLMRobertaSelfAttention):
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from XLMRobertaSelfAttention
-
     def forward(
         self,
         hidden_states: torch.Tensor,
