@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     Expectations,
     require_g2p_en,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -123,7 +122,6 @@ class FastSpeech2ConformerModelTester:
         return config, inputs_dict
 
 
-@require_torch_accelerator
 @require_torch
 class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
@@ -561,7 +559,6 @@ class FastSpeech2ConformerWithHifiGanTester:
         return config, inputs_dict
 
 
-@require_torch_accelerator
 @require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
