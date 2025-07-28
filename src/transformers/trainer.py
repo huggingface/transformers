@@ -3958,7 +3958,7 @@ class Trainer:
             if self.accelerator.should_save_model:
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
-        elif getattr(self.model, "_tp_size", 0) > 1:
+        elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
             self._save(output_dir)
         elif self.is_fsdp_enabled:
             if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
