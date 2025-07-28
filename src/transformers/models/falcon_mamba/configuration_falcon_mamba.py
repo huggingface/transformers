@@ -141,7 +141,8 @@ class FalconMambaConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.conv_kernel = conv_kernel
         self.expand = expand
-        self.intermediate_size = int(expand * self.hidden_size)
+        # This is needed since mamba overrides the intermediate_size attribute
+        self.intermediate_size = int(expand * self.hidden_size) if expand is None else expand
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -160,8 +161,6 @@ class FalconMambaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.use_falcon_mambapy = use_falcon_mambapy
         self.mixer_rms_eps = mixer_rms_eps
-        for k, v in kwargs.items():
-            setattr(self, k, v)
 
 
 __all__ = ["FalconMambaConfig"]
