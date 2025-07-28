@@ -142,7 +142,11 @@ class FalconMambaConfig(PretrainedConfig):
         self.conv_kernel = conv_kernel
         self.expand = expand
         # This is needed since mamba overrides the intermediate_size attribute
-        self.intermediate_size = int(expand * self.hidden_size) if expand is None else expand
+        self.intermediate_size = (
+            int(expand * self.hidden_size)
+            if kwargs.get("intermediate_size") is None
+            else kwargs.get("intermediate_size")
+        )
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
