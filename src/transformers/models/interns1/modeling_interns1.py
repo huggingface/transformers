@@ -1112,15 +1112,14 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
             )
 
         aux_loss = None
-        if output_router_logits:
+        if output_router_logits and labels is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.config.text_config.num_experts,
                 self.config.text_config.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(loss.device)
+            loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(loss.device)
 
         return InternS1CausalLMOutputWithPast(
             loss=loss,

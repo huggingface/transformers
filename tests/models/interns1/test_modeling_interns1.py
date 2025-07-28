@@ -200,6 +200,10 @@ class InternS1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @unittest.skip(reason="No small model")
+    def test_model_is_small(self):
+        pass
+
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_compile_dynamic(self):
         pass
@@ -208,6 +212,6 @@ class InternS1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip("Qwen2 flash attention does not support right padding")
+    @unittest.skip("Qwen3 flash attention does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
