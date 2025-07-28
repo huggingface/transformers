@@ -4617,13 +4617,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if device_mesh is None:
                 tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
-                if "tp" not in device_mesh.mesh_dim_names:
-                    raise ValueError(
-                        "When using `tp_plan`, the `device_mesh` must contain a 'tp' dimension. "
-                        "Please provide a valid `device_mesh`."
-                    )
-                device_mesh = device_mesh["tp"]
-                tp_size = device_mesh["tp"].size()
+                if device_mesh.ndim > 1:
+                    if "tp" not in device_mesh.mesh_dim_names:
+                        raise ValueError(
+                            "When using `tp_plan`, the `device_mesh` must contain a 'tp' dimension. "
+                            "Please provide a valid `device_mesh`."
+                        )
+                    device_mesh = device_mesh["tp"]
+                tp_size = device_mesh.size()
                 device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
