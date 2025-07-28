@@ -24,7 +24,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -648,7 +647,6 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         # If this is instantiated as a cross-attention module, the keys
@@ -772,7 +770,6 @@ class Blip2QFormerAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.attention(
@@ -848,7 +845,6 @@ class Blip2QFormerLayer(GradientCheckpointingLayer):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
         query_length=0,
     ):
@@ -932,8 +928,6 @@ class Blip2QFormerEncoder(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -1122,8 +1116,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

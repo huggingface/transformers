@@ -271,7 +271,6 @@ class EvollaSaProtSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         hidden_shape = (hidden_states.shape[0], -1, self.num_attention_heads, self.attention_head_size)
@@ -383,7 +382,6 @@ class EvollaSaProtFlashAttention2(EvollaSaProtSelfAttention):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         # Flash attention doesn't support output_attentions or cross attention
@@ -512,7 +510,6 @@ class EvollaSaProtAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -584,7 +581,6 @@ class EvollaSaProtLayer(GradientCheckpointingLayer):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -652,8 +648,6 @@ class EvollaSaProtEncoder(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
