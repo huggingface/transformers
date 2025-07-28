@@ -1080,7 +1080,10 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 def distribute_model(model, distributed_config, device_mesh, tp_size):
     _plan = "_tp_plan"
-    model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
+    tp_plan = getattr(model.config, "base_model_tp_plan")
+    if tp_plan is None and hasattr(model.config, "text_config"):
+        tp_plan = getattr(model.config.text_config, "base_model_tp_plan")
+    model._tp_plan = tp_plan.copy()
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
