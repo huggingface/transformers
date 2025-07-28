@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Beit."""
 
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -132,16 +132,6 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
         self,
