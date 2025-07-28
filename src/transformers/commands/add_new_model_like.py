@@ -243,7 +243,7 @@ def insert_model_in_doc_toc(old_lowercase_name: str, new_lowercase_name: str, ne
     with open(toc_file, "r") as f:
         content = f.read()
 
-    old_model_toc = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: \w+\n", content).group(0)
+    old_model_toc = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content).group(0)
     new_toc = f"      - local: model_doc/{new_lowercase_name}\n        title: {new_model_paper_name}\n"
     add_content_to_file(
         REPO_PATH / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
