@@ -16,6 +16,7 @@ import argparse
 import fnmatch
 import re
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -240,6 +241,7 @@ def convert_checkpoint(
     config.upsampling_ratios = metadata["decoder_rates"]
     config.quantizer_dropout = float(metadata["quantizer_dropout"])
     config.sampling_rate = sample_rate
+    config.hop_length = int(np.prod(config.downsampling_ratios))
 
     model = DacModel(config)
     feature_extractor = DacFeatureExtractor()

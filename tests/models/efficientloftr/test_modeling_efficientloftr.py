@@ -273,7 +273,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        from_pretrained_ids = ["stevenbucaille/efficientloftr"]
+        from_pretrained_ids = ["zju-community/efficientloftr"]
         for model_name in from_pretrained_ids:
             model = EfficientLoFTRForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
@@ -414,12 +414,12 @@ def prepare_imgs():
 class EfficientLoFTRModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("stevenbucaille/efficientloftr") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("zju-community/efficientloftr") if is_vision_available() else None
 
     @slow
     def test_inference(self):
         model = EfficientLoFTRForKeypointMatching.from_pretrained(
-            "stevenbucaille/efficientloftr", attn_implementation="eager"
+            "zju-community/efficientloftr", attn_implementation="eager"
         ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
