@@ -2699,10 +2699,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     kernel_function = partial(flash_attention_forward, implementation=kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                # Register it
-                ALL_ATTENTION_FUNCTIONS.register(repo_id, kernel_function)
-                ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
-                applicable_attn_implementation = repo_id
+                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
+                ALL_MASK_ATTENTION_FUNCTIONS.register(
+                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                )
             except Exception as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
