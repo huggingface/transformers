@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
+import inspect
 from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
@@ -25,18 +26,28 @@ if is_torch_available():
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
+# Models that use the "role" of the chat template as a means to select the voice
+MODELS_WITH_VOICE_IN_CHAT_ROLE = "csm"
 
 
 class TextToAudioPipeline(Pipeline):
     """
     Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
-    pipeline generates an audio file from an input text and optional other conditional inputs.
+    pipeline generates an audio waveform from an input text and optionally other conditional inputs.
+
+    <Tip>
+
+    Different audio generation models may support different conditionining inputs, like `voice` in text-to-speech
+    models. Be sure to check the model card for model-specific information, including custom conditioning inputs,
+    and the documentation in [`~TextToAudioPipeline.__call__`] for common audio conditioning inputs.
+
+    </Tip>
 
     Unless the model you're using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
     - max_new_tokens: 256
 
-    Example:
+    Examples:
 
     ```python
     >>> from transformers import pipeline
@@ -47,15 +58,6 @@ class TextToAudioPipeline(Pipeline):
     >>> audio = output["audio"]
     >>> sampling_rate = output["sampling_rate"]
     ```
-
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
-
-    <Tip>
-
-    You can specify parameters passed to the model by using [`TextToAudioPipeline.__call__.forward_params`] or
-    [`TextToAudioPipeline.__call__.generate_kwargs`].
-
-    Example:
 
     ```python
     >>> from transformers import pipeline
@@ -69,10 +71,10 @@ class TextToAudioPipeline(Pipeline):
     ...     "max_new_tokens": 35,
     ... }
 
-    >>> outputs = music_generator("Techno music with high melodic riffs", generate_kwargs=generate_kwargs)
+    >>> outputs = music_generator("Techno music with high melodic riffs", **generate_kwargs)
     ```
 
-    </Tip>
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifiers: `"text-to-speech"` or
     `"text-to-audio"`.
@@ -80,11 +82,8 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
-    # Introducing the processor at load time for new behaviour
-    _load_processor = True
-
     _pipeline_calls_generate = True
-    _load_processor = False
+    _load_processor = True
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -94,11 +93,8 @@ class TextToAudioPipeline(Pipeline):
         max_new_tokens=256,
     )
 
-    def __init__(self, *args, vocoder=None, sampling_rate=None, no_processor=True, **kwargs):
+    def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Legacy behaviour just uses the tokenizer while new models use the processor as a whole at any given time
-        self.no_processor = no_processor
 
         if self.framework == "tf":
             raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
@@ -129,8 +125,13 @@ class TextToAudioPipeline(Pipeline):
                     self.sampling_rate = sampling_rate
 
         # last fallback to get the sampling rate based on processor
-        if self.sampling_rate is None and not self.no_processor and hasattr(self.processor, "feature_extractor"):
+        if self.sampling_rate is None and self.processor is not None and hasattr(self.processor, "feature_extractor"):
             self.sampling_rate = self.processor.feature_extractor.sampling_rate
+
+        # some models can output audio directly from `generate`, but need a flag to do so
+        self._has_output_audio_in_generate = (
+            self.model.can_generate() and "output_audio" in inspect.signature(self.model.generate).parameters
+        )
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
@@ -145,43 +146,27 @@ class TextToAudioPipeline(Pipeline):
                 "return_token_type_ids": False,
                 "padding": "max_length",
             }
-
             # priority is given to kwargs
             new_kwargs.update(kwargs)
-
             kwargs = new_kwargs
 
-        preprocessor = self.tokenizer if self.no_processor else self.processor
-        output = preprocessor(text, **kwargs, return_tensors="pt")
+        preprocessor = self.tokenizer if self.processor is None else self.processor
+        if self.model.config.model_type in MODELS_WITH_VOICE_IN_CHAT_ROLE:
+            voice = kwargs.pop("voice", "0")
+            conversation = [{"role": voice, "content": [{"type": "text", "text": text[0]}]}]
+            output = preprocessor.apply_chat_template(
+                conversation, tokenize=True, return_dict=True, return_tensors="pt"
+            )
+        else:
+            output = preprocessor(text, **kwargs, return_tensors="pt")
 
         return output
 
     def _forward(self, model_inputs, **kwargs):
-        # we expect some kwargs to be additional tensors which need to be on the right device
-        kwargs = self._ensure_tensor_on_device(kwargs, device=self.device)
-        forward_params = kwargs["forward_params"]
-        generate_kwargs = kwargs["generate_kwargs"]
-
         if self.model.can_generate():
-            # we expect some kwargs to be additional tensors which need to be on the right device
-            generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
-
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
-
-            # generate_kwargs get priority over forward_params
-            forward_params.update(generate_kwargs)
-
-            output = self.model.generate(**model_inputs, **forward_params)
+            output = self.model.generate(**model_inputs, **kwargs)
         else:
-            if len(generate_kwargs):
-                raise ValueError(
-                    "You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non "
-                    "empty. For forward-only TTA models, please use `forward_params` instead of `generate_kwargs`. "
-                    f"For reference, the `generate_kwargs` used here are: {generate_kwargs.keys()}"
-                )
-            output = self.model(**model_inputs, **forward_params)[0]
+            output = self.model(**model_inputs, **kwargs)[0]
 
         if self.vocoder is not None:
             # in that case, the output is a spectrogram that needs to be converted into a waveform
@@ -190,28 +175,27 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     @overload
-    def __call__(self, text_inputs: str, **forward_params: Any) -> dict[str, Any]: ...
+    def __call__(self, text_inputs: str, voice: str, **kwargs: Any) -> dict[str, Any]: ...
 
     @overload
-    def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[dict[str, Any]]: ...
+    def __call__(self, text_inputs: list[str], voice: str, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     def __call__(
-        self, text_inputs: Union[str, list[str]], **forward_params
+        self, text_inputs: Union[str, list[str]], voice: str, **kwargs
     ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
             text_inputs (`str` or `list[str]`):
-                The text(s) to generate.
-            forward_params (`dict`, *optional*):
-                Parameters passed to the model generation/forward method. `forward_params` are always passed to the
-                underlying model.
-            generate_kwargs (`dict`, *optional*):
-                The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
-                complete overview of generate, check the [following
-                guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation). `generate_kwargs` are
-                only passed to the underlying model if the latter is a generative model.
+                The text(s) to generate audio from.
+            voice (`str`):
+                The voice to use for the generation, if the model is a text-to-speech model that supports multiple
+                voices.
+            kwargs (`dict`, *optional*):
+                Parameters passed to the model generation (if the model supports generation) or forward method
+                (if not). `kwargs` are always passed to the underlying model. For a complete overview of
+                generate, check the [following guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
 
         Return:
             A `dict` or a list of `dict`: The dictionaries have two keys:
@@ -219,45 +203,64 @@ class TextToAudioPipeline(Pipeline):
             - **audio** (`np.ndarray` of shape `(nb_channels, audio_length)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
-        return super().__call__(text_inputs, **forward_params)
+        return super().__call__(text_inputs, **kwargs)
 
     def _sanitize_parameters(
         self,
-        preprocess_params=None,
-        forward_params=None,
-        generate_kwargs=None,
+        voice=None,
+        **kwargs,
     ):
-        if getattr(self, "assistant_model", None) is not None:
-            generate_kwargs["assistant_model"] = self.assistant_model
-        if getattr(self, "assistant_tokenizer", None) is not None:
-            generate_kwargs["tokenizer"] = self.tokenizer
-            generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
+        # BC: we accepted `generate_kwargs` as a parameter. This was a more complex way of directly passing generation
+        # parameters, `pipe(..., generate_kwargs={"max_new_tokens"=100})` vs `pipe(..., max_new_tokens=100)`. If the
+        # model can't generate, these kwargs are forwarded to the model's `forward` method.
+        # We also accepted `forward_params` and `preprocess_params`.
+        # From now on, we should try to be **explicit** about the parameters the pipeline accepts, and document the
+        # accepted parameters in `__call__`.
 
-        params = {
-            "forward_params": forward_params if forward_params else {},
-            "generate_kwargs": generate_kwargs if generate_kwargs else {},
-        }
+        preprocess_params = {}
+        if "preprocess_params" in kwargs:  # BC
+            preprocess_params.update(kwargs.pop("preprocess_params"))
+        if voice is not None:
+            preprocess_params["voice"] = voice
 
-        if preprocess_params is None:
-            preprocess_params = {}
+        forward_params = {}
+        if "generate_kwargs" in kwargs:  # BC
+            forward_params.update(kwargs.pop("generate_kwargs"))
+        if "forward_params" in kwargs:  # BC
+            forward_params.update(kwargs.pop("forward_params"))
+        forward_params.update(kwargs)
+
+        # generate-specific input preparation
+        if self.model.can_generate():
+            if getattr(self, "assistant_model", None) is not None:
+                forward_params["assistant_model"] = self.assistant_model
+            if getattr(self, "assistant_tokenizer", None) is not None:
+                forward_params["tokenizer"] = self.tokenizer
+                forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+            if getattr(self, "_has_output_audio_in_generate", False) and "output_audio" not in forward_params:
+                forward_params["output_audio"] = True
+            if "generation_config" not in forward_params:
+                forward_params["generation_config"] = self.generation_config
+
+        forward_params = self._ensure_tensor_on_device(forward_params, device=self.device)
+
         postprocess_params = {}
-
-        return preprocess_params, params, postprocess_params
+        return preprocess_params, forward_params, postprocess_params
 
     def postprocess(self, audio):
         output_dict = {}
 
-        # We directly get the waveform
-        if self.no_processor:
+        # We need to postprocess to get the waveform
+        if self.processor is not None and hasattr(self.processor, "decode"):
+            waveform = self.processor.decode(audio)
+        # Or we can use the waveform directly
+        else:
             if isinstance(audio, dict):
-                waveform = audio["waveform"]
-            elif isinstance(audio, tuple):
+                waveform = audio.get("waveform")
+            elif isinstance(audio, (tuple, list)):
                 waveform = audio[0]
             else:
                 waveform = audio
-        # Or we need to postprocess to get the waveform
-        else:
-            waveform = self.processor.decode(audio)
 
         output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
