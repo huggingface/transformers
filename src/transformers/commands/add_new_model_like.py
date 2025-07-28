@@ -371,7 +371,7 @@ def create_test_files(old_model_infos: ModelInfos, new_model_lowercase, filename
         (f"test_image_processing_{new_model_lowercase}.py", test_image_processing),
         (f"test_video_processing_{new_model_lowercase}.py", test_video_processor),
         (f"test_feature_extraction_{new_model_lowercase}.py", test_feature_extractor),
-        (f"test_processor_{new_model_lowercase}.py", test_processor),
+        (f"test_processing_{new_model_lowercase}.py", test_processor),
     )
 
     test_files = {}
