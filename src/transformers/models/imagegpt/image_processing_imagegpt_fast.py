@@ -19,13 +19,19 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
   BaseImageProcessorFast,
-  DefaultFastImageProcessorKwargs
+  DefaultFastImageProcessorKwargs,
+  BatchFeature
 )
 from ...processing_utils import Unpack
-from ...image_utils import PILImageResampling
+from ...image_utils import (
+  PILImageResampling,
+  ImageInput,
+  ChannelDimension
+)
 from ...utils import (
     auto_docstring,
-    is_torch_available
+    is_torch_available,
+    TensorType
 )
 
 if is_torch_available():
@@ -48,6 +54,9 @@ class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_color_quantize: Optional[bool] = True
     clusters: Optional[np.ndarray] = None
     resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
+    return_tensors: Optional[Union[str, TensorType]] = None,
+    data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
@@ -71,10 +80,6 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     clusters = None
     resample = PILImageResampling.BILINEAR
 
-    # initialize these arguments, pass it into super constructor
-    def __init__(self, **kwargs: Unpack[ImageGPTFastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     # not in base:
     image_mean = None # not in base, normalize uses a constant factor to divide pixel values
     image_std = None # not in base, normalize uses a constant factor to divide pixel values
@@ -84,8 +89,20 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     do_rescale = None # not in base
     do_convert_rgb = None # not in base
 
-# preprocessor has additional kwargs:
-    # images, return_tensors, data_format, input_data_format
+    # initialize these arguments, pass it into super constructor
+    def __init__(self, **kwargs: Unpack[ImageGPTFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
+    # _preprocessor has additional kwargs:
+        # images, return_tensors, data_format, input_data_format
+
+    # PUBLIC preprocess:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ImageGPTFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    # PRIVATE preprocess:
+    def _preprocess(self):
+        # TODO: Override
+        pass
 
 __all__ = ["ImageGPTImageProcessorFast"]
