@@ -445,6 +445,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/exaone4
+        title: EXAONE-4.0
       - local: in_translation
         title: Falcon
       - local: in_translation
