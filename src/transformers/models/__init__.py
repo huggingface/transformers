@@ -174,6 +174,7 @@ if TYPE_CHECKING:
     from .lilt import *
     from .llama import *
     from .llama4 import *
+    from .llasa import *
     from .llava import *
     from .llava_next import *
     from .llava_next_video import *
