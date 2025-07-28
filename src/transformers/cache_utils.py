@@ -263,8 +263,9 @@ class StaticLayer(CacheLayerMixin):
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
-        # This may be needed if the Layer was not created with the right device at the beginning. However, if it
-        # is the case, it should only run once, because then the new states receive will always have the same device
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
         if self.device != key_states.device:
             self.device = key_states.device
             self.keys = self.keys.to(self.device)
@@ -348,8 +349,9 @@ class SlidingWindowLayer(StaticLayer):
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
 
-        # This may be needed if the Layer was not created with the right device at the beginning. However, if it
-        # is the case, it should only run once, because then the new states receive will always have the same device
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
         if self.device != key_states.device:
             self.device = key_states.device
             self.keys = self.keys.to(self.device)
@@ -425,8 +427,9 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
 
-        # This may be needed if the Layer was not created with the right device at the beginning. However, if it
-        # is the case, it should only run once, because then the new states receive will always have the same device
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
         if self.device != key_states.device:
             self.device = key_states.device
             self.keys = self.keys.to(self.device)
