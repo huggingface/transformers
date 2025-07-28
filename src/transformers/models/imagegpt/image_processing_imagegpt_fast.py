@@ -19,7 +19,13 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import PILImageResampling
-from ...utils import auto_docstring
+from ...utils import (
+    auto_docstring,
+    is_torch_available
+)
+
+if is_torch_available():
+    import torch
 
 def squared_euclidean_distance_fast(a, b):
     b = b.T
@@ -29,11 +35,11 @@ def squared_euclidean_distance_fast(a, b):
     d = a2[:, None] - 2 * ab + b2[None, :]
     return d
 
-
 def color_quantize_fast(x, clusters):
     x = x.reshape(-1, 3)
     d = squared_euclidean_distance_fast(x, clusters)
     return np.argmin(d, axis=1)
+
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
@@ -47,16 +53,25 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     # Default values should be checked against the slow image processor
     # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
-    image_mean = None
-    image_std = None
-    size = {"height": 256, "width": 256}
-    default_to_square = None
-    crop_size = None
+    size = {"height": 256, "width": 256} # import get_size_dict?
     do_resize = True
-    do_center_crop = None
-    do_rescale = None
     do_normalize = True
-    do_convert_rgb = None
+    # need:
+        # clusters, resample, do_color_quantize
+
+    # initialize these arguments, pass it into super constructor
+
+    # not in base:
+    image_mean = None # not in base, normalize uses a constant factor to divide pixel values
+    image_std = None # not in base, normalize uses a constant factor to divide pixel values
+    default_to_square = None # not in base
+    crop_size = None # not in base
+    do_center_crop = None # not in base
+    do_rescale = None # not in base
+    do_convert_rgb = None # not in base
+
+# preprocessor has additional kwargs:
+    # images, return_tensors, data_format, input_data_format
 
 
 __all__ = ["ImageGPTImageProcessorFast"]
