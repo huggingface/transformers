@@ -3954,7 +3954,7 @@ class Trainer:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
         # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
-        elif (getattr(self.accelerator, "parallelism_config")) is not None:
+        elif getattr(self.accelerator, "parallelism_config", None) is not None:
             if self.accelerator.should_save_model:
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
