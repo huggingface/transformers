@@ -265,8 +265,7 @@ class BLTSelfAttention(nn.Module):
         # Ensure hidden_states is always 3D (batch, seq_len, hidden_dim)
         if hidden_states.dim() == 2:
             hidden_states = hidden_states.unsqueeze(0)
-        bsz = hidden_states.size(0)
-        q_len = hidden_states.size(1)
+        bsz, q_len, _ = hidden_states.size()
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
@@ -340,7 +339,7 @@ class BLTLocalEncoder(nn.Module):
     ):
         if input_embeds is None:
             input_embeds = self.embed_tokens(input_ids)
-        batch_size = input_embeds.shape[0]
+        batch_size, _, _ = input_embeds.shape
         hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training)
         if position_ids is None:
             position_ids = (
@@ -388,8 +387,7 @@ class BLTLocalEncoder(nn.Module):
         (i.e. if the sum(patch_lengths[i]) < seq_len for any i)
         will be sent to a dummy patch, which is trimmed before returning.
         """
-        batch_size = hidden_states.shape[0]
-        embedding_dim = hidden_states.shape[-1]
+        batch_size, _, embedding_dim = hidden_states.shape
 
         patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
 
@@ -446,7 +444,7 @@ class BLTLocalDecoder(nn.Module):
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size = embeds.shape[0]
+        batch_size, _, _ = embeds.shape
         hidden_states = embeds
         patch_embeds = self.patch_embedding_projection(patch_embeds)
         patch_embeds = patch_embeds.reshape(
@@ -518,8 +516,7 @@ class BLTCrossAttention(nn.Module):
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        bsz = hidden_states.size(0)
-        q_len = hidden_states.size(1)
+        bsz, q_len, _ = hidden_states.size()
         query_states = self.q_norm(hidden_states)
         query_states = self.q_proj(query_states)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -580,8 +577,7 @@ class BLTGlobalTransformer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size = input_embeds.shape[0]
-        seq_len = input_embeds.shape[1]
+        batch_size, seq_len, _ = input_embeds.shape
         hidden_states = input_embeds
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         if position_ids is None:
@@ -626,8 +622,7 @@ def byte_group_hash_function(
 ):
     """Hash token groups and map to range [0, max_hash]."""
     with torch.no_grad():
-        batch_size = token_ids.shape[0]
-        seq_len = token_ids.shape[1]
+        batch_size, seq_len = token_ids.shape
         # Add padding for sliding window
         padding = torch.zeros(batch_size, group_size - 1, dtype=torch.int64, device=token_ids.device)
         padded_tokens = torch.cat([padding, token_ids], dim=1)
@@ -689,8 +684,7 @@ def _prepare_patch_cross_attention_mask(
             - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len]
             - full_text_row_masked_out_mask: 4D tensor indicating fully masked rows
     """
-    batch_size = patch_ids.shape[0]
-    seq_len = patch_ids.shape[1]
+    batch_size, seq_len = patch_ids.shape
     device = patch_ids.device
 
     # Determine query and key lengths based on configuration
@@ -817,7 +811,7 @@ class BLTPreTrainedModel(PreTrainedModel):
     _supports_cache_class = False
 
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(BLTTransformerLayer, index=1, layer_name="local_decoder"),
+        "hidden_states": OutputRecorder(BLTTransformerLayer, index=0, layer_name="local_decoder"),
         "attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="local_decoder"),
         "encoder_attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="local_encoder"),
         "global_attentions": OutputRecorder(BLTSelfAttention, index=1, layer_name="global_transformer"),
@@ -1168,11 +1162,10 @@ class BLTPatcher(BLTPreTrainedModel):
             split = split.reshape(-1, max_length)
             if device is not None:
                 split = split.to(device)
-            batch_size = split.shape[0]
-            sequence_length = split.shape[1]
+            batch_size, sequence_length = split.shape
             input_embeds = self.embed_tokens(split)
             hidden_states = input_embeds
-            batch_size = input_embeds.shape[0]
+            batch_size, _, _ = input_embeds.shape
             position_ids = torch.arange(split.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -1195,7 +1188,7 @@ class BLTPatcher(BLTPreTrainedModel):
             entropies.append(prediction_entropies)
         concat_entropies = torch.cat(entropies, dim=0).reshape(token_values.shape)
         concat_predictions = torch.cat(predictions, dim=0).reshape(token_values.shape[0], -1)
-        batch_size = token_values.shape[0]
+        batch_size, sequence_length = token_values.shape
         if patch_size is not None:
             patch_lengths = self.patch_lengths_from_entropies(
                 entropies=concat_entropies,
@@ -1405,7 +1398,7 @@ class BLTForCausalLM(BLTPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
         
-       # Add BLT-specific attention outputs - TODO: this is needed only  for the test_attention_outputs test
+       # Add BLT-specific attention outputs
         if hasattr(outputs, 'encoder_attentions'):
             output.encoder_attentions = outputs.encoder_attentions
         if hasattr(outputs, 'global_attentions'):
