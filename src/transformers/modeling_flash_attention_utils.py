@@ -27,13 +27,8 @@ from .utils import (
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
-    is_kernels_available,
     logging,
 )
-
-
-if is_kernels_available():
-    from kernels import get_kernel
 
 
 logger = logging.get_logger(__name__)

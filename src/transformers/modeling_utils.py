@@ -2254,6 +2254,40 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+        if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+            for v in self._tp_plan.values():
+                if v not in ALL_PARALLEL_STYLES:
+                    raise ValueError(
+                        f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
+                    )
+
+        if (
+            is_torch_greater_or_equal("2.5")
+            and _torch_distributed_available
+            and hasattr(self.config, "device_mesh")
+            and self.config.device_mesh is not None
+        ):
+            # loop over named modules and attach hooks. this is necessary when a module doesn't have parameters and thus we never hit
+            device_mesh = self.config.device_mesh
+            for name, module in self.named_modules():
+                if not getattr(module, "_is_hooked", False):
+                    from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+
+                    add_tensor_parallel_hooks_to_module(
+                        model=self,
+                        module=module,
+                        tp_plan=self._tp_plan,
+                        layer_name="",  # TODO: make this optional?
+                        current_module_plan=_get_parameter_tp_plan(parameter_name=name, tp_plan=self._tp_plan),
+                        device_mesh=device_mesh,
+                        parameter_name=None,
+                    )
+                module._is_hooked = True
 
     def dequantize(self):
         """
@@ -5023,9 +5057,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # check if using kernels
         if use_kernels:
             from kernels import Device, kernelize
-            from kernels.layer import Mode
 
-            kernelize(model, mode=Mode.TRAINING, device=Device(type=model.device.type))
+            kernelize(model, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
