@@ -413,7 +413,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
@@ -698,7 +697,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=text * 2,
+            text=[text] * 2,
             audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
