@@ -168,9 +168,13 @@ class Ovis2VisionModel(nn.Module):
             last_hidden_state = nn.functional.pad(last_hidden_state, (0, 0, 0, pad_size, 0, pad_size), "constant", 0)
             sqrt_l += pad_size
 
-            last_hidden_state = last_hidden_state.reshape(num_images, sqrt_l // hidden_stride, hidden_stride, sqrt_l // hidden_stride, hidden_stride, hidden_dim)
+            last_hidden_state = last_hidden_state.reshape(
+                num_images, sqrt_l // hidden_stride, hidden_stride, sqrt_l // hidden_stride, hidden_stride, hidden_dim
+            )
             last_hidden_state = last_hidden_state.permute(0, 1, 3, 2, 4, 5)
-            last_hidden_state = last_hidden_state.reshape(num_images, -1, hidden_stride * hidden_stride * hidden_dim)  # (n, (sqrt_l//hs)^2, hs^2*d)
+            last_hidden_state = last_hidden_state.reshape(
+                num_images, -1, hidden_stride * hidden_stride * hidden_dim
+            )  # (n, (sqrt_l//hs)^2, hs^2*d)
 
         logits = self.head_linear(last_hidden_state)
         logits = self.head_norm(logits)
