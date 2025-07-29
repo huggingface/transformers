@@ -141,9 +141,6 @@ if __name__ == "__main__":
     except AssertionError as e:
         breakpoint()
         raise e
-    print("model loaded")
-    model.save_pretrained("/tmp/small_model")
-    exit(0)
     
     inputs = inputs.to(model.device)
 
