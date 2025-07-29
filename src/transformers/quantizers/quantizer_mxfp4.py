@@ -59,6 +59,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("Using MXFP4 quantized models requires a GPU")
 
+        if not is_accelerate_available():
+            raise ImportError(
+                "Using mxfp4 requires Accelerate: `pip install 'accelerate>=1.8.0'`"
+        )
+
+        if self.quantization_config.dequantize:
+            return
+
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
 
@@ -68,19 +76,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed, we will default to dequantizing the model to bf16"
                 )
                 self.quantization_config.dequantize = True
+                return
             else:
                 # we can't quantize the model in this case so we raise an error
                 raise ValueError(
                     "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed"
                 )
 
-        if major < 9 and not self.quantization_config.dequantize:
+        if major < 9 :
             raise ValueError(
                 "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
-            )
-        if not is_accelerate_available():
-            raise ImportError(
-                "Using mxfp4 requires Accelerate: `pip install 'accelerate>=1.8.0'`"
             )
 
         device_map = kwargs.get("device_map", None)

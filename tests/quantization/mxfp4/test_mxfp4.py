@@ -346,7 +346,7 @@ class Mxfp4ModelTest(unittest.TestCase):
                 max_new_tokens=10,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
-                use_cache=True,
+                use_cache=False,
             )
 
         generated_text = tokenizer.decode(output_sequences[0], skip_special_tokens=True)

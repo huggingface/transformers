@@ -32,6 +32,8 @@ FP4_VALUES = [
     -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
 ]
 
+# Copied from GPT_OSS repo
+# TODO: Add absolute link when the repo is public
 def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
     from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
@@ -55,6 +57,8 @@ def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
         actual_weight_scale_shape=weight_scale_shape
     )
 
+# Copied from GPT_OSS repo
+# TODO: Add absolute link when the repo is public
 def convert_moe_packed_tensors(
     blocks,
     scales,
@@ -178,6 +182,8 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
 
         return intermediate_cache3
 
+# Adapted from GPT_OSS repo
+# TODO: Add absolute link when the repo is public
 def routing_torch_dist(
     logits,
     n_expts_act,
@@ -351,9 +357,6 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
 
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 dequantized = dequantized.transpose(1, 2).to(target_device)
-
-                module.device_mesh = device_mesh
-                module.rank = rank
 
                 right_pad = getattr(module, right_pad_attr)
                 bottom_pad = getattr(module, bottom_pad_attr)
