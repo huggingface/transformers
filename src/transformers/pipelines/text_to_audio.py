@@ -142,7 +142,8 @@ class TextToAudioPipeline(Pipeline):
             self.model.can_generate() and "output_audio" in inspect.signature(self.model.generate).parameters
         )
         # 2 - some TTS models use the `role` field of the chat template to select the voice, as a digit.
-        self._has_voice_digit_in_chat_role = "isdigit()" in self.processor.chat_template
+        chat_template = getattr(self.tokenizer, "chat_template", None)
+        self._has_voice_digit_in_chat_role = "isdigit()" in chat_template if chat_template is not None else False
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
