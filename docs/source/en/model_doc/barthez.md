@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # BARThez
 
-[BARThez](https://huggingface.co/papers/2010.12321) is the first monolingual French [BART](https://huggingface.co/papers/1910.13461) model, pretrained on a large, adapted French corpus using BART’s denoising objectives. By pretraining both its encoder and decoder, it is uniquely equipped for generative tasks in French, unlike existing French [BERT](https://huggingface.co/papers/1810.04805)‑based models.
+[BARThez](https://huggingface.co/papers/2010.12321) is a [BART](./bart) model designed for French language tasks. Unlike existing French BERT models, BARThez includes a pretrained encoder-decoder, allowing it to generate text as well. This model is also available as a multilingual variant, mBARThez, by continuing pretraining multilingual BART on a French corpus.
 
 You can find all of the original BARThez checkpoints under the [BARThez](https://huggingface.co/collections/dascim/barthez-670920b569a07aa53e3b6887) collection.
 
