@@ -462,6 +462,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
+                For audios longer than 30 seconds, it is necessary to set `return_timestamps=True`.
             task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe".
             language (`str` or list of `str`, *optional*):
@@ -546,7 +547,7 @@ class WhisperGenerationMixin(GenerationMixin):
         Return:
             [`~utils.ModelOutput`] or `dict[str, Any]` or `torch.LongTensor`:
 
-                A:
+                One of the following:
                 - [`~utils.ModelOutput`] when `return_dict_in_generate=True` and (`return_timestamps=False` or `force_unique_generate_call=True`), including the decoder input ids and end of sequence id.
                 - `dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
                 - `torch.LongTensor` in all other cases, excluding the decoder input ids and end of sequence id.
@@ -592,10 +593,34 @@ class WhisperGenerationMixin(GenerationMixin):
         >>> inputs = inputs.to("cuda", torch.float32)
 
         >>> # transcribe audio to ids
-        >>> generated_ids = model.generate(**inputs)
+        >>> generated_ids = model.generate(**inputs, return_timestamps=True)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
         >>> transcription[0]
+        " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
+        ```
+
+        The `monitor_progress` callback can be used to monitor the progress of the transcription:
+        ```python
+        >>> from tqdm import tqdm
+
+        >>> # prepare inputs like above
+
+        >>> # define a callback to monitor the progress of the transcription.
+        >>> with tqdm(desc="Progress") as pbar:
+        >>>     def monitor_progress(p_batch):
+        >>>         i = torch.argmax(p_batch[:, 1])
+        >>>         p = p_batch[i].detach().cpu()
+        >>>         pbar.total = int(p[1])
+        >>>         pbar.n = int(p[0])
+        >>>         pbar.update()
+
+        >>>     # transcribe audio to ids
+        >>>     generated_ids = model.generate(**inputs, return_timestamps=True, monitor_progress=monitor_progress)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        >>> transcription[0]
+        Progress:  95%|█████████████████████████████████████████████████████████████████████████████████████████████████▎    | 8497/8901 [00:04<00:00, 2052.79it/s]
         " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
