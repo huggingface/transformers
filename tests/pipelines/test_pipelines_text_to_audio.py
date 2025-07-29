@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -42,7 +44,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     # for now only test text_to_waveform and not text_to_spectrogram
 
     @require_torch
-    def test_small_musicgen_pt(self):
+    def test_small_musicgen(self):
         music_generator = pipeline(
             task="text-to-audio", model="facebook/musicgen-small", framework="pt", do_sample=False, max_new_tokens=5
         )
@@ -55,18 +57,36 @@ class TextToAudioPipelineTests(unittest.TestCase):
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
-        # test batching, this time with parameterization in the forward pass
+        # test batching, this time with parameterization in the forward pass (BC test)
         music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
         forward_params = {"do_sample": False, "max_new_tokens": 5}
         outputs = music_generator(
             ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
         )
-        audio = [output["audio"] for output in outputs]
-        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        audio_bc = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio_bc)
+
+        # same as above, but passing generate flags directly
+        outputs = music_generator(
+            ["This is a test", "This is a second test"],
+            do_sample=False,
+            max_new_tokens=5,
+            batch_size=2,
+        )
+        audio_generate = [output["audio"] for output in outputs]
+        self.assertTrue(np.abs(audio_bc[0] - audio_generate[0]).max() < 1e-5)
+        self.assertTrue(np.abs(audio_bc[1] - audio_generate[1]).max() < 1e-5)
+
+        # test saving audio
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # 2 files and 1 path -> append a number suffix to the path
+            music_generator.save_audio(outputs, os.path.join(tmp_dir, "audio.wav"))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "audio_0.wav")))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "audio_1.wav")))
 
     @slow
     @require_torch
-    def test_medium_seamless_m4t_pt(self):
+    def test_medium_seamless_m4t(self):
         speech_generator = pipeline(
             task="text-to-audio", model="facebook/hf-seamless-m4t-medium", framework="pt", max_new_tokens=5
         )
@@ -89,7 +109,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_small_bark_pt(self):
+    def test_small_bark(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
 
         forward_params = {
@@ -123,7 +143,19 @@ class TextToAudioPipelineTests(unittest.TestCase):
         audio = outputs["audio"]
         self.assertEqual(ANY(np.ndarray), audio)
 
-        # test using a speaker embedding
+    @slow
+    @require_torch
+    def test_small_bark_set_speaker(self):
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
+        breakpoint()
+
+        # BC: test using a speaker embedding
+        forward_params = {
+            "do_sample": True,
+            "semantic_max_new_tokens": 5,
+            "semantic_num_return_sequences": 2,
+        }
+
         processor = AutoProcessor.from_pretrained("suno/bark-small")
         temp_inp = processor("hey, how are you?", voice_preset="v2/en_speaker_5")
         history_prompt = temp_inp["history_prompt"]
@@ -134,8 +166,10 @@ class TextToAudioPipelineTests(unittest.TestCase):
             forward_params=forward_params,
             batch_size=2,
         )
-        audio = [output["audio"] for output in outputs]
-        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        audio_bc = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio_bc)
+
+        # test using `voice` pipeline parameter
 
     @slow
     @require_torch_accelerator
@@ -177,7 +211,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    def test_vits_model_pt(self):
+    def test_vits_model(self):
         speech_generator = pipeline(task="text-to-audio", model="facebook/mms-tts-eng", framework="pt")
 
         outputs = speech_generator("This is a test")

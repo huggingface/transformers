@@ -13,6 +13,7 @@
 # limitations under the License.from typing import List, Union
 import inspect
 from typing import Any, Union, overload
+import numpy as np
 
 from ..generation import GenerationConfig
 from ..utils import is_soundfile_available, is_torch_available, logging
@@ -137,13 +138,17 @@ class TextToAudioPipeline(Pipeline):
 
         # Text to audio models are a diverse bunch: this section contains a best-effort to attempt to identify types
         # of models, to control the behavior of the pipeline (set `generate` flags, preprocess differently, etc.)
-        # 1 - some models can output audio directly from `generate`, but need a flag to do so.
+        # 1 - audio output: some models can output audio directly from `generate`, but need a flag to do so. E.g. CSM
         self._has_output_audio_in_generate = (
             self.model.can_generate() and "output_audio" in inspect.signature(self.model.generate).parameters
         )
-        # 2 - some TTS models use the `role` field of the chat template to select the voice, as a digit.
+        # 2 - voice selection: some TTS models use the `role` field of the chat template to select the voice, as a
+        # digit. E.g. CSM
         chat_template = getattr(self.tokenizer, "chat_template", None)
         self._has_voice_digit_in_chat_role = "isdigit()" in chat_template if chat_template is not None else False
+        # 3 - voice selection: some TTS models use speaker embeddings and have a `voice_preset` parameter in the
+        # processor. E.g. Bark
+        self._has_voice_preset_in_processor = "voice_preset" in inspect.signature(self.processor).parameters
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
@@ -156,12 +161,13 @@ class TextToAudioPipeline(Pipeline):
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
-                "padding": "max_length",
+                # "padding": "max_length",
             }
             # priority is given to kwargs
             new_kwargs.update(kwargs)
             kwargs = new_kwargs
 
+        # Different ways to select the voice (TTS models)
         if self._has_voice_digit_in_chat_role:
             voice = str(kwargs.pop("voice", "0"))
             if not voice.isdigit():
@@ -174,6 +180,10 @@ class TextToAudioPipeline(Pipeline):
             output = self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
             )
+        elif self._has_voice_preset_in_processor:
+            voice = kwargs.pop("voice", None)
+            output = self.processor(text, voice_preset=voice, **kwargs)
+        # Default: no voice selection
         else:
             output = self.tokenizer(text, **kwargs, return_tensors="pt")
 
@@ -265,22 +275,37 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, audio):
         output_dict = {}
 
-        # # We need to postprocess to get the waveform
-        # if self.processor is not None and hasattr(self.processor, "decode"):
-        #     waveform = self.processor.decode(audio)
-        # # Or we can use the waveform directly
-        # else:
+        # Extract the waveform(s) from the possible formats
         if isinstance(audio, dict):
-            waveform = audio.get("waveform")
+            waveform = audio.get("waveform") if "waveform" in audio else audio.get("audio")
         elif isinstance(audio, (tuple, list)):
             waveform = audio[0]
         else:
             waveform = audio
 
-        output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
-        output_dict["sampling_rate"] = self.sampling_rate
+        # Expected format: (batch_size [optional], nb_channels, audio_length)
+        if not 2 <= len(waveform.shape) <= 3:
+            raise ValueError(
+                f"Invalid waveform shape: {waveform.shape}, expected (batch_size [optional], nb_channels, "
+                "audio_length)"
+            )
 
-        return output_dict
+        # bsz == 1 -> output a single dict
+        if len(waveform.shape) == 3 and waveform.shape[0] == 1:
+            waveform = waveform[0]
+        if len(waveform.shape) == 2:
+            output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
+            output_dict["sampling_rate"] = self.sampling_rate
+            return output_dict
+        # bsz > 1 -> output a list of dicts
+        else:
+            output_list = []
+            for batch_idx in range(waveform.shape[0]):
+                output_dict = {}
+                output_dict["audio"] = waveform[batch_idx].to(device="cpu", dtype=torch.float).numpy()
+                output_dict["sampling_rate"] = self.sampling_rate
+                output_list.append(output_dict)
+            return output_list
 
     def save_audio(self, audio: Union[dict[str, Any], list[dict[str, Any]]], path: Union[str, list[str]]):
         """
@@ -317,8 +342,9 @@ class TextToAudioPipeline(Pipeline):
         for audio_dict, audio_file_path in zip(audio, path):
             if self.processor is not None and hasattr(self.processor, "save_audio"):
                 self.processor.save_audio(audio_dict["audio"], audio_file_path)
-        else:
-            # If the processor does not have a save_audio method, does a best effort to save the audio. This may fail
-            # if the audio data returned by the model is not in the format expected by soundfile's defaults.
-            # Add more complexity if there is demand for it.
-            sf.write(audio_file_path, audio_dict["audio"], audio_dict["sampling_rate"])
+            else:
+                # If the processor does not have a save_audio method, does a best effort to save the audio. This may
+                # fail if the audio data returned by the model is not in the format expected by soundfile's defaults.
+                # Add more complexity if there is demand for it.
+                squeezed_audio = np.squeeze(audio_dict["audio"])  # to correctly save mono audio with `soundfile`
+                sf.write(audio_file_path, squeezed_audio, audio_dict["sampling_rate"])
