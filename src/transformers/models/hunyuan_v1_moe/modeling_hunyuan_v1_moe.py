@@ -1397,7 +1397,7 @@ class HunYuanMoEV1Model(HunYuanMoEPreTrainedModel):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_seq_length()
 
-        if position_ids is None:
+        if position_ids is None or position_ids.numel() == 0:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
