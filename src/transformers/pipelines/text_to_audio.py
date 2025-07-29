@@ -15,7 +15,7 @@ import inspect
 from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
-from ..utils import is_torch_available
+from ..utils import is_soundfile_available, is_torch_available, logging
 from .base import Pipeline
 
 
@@ -25,9 +25,13 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
+if is_soundfile_available():
+    import soundfile as sf
+
+
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
-# Models that use the "role" of the chat template as a means to select the voice
-MODELS_WITH_VOICE_IN_CHAT_ROLE = "csm"
+
+logger = logging.get_logger(__name__)
 
 
 class TextToAudioPipeline(Pipeline):
@@ -57,6 +61,8 @@ class TextToAudioPipeline(Pipeline):
 
     >>> audio = output["audio"]
     >>> sampling_rate = output["sampling_rate"]
+
+    >>> pipe.save_audio(output, "audio.wav")
     ```
 
     ```python
@@ -72,6 +78,7 @@ class TextToAudioPipeline(Pipeline):
     ... }
 
     >>> outputs = music_generator("Techno music with high melodic riffs", **generate_kwargs)
+    >>> music_generator.save_audio(outputs, "audio.wav")
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
@@ -128,10 +135,14 @@ class TextToAudioPipeline(Pipeline):
         if self.sampling_rate is None and self.processor is not None and hasattr(self.processor, "feature_extractor"):
             self.sampling_rate = self.processor.feature_extractor.sampling_rate
 
-        # some models can output audio directly from `generate`, but need a flag to do so
+        # Text to audio models are a diverse bunch: this section contains a best-effort to attempt to identify types
+        # of models, to control the behavior of the pipeline (set `generate` flags, preprocess differently, etc.)
+        # 1 - some models can output audio directly from `generate`, but need a flag to do so.
         self._has_output_audio_in_generate = (
             self.model.can_generate() and "output_audio" in inspect.signature(self.model.generate).parameters
         )
+        # 2 - some TTS models use the `role` field of the chat template to select the voice, as a digit.
+        self._has_voice_digit_in_chat_role = "isdigit()" in self.processor.chat_template
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
@@ -151,11 +162,17 @@ class TextToAudioPipeline(Pipeline):
             kwargs = new_kwargs
 
         preprocessor = self.tokenizer if self.processor is None else self.processor
-        if self.model.config.model_type in MODELS_WITH_VOICE_IN_CHAT_ROLE:
-            voice = kwargs.pop("voice", "0")
+        if self._has_voice_digit_in_chat_role:
+            voice = str(kwargs.pop("voice", "0"))
+            if not voice.isdigit():
+                logger.warning(
+                    f"With {self.model.name_or_path}, the voice pipeline argument must be a digit. Got voice={voice}, "
+                    "using voice=0 instead."
+                )
+                voice = "0"
             conversation = [{"role": voice, "content": [{"type": "text", "text": text[0]}]}]
             output = preprocessor.apply_chat_template(
-                conversation, tokenize=True, return_dict=True, return_tensors="pt"
+                conversation, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
             )
         else:
             output = preprocessor(text, **kwargs, return_tensors="pt")
@@ -175,14 +192,12 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     @overload
-    def __call__(self, text_inputs: str, voice: str, **kwargs: Any) -> dict[str, Any]: ...
+    def __call__(self, text_inputs: str, **kwargs: Any) -> dict[str, Any]: ...
 
     @overload
-    def __call__(self, text_inputs: list[str], voice: str, **kwargs: Any) -> list[dict[str, Any]]: ...
+    def __call__(self, text_inputs: list[str], **kwargs: Any) -> list[dict[str, Any]]: ...
 
-    def __call__(
-        self, text_inputs: Union[str, list[str]], voice: str, **kwargs
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    def __call__(self, text_inputs: Union[str, list[str]], **kwargs) -> Union[dict[str, Any], list[dict[str, Any]]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
@@ -215,7 +230,7 @@ class TextToAudioPipeline(Pipeline):
         # model can't generate, these kwargs are forwarded to the model's `forward` method.
         # We also accepted `forward_params` and `preprocess_params`.
         # From now on, we should try to be **explicit** about the parameters the pipeline accepts, and document the
-        # accepted parameters in `__call__`.
+        # accepted parameters in `__call__` (the exception being `generate` kwargs).
 
         preprocess_params = {}
         if "preprocess_params" in kwargs:  # BC
@@ -266,3 +281,44 @@ class TextToAudioPipeline(Pipeline):
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict
+
+    def save_audio(self, audio: Union[dict[str, Any], list[dict[str, Any]]], path: Union[str, list[str]]):
+        """
+        Saves the audio returned by the pipeline to files.
+
+        Args:
+            audio (`dict[str, Any]` or `list[dict[str, Any]]`):
+                The audio returned by the pipeline. The dictionary (or each dictionary, if it is a list) should
+                contain two keys:
+                - `"audio"`: The audio waveform.
+                - `"sampling_rate"`: The sampling rate of the audio waveform.
+            path (`str` or `list[str]`):
+                The path(s) to save the audio to. If multiple audio files are provided, but only one path is provided,
+                the audio files will be saved in the same directory, with the same name but with a number suffix (e.g.
+                `"audio_0.wav", "audio_1.wav", ...`).
+        """
+        if isinstance(audio, dict):
+            audio = [audio]
+        if isinstance(path, str):
+            path = [path]
+
+        # 1 path for multiple audio files -> add a number suffix to the path
+        if len(path) == 1 and len(audio) > 1:
+            base_path, extension = path[0].rsplit(".", 1)
+            path = [f"{base_path}_{i}.{extension}" for i in range(len(audio))]
+
+        # by this point, each audio file should have a path
+        if len(audio) != len(path):
+            raise ValueError(
+                f"The number of audio files ({len(audio)}) does not match the number of paths ({len(path)})."
+            )
+
+        # save each audio file
+        for audio_dict, audio_file_path in zip(audio, path):
+            if self.processor is not None and hasattr(self.processor, "save_audio"):
+                self.processor.save_audio(audio_dict["audio"], audio_file_path)
+        else:
+            # If the processor does not have a save_audio method, does a best effort to save the audio. This may fail
+            # if the audio data returned by the model is not in the format expected by soundfile's defaults.
+            # Add more complexity if there is demand for it.
+            sf.write(audio_file_path, audio_dict["audio"], audio_dict["sampling_rate"])
