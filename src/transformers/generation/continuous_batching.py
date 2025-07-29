@@ -383,15 +383,15 @@ class PagedAttentionCache:
         value_states: torch.Tensor,
         layer_idx: int,
         cache_index: dict[str, tuple[Optional[list[int]], Optional[list[int]]]],
-        # read_index,
-        # write_index,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
         layer_type = self.layer_types[layer_idx] if self.layer_types else "full_attention"
         read_index, write_index = cache_index[layer_type]
-        if layer_type == "sliding_window" and read_index is None or write_index is None:
-            raise ValueError(f"layer {layer_idx} is sliding window, but `model.config.sliding_window` is set to None.")
+        if layer_type == "sliding_attention" and read_index is None or write_index is None:
+            raise ValueError(
+                f"layer {layer_idx} is sliding attention, but `model.config.sliding_window` is set to None."
+            )
         total_slots = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
@@ -623,7 +623,8 @@ class PrefillFirstScheduler(Scheduler):
         scheduled_requests = []
 
         for state in self.active_requests.values():
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+            # XXX: when cache is full (len(self.cache._free_blocks) == 0), state can stay on `PREFILLING_SPLIT` we need to take those into account
+            if state.status in [RequestStatus.PREFILLING_SPLIT, RequestStatus.SPLIT_PENDING_REMAINDER]:
                 priority_states.append(state)
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
@@ -845,9 +846,9 @@ class ContinuousBatchProcessor:
 
         if hasattr(self.config, "layer_types") and self.config.layer_types:
             unique_layer_types = set(self.config.layer_types)
-            if "sliding_window" in unique_layer_types and "full_attention" in unique_layer_types:
+            if "sliding_attention" in unique_layer_types and "full_attention" in unique_layer_types:
                 self.attention_mask_mode = AttentionMaskMode.HYBRID
-            elif "sliding_window" in unique_layer_types:
+            elif "sliding_attention" in unique_layer_types:
                 self.attention_mask_mode = AttentionMaskMode.SLIDING
             else:
                 self.attention_mask_mode = AttentionMaskMode.FULL
@@ -859,7 +860,7 @@ class ContinuousBatchProcessor:
                 "full_attention": torch.zeros(
                     (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
                 ),
-                "sliding_window": torch.zeros(
+                "sliding_attention": torch.zeros(
                     (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
                 ),
             }
@@ -1052,7 +1053,7 @@ class ContinuousBatchProcessor:
             self.write_sliding_index[: len(write_sliding_index)] = to_tensor(write_sliding_index)
         self.cache_index = {
             "full_attention": (self.read_index, self.write_index),
-            "sliding_window": (self.read_sliding_index, self.write_sliding_index),
+            "sliding_attention": (self.read_sliding_index, self.write_sliding_index),
         }
 
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
@@ -1112,7 +1113,7 @@ class ContinuousBatchProcessor:
 
                 if self.attention_mask_mode == AttentionMaskMode.HYBRID:
                     self.attention_mask["full_attention"][..., query_range, key_range] = mask
-                    self.attention_mask["sliding_window"][..., query_range, key_range] = sliding_mask
+                    self.attention_mask["sliding_attention"][..., query_range, key_range] = sliding_mask
 
                 elif self.attention_mask_mode == AttentionMaskMode.SLIDING:
                     self.attention_mask[..., query_range, key_range] = sliding_mask
@@ -1322,11 +1323,15 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
-    def add_requests(self, inputs: list[list[int]], **kwargs):
+    def add_requests(self, inputs: list[list[int]], **kwargs) -> list[str]:
+        req_ids = []
         for i, input_ids in enumerate(inputs):
             # Assign a predictable request ID for ordering results later
             req_id = f"batch_req_{i}"
             self.add_request(input_ids, request_id=req_id, **kwargs)
+            req_ids.append(req_id)
+
+        return req_ids
 
     def get_result(self, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
