@@ -28,7 +28,6 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
-from ..cache_utils import Cache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
@@ -37,8 +36,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
-
-from ..utils.deprecation import deprecate_kwarg
 
 
 class CandidateGenerator:
@@ -135,7 +132,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 )
 
         # Remove potential default "logits_to_keep" key
-        if "logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_logits_to_keep():
+        if "logits_to_keep" in assistant_kwargs and not assistant_model._supports_logits_to_keep():
             del assistant_kwargs["logits_to_keep"]
 
         # If the assistant is an encoder-decoder model, assume the encoder is different on the assistant.
@@ -295,9 +292,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
             new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
-                self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - num_added_tokens
-            )
+            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
@@ -688,9 +683,6 @@ class AssistantToTargetTranslator:
             The tokenizer used by the assistant model.
         target_vocab_size (`int`):
             The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
-        assistant_model_device (str, optional): The device on which the assistant model is loaded.
-                Defaults to "cpu".
-        assistant_model_device (`str`, defaults to "cpu"): The device where the assistant model is located. Used for placing tensors.
         assistant_model (Optional[PreTrainedModel], optional): The assistant model to be used. Defaults to None for backward compatibility.
         assistant_prune_lm_head (bool): Whether to prune the assistant model's language model
             head to match the target vocabulary. This is only applicable if `assistant_model` is provided.
@@ -700,21 +692,17 @@ class AssistantToTargetTranslator:
     FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
     SUPPRESS_TOKEN_ID: int = -1  # The ID used to mark suppressed tokens in the mapping.
 
-    @deprecate_kwarg("assistant_model_device", version="4.53")
     def __init__(
         self,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
-        assistant_model_device: str = "cpu",
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_prune_lm_head: bool = False,
     ):
         self._target_tokenizer: PreTrainedTokenizerBase = target_tokenizer
         self._assistant_tokenizer: PreTrainedTokenizerBase = assistant_tokenizer
-        self._assistant_model_device: str = (
-            assistant_model_device if assistant_model is None else assistant_model.device
-        )
+        self._assistant_model_device = assistant_model.device if assistant_model is not None else "cpu"
         self.target_vocab_size: int = target_vocab_size
         self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
             self._get_assistant_to_target_input_ids()
@@ -848,13 +836,11 @@ class AssistantVocabTranslatorCache:
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
-    @deprecate_kwarg("assistant_model_device", version="4.53")
     def get_translator(
         cls,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,
-        assistant_model_device: str = "cpu",
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_prune_lm_head: bool = False,
     ) -> AssistantToTargetTranslator:
@@ -869,7 +855,6 @@ class AssistantVocabTranslatorCache:
                 target_tokenizer,
                 assistant_tokenizer,
                 target_vocab_size,
-                assistant_model_device,
                 assistant_model,
                 assistant_prune_lm_head,
             )
@@ -1178,47 +1163,6 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         candidate_ids, candidate_logits = super().get_candidates(input_ids)
         base_model.config.num_hidden_layers = original_num_hidden_layers
         return candidate_ids, candidate_logits
-
-
-def _crop_past_key_values(model, past_key_values, max_length):
-    """Crops the past key values up to a certain maximum length."""
-    new_past = []
-    if isinstance(past_key_values, Cache):
-        past_key_values.crop(max_length)
-    elif model.config.is_encoder_decoder:
-        for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :max_length, :],
-                    past_key_values[idx][1][:, :, :max_length, :],
-                    past_key_values[idx][2],
-                    past_key_values[idx][3],
-                )
-            )
-        past_key_values = tuple(new_past)
-    # gptbigcode is special and stores kv in shape (batch_size, seq_len, dim), if it's a multi_query model
-    elif "gptbigcode" in model.__class__.__name__.lower() or (
-        model.config.architectures is not None and "gptbigcode" in model.config.architectures[0].lower()
-    ):
-        if model.config.multi_query:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :max_length, :]
-        else:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :, :max_length, :]
-    elif past_key_values is not None:
-        for idx in range(len(past_key_values)):
-            if past_key_values[idx] != ([], []):
-                new_past.append(
-                    (
-                        past_key_values[idx][0][:, :, :max_length, :],
-                        past_key_values[idx][1][:, :, :max_length, :],
-                    )
-                )
-            else:
-                new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
-        past_key_values = tuple(new_past)
-    return past_key_values
 
 
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:

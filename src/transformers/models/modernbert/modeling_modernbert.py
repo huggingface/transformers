@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from contextlib import nullcontext
 from typing import Optional, Union
@@ -241,10 +242,10 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(nn.Module):
-    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
+    def __init__(self, config: ModernBertConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -253,7 +254,8 @@ class ModernBertRotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -458,22 +460,21 @@ class ModernBertAttention(nn.Module):
 
         if layer_id % config.global_attn_every_n_layers != 0:
             self.local_attention = (config.local_attention // 2, config.local_attention // 2)
+            rope_theta = config.local_rope_theta if config.local_rope_theta is not None else config.global_rope_theta
+            max_position_embeddings = config.local_attention
         else:
             self.local_attention = (-1, -1)
-
-        rope_theta = config.global_rope_theta
-        max_position_embeddings = config.max_position_embeddings
-        if self.local_attention != (-1, -1):
-            if config.local_rope_theta is not None:
-                rope_theta = config.local_rope_theta
-            max_position_embeddings = config.local_attention
+            max_position_embeddings = config.max_position_embeddings
+            rope_theta = config.global_rope_theta
 
         if config._attn_implementation == "flash_attention_2":
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
+            config_copy = copy.deepcopy(config)
+            config_copy.rope_theta = rope_theta
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config_copy)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -557,11 +558,11 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class ModernBertPreTrainedModel(PreTrainedModel):
-    config_class = ModernBertConfig
+    config: ModernBertConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = False
 
@@ -612,35 +613,27 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-        check_device_map: bool = True,
-    ):
+    def _check_and_adjust_attn_implementation(
+        self, attn_implementation: Optional[str], is_init_check: bool = False
+    ) -> str:
+        """
+        Checks and dispatches to hhe requested attention implementation.
+        """
         # If the user didn't specify anything, try to use flash_attention_2 if available.
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
         # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
         # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
-        if config._attn_implementation_internal is None:
-            config._attn_implementation_internal = "flash_attention_2"
-            try:
-                return cls._check_and_enable_flash_attn_2(
-                    config,
-                    torch_dtype=torch.float16,
-                    device_map=device_map,
-                    hard_check_only=False,
-                    check_device_map=check_device_map,
-                )
-            except (ValueError, ImportError):
-                config._attn_implementation_internal = None
-        return super()._autoset_attn_implementation(
-            config,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
+
+        try:
+            attn_implementation = (
+                "flash_attention_2"
+                if attn_implementation is None and self._flash_attn_2_can_dispatch()
+                else attn_implementation
+            )
+        except (ValueError, ImportError):
+            pass
+        return super()._check_and_adjust_attn_implementation(
+            attn_implementation=attn_implementation, is_init_check=is_init_check
         )
 
     def _maybe_set_compile(self):

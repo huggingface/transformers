@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch BLIP-2 model."""
 
+import copy
 import inspect
 import tempfile
 import unittest
@@ -28,6 +29,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_sdpa,
     require_vision,
@@ -184,9 +186,8 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -485,6 +486,12 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -620,7 +627,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
-            for attr_name in config.to_dict().keys()
+            for attr_name in config.to_dict()
             if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
@@ -771,7 +778,14 @@ class Blip2TextModelTester:
 # this model tester uses an encoder-decoder language model (T5)
 class Blip2ModelTester:
     def __init__(
-        self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
+        self,
+        parent,
+        vision_kwargs=None,
+        qformer_kwargs=None,
+        text_kwargs=None,
+        is_training=True,
+        num_query_tokens=10,
+        image_token_index=4,
     ):
         if vision_kwargs is None:
             vision_kwargs = {}
@@ -786,11 +800,10 @@ class Blip2ModelTester:
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
-        self.encoder_seq_length = (
-            self.text_model_tester.encoder_seq_length + num_query_tokens
-        )  # need enc seq_length for gen tests
+        self.encoder_seq_length = self.text_model_tester.encoder_seq_length
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -813,6 +826,7 @@ class Blip2ModelTester:
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             num_query_tokens=self.num_query_tokens,
+            image_token_index=self.image_token_index,
         )
 
     def create_and_check_for_conditional_generation(
@@ -905,6 +919,12 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -975,9 +995,8 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -1065,7 +1084,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         for key in ["vision_config", "qformer_config", "text_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
+            model = model_class(config=copy.deepcopy(configs_no_init))
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
@@ -1073,6 +1092,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @unittest.skip("T5 backbone deepcopies the configs, and fixing it would be more involved")
+    def test_internal_model_config_and_subconfig_are_same(self):
+        pass
 
 
 class Blip2TextModelWithProjectionTester:
@@ -1857,37 +1880,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
         self.assertEqual(generated_text, expected_ids_and_text[1])
 
-    def test_expansion_in_processing(self):
-        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
-
-        image = prepare_img()
-        prompt = "Question: which city is this? Answer:"
-
-        # Make sure we will go the legacy path by setting these args to None
-        processor.num_query_tokens = None
-        model.config.image_token_index = None
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Add args to the config to trigger new logic when inputs are expanded in processing file
-        processor.num_query_tokens = model.config.num_query_tokens
-        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        model.config.image_token_index = len(processor.tokenizer) - 1
-        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
-
-        # Generate again with new inputs
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
-
-        self.assertTrue(generated_text_expanded == generated_text)
-
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_inference_itm(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)

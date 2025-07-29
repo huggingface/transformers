@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import WhisperTokenizer, is_speech_available
+from transformers import WhisperTokenizer, WhisperTokenizerFast, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 from .test_feature_extraction_whisper import floats_list
@@ -60,7 +60,7 @@ class WhisperProcessorTest(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, WhisperTokenizer)
+        self.assertIsInstance(processor.tokenizer, WhisperTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
@@ -77,7 +77,7 @@ class WhisperProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, WhisperTokenizer)
+        self.assertIsInstance(processor.tokenizer, WhisperTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
@@ -93,7 +93,7 @@ class WhisperProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -108,7 +108,7 @@ class WhisperProcessorTest(unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_decode(self):

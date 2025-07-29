@@ -34,10 +34,10 @@ from transformers.testing_utils import (
     is_torchaudio_available,
     require_flash_attn,
     require_pyctcdecode,
-    require_soundfile,
     require_torch,
     require_torch_gpu,
     require_torchaudio,
+    require_torchcodec,
     run_test_in_subprocess,
     slow,
     torch_device,
@@ -1444,7 +1444,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
@@ -1982,7 +1982,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "en": "joe keton disapproved of films and buster also had reservations about the media",
         }
 
-        for lang in LANG_MAP.keys():
+        for lang in LANG_MAP:
             assert run_model(lang) == TRANSCRIPTIONS[lang]
 
     @require_flash_attn

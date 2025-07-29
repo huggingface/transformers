@@ -61,7 +61,7 @@ def generate_fake_bounding_boxes(n_boxes):
     """Generate bounding boxes in the format (center_x, center_y, width, height)"""
     # Validate the input
     if not isinstance(n_boxes, int):
-        raise ValueError("n_boxes must be an integer")
+        raise TypeError("n_boxes must be an integer")
     if n_boxes <= 0:
         raise ValueError("n_boxes must be a positive integer")
 
@@ -763,7 +763,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
-        for key in cpu_outputs.keys():
+        for key in cpu_outputs:
             torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(

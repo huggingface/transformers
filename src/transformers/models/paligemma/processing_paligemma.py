@@ -29,7 +29,6 @@ from ...processing_utils import (
     ProcessorMixin,
     TextKwargs,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import logging
@@ -216,8 +215,6 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             PaliGemmaProcessorKwargs,
@@ -330,9 +327,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
-            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
         vision_data = {}
         if image_sizes is not None:

@@ -235,8 +235,8 @@ class GPTNeoXModelTester:
             """Deep copy a DynamicCache to reuse the same one multiple times."""
             new_cache = cache
             for i in range(len(cache)):
-                new_cache.key_cache[i] = cache.key_cache[i].clone()
-                new_cache.value_cache[i] = cache.value_cache[i].clone()
+                new_cache.layers[i].keys = cache.layers[i].keys.clone()
+                new_cache.layers[i].values = cache.layers[i].values.clone()
 
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
         # We need to run both on a copy of the cache, otherwise it is modified in-place

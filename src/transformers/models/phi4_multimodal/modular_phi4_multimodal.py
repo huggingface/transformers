@@ -18,11 +18,10 @@ from typing import Callable, Optional, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -33,7 +32,9 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -453,7 +454,7 @@ def simple_eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
@@ -534,12 +535,12 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
 
 
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -648,7 +649,7 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttention
 
 
 class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
-    config_class = Phi4MultimodalVisionConfig
+    config: Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
@@ -1116,27 +1117,16 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 @auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
-    config_class = Phi4MultimodalAudioConfig
+    config: Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["Phi4MultimodalAudioConformerEncoderLayer"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+        super()._init_weights(module)
+        if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
             module.b1.data.zero_()
             module.b2.data.zero_()
 
@@ -1459,18 +1449,8 @@ class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Phi4MultimodalRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Phi4MultimodalImageEmbedding):
+        Phi3PreTrainedModel._init_weights(module)
+        if isinstance(module, Phi4MultimodalImageEmbedding):
             module.global_img_feature_extensor.data.zero_()
             module.sub_img_feature_extensor.data.zero_()
 
@@ -1495,12 +1475,13 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
@@ -1530,22 +1511,8 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
@@ -1584,43 +1551,22 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
         hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
@@ -1641,7 +1587,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,

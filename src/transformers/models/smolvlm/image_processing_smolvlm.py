@@ -863,10 +863,13 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        do_image_splitting = images_kwargs.get("do_image_splitting", None) or self.do_image_splitting
-        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
-        size = images_kwargs.get("size", None) or self.size
+        do_image_splitting = (
+            images_kwargs["do_image_splitting"] if "do_image_splitting" in images_kwargs else self.do_image_splitting
+        )
+        max_image_size = images_kwargs["max_image_size"] if "max_image_size" in images_kwargs else self.max_image_size
+        size = images_kwargs["size"] if "size" in images_kwargs else self.size
 
+        num_patches = num_rows = num_cols = 1
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
             height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
@@ -888,7 +891,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 num_cols = math.ceil(resized_width / max_width)
                 num_patches = num_rows * num_cols + 1
 
-        return num_patches
+        return num_patches, num_rows, num_cols
 
 
 __all__ = ["SmolVLMImageProcessor"]
