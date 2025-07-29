@@ -45,12 +45,15 @@ def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
         axis=1,
         swizzle_axis=swizzle_axis,
         swizzle_scale=swizzle_mx_scale,
-        swizzle_value=swizzle_mx_value)
+        swizzle_value=swizzle_mx_value
+    )
+
     return w, InFlexData(), MicroscalingCtx(
         weight_scale=mx_scales,
         swizzle_scale=swizzle_mx_scale,
         swizzle_value=swizzle_mx_value,
-        actual_weight_scale_shape=weight_scale_shape)
+        actual_weight_scale_shape=weight_scale_shape
+    )
 
 def convert_moe_packed_tensors(
     blocks,
@@ -95,12 +98,14 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
+
     return out
 
 class Mxfp4OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
 
         super().__init__()
+
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
@@ -139,23 +144,28 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
         from triton_kernels.swiglu import swiglu_fn
+
         with torch.cuda.device(hidden_states.device):
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),(self.alpha, None), 2)
 
             if self.hidden_size_pad is not None:
-                hidden_states = torch.nn.functional.pad(hidden_states,
-                                    (0, self.hidden_size_pad, 0, 0),
-                                    mode="constant",
-                                    value=0)
+                hidden_states = torch.nn.functional.pad(
+                    hidden_states,
+                    (0, self.hidden_size_pad, 0, 0),
+                    mode="constant",
+                    value=0
+                )
 
-            intermediate_cache1 = matmul_ogs(hidden_states,
-                                            self.gate_up_proj,
-                                            self.gate_up_proj_bias.to(torch.float32),
-                                            routing_data,
-                                            gather_indx=gather_idx,
-                                            precision_config=self.gate_up_proj_precision_config,
-                                            gammas=None,
-                                            fused_activation=act)
+            intermediate_cache1 = matmul_ogs(
+                hidden_states,
+                self.gate_up_proj,
+                self.gate_up_proj_bias.to(torch.float32),
+                routing_data,
+                gather_indx=gather_idx,
+                precision_config=self.gate_up_proj_precision_config,
+                gammas=None,
+                fused_activation=act
+            )
 
             intermediate_cache3 = matmul_ogs(
                 intermediate_cache1,
@@ -239,6 +249,7 @@ def mlp_forward(self, hidden_states):
     else:
         from triton_kernels.routing import routing
         routing = routing
+
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
     routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
@@ -309,14 +320,32 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
             scales = getattr(module, scales_attr)
             if blocks.device.type == "meta" and scales.device.type == "meta":
                 if device_mesh is not None:
-                    shard_and_distribute_module(model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh)
+                    shard_and_distribute_module(
+                        model,
+                        param_value,
+                        empty_param,
+                        param_name,
+                        casting_dtype,
+                        to_contiguous,
+                        rank,
+                        device_mesh
+                    )
                 else:
                     _load_parameter_into_model(model, param_name, param_value)
                 return
             else:
                 # One of the params is already loaded, so load the other
                 if device_mesh is not None:
-                    shard_and_distribute_module(model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh)
+                    shard_and_distribute_module(
+                        model,
+                        param_value,
+                        empty_param,
+                        param_name,
+                        casting_dtype,
+                        to_contiguous,
+                        rank,
+                        device_mesh
+                    )
                 else:
                     _load_parameter_into_model(model, param_name, param_value)
 
@@ -337,8 +366,10 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
                 del dequantized
                 with torch.cuda.device(target_device):
                     loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, swizzle_mx_value, swizzle_mx_scale)
+
                 setattr(module, precision_config_attr, PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex)))
                 setattr(module, proj, torch.nn.Parameter(loaded_weight, requires_grad=False))
+
             return
 
 def _replace_with_mxfp4_linear(
