@@ -22,86 +22,42 @@ rendered properly in your Markdown viewer.
 
 # CLAP
 
-[CLAP (Contrastive Language-Audio Pretraining)](https://huggingface.co/papers/2211.06687) is a model trained on a large number of (audio, text) pairs to learn a shared space between audio and language.
+[CLAP (Contrastive Language-Audio Pretraining)](https://huggingface.co/papers/2211.06687) is a multimodal model that combines audio data with natural language descriptions through contrastive learning.
 
-It uses a SWINTransformer to get features from audio (converted into log-Mel spectrograms) and a RoBERTa model for text. Both are projected into the same space so that similar audio and text end up close together. This lets CLAP work well for things like zero-shot audio classification and text-to-audio retrieval.
+It incorporates feature fusion and keyword-to-caption augmentation to process variable-length audio inputs and to improve performance. CLAP doesn't require task-specific training data and can learn meaningful audio representations through natural language.
 
-You can find all the original CLAP checkpoints under the [laion](https://huggingface.co/laion?search=clap) organization.
+You can find all the original CLAP checkpoints under the [CLAP](https://huggingface.co/collections/laion/clap-contrastive-language-audio-pretraining-65415c0b18373b607262a490) collection.
 
 > [!TIP]
-> This model was contributed by [@ybelkada](https://huggingface.co/ybelkada) and [@ArthurZ](https://huggingface.co/ArthurZ).
+> This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
 >
 > Click on the CLAP models in the right sidebar for more examples of how to apply CLAP to different audio retrieval and classification tasks.
 
-The example below demonstrates how to extract embeddings with [`Pipeline`], [`AutoModel`] and from the command line.
+The example below demonstrates how to extract text embeddings with the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="feature-extraction",
-    model="laion/clap-htsat-unfused",
-    device=0
-)
-embedding = pipeline("A sound of waves crashing on the beach.")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
 import torch
-import torchaudio
-from transformers import AutoProcessor, ClapModel
+from transformers import AutoTokenizer, AutoModel
 
-processor = AutoProcessor.from_pretrained(
-    "laion/clap-htsat-unfused"
-)
-model = ClapModel.from_pretrained(
-    "laion/clap-htsat-unfused",
-    torch_dtype=torch.float16,
-    device_map="auto"
-)
+model = AutoModel.from_pretrained("laion/clap-htsat-unfused", torch_dtype=torch.float16, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
-waveform, sample_rate = torchaudio.load("path/to/audio.wav")
-inputs = processor(audios=waveform, sampling_rate=sample_rate, return_tensors="pt")
-inputs = {k: v.to("cuda") for k, v in inputs.items()}
-audio_embed = model.get_audio_features(**inputs)
+texts = ["the sound of a cat", "the sound of a dog", "music playing"]
 
-text_inputs = processor(text=["A dog is barking"], return_tensors="pt")
-text_inputs = {k: v.to("cuda") for k, v in text_inputs.items()}
-text_embed = model.get_text_features(**text_inputs)
+inputs = tokenizer(texts, padding=True, return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    text_features = model.get_text_features(**inputs)
+
+print(f"Text embeddings shape: {text_features.shape}")
+print(f"Text embeddings: {text_features}")
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
-
-This model is not supported via `transformers-cli` at this time.
-</hfoption>
 </hfoptions>
-
-## Quantization
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-Quantization is not currently supported for this model.
-
-## Notes
-
-- CLAP works with both raw audio (as waveform tensors) and text input.
-- For best results, resample your audio to 48 kHz mono before inference:
-
-    ```python
-    import torchaudio
-
-    waveform, sample_rate = torchaudio.load("my_audio.wav")
-    resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=48000)
-    mono_waveform = resampler(waveform.mean(dim=0, keepdim=True))
-    ```
   
 ## Resources
 
