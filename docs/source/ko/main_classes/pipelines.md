@@ -35,7 +35,7 @@ rendered properly in your Markdown viewer.
 [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
 ```
 
-[hub](https://huggingface.co)에서 특정 모델을 사용하려면, 해당 모델이 작업을 이미 정의한 경우 작업명을 생략할 수 있습니다:
+[hub](https://huggingface.co)에서 특정 모델을 사용하려는 경우, 해당 모델이 이미 허브에 작업을 정의하고 있다면 작업명을 생략할 수 있습니다:
 
 ```python
 >>> pipe = pipeline(model="FacebookAI/roberta-large-mnli")
