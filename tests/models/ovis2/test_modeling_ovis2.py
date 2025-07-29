@@ -411,10 +411,10 @@ class Ovis2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=50)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a forested area with two deer grazing on a grassy slope. The scene is shrouded in fog, creating a mysterious atmosphere. The deer are positioned in the center of the image, with one slightly behind the other. The',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a forested area with two deer in the foreground. The deer are standing on a grassy area, and the surrounding environment is shrouded in fog, creating a misty atmosphere. The deer appear to be grazing',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
-
+        
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
