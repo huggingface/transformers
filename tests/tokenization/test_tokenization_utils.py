@@ -393,7 +393,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         # Now, test the message-by-message encoding
         tokens = []
         for i, message in enumerate(conversation):
-            tokens += tokenizer.encode_message(message, conversation_history=conversation[:i])
+            tokens += tokenizer.encode_message_with_chat_template(message, conversation_history=conversation[:i])
 
         self.assertEqual(whole_conversation_tokens, tokens)
 
@@ -404,4 +404,4 @@ class TokenizerUtilsTest(unittest.TestCase):
             {"role": "user", "content": "Hey there, how are you?"},
         ]
         with self.assertRaises(ValueError):
-            tokenizer.encode_message(conversation[0], add_generation_prompt=True)
+            tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
