@@ -31,6 +31,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -68,7 +69,7 @@ if is_torchaudio_available():
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -1255,6 +1256,12 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def processor(self):
