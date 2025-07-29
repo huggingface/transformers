@@ -414,7 +414,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a forested area with two deer in the foreground. The deer are standing on a grassy area, and the surrounding environment is shrouded in fog, creating a misty atmosphere. The deer appear to be grazing',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
-        
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
