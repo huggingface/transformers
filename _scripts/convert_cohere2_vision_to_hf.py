@@ -83,6 +83,7 @@ def write_model(
         
     del model.config._name_or_path
     model.config.torch_dtype = dtype
+    model = model.to(dtype=dtype)
     logging.info("Saving model in the Transformers format.")
     model.save_pretrained(model_path, safe_serialization=True)
     logging.info("No unexpected keys found, proceeding with the model.")
