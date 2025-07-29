@@ -536,16 +536,18 @@ def create_new_model_like(
 
     # 9. Run linters
     model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
-    toctree_file = REPO_PATH / "docs" / "source" / "en" / "_toctree.yml"
     subprocess.run(
-        ["ruff", "check", new_module_folder, tests_folder, model_init_file, toctree_file, "--fix"],
+        ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],
         cwd=REPO_PATH,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        ["ruff", "format", new_module_folder, tests_folder, model_init_file, toctree_file],
+        ["ruff", "format", new_module_folder, tests_folder, model_init_file],
         cwd=REPO_PATH,
         stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"], cwd=REPO_PATH, stdout=subprocess.DEVNULL
     )
     subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
 
@@ -625,7 +627,7 @@ def get_user_input():
     valid_model_type = False
     while not valid_model_type:
         old_model_type = input(
-            "What model would you like to duplicate? Please provide it as lowercase, e.g. `llama`):"
+            "What model would you like to duplicate? Please provide it as lowercase, e.g. `llama`): "
         )
         if old_model_type in model_types:
             valid_model_type = True
