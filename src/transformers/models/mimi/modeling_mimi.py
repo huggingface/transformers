@@ -280,7 +280,7 @@ class MimiConv1d(nn.Module):
         """
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
-        if not mode == "reflect":
+        if mode != "reflect":
             return nn.functional.pad(hidden_states, paddings, mode, value)
 
         max_pad = max(padding_left, padding_right)

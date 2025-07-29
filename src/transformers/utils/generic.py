@@ -415,7 +415,7 @@ class ModelOutput(OrderedDict):
                 for idx, element in enumerate(iterator):
                     if (
                         not isinstance(element, (list, tuple))
-                        or not len(element) == 2
+                        or len(element) != 2
                         or not isinstance(element[0], str)
                     ):
                         if idx == 0:
