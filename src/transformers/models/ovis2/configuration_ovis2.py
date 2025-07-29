@@ -54,6 +54,8 @@ class Ovis2VisionConfig(PretrainedConfig):
             The stride of the hidden layer in the Vision Transformer.
         num_visual_indicator_tokens (`int`, *optional*, defaults to 5):
             Number of visual indicator tokens.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated normal initializer for initializing all weight matrices.
         tokenize_function (`str`, *optional*, defaults to `"softmax"`):
             The function used to tokenize the visual indicator tokens.
     ```"""

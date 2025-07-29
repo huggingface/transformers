@@ -93,6 +93,7 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "EvollaSaProtPreTrainedModel",
+    "Ovis2VisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
