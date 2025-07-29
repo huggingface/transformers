@@ -55,7 +55,7 @@ jobs:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
@@ -219,7 +219,7 @@ jobs:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
         working-directory: /transformers

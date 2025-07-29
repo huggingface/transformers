@@ -262,7 +262,7 @@ class AutoProcessor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -277,9 +277,7 @@ class AutoProcessor:
 
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `cached_file`.
-        cached_file_kwargs = {
-            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
-        }
+        cached_file_kwargs = {key: kwargs[key] for key in inspect.signature(cached_file).parameters if key in kwargs}
         # We don't want to raise
         cached_file_kwargs.update(
             {

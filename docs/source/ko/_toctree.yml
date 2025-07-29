@@ -13,8 +13,8 @@
       title: (번역중) Loading models
     - local: custom_models
       title: 사용자 정의 모델 공유하기
-    - local: in_translation
-      title: (번역중) Customizing model components
+    - local: how_to_hack_models
+      title: 모델 구성 요소 맞춤 설정하기
     - local: model_sharing
       title: 만든 모델 공유하기
     - local: modular_transformers
@@ -50,8 +50,8 @@
   - sections:
     - local: pipeline_tutorial
       title: Pipeline으로 추론하기
-    - local: in_translation
-      title: (번역중) Machine learning apps
+    - local: pipeline_gradio
+      title: 머신러닝 앱
     - local: pipeline_webserver
       title: 추론 웹 서버를 위한 파이프라인
     - local: add_new_pipeline
@@ -135,8 +135,8 @@
       title: 다중 GPU에서 학습 진행하기
     title: 분산 학습(Distributed training)
   - sections:
-    - local: in_translation
-      title: (번역중) GPU
+    - local: perf_train_gpu_one
+      title: GPU
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_special
@@ -332,12 +332,12 @@
       title: (번역중) Optimization
     - local: main_classes/output
       title: 모델 출력
-    - local: in_translation
-      title: (번역중) PEFT
+    - local: main_classes/peft
+      title: PEFT
     - local: in_translation
       title: (번역중) Pipelines
-    - local: in_translation
-      title: (번역중) Processors
+    - local: main_classes/tokenizer
+      title: 토크나이저
     - local: main_classes/quantization
       title: 양자화
     - local: in_translation

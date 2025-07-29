@@ -238,7 +238,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         """
         if isinstance(member, torch.Tensor):
             max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
+        elif isinstance(member, (list, tuple)):
             max_value, min_value = max(member), min(member)
 
         if not isinstance(container, list):

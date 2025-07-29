@@ -128,6 +128,7 @@ if TYPE_CHECKING:
     from .gemma import *
     from .gemma2 import *
     from .gemma3 import *
+    from .gemma3n import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -261,6 +262,7 @@ if TYPE_CHECKING:
     from .pvt import *
     from .pvt_v2 import *
     from .qwen2 import *
+    from .qwen2_5_omni import *
     from .qwen2_5_vl import *
     from .qwen2_audio import *
     from .qwen2_moe import *

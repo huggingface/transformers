@@ -123,8 +123,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
-        do_convert_annotations = kwargs.get("do_convert_annotations", None)
-        do_normalize = kwargs.get("do_normalize", None)
+        do_convert_annotations = kwargs.get("do_convert_annotations")
+        do_normalize = kwargs.get("do_normalize")
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
