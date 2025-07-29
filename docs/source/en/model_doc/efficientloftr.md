@@ -20,14 +20,14 @@ rendered properly in your Markdown viewer.
 
 # EfficientLoFTR
 
-[EfficientLoFTR](https://huggingface.co/papers/2403.04765) is an efficient detector-free local feature matching method that produces semi-dense matches across images with sparse-like speed. It builds upon the original [LoFTR](https://huggingface.co/papers/2104.00680) architecture but introduces significant improvements for both efficiency and accuracy. The key innovation is an aggregated attention mechanism with adaptive token selection that makes the model ~2.5× faster than LoFTR while achieving higher accuracy. EfficientLoFTR can even surpass state-of-the-art efficient sparse matching pipelines like SuperPoint + LightGlue in terms of speed, making it suitable for large-scale or latency-sensitive applications such as image retrieval and 3D reconstruction.
+[EfficientLoFTR](https://huggingface.co/papers/2403.04765) is an efficient detector-free local feature matching method that produces semi-dense matches across images with sparse-like speed. It builds upon the original [LoFTR](https://huggingface.co/papers/2104.00680) architecture but introduces significant improvements for both efficiency and accuracy. The key innovation is an aggregated attention mechanism with adaptive token selection that makes the model ~2.5× faster than LoFTR while achieving higher accuracy. EfficientLoFTR can even surpass state-of-the-art efficient sparse matching pipelines like [SuperPoint](./superpoint) + [LightGlue](./lightglue) in terms of speed, making it suitable for large-scale or latency-sensitive applications such as image retrieval and 3D reconstruction.
 
 > [!TIP]
 > This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 >
 > Click on the EfficientLoFTR models in the right sidebar for more examples of how to apply EfficientLoFTR to different computer vision tasks.
 
-The example below demonstrates how to match keypoints between two images with the [`AutoModelForKeypointMatching`] class.
+The example below demonstrates how to match keypoints between two images with the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -86,7 +86,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 
 - The model produces semi-dense matches, offering a good balance between the density of matches and computational efficiency. It excels in handling large viewpoint changes and texture-poor scenarios.
 
-- For better visualization and analysis, use the [`EfficientLoFTRImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
+- For better visualization and analysis, use the [`~EfficientLoFTRImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
 
     ```py
     # Process outputs for visualization
