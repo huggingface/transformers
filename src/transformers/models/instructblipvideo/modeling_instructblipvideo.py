@@ -1308,8 +1308,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         else:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
+            ).all(-1)
 
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
