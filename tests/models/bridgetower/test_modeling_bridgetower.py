@@ -203,9 +203,9 @@ class BridgeTowerModelTester:
         return (config, input_ids, attention_mask, pixel_values, pixel_mask)
 
     def get_config(self):
-        return BridgeTowerConfig.from_text_vision_configs(
-            text_config=self.text_model_tester.get_config(),
-            vision_config=self.vision_model_tester.get_config(),
+        return BridgeTowerConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             share_cross_modal_transformer_layers=self.share_cross_modal_transformer_layers,
             share_link_tower_layers=self.share_link_tower_layers,
             link_tower_type=self.link_tower_type,
