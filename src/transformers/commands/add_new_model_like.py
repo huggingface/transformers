@@ -185,7 +185,7 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
         "\n\n⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that "
         "may not be rendered properly in your Markdown viewer.\n\n-->\n\n"
     )
-    copyright_for_markdown = COPYRIGHT.replace("# ", "").replace("coding=utf-8\n", "<!--") + added_note
+    copyright_for_markdown = re.sub(r"# *", "", COPYRIGHT).replace("coding=utf-8\n", "<!--") + added_note
 
     doc_template = textwrap.dedent(
         f"""
