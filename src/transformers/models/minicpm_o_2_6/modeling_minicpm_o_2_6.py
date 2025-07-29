@@ -261,15 +261,21 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             [1, 1, 1, 1],
             [1, 1, 1, 1]]
         """
-        ret = torch.zeros(size, size, device=device, dtype=torch.bool)
-        for i in range(size):
-            if num_left_chunks < 0:
-                start = 0
-            else:
-                start = max((i // chunk_size - num_left_chunks) * chunk_size, 0)
-            ending = min((i // chunk_size + 1) * chunk_size + num_lookhead, size)
-            ret[i, start:ending] = True
-        return ret
+        idx = torch.arange(size, device=device)
+        chunk_idx = idx // chunk_size
+
+        if num_left_chunks < 0:
+            starts = torch.zeros_like(chunk_idx)
+        else:
+            starts = ((chunk_idx - num_left_chunks).clamp(min=0)) * chunk_size
+        ends = ((chunk_idx + 1) * chunk_size + num_lookhead).clamp(max=size)
+
+        jdx = torch.arange(size, device=device).view(1, size).expand(size, size)
+        starts_mat = starts.view(size, 1).expand(size, size)
+        ends_mat = ends.view(size, 1).expand(size, size)
+
+        mask = (jdx >= starts_mat) & (jdx < ends_mat)
+        return mask
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
@@ -2807,6 +2813,7 @@ class ConditionalChatTTS(PreTrainedModel):
             )
 
         # Model forward
+        past_key_values_for_prefill = DynamicCache.from_legacy_cache(past_key_values_for_prefill)
         outputs_prefill: BaseModelOutputWithPast = self.model(
             attention_mask=None,  # because for text, it is standard causal attention mask, do nothing
             position_ids=position_ids,  # position_ids denotes the position of new text tokens in the sequence
@@ -2818,7 +2825,7 @@ class ConditionalChatTTS(PreTrainedModel):
         )
 
         # Get model updated KV Cache
-        past_key_values_for_prefill_updated = outputs_prefill.past_key_values
+        past_key_values_for_prefill_updated = outputs_prefill.past_key_values.to_legacy_cache()
 
         # Update generated KV Cache to input `past_key_values`
         for layer_idx in range(len(past_key_values)):
@@ -3010,6 +3017,7 @@ class ConditionalChatTTS(PreTrainedModel):
             )
 
             # Model forward
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             outputs: BaseModelOutputWithPast = self.model(
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -3026,7 +3034,7 @@ class ConditionalChatTTS(PreTrainedModel):
             del causal_mask
 
             hidden_states = outputs.last_hidden_state
-            past_key_values = outputs.past_key_values
+            past_key_values = outputs.past_key_values.to_legacy_cache()
 
             with P.cached():
                 logits = torch.empty(
