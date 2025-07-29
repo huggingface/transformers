@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # mT5
 
-[mT5](https://huggingface.co/papers/2010.11934) is an encoder-decoder transformer model for sequence-to-sequence tasks. It follows the same architecture and training procedure as [T5](.t5), a sequence-to-sequence model trained exclusively on English examples. In contrast, mT5 was trained from scratch on a multilingual dataset, allowing it to generalize across a wide range of languages. This leads to improved performance in a multilingual setting compared to T5.
+[mT5](https://huggingface.co/papers/2010.11934) is a multilingual variant of [T5](./t5), training on 101 languages. It also incorporates a new "accidental translation" technique to prevent the model from incorrectly translating predictions into the wrong language.
 
 You can find all the original [mT5] checkpoints under the [mT5](https://huggingface.co/collections/google/mt5-release-65005f1a520f8d7b4d039509) collection.
 
@@ -79,10 +79,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis." | transformers-cli run --task text2text-generation --model csebuetnlp/mT5_multilingual_XLSum --device 0
+echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis." | transformers run --task text2text-generation --model csebuetnlp/mT5_multilingual_XLSum --device 0
 ```
 
 </hfoption>
@@ -122,7 +122,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- mT5 was only pre-trained on [mc4](https://huggingface.co/datasets/mc4), meaning it must be fine-tuned before it can be used for downstream tasks.
+- mT5 must be fine-tuned for downstream tasks because it was only pretrained on the [mc4](https://huggingface.co/datasets/mc4) dataset.
 
 ## MT5Config
 
