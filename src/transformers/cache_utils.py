@@ -317,8 +317,9 @@ class SlidingWindowLayer(StaticLayer):
             sliding_window (`int`):
                 Effective window size: number of tokens that are kept on each update call.
         """
-        kwargs.pop("max_cache_len", None)
-        super().__init__(*args, max_cache_len=sliding_window, *args, **kwargs)
+        max_cache_len = kwargs.pop("max_cache_len", None)
+        max_cache_len = min(sliding_window, max_cache_len) if max_cache_len is not None else sliding_window
+        super().__init__(*args, max_cache_len=max_cache_len, *args, **kwargs)
 
     def update(
         self,
