@@ -541,7 +541,7 @@ class _BaseAutoModelClass:
             if kwargs.get("torch_dtype") == "auto":
                 _ = kwargs.pop("torch_dtype")
             # to not overwrite the quantization_config if config has a quantization_config
-            _ = kwargs.pop("quantization_config")
+            _ = kwargs.pop("quantization_config", None)
 
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
