@@ -17,6 +17,7 @@ import tempfile
 import textwrap
 import unittest
 from datetime import date
+from pathlib import Path
 
 import transformers.commands.add_new_model_like
 from transformers.commands.add_new_model_like import ModelInfos, create_new_model_like
@@ -35,14 +36,15 @@ class TestAddNewModelLike(unittest.TestCase):
         """
         Create a temporary repo with the same structure as Transformers, with just 2 models.
         """
-        cls.FAKE_REPO = tempfile.TemporaryDirectory()
+        cls.FAKE_REPO = tempfile.TemporaryDirectory().name
         os.makedirs(os.path.join(cls.FAKE_REPO, "src", "transformers", "models"), exist_ok=True)
         os.makedirs(os.path.join(cls.FAKE_REPO, "tests", "models"), exist_ok=True)
-        os.makedirs(os.path.join(cls.FAKE_REPO, "docs", "source", "en"), exist_ok=True)
+        os.makedirs(os.path.join(cls.FAKE_REPO, "docs", "source", "en", "model_doc"), exist_ok=True)
 
+        # We need to copy the utils to run the cleanup commands
+        utils_src = os.path.join(REPO_PATH, "utils")
+        shutil.copytree(utils_src, utils_src.replace(REPO_PATH, cls.FAKE_REPO))
         # Copy the __init__ files
-        main_init = os.path.join(REPO_PATH, "src", "transformers", "__init__.py")
-        shutil.copy(main_init, main_init.replace(REPO_PATH, cls.FAKE_REPO))
         model_init = os.path.join(REPO_PATH, "src", "transformers", "models", "__init__.py")
         shutil.copy(model_init, model_init.replace(REPO_PATH, cls.FAKE_REPO))
         doc_toc = os.path.join(REPO_PATH, "docs", "source", "en", "_toctree.yml")
@@ -56,14 +58,14 @@ class TestAddNewModelLike(unittest.TestCase):
             shutil.copytree(test_src, test_src.replace(REPO_PATH, cls.FAKE_REPO))
 
             if model != "auto":
-                doc_src = os.path.join(REPO_PATH, "docs", "source", "en", f"{model}.md")
+                doc_src = os.path.join(REPO_PATH, "docs", "source", "en", "model_doc", f"{model}.md")
                 shutil.copy(doc_src, doc_src.replace(REPO_PATH, cls.FAKE_REPO))
 
         # Replace the globals
         cls.ORIGINAL_REPO = transformers.commands.add_new_model_like.REPO_PATH
         cls.ORIGINAL_TRANSFORMERS_REPO = transformers.commands.add_new_model_like.TRANSFORMERS_PATH
-        transformers.commands.add_new_model_like.REPO_PATH = cls.FAKE_REPO
-        transformers.commands.add_new_model_like.TRANSFORMERS_PATH = os.path.join(cls.FAKE_REPO, "src", "transformers")
+        transformers.commands.add_new_model_like.REPO_PATH = Path(cls.FAKE_REPO)
+        transformers.commands.add_new_model_like.TRANSFORMERS_PATH = Path(cls.FAKE_REPO) / "src" / "transformers"
 
         # For convenience
         cls.MODEL_PATH = os.path.join(cls.FAKE_REPO, "src", "transformers", "models")
@@ -115,7 +117,7 @@ class TestAddNewModelLike(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "modeling_my_test.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "configuration_my_test.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "__init__.py")))
-        self.assertTrue(os.path.isfile(os.path.join(self.DOC_PATH, "models", "my_test.md")))
+        self.assertTrue(os.path.isfile(os.path.join(self.DOC_PATH, "model_doc", "my_test.md")))
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "__init__.py")))
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "test_modeling_my_test.py")))
 
@@ -251,7 +253,7 @@ class TestAddNewModelLike(unittest.TestCase):
             ]
             """
         )
-        self.assertFileIsEqual(os.path.join(model_repo, "modular_my_test.py"), EXPECTED_MODULAR)
+        self.assertFileIsEqual(EXPECTED_MODULAR, os.path.join(model_repo, "modular_my_test.py"))
 
         EXPECTED_INIT = textwrap.dedent(
             f"""
@@ -287,7 +289,7 @@ class TestAddNewModelLike(unittest.TestCase):
 
             """
         )
-        self.assertFileIsEqual(os.path.join(model_repo, "__init__.py"), EXPECTED_INIT)
+        self.assertFileIsEqual(EXPECTED_INIT, os.path.join(model_repo, "__init__.py"))
 
         EXPECTED_DOC = textwrap.dedent(
             f"""
@@ -364,7 +366,7 @@ class TestAddNewModelLike(unittest.TestCase):
             [[autodoc]] MyTestForTokenClassification
             """
         )
-        self.assertFileIsEqual(os.path.join(self.DOC_PATH, "models", "my_test.md"), EXPECTED_DOC)
+        self.assertFileIsEqual(EXPECTED_DOC, os.path.join(self.DOC_PATH, "model_doc", "my_test.md"))
 
     def test_phi4_with_all_processors(self):
         # This is the structure without adding the tokenizers
@@ -398,7 +400,7 @@ class TestAddNewModelLike(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "feature_extraction_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "processing_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "__init__.py")))
-        self.assertTrue(os.path.isfile(os.path.join(self.DOC_PATH, "models", "my_test2.md")))
+        self.assertTrue(os.path.isfile(os.path.join(self.DOC_PATH, "model_doc", "my_test2.md")))
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "__init__.py")))
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "test_modeling_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "test_feature_extraction_my_test2.py")))
@@ -675,7 +677,7 @@ class TestAddNewModelLike(unittest.TestCase):
             ]
             """
         )
-        self.assertFileIsEqual(os.path.join(model_repo, "modular_my_test2.py"), EXPECTED_MODULAR)
+        self.assertFileIsEqual(EXPECTED_MODULAR, os.path.join(model_repo, "modular_my_test2.py"))
 
         EXPECTED_INIT = textwrap.dedent(
             f"""
@@ -713,7 +715,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
             """
         )
-        self.assertFileIsEqual(os.path.join(model_repo, "__init__.py"), EXPECTED_INIT)
+        self.assertFileIsEqual(EXPECTED_INIT, os.path.join(model_repo, "__init__.py"))
 
         EXPECTED_DOC = textwrap.dedent(
             f"""
@@ -818,4 +820,4 @@ class TestAddNewModelLike(unittest.TestCase):
             [[autodoc]] MyTest2Processor
             """
         )
-        self.assertFileIsEqual(os.path.join(self.DOC_PATH, "models", "my_test2.md"), EXPECTED_DOC)
+        self.assertFileIsEqual(EXPECTED_DOC, os.path.join(self.DOC_PATH, "model_doc", "my_test2.md"))
