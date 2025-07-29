@@ -157,7 +157,7 @@ class Ovis2VisionText2TextModelTester:
         vocab_range = config.text_config.vocab_size - safe_start
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_range) + safe_start
-        input_ids[:, :self.image_seq_length] = config.image_token_id
+        input_ids[:, : self.image_seq_length] = config.image_token_id
 
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
