@@ -431,6 +431,11 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_dola_decoding_sample(self):
         pass
 
+    @pytest.mark.generate
+    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
+    def test_generate_with_quant_cache(self):
+        pass
+
 
 class Gemma3nVision2TextModelTester:
     text_config = {"activation_sparsity_pattern": None}
