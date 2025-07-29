@@ -14,17 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Text to speech
+# Text to speech[[text-to-speech]]
 
 [[open-in-colab]]
 
-Text-to-speech (TTS) is the task of creating natural-sounding speech from text, where the speech can be generated in multiple
-languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as
-[Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5).
+Text-to-speech (TTS)는 텍스트에서 자연스러운 음성을 생성하는 작업으로, 여러 언어와 여러 화자에 대해 음성을 생성할 수 있습니다. 🤗 Transformers에는 현재 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits), [SpeechT5](../model_doc/speecht5)와 같은 여러 text-to-speech 모델이 있습니다.
 
-You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Bark,
-can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music.
-Here's an example of how you would use the `"text-to-speech"` pipeline with Bark:
+`"text-to-audio"` 파이프라인(또는 별칭인 `"text-to-speech"`)을 사용하여 쉽게 오디오를 생성할 수 있습니다. Bark와 같은 일부 모델은 웃음, 한숨, 울음과 같은 비언어적 의사소통을 생성하거나 음악을 추가하도록 조건을 설정할 수도 있습니다.
+다음은 Bark와 함께 `"text-to-speech"` 파이프라인을 사용하는 방법의 예시입니다:
 
 ```py
 >>> from transformers import pipeline
@@ -34,31 +31,29 @@ Here's an example of how you would use the `"text-to-speech"` pipeline with Bark
 >>> output = pipe(text)
 ```
 
-Here's a code snippet you can use to listen to the resulting audio in a notebook:
+노트북에서 결과 오디오를 듣기 위해 사용할 수 있는 코드 스니펫입니다:
 
 ```python
 >>> from IPython.display import Audio
 >>> Audio(output["audio"], rate=output["sampling_rate"])
 ```
 
-For more examples on what Bark and other pretrained TTS models can do, refer to our
-[Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
+Bark와 다른 사전 학습된 TTS 모델이 할 수 있는 더 많은 예시를 보려면, 저희 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models)를 참조하세요.
 
-If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers
-are [SpeechT5](model_doc/speecht5) and [FastSpeech2Conformer](model_doc/fastspeech2_conformer), though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
+TTS 모델을 파인튜닝하려는 경우, 현재 🤗 Transformers에서 사용할 수 있는 text-to-speech 모델은 [SpeechT5](model_doc/speecht5)와 [FastSpeech2Conformer](model_doc/fastspeech2_conformer)뿐이며, 향후 더 많은 모델이 추가될 예정입니다. SpeechT5는 speech-to-text와 text-to-speech 데이터의 조합으로 사전 학습되어 텍스트와 음성이 공유하는 숨겨진 표현의 통합된 공간을 학습할 수 있습니다. 이는 동일한 사전 학습된 모델을 다른 작업에 대해 파인튜닝할 수 있음을 의미합니다. 또한 SpeechT5는 x-vector 화자 임베딩을 통해 여러 화자를 지원합니다.
 
-The remainder of this guide illustrates how to:
+이 가이드의 나머지 부분에서는 다음 방법을 설명합니다:
 
-1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) dataset.
-2. Use your refined model for inference in one of two ways: using a pipeline or directly.
+1. 원래 영어 음성으로 학습된 [SpeechT5](../model_doc/speecht5)를 [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) 데이터셋의 네덜란드어(`nl`) 언어 하위 집합에서 파인튜닝합니다.
+2. 파이프라인을 사용하거나 직접적으로 사용하는 두 가지 방법 중 하나로 개선된 모델을 추론에 사용합니다.
 
-Before you begin, make sure you have all the necessary libraries installed:
+시작하기 전에 필요한 모든 라이브러리가 설치되어 있는지 확인하세요:
 
 ```bash
 pip install datasets soundfile speechbrain accelerate
 ```
 
-Install 🤗Transformers from source as not all the SpeechT5 features have been merged into an official release yet:
+모든 SpeechT5 기능이 아직 공식 릴리스에 병합되지 않았으므로 소스에서 🤗Transformers를 설치하세요:
 
 ```bash
 pip install git+https://github.com/huggingface/transformers.git
@@ -66,13 +61,13 @@ pip install git+https://github.com/huggingface/transformers.git
 
 <Tip>
 
-To follow this guide you will need a GPU. If you're working in a notebook, run the following line to check if a GPU is available:
+이 가이드를 따르려면 GPU가 필요합니다. 노트북에서 작업하는 경우, 다음 명령을 실행하여 GPU를 사용할 수 있는지 확인하세요:
 
 ```bash
 !nvidia-smi
 ```
 
-or alternatively for AMD GPUs:
+또는 AMD GPU의 경우:
 
 ```bash
 !rocm-smi
@@ -80,7 +75,7 @@ or alternatively for AMD GPUs:
 
 </Tip>
 
-We encourage you to log in to your Hugging Face account to upload and share your model with the community. When prompted, enter your token to log in:
+Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와 공유하는 것을 권장합니다. 메시지가 표시되면 토큰을 입력하여 로그인하세요:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -88,18 +83,13 @@ We encourage you to log in to your Hugging Face account to upload and share your
 >>> notebook_login()
 ```
 
-## Load the dataset
+## 데이터셋 로드하기[[load-the-dataset]]
 
-[VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) is a large-scale multilingual speech corpus consisting of
-data sourced from 2009-2020 European Parliament event recordings. It contains labelled audio-transcription data for 15
-European languages. In this guide, we are using the Dutch language subset, feel free to pick another subset.
+[VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli)는 2009-2020년 유럽 의회 행사 녹음에서 수집된 데이터로 구성된 대규모 다국어 음성 코퍼스입니다. 15개 유럽 언어에 대한 라벨링된 오디오-전사 데이터를 포함합니다. 이 가이드에서는 네덜란드어 언어 하위 집합을 사용하며, 다른 하위 집합을 선택해도 됩니다.
 
-Note that VoxPopuli or any other automated speech recognition (ASR) dataset may not be the most suitable
-option for training TTS models. The features that make it beneficial for ASR, such as excessive background noise, are
-typically undesirable in TTS. However, finding top-quality, multilingual, and multi-speaker TTS datasets can be quite
-challenging.
+VoxPopuli나 다른 자동 음성 인식(ASR) 데이터셋은 TTS 모델 학습에 가장 적합한 옵션이 아닐 수 있습니다. 과도한 배경 소음과 같이 ASR에 유익한 특성들은 일반적으로 TTS에서는 바람직하지 않습니다. 그러나 고품질의 다국어, 다중 화자 TTS 데이터셋을 찾는 것은 매우 어려울 수 있습니다.
 
-Let's load the data:
+데이터를 로드해보겠습니다:
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -109,16 +99,15 @@ Let's load the data:
 20968
 ```
 
-20968 examples should be sufficient for fine-tuning. SpeechT5 expects audio data to have a sampling rate of 16 kHz, so
-make sure the examples in the dataset meet this requirement:
+20968개의 예시는 파인튜닝에 충분해야 합니다. SpeechT5는 오디오 데이터가 16kHz의 샘플링 속도를 가질 것으로 예상하므로, 데이터셋의 예시가 이 요구사항을 충족하는지 확인하세요:
 
 ```py
 dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 ```
 
-## Preprocess the data
+## 데이터 전처리하기[[preprocess-the-data]]
 
-Let's begin by defining the model checkpoint to use and loading the appropriate processor:
+사용할 모델 체크포인트를 정의하고 적절한 프로세서를 로드하는 것부터 시작하겠습니다:
 
 ```py
 >>> from transformers import SpeechT5Processor
@@ -127,27 +116,20 @@ Let's begin by defining the model checkpoint to use and loading the appropriate 
 >>> processor = SpeechT5Processor.from_pretrained(checkpoint)
 ```
 
-### Text cleanup for SpeechT5 tokenization
+### SpeechT5 토큰화를 위한 텍스트 정리[[text-cleanup-for-speecht5-tokenization]]
 
-Start by cleaning up the text data. You'll need the tokenizer part of the processor to process the text:
+텍스트 데이터를 정리하는 것부터 시작하겠습니다. 텍스트를 처리하기 위해 프로세서의 토크나이저 부분이 필요합니다:
 
 ```py
 >>> tokenizer = processor.tokenizer
 ```
 
-The dataset examples contain `raw_text` and `normalized_text` features. When deciding which feature to use as the text input,
-consider that the SpeechT5 tokenizer doesn't have any tokens for numbers. In `normalized_text` the numbers are written
-out as text. Thus, it is a better fit, and we recommend using    `normalized_text` as input text.
+데이터셋 예시에는 `raw_text`와 `normalized_text` 특성이 있습니다. 텍스트 입력으로 어떤 특성을 사용할지 결정할 때, SpeechT5 토크나이저에는 숫자에 대한 토큰이 없다는 점을 고려하세요. `normalized_text`에서는 숫자가 텍스트로 작성되어 있습니다. 따라서 더 적합하며, 입력 텍스트로 `normalized_text`를 사용하는 것을 권장합니다.
 
-Because SpeechT5 was trained on the English language, it may not recognize certain characters in the Dutch dataset. If
-left as is, these characters will be converted to `<unk>` tokens. However, in Dutch, certain characters like `à` are
-used to stress syllables. In order to preserve the meaning of the text, we can replace this character with a regular `a`.
+SpeechT5는 영어로 학습되었기 때문에 네덜란드어 데이터셋의 특정 문자를 인식하지 못할 수 있습니다. 그대로 두면 이러한 문자들은 `<unk>` 토큰으로 변환됩니다. 그러나 네덜란드어에서는 `à`와 같은 특정 문자들이 음절을 강조하는 데 사용됩니다. 텍스트의 의미를 보존하기 위해 이 문자를 일반적인 `a`로 바꿀 수 있습니다.
 
-To identify unsupported tokens, extract all unique characters in the dataset using the `SpeechT5Tokenizer` which
-works with characters as tokens. To do this, write the `extract_all_chars` mapping function that concatenates
-the transcriptions from all examples into one string and converts it to a set of characters.
-Make sure to set `batched=True` and `batch_size=-1` in `dataset.map()` so that all transcriptions are available at once for
-the mapping function.
+지원되지 않는 토큰을 식별하기 위해 문자를 토큰으로 사용하는 `SpeechT5Tokenizer`를 사용하여 데이터셋의 모든 고유 문자를 추출하세요. 이를 위해 모든 예시의 전사를 하나의 문자열로 연결하고 문자 집합으로 변환하는 `extract_all_chars` 매핑 함수를 작성하세요.
+매핑 함수에 모든 전사가 한 번에 사용 가능하도록 `dataset.map()`에서 `batched=True`와 `batch_size=-1`을 설정하세요.
 
 ```py
 >>> def extract_all_chars(batch):
@@ -168,17 +150,15 @@ the mapping function.
 >>> tokenizer_vocab = {k for k, _ in tokenizer.get_vocab().items()}
 ```
 
-Now you have two sets of characters: one with the vocabulary from the dataset and one with the vocabulary from the tokenizer.
-To identify any unsupported characters in the dataset, you can take the difference between these two sets. The resulting
-set will contain the characters that are in the dataset but not in the tokenizer.
+이제 두 개의 문자 집합이 있습니다: 하나는 데이터셋의 어휘이고 다른 하나는 토크나이저의 어휘입니다.
+데이터셋에서 지원되지 않는 문자를 식별하기 위해 이 두 집합의 차이를 구할 수 있습니다. 결과 집합에는 데이터셋에는 있지만 토크나이저에는 없는 문자가 포함됩니다.
 
 ```py
 >>> dataset_vocab - tokenizer_vocab
 {' ', 'à', 'ç', 'è', 'ë', 'í', 'ï', 'ö', 'ü'}
 ```
 
-To handle the unsupported characters identified in the previous step, define a function that maps these characters to
-valid tokens. Note that spaces are already replaced by `▁` in the tokenizer and don't need to be handled separately.
+이전 단계에서 식별된 지원되지 않는 문자를 처리하기 위해 이러한 문자를 유효한 토큰에 매핑하는 함수를 정의하세요. 공백은 토크나이저에서 이미 `▁`로 대체되므로 별도로 처리할 필요가 없습니다.
 
 ```py
 >>> replacements = [
@@ -202,14 +182,12 @@ valid tokens. Note that spaces are already replaced by `▁` in the tokenizer an
 >>> dataset = dataset.map(cleanup_text)
 ```
 
-Now that you have dealt with special characters in the text, it's time to shift focus to the audio data.
+이제 텍스트의 특수 문자를 처리했으므로, 오디오 데이터에 집중할 때입니다.
 
-### Speakers
+### 화자[[speakers]]
 
-The VoxPopuli dataset includes speech from multiple speakers, but how many speakers are represented in the dataset? To
-determine this, we can count the number of unique speakers and the number of examples each speaker contributes to the dataset.
-With a total of 20,968 examples in the dataset, this information will give us a better understanding of the distribution of
-speakers and examples in the data.
+VoxPopuli 데이터셋은 여러 화자의 음성을 포함하지만, 데이터셋에 몇 명의 화자가 표현되어 있을까요? 이를 확인하기 위해 고유 화자 수와 각 화자가 데이터셋에 기여하는 예시 수를 세어볼 수 있습니다.
+데이터셋에 총 20,968개의 예시가 있으므로, 이 정보는 데이터의 화자와 예시 분포를 더 잘 이해하는 데 도움이 됩니다.
 
 ```py
 >>> from collections import defaultdict
@@ -220,7 +198,7 @@ speakers and examples in the data.
 ...     speaker_counts[speaker_id] += 1
 ```
 
-By plotting a histogram you can get a sense of how much data there is for each speaker.
+히스토그램을 그려서 각 화자에 대해 얼마나 많은 데이터가 있는지 감을 잡을 수 있습니다.
 
 ```py
 >>> import matplotlib.pyplot as plt
@@ -236,9 +214,7 @@ By plotting a histogram you can get a sense of how much data there is for each s
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/tts_speakers_histogram.png" alt="Speakers histogram"/>
 </div>
 
-The histogram reveals that approximately one-third of the speakers in the dataset have fewer than 100 examples, while
-around ten speakers have more than 500 examples. To improve training efficiency and balance the dataset, we can limit
-the data to speakers with between 100 and 400 examples.
+히스토그램은 데이터셋 화자의 약 3분의 1이 100개 미만의 예시를 가지고 있으며, 약 10명의 화자가 500개 이상의 예시를 가지고 있음을 보여줍니다. 훈련 효율성을 개선하고 데이터셋의 균형을 맞추기 위해 100개에서 400개 사이의 예시를 가진 화자로 데이터를 제한할 수 있습니다.
 
 ```py
 >>> def select_speaker(speaker_id):
@@ -248,35 +224,31 @@ the data to speakers with between 100 and 400 examples.
 >>> dataset = dataset.filter(select_speaker, input_columns=["speaker_id"])
 ```
 
-Let's check how many speakers remain:
+남은 화자가 몇 명인지 확인해보겠습니다:
 
 ```py
 >>> len(set(dataset["speaker_id"]))
 42
 ```
 
-Let's see how many examples are left:
+남은 예시가 몇 개인지 살펴보겠습니다:
 
 ```py
 >>> len(dataset)
 9973
 ```
 
-You are left with just under 10,000 examples from approximately 40 unique speakers, which should be sufficient.
+약 40명의 고유 화자로부터 10,000개 미만의 예시가 남았으며, 이는 충분해야 합니다.
 
-Note that some speakers with few examples may actually have more audio available if the examples are long. However,
-determining the total amount of audio for each speaker requires scanning through the entire dataset, which is a
-time-consuming process that involves loading and decoding each audio file. As such, we have chosen to skip this step here.
+적은 예시를 가진 일부 화자들이 예시가 길면 실제로 더 많은 오디오를 사용할 수 있을 수 있습니다. 그러나 각 화자의 총 오디오 양을 결정하려면 전체 데이터셋을 스캔해야 하며, 이는 각 오디오 파일을 로드하고 디코딩하는 시간이 많이 걸리는 과정입니다. 따라서 여기서는 이 단계를 건너뛰기로 했습니다.
 
-### Speaker embeddings
+### 화자 임베딩[[speaker-embeddings]]
 
-To enable the TTS model to differentiate between multiple speakers, you'll need to create a speaker embedding for each example.
-The speaker embedding is an additional input into the model that captures a particular speaker's voice characteristics.
-To generate these speaker embeddings, use the pre-trained [spkrec-xvect-voxceleb](https://huggingface.co/speechbrain/spkrec-xvect-voxceleb)
-model from SpeechBrain.
+TTS 모델이 여러 화자를 구별할 수 있도록 하려면 각 예시에 대한 화자 임베딩을 만들어야 합니다.
+화자 임베딩은 특정 화자의 음성 특성을 포착하는 모델에 대한 추가 입력입니다.
+이러한 화자 임베딩을 생성하기 위해 SpeechBrain의 사전 학습된 [spkrec-xvect-voxceleb](https://huggingface.co/speechbrain/spkrec-xvect-voxceleb) 모델을 사용하세요.
 
-Create a function `create_speaker_embedding()` that takes an input audio waveform and outputs a 512-element vector
-containing the corresponding speaker embedding.
+입력 오디오 파형을 받아 해당 화자 임베딩이 포함된 512 요소 벡터를 출력하는 `create_speaker_embedding()` 함수를 만드세요.
 
 ```py
 >>> import os
@@ -301,18 +273,14 @@ containing the corresponding speaker embedding.
 ...     return speaker_embeddings
 ```
 
-It's important to note that the `speechbrain/spkrec-xvect-voxceleb` model was trained on English speech from the VoxCeleb
-dataset, whereas the training examples in this guide are in Dutch. While we believe that this model will still generate
-reasonable speaker embeddings for our Dutch dataset, this assumption may not hold true in all cases.
+`speechbrain/spkrec-xvect-voxceleb` 모델은 VoxCeleb 데이터셋의 영어 음성으로 학습되었으나, 이 가이드의 훈련 예시는 네덜란드어라는 점에 주목하는 것이 중요합니다. 이 모델이 우리의 네덜란드어 데이터셋에 대해 여전히 합리적인 화자 임베딩을 생성할 것이라고 믿지만, 이 가정이 모든 경우에 적용되지 않을 수 있습니다.
 
-For optimal results, we recommend training an X-vector model on the target speech first. This will ensure that the model
-is better able to capture the unique voice characteristics present in the Dutch language.
+최적의 결과를 위해 먼저 목표 음성에서 X-vector 모델을 훈련하는 것을 권장합니다. 이렇게 하면 모델이 네덜란드어에 존재하는 고유한 음성 특성을 더 잘 포착할 수 있습니다.
 
-### Processing the dataset
+### 데이터셋 처리하기[[processing-the-dataset]]
 
-Finally, let's process the data into the format the model expects. Create a `prepare_dataset` function that takes in a
-single example and uses the `SpeechT5Processor` object to tokenize the input text and load the target audio into a log-mel spectrogram.
-It should also add the speaker embeddings as an additional input.
+마지막으로, 모델이 예상하는 형식으로 데이터를 처리해보겠습니다. 단일 예시를 받아 `SpeechT5Processor` 객체를 사용하여 입력 텍스트를 토큰화하고 대상 오디오를 log-mel 스펙트로그램으로 로드하는 `prepare_dataset` 함수를 만드세요.
+또한 화자 임베딩을 추가 입력으로 추가해야 합니다.
 
 ```py
 >>> def prepare_dataset(example):
@@ -334,7 +302,7 @@ It should also add the speaker embeddings as an additional input.
 ...     return example
 ```
 
-Verify the processing is correct by looking at a single example:
+단일 예시를 살펴보면서 처리가 올바른지 확인하세요:
 
 ```py
 >>> processed_example = prepare_dataset(dataset[0])
@@ -342,14 +310,14 @@ Verify the processing is correct by looking at a single example:
 ['input_ids', 'labels', 'stop_labels', 'speaker_embeddings']
 ```
 
-Speaker embeddings should be a 512-element vector:
+화자 임베딩은 512 요소 벡터여야 합니다:
 
 ```py
 >>> processed_example["speaker_embeddings"].shape
 (512,)
 ```
 
-The labels should be a log-mel spectrogram with 80 mel bins.
+라벨은 80개의 mel bin이 있는 log-mel 스펙트로그램이어야 합니다.
 
 ```py
 >>> import matplotlib.pyplot as plt
@@ -363,18 +331,16 @@ The labels should be a log-mel spectrogram with 80 mel bins.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/tts_logmelspectrogram_1.png" alt="Log-mel spectrogram with 80 mel bins"/>
 </div>
 
-Side note: If you find this spectrogram confusing, it may be due to your familiarity with the convention of placing low frequencies
-at the bottom and high frequencies at the top of a plot. However, when plotting spectrograms as an image using the matplotlib library,
-the y-axis is flipped and the spectrograms appear upside down.
+참고: 이 스펙트로그램이 혼란스럽다면, 낮은 주파수를 플롯의 아래쪽에, 높은 주파수를 위쪽에 배치하는 관례에 익숙하기 때문일 수 있습니다. 그러나 matplotlib 라이브러리를 사용하여 스펙트로그램을 이미지로 플롯할 때 y축이 뒤집어져 스펙트로그램이 거꾸로 나타납니다.
 
-Now apply the processing function to the entire dataset. This will take between 5 and 10 minutes.
+이제 처리 함수를 전체 데이터셋에 적용하세요. 5분에서 10분 정도 걸립니다.
 
 ```py
 >>> dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names)
 ```
 
-You'll see a warning saying that some examples in the dataset are longer than the maximum input length the model can handle (600 tokens).
-Remove those examples from the dataset. Here we go even further and to allow for larger batch sizes we remove anything over 200 tokens.
+데이터셋의 일부 예시가 모델이 처리할 수 있는 최대 입력 길이(600 토큰)보다 길다는 경고가 표시됩니다.
+해당 예시를 데이터셋에서 제거하세요. 여기서는 더 나아가 더 큰 배치 크기를 허용하기 위해 200 토큰 이상인 모든 것을 제거합니다.
 
 ```py
 >>> def is_not_too_long(input_ids):
@@ -387,17 +353,15 @@ Remove those examples from the dataset. Here we go even further and to allow for
 8259
 ```
 
-Next, create a basic train/test split:
+다음으로, 기본적인 train/test 분할을 만드세요:
 
 ```py
 >>> dataset = dataset.train_test_split(test_size=0.1)
 ```
 
-### Data collator
+### 데이터 콜레이터[[data-collator]]
 
-In order to combine multiple examples into a batch, you need to define a custom data collator. This collator will pad shorter sequences with padding
-tokens, ensuring that all examples have the same length. For the spectrogram labels, the padded portions are replaced with the special value `-100`. This special value
-instructs the model to ignore that part of the spectrogram when calculating the spectrogram loss.
+여러 예시를 배치로 결합하려면 사용자 정의 데이터 콜레이터를 정의해야 합니다. 이 콜레이터는 더 짧은 시퀀스를 패딩 토큰으로 패딩하여 모든 예시가 동일한 길이를 갖도록 합니다. 스펙트로그램 라벨의 경우, 패딩된 부분은 특수 값 `-100`으로 대체됩니다. 이 특수 값은 스펙트로그램 손실을 계산할 때 모델이 해당 부분을 무시하도록 지시합니다.
 
 ```py
 >>> from dataclasses import dataclass
@@ -437,18 +401,15 @@ instructs the model to ignore that part of the spectrogram when calculating the 
 ...         return batch
 ```
 
-In SpeechT5, the input to the decoder part of the model is reduced by a factor 2. In other words, it throws away every
-other timestep from the target sequence. The decoder then predicts a sequence that is twice as long. Since the original
-target sequence length may be odd, the data collator makes sure to round the maximum length of the batch down to be a
-multiple of 2.
+SpeechT5에서는 모델의 디코더 부분에 대한 입력이 2배로 줄어듭니다. 즉, 대상 시퀀스에서 다른 모든 타임스텝을 버립니다. 그런 다음 디코더는 두 배 길이의 시퀀스를 예측합니다. 원래 대상 시퀀스 길이가 홀수일 수 있으므로, 데이터 콜레이터는 배치의 최대 길이가 2의 배수가 되도록 반내림합니다.
 
 ```py
 >>> data_collator = TTSDataCollatorWithPadding(processor=processor)
 ```
 
-## Train the model
+## 모델 훈련하기[[train-the-model]]
 
-Load the pre-trained model from the same checkpoint as you used for loading the processor:
+프로세서를 로드하는 데 사용한 것과 동일한 체크포인트에서 사전 학습된 모델을 로드하세요:
 
 ```py
 >>> from transformers import SpeechT5ForTextToSpeech
@@ -456,14 +417,13 @@ Load the pre-trained model from the same checkpoint as you used for loading the 
 >>> model = SpeechT5ForTextToSpeech.from_pretrained(checkpoint)
 ```
 
-The `use_cache=True` option is incompatible with gradient checkpointing. Disable it for training.
+`use_cache=True` 옵션은 그래디언트 체크포인팅과 호환되지 않습니다. 훈련을 위해 비활성화하세요.
 
 ```py
 >>> model.config.use_cache = False
 ```
 
-Define the training arguments. Here we are not computing any evaluation metrics during the training process. Instead, we'll
-only look at the loss:
+훈련 인수를 정의하세요. 여기서는 훈련 과정에서 평가 메트릭을 계산하지 않습니다. 대신 손실만 살펴보겠습니다:
 
 ```python
 >>> from transformers import Seq2SeqTrainingArguments
@@ -490,7 +450,7 @@ only look at the loss:
 ... )
 ```
 
-Instantiate the `Trainer` object  and pass the model, dataset, and data collator to it.
+`Trainer` 객체를 인스턴스화하고 모델, 데이터셋, 데이터 콜레이터를 전달하세요.
 
 ```py
 >>> from transformers import Seq2SeqTrainer
@@ -505,33 +465,30 @@ Instantiate the `Trainer` object  and pass the model, dataset, and data collator
 ... )
 ```
 
-And with that, you're ready to start training! Training will take several hours. Depending on your GPU,
-it is possible that you will encounter a CUDA "out-of-memory" error when you start training. In this case, you can reduce
-the `per_device_train_batch_size` incrementally by factors of 2 and increase `gradient_accumulation_steps` by 2x to compensate.
+이제 훈련을 시작할 준비가 되었습니다! 훈련에는 몇 시간이 걸립니다. GPU에 따라 훈련을 시작할 때 CUDA "out-of-memory" 오류가 발생할 수 있습니다. 이 경우 `per_device_train_batch_size`를 2배씩 점진적으로 줄이고 `gradient_accumulation_steps`를 2배로 늘려서 보상할 수 있습니다.
 
 ```py
 >>> trainer.train()
 ```
 
-To be able to use your checkpoint with a pipeline, make sure to save the processor with the checkpoint:
+파이프라인과 함께 체크포인트를 사용할 수 있도록 하려면, 체크포인트와 함께 프로세서를 저장하세요:
 
 ```py
 >>> processor.save_pretrained("YOUR_ACCOUNT_NAME/speecht5_finetuned_voxpopuli_nl")
 ```
 
-Push the final model to the 🤗 Hub:
+최종 모델을 🤗 Hub에 푸시하세요:
 
 ```py
 >>> trainer.push_to_hub()
 ```
 
-## Inference
+## 추론[[inference]]
 
-### Inference with a pipeline
+### 파이프라인으로 추론하기[[inference-with-a-pipeline]]
 
-Great, now that you've fine-tuned a model, you can use it for inference!
-First, let's see how you can use it with a corresponding pipeline. Let's create a `"text-to-speech"` pipeline with your
-checkpoint:
+훌륭합니다. 이제 모델을 파인튜닝했으므로 추론에 사용할 수 있습니다!
+먼저 해당 파이프라인과 함께 사용하는 방법을 살펴보겠습니다. 체크포인트로 `"text-to-speech"` 파이프라인을 만들어보겠습니다:
 
 ```py
 >>> from transformers import pipeline
@@ -539,20 +496,20 @@ checkpoint:
 >>> pipe = pipeline("text-to-speech", model="YOUR_ACCOUNT_NAME/speecht5_finetuned_voxpopuli_nl")
 ```
 
-Pick a piece of text in Dutch you'd like narrated, e.g.:
+내레이션하고 싶은 네덜란드어 텍스트를 선택하세요. 예를 들어:
 
 ```py
 >>> text = "hallo allemaal, ik praat nederlands. groetjes aan iedereen!"
 ```
 
-To use SpeechT5 with the pipeline, you'll need a speaker embedding. Let's get it from an example in the test dataset:
+파이프라인과 함께 SpeechT5를 사용하려면 화자 임베딩이 필요합니다. 테스트 데이터셋의 예시에서 가져와보겠습니다:
 
 ```py
 >>> example = dataset["test"][304]
 >>> speaker_embeddings = torch.tensor(example["speaker_embeddings"]).unsqueeze(0)
 ```
 
-Now you can pass the text and speaker embeddings to the pipeline, and it will take care of the rest:
+이제 텍스트와 화자 임베딩을 파이프라인에 전달할 수 있으며, 나머지는 파이프라인이 처리합니다:
 
 ```py
 >>> forward_params = {"speaker_embeddings": speaker_embeddings}
@@ -563,44 +520,44 @@ Now you can pass the text and speaker embeddings to the pipeline, and it will ta
  'sampling_rate': 16000}
 ```
 
-You can then listen to the result:
+그런 다음 결과를 들어볼 수 있습니다:
 
 ```py
 >>> from IPython.display import Audio
 >>> Audio(output['audio'], rate=output['sampling_rate'])
 ```
 
-### Run inference manually
+### 수동으로 추론 실행하기[[run-inference-manually]]
 
-You can achieve the same inference results without using the pipeline, however, more steps will be required.
+파이프라인을 사용하지 않고도 동일한 추론 결과를 얻을 수 있지만, 더 많은 단계가 필요합니다.
 
-Load the model from the 🤗 Hub:
+🤗 Hub에서 모델을 로드하세요:
 
 ```py
 >>> model = SpeechT5ForTextToSpeech.from_pretrained("YOUR_ACCOUNT/speecht5_finetuned_voxpopuli_nl")
 ```
 
-Pick an example from the test dataset obtain a speaker embedding.
+테스트 데이터셋에서 예시를 선택하여 화자 임베딩을 얻으세요.
 
 ```py
 >>> example = dataset["test"][304]
 >>> speaker_embeddings = torch.tensor(example["speaker_embeddings"]).unsqueeze(0)
 ```
 
-Define the input text and tokenize it.
+입력 텍스트를 정의하고 토큰화하세요.
 
 ```py
 >>> text = "hallo allemaal, ik praat nederlands. groetjes aan iedereen!"
 >>> inputs = processor(text=text, return_tensors="pt")
 ```
 
-Create a spectrogram with your model:
+모델로 스펙트로그램을 생성하세요:
 
 ```py
 >>> spectrogram = model.generate_speech(inputs["input_ids"], speaker_embeddings)
 ```
 
-Visualize the spectrogram, if you'd like to:
+원한다면 스펙트로그램을 시각화하세요:
 
 ```py
 >>> plt.figure()
@@ -612,7 +569,7 @@ Visualize the spectrogram, if you'd like to:
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/tts_logmelspectrogram_2.png" alt="Generated log-mel spectrogram"/>
 </div>
 
-Finally, use the vocoder to turn the spectrogram into sound.
+마지막으로, 보코더를 사용하여 스펙트로그램을 소리로 변환하세요.
 
 ```py
 >>> with torch.no_grad():
@@ -623,15 +580,9 @@ Finally, use the vocoder to turn the spectrogram into sound.
 >>> Audio(speech.numpy(), rate=16000)
 ```
 
-In our experience, obtaining satisfactory results from this model can be challenging. The quality of the speaker
-embeddings appears to be a significant factor. Since SpeechT5 was pre-trained with English x-vectors, it performs best
-when using English speaker embeddings. If the synthesized speech sounds poor, try using a different speaker embedding.
+저희 경험상 이 모델에서 만족스러운 결과를 얻는 것은 어려울 수 있습니다. 화자 임베딩의 품질이 중요한 요소로 보입니다. SpeechT5는 영어 x-vector로 사전 학습되었기 때문에 영어 화자 임베딩을 사용할 때 가장 잘 작동합니다. 합성된 음성이 좋지 않게 들리면 다른 화자 임베딩을 사용해보세요.
 
-Increasing the training duration is also likely to enhance the quality of the results. Even so, the speech clearly is Dutch instead of English, and it does
-capture the voice characteristics of the speaker (compare to the original audio in the example).
-Another thing to experiment with is the model's configuration. For example, try using `config.reduction_factor = 1` to
-see if this improves the results.
+훈련 기간을 늘리는 것도 결과의 품질을 향상시킬 가능성이 높습니다. 그럼에도 불구하고 음성은 분명히 영어가 아닌 네덜란드어이며 화자의 음성 특성을 포착합니다(예시의 원본 오디오와 비교).
+실험해볼 또 다른 점은 모델의 구성입니다. 예를 들어, `config.reduction_factor = 1`을 사용하여 결과가 개선되는지 확인해보세요.
 
-Finally, it is essential to consider ethical considerations. Although TTS technology has numerous useful applications, it
-may also be used for malicious purposes, such as impersonating someone's voice without their knowledge or consent. Please
-use TTS judiciously and responsibly.
+마지막으로, 윤리적 고려사항을 검토하는 것이 중요합니다. TTS 기술은 수많은 유용한 응용 프로그램을 가지고 있지만, 누군가의 지식이나 동의 없이 그들의 음성을 흉내내는 것과 같은 악의적인 목적으로도 사용될 수 있습니다. TTS를 신중하고 책임감 있게 사용해주세요.
