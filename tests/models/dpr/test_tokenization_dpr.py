@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,11 +24,11 @@ from transformers import (
 from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_utils_base import BatchEncoding
 
-from ..bert.test_tokenization_bert import BertTokenizationTest
+from ..bert import test_tokenization_bert
 
 
 @require_tokenizers
-class DPRContextEncoderTokenizationTest(BertTokenizationTest):
+class DPRContextEncoderTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DPRContextEncoderTokenizer
     rust_tokenizer_class = DPRContextEncoderTokenizerFast
     test_rust_tokenizer = True
@@ -37,7 +36,7 @@ class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 
 
 @require_tokenizers
-class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
+class DPRQuestionEncoderTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DPRQuestionEncoderTokenizer
     rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
     test_rust_tokenizer = True
@@ -45,7 +44,7 @@ class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 
 
 @require_tokenizers
-class DPRReaderTokenizationTest(BertTokenizationTest):
+class DPRReaderTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DPRReaderTokenizer
     rust_tokenizer_class = DPRReaderTokenizerFast
     test_rust_tokenizer = True

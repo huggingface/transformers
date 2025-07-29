@@ -45,18 +45,28 @@ or use `make post-release`.
 import argparse
 import os
 import re
+from pathlib import Path
 
 import packaging.version
 
 
 # All paths are defined with the intent that this script should be run from the root of the repo.
 PATH_TO_EXAMPLES = "examples/"
+PATH_TO_MODELS = "src/transformers/models"
 # This maps a type of file to the pattern to look for when searching where the version is defined, as well as the
 # template to follow when replacing it with the new version.
 REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
+    "uv_script_release": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1>==VERSION",',
+    ),
+    "uv_script_dev": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1> @ git+https://github.com/huggingface/transformers.git",',
+    ),
 }
 # This maps a type of file to its path in Transformers
 REPLACE_FILES = {
@@ -64,6 +74,7 @@ REPLACE_FILES = {
     "setup": "setup.py",
 }
 README_FILE = "README.md"
+UV_SCRIPT_MARKER = "# /// script"
 
 
 def update_version_in_file(fname: str, version: str, file_type: str):
@@ -84,22 +95,27 @@ def update_version_in_file(fname: str, version: str, file_type: str):
         f.write(code)
 
 
-def update_version_in_examples(version: str):
+def update_version_in_examples(version: str, patch: bool = False):
     """
     Update the version in all examples files.
 
     Args:
         version (`str`): The new version to set in the examples.
+        patch (`bool`, *optional*, defaults to `False`): Whether or not this is a patch release.
     """
     for folder, directories, fnames in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
-        if "research_projects" in directories:
-            directories.remove("research_projects")
         if "legacy" in directories:
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
+                if UV_SCRIPT_MARKER in Path(folder, fname).read_text():
+                    # Update the depdendencies in UV scripts
+                    uv_script_file_type = "uv_script_dev" if ".dev" in version else "uv_script_release"
+                    update_version_in_file(os.path.join(folder, fname), version, file_type=uv_script_file_type)
+                if not patch:
+                    # We don't update the version in the examples for patch releases.
+                    update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
 
 
 def global_version_update(version: str, patch: bool = False):
@@ -112,9 +128,18 @@ def global_version_update(version: str, patch: bool = False):
     """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    if not patch:
-        # We don't update the version in the examples for patch releases.
-        update_version_in_examples(version)
+    update_version_in_examples(version, patch=patch)
+
+
+def remove_conversion_scripts():
+    """
+    Delete the scripts that convert models from older, unsupported formats. We don't want to include these
+    in release wheels because they often have to open insecure file types (pickle, Torch .bin models). This results in
+    vulnerability scanners flagging us and can cause compliance issues for users with strict security policies.
+    """
+    model_dir = Path(PATH_TO_MODELS)
+    for conversion_script in list(model_dir.glob("**/convert*.py")):
+        conversion_script.unlink()
 
 
 def get_version() -> packaging.version.Version:
@@ -131,7 +156,7 @@ def pre_release_work(patch: bool = False):
     """
     Do all the necessary pre-release steps:
     - figure out the next minor release version and ask confirmation
-    - update the version eveywhere
+    - update the version everywhere
     - clean-up the model list in the main README
 
     Args:
@@ -155,13 +180,15 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
+    print("Deleting conversion scripts.")
+    remove_conversion_scripts()
 
 
 def post_release_work():
     """
-    Do all the necesarry post-release steps:
+    Do all the necessary post-release steps:
     - figure out the next dev version and ask confirmation
-    - update the version eveywhere
+    - update the version everywhere
     - clean-up the model list in the main README
     """
     # First let's get the current version

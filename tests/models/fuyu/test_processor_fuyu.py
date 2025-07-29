@@ -1,6 +1,7 @@
 import io
 import tempfile
 import unittest
+from shutil import rmtree
 
 import requests
 
@@ -32,18 +33,23 @@ if is_torch_available():
 class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = FuyuProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = FuyuImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("adept/fuyu-8b")
 
         processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.text_prompt = "Generate a coco-style caption.\\n"
+        cls.text_prompt = "Generate a coco-style caption.\\n"
         bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        self.bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
+        cls.bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
+
+    @classmethod
+    def tearDownClass(cls):
+        rmtree(cls.tmpdirname)
 
     def get_processor(self):
         image_processor = FuyuImageProcessor()
@@ -57,6 +63,19 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
 
     def test_fuyu_processing(self):
         """
@@ -326,7 +345,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
             max_length=76,
         )
 
-        self.assertEqual(len(inputs["input_ids"][0]), 6)
+        self.assertEqual(len(inputs["input_ids"][0]), 7)
 
 
 @require_torch

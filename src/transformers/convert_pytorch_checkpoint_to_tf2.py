@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,7 +105,6 @@ if is_torch_available():
         XLMWithLMHeadModel,
         XLNetLMHeadModel,
     )
-    from .pytorch_utils import is_torch_greater_or_equal_than_1_13
 
 
 logging.set_verbosity_info()
@@ -269,7 +267,7 @@ def convert_pt_checkpoint_to_tf(
     tf_model = model_class(config)
 
     # Load weights from tf checkpoint
-    if pytorch_checkpoint_path in aws_config_map.keys():
+    if pytorch_checkpoint_path in aws_config_map:
         pytorch_checkpoint_path = cached_file(
             pytorch_checkpoint_path, WEIGHTS_NAME, force_download=not use_cached_models
         )
@@ -279,12 +277,7 @@ def convert_pt_checkpoint_to_tf(
     if compare_with_pt_model:
         tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
 
-        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
-        state_dict = torch.load(
-            pytorch_checkpoint_path,
-            map_location="cpu",
-            **weights_only_kwarg,
-        )
+        state_dict = torch.load(pytorch_checkpoint_path, map_location="cpu", weights_only=True)
         pt_model = pt_model_class.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict
         )

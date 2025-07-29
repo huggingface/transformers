@@ -325,7 +325,7 @@ def convert_checkpoint(
     )
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
-    original_checkpoint = torch.load(checkpoint_path)
+    original_checkpoint = torch.load(checkpoint_path, weights_only=True)
     if "best_state" in original_checkpoint:
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]

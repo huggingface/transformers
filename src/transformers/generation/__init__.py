@@ -26,7 +26,7 @@ _import_structure = {
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
     ],
-    "streamers": ["TextIteratorStreamer", "TextStreamer"],
+    "streamers": ["AsyncTextIteratorStreamer", "BaseStreamer", "TextIteratorStreamer", "TextStreamer"],
 }
 
 try:
@@ -68,7 +68,6 @@ else:
         "LogitNormalization",
         "LogitsProcessor",
         "LogitsProcessorList",
-        "LogitsWarper",
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
         "MinPLogitsWarper",
@@ -89,7 +88,6 @@ else:
         "WatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
-        "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
         "ConfidenceCriteria",
@@ -98,6 +96,9 @@ else:
         "StoppingCriteriaList",
         "validate_stopping_criteria",
         "StopStringCriteria",
+    ]
+    _import_structure["continuous_batching"] = [
+        "ContinuousMixin",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -199,7 +200,7 @@ if TYPE_CHECKING:
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
     )
-    from .streamers import TextIteratorStreamer, TextStreamer
+    from .streamers import AsyncTextIteratorStreamer, BaseStreamer, TextIteratorStreamer, TextStreamer
 
     try:
         if not is_torch_available():
@@ -215,6 +216,7 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
+        from .continuous_batching import ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -230,7 +232,6 @@ if TYPE_CHECKING:
             LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
-            LogitsWarper,
             MinLengthLogitsProcessor,
             MinNewTokensLengthLogitsProcessor,
             MinPLogitsWarper,
@@ -254,7 +255,6 @@ if TYPE_CHECKING:
             ConfidenceCriteria,
             EosTokenCriteria,
             MaxLengthCriteria,
-            MaxNewTokensCriteria,
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,

@@ -89,7 +89,7 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
         hf_pointer = getattr(hf_pointer, attribute)
 
     hf_param_name = None
-    for param_key in PARAM_MAPPING.keys():
+    for param_key in PARAM_MAPPING:
         if full_name.endswith(param_key):
             hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
             weight_type = "param"
@@ -148,7 +148,7 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
 
 def rename_dict(key, value, full_name, weight_type, hf_dict):
     hf_param_name = None
-    for param_key in PARAM_MAPPING.keys():
+    for param_key in PARAM_MAPPING:
         if full_name.endswith(param_key):
             hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
             weight_type = "param"
@@ -307,7 +307,7 @@ def convert_wav2vec2_checkpoint(
             config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
-                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
+                logger.error(f"--pytorch_dump_folder_path ({pytorch_dump_folder_path}) should be a directory")
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
             vocab_dict = target_dict.indices

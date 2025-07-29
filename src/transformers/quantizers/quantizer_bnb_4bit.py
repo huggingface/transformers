@@ -13,7 +13,7 @@
 # limitations under the License.
 import importlib
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from packaging import version
 
@@ -29,6 +29,8 @@ from ..utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
+    is_torch_hpu_available,
+    is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
@@ -70,10 +72,23 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available():
+        if not is_bitsandbytes_available(check_library_only=True):
             raise ImportError(
                 "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
+        if not is_torch_available():
+            raise ImportError(
+                "The bitsandbytes library requires PyTorch but it was not found in your environment. "
+                "You can install it with `pip install torch`."
+            )
+        # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+        # so those versions of the library are practically only available when CUDA is too.
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+            if not torch.cuda.is_available():
+                raise ImportError(
+                    "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
+                    "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
+                )
 
         from ..integrations import validate_bnb_backend_availability
         from ..utils import is_bitsandbytes_multi_backend_available
@@ -87,14 +102,14 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if (
             device_map is not None
             and isinstance(device_map, dict)
             and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
         ):
             device_map_without_lm_head = {
-                key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
+                key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
             if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass
@@ -107,12 +122,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     "https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu "
                     "for more details. "
                 )
-
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.39.0"):
-            raise ValueError(
-                "You have a version of `bitsandbytes` that is not compatible with 4bit inference and training"
-                " make sure you have the latest version of `bitsandbytes` installed"
-            )
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
@@ -134,7 +143,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         import bitsandbytes as bnb
@@ -156,8 +165,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
@@ -171,6 +180,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
         old_value = getattr(module, tensor_name)
 
+        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+        if isinstance(target_device, int) and is_torch_npu_available():
+            target_device = f"npu:{target_device}"
         if tensor_name == "bias":
             if param_value is None:
                 new_value = old_value.to(target_device)
@@ -240,7 +252,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         module._parameters[tensor_name] = new_value
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -259,13 +271,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             torch_dtype = torch.float16
         return torch_dtype
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
         if device_map is None:
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
+            elif is_torch_npu_available():
+                device_map = {"": f"npu:{torch.npu.current_device()}"}
+            elif is_torch_hpu_available():
+                device_map = {"": f"hpu:{torch.hpu.current_device()}"}
             elif is_torch_xpu_available():
-                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+                device_map = {"": torch.xpu.current_device()}
             else:
                 device_map = {"": "cpu"}
             logger.info(
@@ -280,23 +295,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: List[str] = [],
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
+        from ..integrations import replace_with_bnb_linear
 
         llm_int8_enable_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.llm_int8_skip_modules is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
+        )
 
         # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:

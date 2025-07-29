@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # REALM
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 <Tip warning={true}>
 
 This model is in maintenance mode only, we don't accept any new PRs changing its code.
@@ -26,7 +30,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The REALM model was proposed in [REALM: Retrieval-Augmented Language Model Pre-Training](https://arxiv.org/abs/2002.08909) by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang. It's a
+The REALM model was proposed in [REALM: Retrieval-Augmented Language Model Pre-Training](https://huggingface.co/papers/2002.08909) by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang. It's a
 retrieval-augmented language model that firstly retrieves documents from a textual knowledge corpus and then
 utilizes retrieved documents to process question answering tasks.
 

@@ -31,15 +31,16 @@ if is_vision_available():
 class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Blip2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = BlipImageProcessor()
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
 
         processor = Blip2Processor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -47,19 +48,24 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    def prepare_processor_dict(self):
+        return {"num_query_tokens": 1}
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Blip2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = Blip2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = Blip2Processor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = Blip2Processor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
@@ -78,29 +84,15 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-
-        encoded_processor = processor(text=input_str)
-
-        encoded_tok = tokenizer(input_str, return_token_type_ids=False)
-
-        for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key][0])
 
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -116,8 +108,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -129,8 +122,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Blip2Processor(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

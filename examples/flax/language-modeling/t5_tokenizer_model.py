@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
-from typing import Iterator, List, Union
+from collections.abc import Iterator
+from typing import Union
 
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, trainers
 from tokenizers.implementations.base_tokenizer import BaseTokenizer
@@ -72,7 +73,7 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
 
     def train(
         self,
-        files: Union[str, List[str]],
+        files: Union[str, list[str]],
         vocab_size: int = 8000,
         show_progress: bool = True,
     ):

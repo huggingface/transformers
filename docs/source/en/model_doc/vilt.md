@@ -16,9 +16,13 @@ rendered properly in your Markdown viewer.
 
 # ViLT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://arxiv.org/abs/2102.03334)
+The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://huggingface.co/papers/2102.03334)
 by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design
 for Vision-and-Language Pre-training (VLP).
 
@@ -37,7 +41,7 @@ times faster than previous VLP models, yet with competitive or better downstream
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vilt_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> ViLT architecture. Taken from the <a href="https://arxiv.org/abs/2102.03334">original paper</a>. </small>
+<small> ViLT architecture. Taken from the <a href="https://huggingface.co/papers/2102.03334">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/dandelin/ViLT).
 
@@ -66,6 +70,11 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 ## ViltImageProcessor
 
 [[autodoc]] ViltImageProcessor
+    - preprocess
+
+## ViltImageProcessorFast
+
+[[autodoc]] ViltImageProcessorFast
     - preprocess
 
 ## ViltProcessor

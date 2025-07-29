@@ -79,7 +79,7 @@ RAG_CONFIG_DOC = r"""
 @add_start_docstrings(RAG_CONFIG_DOC)
 class RagConfig(PretrainedConfig):
     model_type = "rag"
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(
         self,
@@ -126,7 +126,7 @@ class RagConfig(PretrainedConfig):
         )
         if "question_encoder" not in kwargs or "generator" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"A configuration of type {self.model_type} cannot be instantiated because "
                 f"both `question_encoder` and `generator` sub-configurations were not passed, only {kwargs}"
             )
         question_encoder_config = kwargs.pop("question_encoder")
@@ -181,3 +181,6 @@ class RagConfig(PretrainedConfig):
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
+
+
+__all__ = ["RagConfig"]

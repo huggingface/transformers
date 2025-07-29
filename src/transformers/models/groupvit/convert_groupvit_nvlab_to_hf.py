@@ -85,7 +85,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -163,7 +163,7 @@ def convert_groupvit_checkpoint(
     config = GroupViTConfig()
     model = GroupViTModel(config).eval()
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     new_state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     assert missing_keys == ["text_model.embeddings.position_ids"]

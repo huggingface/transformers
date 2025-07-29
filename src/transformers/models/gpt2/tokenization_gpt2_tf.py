@@ -1,14 +1,19 @@
 import os
-from typing import Dict, List, Union
+from typing import Optional, Union
 
 import tensorflow as tf
-from keras_nlp.tokenizers import BytePairTokenizer
 from tensorflow_text import pad_model_inputs
 
 from ...modeling_tf_utils import keras
+from ...utils.import_utils import is_keras_nlp_available, requires
 from .tokenization_gpt2 import GPT2Tokenizer
 
 
+if is_keras_nlp_available():
+    from keras_nlp.tokenizers import BytePairTokenizer
+
+
+@requires(backends=("keras_nlp",))
 class TFGPT2Tokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
@@ -21,16 +26,23 @@ class TFGPT2Tokenizer(keras.layers.Layer):
     straight from `tf.string` inputs to outputs.
 
     Args:
-        vocab (Dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
-        merges (List[str]): Merges list for Byte Pair Tokenizer
+        vocab (dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
+        merges (list[str]): Merges list for Byte Pair Tokenizer
     """
 
-    def __init__(self, vocab: Dict[str, int], merges: List[str], max_length: int = None, pad_token_id: int = None):
+    def __init__(
+        self,
+        vocab: dict[str, int],
+        merges: list[str],
+        max_length: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+    ):
         super().__init__()
         self.pad_token_id = pad_token_id
         self.max_length = max_length
         self.vocab = vocab
         self.merges = merges
+
         self.tf_tokenizer = BytePairTokenizer(vocab, merges, sequence_length=max_length)
 
     @classmethod
@@ -49,7 +61,7 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         tf_tokenizer = TFGPT2Tokenizer.from_tokenizer(tokenizer)
         ```
         """
-        merges = [" ".join(m) for m in tokenizer.bpe_ranks.keys()]
+        merges = [" ".join(m) for m in tokenizer.bpe_ranks]
         vocab = tokenizer.get_vocab()
         return cls(vocab, merges, *args, **kwargs)
 
@@ -88,7 +100,7 @@ class TFGPT2Tokenizer(keras.layers.Layer):
             "pad_token_id": self.pad_token_id,
         }
 
-    def call(self, x, max_length: int = None):
+    def call(self, x, max_length: Optional[int] = None):
         input_ids = self.tf_tokenizer(x)
         attention_mask = tf.ones_like(input_ids)
 
@@ -102,3 +114,6 @@ class TFGPT2Tokenizer(keras.layers.Layer):
                 )
 
         return {"attention_mask": attention_mask, "input_ids": input_ids}
+
+
+__all__ = ["TFGPT2Tokenizer"]

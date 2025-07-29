@@ -39,7 +39,7 @@ class ViltConfig(PretrainedConfig):
             The vocabulary size of the `token_type_ids` passed when calling [`ViltModel`]. This is used when encoding
             text.
         modality_type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the modalities passed when calling [`ViltModel`]. This is used after concatening the
+            The vocabulary size of the modalities passed when calling [`ViltModel`]. This is used after concatenating the
             embeddings of the text and image modalities.
         max_position_embeddings (`int`, *optional*, defaults to 40):
             The maximum sequence length that this model might ever be used with.
@@ -142,3 +142,6 @@ class ViltConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.max_image_length = max_image_length
         self.num_images = num_images
+
+
+__all__ = ["ViltConfig"]

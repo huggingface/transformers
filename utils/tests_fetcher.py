@@ -52,14 +52,12 @@ python utils/tests_fetcher.py --diff_with_last_commit
 import argparse
 import collections
 import glob
-import importlib.util
 import json
 import os
 import re
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Optional, Union
 
 from git import Repo
 
@@ -76,31 +74,29 @@ NUM_MODELS_TO_TRIGGER_FULL_CI = 30
 # List here the models to always test.
 IMPORTANT_MODELS = [
     "auto",
-    # Most downloaded models
     "bert",
-    "clip",
-    "t5",
-    "xlm-roberta",
     "gpt2",
-    "bart",
-    "mpnet",
-    "gpt-j",
-    "wav2vec2",
-    "deberta-v2",
-    "layoutlm",
-    "llama",
-    "opt",
-    "longformer",
-    "vit",
-    "whisper",
-    # Pipeline-specific model (to be sure each pipeline has one model in this list)
-    "tapas",
-    "vilt",
-    "clap",
+    "t5",
+    "modernbert",
+    "vit,clip",
     "detr",
-    "owlvit",
-    "dpt",
-    "videomae",
+    "table_transformer",
+    "got_ocr2",
+    "whisper",
+    "wav2vec2",
+    "qwen2_audio",
+    "speech_t5",
+    "csm",
+    "llama",
+    "gemma3",
+    "qwen2",
+    "mistral3",
+    "qwen2_5_vl",
+    "llava",
+    "smolvlm",
+    "internvl",
+    "gemma3n",
+    "qwen2_5_omni",
 ]
 
 
@@ -182,10 +178,10 @@ def keep_doc_examples_only(content: str) -> str:
     return "\n".join(lines_to_keep)
 
 
-def get_all_tests() -> List[str]:
+def get_all_tests() -> list[str]:
     """
     Walks the `tests` folder to return a list of files/subfolders. This is used to split the tests to run when using
-    paralellism. The split is:
+    parallelism. The split is:
 
     - folders under `tests`: (`tokenization`, `pipelines`, etc) except the subfolder `models` is excluded.
     - folders under `tests/models`: `bert`, `gpt2`, etc.
@@ -263,7 +259,7 @@ def diff_contains_doc_examples(repo: Repo, branching_point: str, filename: str) 
     return old_content_clean != new_content_clean
 
 
-def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> List[str]:
+def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python modeling files that are impacted by the changes of `tiny_model_summary.json` in between:
 
@@ -323,63 +319,35 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
             if key in new_keys:
                 impacted_model_classes.extend(new_content[key]["model_classes"])
 
-        # get the module where the model classes are defined. We want to use the main `__init__` file, but it requires
-        # all the framework being installed, which is not ideal for a simple script like test fetcher.
-        # So we create a temporary and modified main `__init__` and access its `_import_structure`.
-        with open(folder / "src/transformers/__init__.py") as fp:
-            lines = fp.readlines()
-            new_lines = []
-            # Get all the code related to `_import_structure`
-            for line in lines:
-                if line == "_import_structure = {\n":
-                    new_lines.append(line)
-                elif line == "# Direct imports for type-checking\n":
-                    break
-                elif len(new_lines) > 0:
-                    # bypass the framework check so we can get all the information even if frameworks are not available
-                    line = re.sub(r"is_.+_available\(\)", "True", line)
-                    line = line.replace("OptionalDependencyNotAvailable", "Exception")
-                    line = line.replace("Exception()", "Exception")
-                    new_lines.append(line)
+        # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
+        from transformers.utils.import_utils import define_import_structure
 
-        # create and load the temporary module
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            with open(os.path.join(tmpdirname, "temp_init.py"), "w") as fp:
-                fp.write("".join(new_lines))
+        reversed_structure = {}
+        new_imported_modules_from_import_structure = define_import_structure("src/transformers/__init__.py")
+        for mapping in new_imported_modules_from_import_structure.values():
+            for _module, _imports in mapping.items():
+                for _import in _imports:
+                    reversed_structure[_import] = _module
 
-            spec = importlib.util.spec_from_file_location("temp_init", os.path.join(tmpdirname, "temp_init.py"))
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            # Finally, get `_import_structure` that we need
-            import_structure = module._import_structure
-
-            # map model classes to their defined module
-            reversed_structure = {}
-            for key, values in import_structure.items():
-                for value in values:
-                    reversed_structure[value] = key
-
-            # Get the corresponding modeling file path
-            for model_class in impacted_model_classes:
-                module = reversed_structure[model_class]
-                framework = ""
-                if model_class.startswith("TF"):
-                    framework = "tf"
-                elif model_class.startswith("Flax"):
-                    framework = "flax"
-                fn = (
-                    f"modeling_{module.split('.')[-1]}.py"
-                    if framework == ""
-                    else f"modeling_{framework}_{module.split('.')[-1]}.py"
-                )
-                files.add(
-                    f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py")
-                )
+        # Get the corresponding modeling file path
+        for model_class in impacted_model_classes:
+            module = reversed_structure[model_class]
+            framework = ""
+            if model_class.startswith("TF"):
+                framework = "tf"
+            elif model_class.startswith("Flax"):
+                framework = "flax"
+            fn = (
+                f"modeling_{module.split('.')[-1]}.py"
+                if framework == ""
+                else f"modeling_{framework}_{module.split('.')[-1]}.py"
+            )
+            files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
 
     return sorted(files)
 
 
-def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
+def get_diff(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the diff between a base commit and one or several commits.
 
@@ -421,7 +389,7 @@ def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
     return code_diff
 
 
-def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
+def get_modified_python_files(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python files that have been modified between:
 
@@ -451,7 +419,7 @@ def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
-def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
+def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the diff in doc examples between a base commit and one or several commits.
 
@@ -492,7 +460,7 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
     return code_diff
 
 
-def get_all_doctest_files() -> List[str]:
+def get_all_doctest_files() -> list[str]:
     """
     Return the complete list of python and Markdown files on which we run doctest.
 
@@ -525,7 +493,7 @@ def get_all_doctest_files() -> List[str]:
     return sorted(test_files_to_run)
 
 
-def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
+def get_new_doctest_files(repo, base_commit, branching_commit) -> list[str]:
     """
     Get the list of files that were removed from "utils/not_doctested.txt", between `base_commit` and
     `branching_commit`.
@@ -552,7 +520,7 @@ def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
     return []
 
 
-def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
+def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python and Markdown files where doc example have been modified between:
 
@@ -621,7 +589,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def extract_imports(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
     """
     Get the imports a given module makes.
 
@@ -703,7 +671,7 @@ def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> Li
     return result
 
 
-def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def get_module_dependencies(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
     """
     Refines the result of `extract_imports` to remove subfolders and get a proper list of module filenames: if a file
     as an import `from utils import Foo, Bar`, with `utils` being a subfolder containing many files, this will traverse
@@ -730,16 +698,39 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
     while len(imported_modules) > 0:
         new_modules = []
         for module, imports in imported_modules:
+            if "models" in module.split("/") and module.split("/")[-1].startswith("convert_"):
+                continue
             # If we end up in an __init__ we are often not actually importing from this init (except in the case where
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = extract_imports(module, cache=cache)
-                for new_module, new_imports in new_imported_modules:
+                new_imported_modules = dict(extract_imports(module, cache=cache))
+
+                # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
+                from transformers.utils.import_utils import define_import_structure
+
+                new_imported_modules_from_import_structure = define_import_structure(PATH_TO_REPO / module)
+
+                for mapping in new_imported_modules_from_import_structure.values():
+                    for _module, _imports in mapping.items():
+                        # Import Structure returns _module keys as import paths rather than local paths
+                        # We replace with os.path.sep so that it's Windows-compatible
+                        _module = _module.replace(".", os.path.sep)
+                        _module = module.replace("__init__.py", f"{_module}.py")
+                        if _module not in new_imported_modules:
+                            new_imported_modules[_module] = list(_imports)
+                        else:
+                            original_imports = new_imported_modules[_module]
+                            for potential_new_item in list(_imports):
+                                if potential_new_item not in original_imports:
+                                    new_imported_modules[_module].append(potential_new_item)
+
+                for new_module, new_imports in new_imported_modules.items():
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]
+
                 if len(imports) > 0:
                     # If there are any objects lefts, they may be a submodule
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
@@ -759,22 +750,25 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                 dependencies.append(module)
 
         imported_modules = new_modules
+
     return dependencies
 
 
-def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
+def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     """
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
     cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
 
     return list(set(edges))
 
 
-def get_tree_starting_at(module: str, edges: List[Tuple[str, str]]) -> List[Union[str, List[str]]]:
+def get_tree_starting_at(module: str, edges: list[tuple[str, str]]) -> list[Union[str, list[str]]]:
     """
     Returns the tree starting at a given module following all edges.
 
@@ -835,9 +829,9 @@ def print_tree_deps_of(module, all_edges=None):
         print(line[0])
 
 
-def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
+def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
-    The test examples do not import from the examples (which are just scripts, not modules) so we need som extra
+    The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
     care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
     example files by linking each example to the example test file for the example framework.
 
@@ -871,7 +865,7 @@ def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
     return test_example_deps, all_examples
 
 
-def create_reverse_dependency_map() -> Dict[str, List[str]]:
+def create_reverse_dependency_map() -> dict[str, list[str]]:
     """
     Create the dependency map from module/test filename to the list of modules/tests that depend on it recursively.
 
@@ -880,11 +874,14 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
         depending on it recursively. This way the tests impacted by a change in file A are the test files in the list
         corresponding to key A in this result.
     """
+
     cache = {}
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
     # Add all modules and all tests to all examples
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py")) + examples
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py")) + examples
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
@@ -924,8 +921,8 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
 
 
 def create_module_to_test_map(
-    reverse_map: Dict[str, List[str]] = None, filter_models: bool = False
-) -> Dict[str, List[str]]:
+    reverse_map: Optional[dict[str, list[str]]] = None, filter_models: bool = False
+) -> dict[str, list[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.
 
@@ -995,9 +992,7 @@ def _print_list(l) -> str:
 
 
 def infer_tests_to_run(
-    output_file: str,
-    diff_with_last_commit: bool = False,
-    filter_models: bool = False,
+    output_file: str, diff_with_last_commit: bool = False, filter_models: bool = False, test_all: bool = False
 ):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.
@@ -1018,10 +1013,13 @@ def infer_tests_to_run(
             Whether or not to filter the tests to core models only, when a file modified results in a lot of model
             tests.
     """
-    modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+    if not test_all:
+        modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+    else:
+        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
-    # Create the map that will give us all impacted modules.
     reverse_map = create_reverse_dependency_map()
     impacted_files = modified_files.copy()
     for f in modified_files:
@@ -1078,7 +1076,7 @@ def infer_tests_to_run(
             f.write(" ".join(doctest_list))
 
 
-def filter_tests(output_file: str, filters: List[str]):
+def filter_tests(output_file: str, filters: list[str]):
     """
     Reads the content of the output file and filters out all the tests in a list of given folders.
 
@@ -1105,7 +1103,7 @@ def filter_tests(output_file: str, filters: List[str]):
         f.write(" ".join(test_files))
 
 
-def parse_commit_message(commit_message: str) -> Dict[str, bool]:
+def parse_commit_message(commit_message: str) -> dict[str, bool]:
     """
     Parses the commit message to detect if a command is there to skip, force all or part of the CI.
 
@@ -1132,19 +1130,14 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch_and_tf": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
-    "tests_torch_and_flax": r"tests/models/.*/test_modeling_(?:flax|(?!tf)).*",
-    "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_tokenization": r"tests/models/.*/test_tokenization.*",
+    "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
-    "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    "pipelines_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
@@ -1230,5 +1223,6 @@ if __name__ == "__main__":
             args.output_file,
             diff_with_last_commit=diff_with_last_commit,
             filter_models=False,
+            test_all=commit_flags["test_all"],
         )
         filter_tests(args.output_file, ["repo_utils"])

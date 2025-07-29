@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ import math
 import tempfile
 import unittest
 import warnings
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import load_dataset
@@ -433,7 +431,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits per modality, let's verify each modality
-                for modality in first.keys():
+                for modality in first:
                     out_1 = first[modality].cpu().numpy()
                     out_2 = second[modality].cpu().numpy()
                     out_1 = out_1[~np.isnan(out_1)]
@@ -458,7 +456,8 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -559,10 +558,10 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -678,12 +677,12 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits for each modality
-                for modality in hidden_states_no_chunk.keys():
+                for modality in hidden_states_no_chunk:
                     self.assertTrue(
                         torch.allclose(hidden_states_no_chunk[modality], hidden_states_with_chunk[modality], atol=1e-3)
                     )
             else:
-                self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+                torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-3, atol=1e-3)
 
     def test_save_load(self):
         for model_class in self.all_model_classes:
@@ -696,7 +695,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-                for modality in outputs[0].keys():
+                for modality in outputs[0]:
                     out_2 = outputs[0][modality].cpu().numpy()
                     out_2[np.isnan(out_2)] = 0
 
@@ -812,14 +811,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
@@ -851,11 +842,8 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
-    image1 = Image.open(dataset[0]["file"]).convert("RGB")
-    image2 = Image.open(dataset[0]["file"]).convert("RGB")
-
-    return image1, image2
+    ds = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    return list(ds["image"][:2])
 
 
 def normalize(img):
@@ -909,7 +897,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_greedy_predictions = [38, 115, 111, 121, 121, 111, 116, 109, 52]
         masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
@@ -938,7 +926,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.1652, -0.1992, -0.7520], device=torch_device)
 
         atol = 1e-3 if IS_ROCM_SYSTEM else 1e-4
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=atol))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=atol, atol=atol)
 
     @slow
     def test_inference_image_classification_fourier(self):
@@ -962,7 +950,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.1295, -0.2832, 0.3226], device=torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_image_classification_conv(self):
@@ -986,7 +974,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.1186, 0.0554, 0.0897], device=torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_optical_flow(self):
@@ -1030,7 +1018,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -275,14 +274,6 @@ class BloomModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
-        model = BloomForQuestionAnswering(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -299,7 +290,7 @@ class BloomModelTester:
     def create_and_check_bloom_weight_initialization(self, config, *args):
         model = BloomModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -328,7 +319,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
 
-    all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BloomModel,
@@ -400,7 +390,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_simple_generation(self):
         # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
         # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
-        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (560m)
+        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction, the tests failed when running in half-precision with smaller models (560m)
         # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
         # This discrepancy is observed only when using small models and seems to be stable for larger models.
         # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
@@ -757,7 +747,7 @@ class BloomEmbeddingTest(unittest.TestCase):
             output_dict["max"][idx] = embeddings.max(dim=-1).values[0][i].item()
             output_dict["mean"][idx] = embeddings.mean(dim=-1)[0][i].item()
 
-        for key in TEST_EMBEDDINGS[str(model.dtype)].keys():
+        for key in TEST_EMBEDDINGS[str(model.dtype)]:
             self.assertDictEqual(TEST_EMBEDDINGS[str(model.dtype)][key], output_dict[key])
 
         output_dict_norm = {"min": {}, "max": {}, "mean": {}}
@@ -773,7 +763,6 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        cuda_available = torch.cuda.is_available()
         model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
             torch_device
         )
@@ -792,7 +781,7 @@ class BloomEmbeddingTest(unittest.TestCase):
             "max": logits.last_hidden_state.max(dim=-1).values[0][0].item(),
         }
 
-        if cuda_available:
+        if torch_device == "cuda":
             self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=4)
         else:
             self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=3)
@@ -801,7 +790,6 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        cuda_available = torch.cuda.is_available()
         model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
             torch_device
         )  # load in bf16
@@ -817,9 +805,5 @@ class BloomEmbeddingTest(unittest.TestCase):
             output = model(tensor_ids).logits
 
         output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
-        if cuda_available:
-            self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)
-            self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
-        else:
-            self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
-            self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
+        self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)
+        self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
