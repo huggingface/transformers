@@ -654,43 +654,43 @@ def get_user_input():
     add_processor = False
     if old_model_infos.tokenizer_class is not None:
         add_tokenizer = get_user_field(
-            f"Do you want to create a new tokenizer? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.fast_tokenizer_class is not None:
         add_fast_tokenizer = get_user_field(
-            f"Do you want to create a new fast tokenizer? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new fast tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.image_processor_class is not None:
         add_image_processor = get_user_field(
-            f"Do you want to create a new image processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new image processor? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.fast_image_processor_class is not None:
         add_fast_image_processor = get_user_field(
-            f"Do you want to create a new fast image processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new fast image processor? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.video_processor_class is not None:
         add_video_processor = get_user_field(
-            f"Do you want to create a new video processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new video processor? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.feature_extractor_class is not None:
         add_feature_extractor = get_user_field(
-            f"Do you want to create a new feature extractor? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new feature extractor? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
     if old_model_infos.processor_class is not None:
         add_processor = get_user_field(
-            f"Do you want to create a new processor? If `no`, it will use the same as {old_model_type} (yes/no)?",
+            f"Do you want to create a new processor? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
@@ -713,9 +713,9 @@ def get_user_input():
     if add_image_processor and not add_fast_image_processor:
         create_fast_image_processor = get_user_field(
             "A fast image processor can be created from the slow one, but modifications might be needed. "
-            "Should we add a fast image processor class for this model (recommended) (yes/no)? ",
+            "Should we add a fast image processor class for this model (recommended) (y/n)? ",
             convert_to=convert_to_bool,
-            default_value="yes",
+            default_value="y",
             fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
         )
 
