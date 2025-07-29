@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -727,6 +726,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, Qwen2AudioCausalLMOutputWithPast]:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
@@ -845,6 +845,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         logits = outputs[0]
@@ -877,6 +878,20 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             attention_mask=attention_mask,
         )
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        # Overwritten -- we should not pass input_features when we are in cached decoding stage
+
+        input_features = kwargs.pop("input_features", None)
+        cache_position = kwargs.get("cache_position")
+
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+
+        if cache_position is not None and cache_position[0] == 0:
+            # input_features should only be passed when we are not in cached decoding stage
+            model_inputs["input_features"] = input_features
+
+        return model_inputs
 
 
 __all__ = ["Qwen2AudioForConditionalGeneration", "Qwen2AudioPreTrainedModel", "Qwen2AudioEncoder"]

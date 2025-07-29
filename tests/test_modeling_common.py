@@ -3484,6 +3484,7 @@ class ModelTesterMixin:
             model = model_class(config)
 
             model.to(torch_device)
+            model.to(torch.bfloat16)
             dummy_input = inputs_dict[model.main_input_name][:1]
             if dummy_input.dtype in [torch.float32, torch.float16]:
                 dummy_input = dummy_input.to(torch.bfloat16)
@@ -4476,7 +4477,7 @@ class ModelTesterMixin:
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        if not hasattr(self, "_torch_compile_train_cls"):
+        if getattr(self, "_torch_compile_train_cls", None) is None:
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
