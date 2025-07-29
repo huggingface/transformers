@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, AyaVisionProcessor
-from transformers.testing_utils import require_read_token, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -31,7 +31,6 @@ if is_vision_available():
     from transformers import GotOcr2ImageProcessor
 
 
-@require_read_token
 @require_vision
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
@@ -80,6 +79,19 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
 
     @require_torch
     def test_process_interleaved_images_videos(self):

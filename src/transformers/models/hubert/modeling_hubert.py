@@ -20,7 +20,7 @@
 # limitations under the License.
 
 import warnings
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -32,6 +32,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -107,7 +108,7 @@ class HubertSamePadLayer(nn.Module):
         return hidden_states
 
 
-class HubertNoLayerNormConvLayer(nn.Module):
+class HubertNoLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -128,7 +129,7 @@ class HubertNoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class HubertLayerNormConvLayer(nn.Module):
+class HubertLayerNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -155,7 +156,7 @@ class HubertLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
-class HubertGroupNormConvLayer(nn.Module):
+class HubertGroupNormConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -212,13 +213,7 @@ class HubertFeatureEncoder(nn.Module):
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
@@ -309,14 +304,13 @@ class HubertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -333,42 +327,9 @@ class HubertAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        current_states = key_value_states if is_cross_attention else hidden_states
+        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -390,7 +351,7 @@ class HubertAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, None
 
 
 class HubertFeedForward(nn.Module):
@@ -417,7 +378,7 @@ class HubertFeedForward(nn.Module):
         return hidden_states
 
 
-class HubertEncoderLayer(nn.Module):
+class HubertEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = HubertAttention(
@@ -495,23 +456,15 @@ class HubertEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -579,7 +532,7 @@ class HubertAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-class HubertEncoderLayerStableLayerNorm(nn.Module):
+class HubertEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = HubertAttention(
@@ -668,24 +621,16 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
                 hidden_states = layer_outputs[0]
 
             if skip_the_layer:
@@ -732,11 +677,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
 @auto_docstring
 class HubertPreTrainedModel(PreTrainedModel):
-    config_class = HubertConfig
+    config: HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -802,7 +747,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -810,7 +755,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -948,7 +893,7 @@ class HubertModel(HubertPreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -995,7 +940,7 @@ class HubertModel(HubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1006,16 +951,14 @@ class HubertModel(HubertPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, HubertModel
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
 
         >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
+        >>> def map_to_array(example):
+        ...     example["speech"] = example["audio"]["array"]
+        ...     return example
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1155,7 +1098,7 @@ class HubertForCTC(HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1278,13 +1221,14 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
+            into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

@@ -16,15 +16,13 @@
 Processor class for Qwen2Audio.
 """
 
-import warnings
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils.deprecation import deprecate_kwarg
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
@@ -80,12 +78,10 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    @deprecate_kwarg("audios", version="4.54.0", new_name="audio")
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio: Union[np.ndarray, List[np.ndarray]] = None,
-        audios=None,  # kept for BC
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, list[np.ndarray]] = None,
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -96,23 +92,13 @@ class Qwen2AudioProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `List[np.ndarray]`):
+            audio (`np.ndarray`, `list[np.ndarray]`):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
         """
-
-        # Handle BC when user passes deprecated keyword argument
-        if audios is not None and audio is None:
-            audio = audios
-            warnings.warn(
-                "You may have used the keyword argument for the `audio` inputs. It is strongly recommended to pass inputs with keyword arguments "
-                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the only acceptable keyword argument.",
-                FutureWarning,
-            )
-
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
         elif isinstance(text, str):
@@ -248,7 +234,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     "{{ message['content'] }}<|im_end|>\n"
                 "{% else %}"
                     "{% for content in message['content'] %}"
-                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' %}"
+                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' or content['type'] == 'audio' %}"
                             "{% set audio_count.value = audio_count.value + 1 %}"
                             "Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n"
                         "{% elif 'text' in content %}"

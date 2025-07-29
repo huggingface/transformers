@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm6.4_ubuntu22.04_py3.10_pytorch_release_2.6.0
+FROM rocm/pytorch:rocm6.4.1_ubuntu24.04_py3.12_pytorch_release_2.7.1
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -20,8 +20,12 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video]
+# On ROCm, torchcodec is required to decode audio files
+RUN python3 -m pip install --no-cache-dir torchcodec
+# Install transformers
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video,audio]
 
+# Remove tensorflow and flax as they are no longer supported by transformers
 RUN python3 -m pip uninstall -y tensorflow flax
 
 # When installing in editable mode, `transformers` is not recognized as a package.

@@ -260,7 +260,7 @@ class BestRun(NamedTuple):
             with run-{run_id}).
         objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (`Dict[str, Any]`):
+        hyperparameters (`dict[str, Any]`):
             The hyperparameters picked to get this run.
         run_summary (`Optional[Any]`):
             A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
@@ -278,7 +278,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
         `float`: The objective to minimize or maximize
@@ -444,6 +444,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
@@ -876,7 +877,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
-        optim_target_modules (`Union[str, List[str]]`):
+        optim_target_modules (`Union[str, list[str]]`):
             A list of strings to try to match. Can be also a full string.
         key (`str`):
             A key to search any matches in optim_target_modules

@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The T5 model was presented in [Unifying Language Learning Paradigms](https://arxiv.org/pdf/2205.05131v1.pdf) by Yi Tay, Mostafa Dehghani, Vinh Q. Tran, Xavier Garcia, Dara Bahri, Tal Schuster, Huaixiu Steven Zheng, Neil Houlsby, Donald Metzler.
+The T5 model was presented in [Unifying Language Learning Paradigms](https://huggingface.co/papers/2205.05131) by Yi Tay, Mostafa Dehghani, Vinh Q. Tran, Xavier Garcia, Dara Bahri, Tal Schuster, Huaixiu Steven Zheng, Neil Houlsby, Donald Metzler.
 
 The abstract from the paper is the following:
 

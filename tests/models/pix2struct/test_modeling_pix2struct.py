@@ -383,7 +383,11 @@ class Pix2StructModelTester:
         return config, input_ids, attention_mask, flattened_patches
 
     def get_config(self, text_config, vision_config):
-        return Pix2StructConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+        return Pix2StructConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -544,8 +548,19 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
+                        # See PR #38607 (to avoid flakiness)
+                        data = torch.flatten(param.data)
+                        n_elements = torch.numel(data)
+                        # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
+                        # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
+                        n_elements_to_skip_on_each_side = int(n_elements * 0.025)
+                        data_to_check = torch.sort(data).values
+                        if n_elements_to_skip_on_each_side > 0:
+                            data_to_check = data_to_check[
+                                n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
+                            ]
                         self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
@@ -644,10 +659,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
-
-    @unittest.skip(reason="Pix2Struct doesn't use tied weights")
-    def test_tied_model_weights_key_ignore(self):
-        pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

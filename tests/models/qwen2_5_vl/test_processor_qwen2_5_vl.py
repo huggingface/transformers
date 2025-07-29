@@ -19,17 +19,16 @@ import unittest
 
 import numpy as np
 import pytest
-from huggingface_hub import hf_hub_download
 
-from transformers import AutoProcessor, Qwen2Tokenizer
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers import AutoProcessor, Qwen2TokenizerFast
+from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessor
+    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessorFast
 
 if is_torch_available():
     import torch
@@ -37,6 +36,7 @@ if is_torch_available():
 
 @require_vision
 @require_torch
+@require_torchvision
 class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5_VLProcessor
 
@@ -65,6 +65,19 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
+
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
@@ -74,12 +87,12 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=True)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
+        self.assertIsInstance(processor.tokenizer, Qwen2TokenizerFast)
+        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -92,8 +105,8 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
+        input_image_proc = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
 
         for key in input_image_proc.keys():
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -219,14 +232,14 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            num_frames=4,  # by default no more than 4 frames, otherwise too slow
+            num_frames=2,  # by default no more than 2 frames, otherwise too slow
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = 360 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
+        video_len = 180 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
         mm_len = batch_size * 192 if modality == "image" else video_len
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
@@ -346,70 +359,3 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
-
-    @require_av
-    def test_apply_chat_template_video_special_processing(self):
-        """
-        Tests that models can use their own preprocessing to preprocess conversations.
-        """
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
-
-        video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
-        )
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "video", "path": video_file_path},
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        def _process_messages_for_chat_template(
-            conversation,
-            batch_images,
-            batch_videos,
-            batch_video_metadata,
-            **chat_template_kwargs,
-        ):
-            # Let us just always return a dummy prompt
-            new_msg = [
-                [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "video"},  # no need to use path, video is loaded already by this moment
-                            {"type": "text", "text": "Dummy prompt for preprocess testing"},
-                        ],
-                    },
-                ]
-            ]
-            return new_msg
-
-        processor._process_messages_for_chat_template = _process_messages_for_chat_template
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-
-        # Check with `in` because we don't know how each template formats the prompt with BOS/EOS/etc
-        formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
-        self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 21960)

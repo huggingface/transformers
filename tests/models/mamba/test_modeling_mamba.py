@@ -20,11 +20,11 @@ from unittest.util import safe_repr
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -32,10 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MambaCache,
         MambaForCausalLM,
         MambaModel,
     )
-    from transformers.models.mamba.modeling_mamba import MambaCache
 
 
 class MambaModelTester:
@@ -279,31 +279,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["cache_params"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
-        # move input tensors to cuda:O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
-
     def test_mamba_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_model(*config_and_inputs)
@@ -326,9 +301,11 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rescale_prenorm_residual = True
 
+        configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = model_class(config=config)
+            model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if "dt_proj.bias" in name:
                     dt = torch.exp(
@@ -347,6 +324,19 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     if param.requires_grad:
                         # check if it's a ones like
                         torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
+                else:
+                    if param.requires_grad:
+                        if (
+                            "mixer.conv1d.weight" in name
+                            or "mixer.dt_proj.weight" in name
+                            or "mixer.out_proj.weight" in name
+                        ):
+                            continue
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -436,6 +426,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             outputs.last_hidden_state.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
         )
+
+    @unittest.skip("Mamba models do not support DDP.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
 
 @require_torch
@@ -532,11 +526,11 @@ class MambaIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
         model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)

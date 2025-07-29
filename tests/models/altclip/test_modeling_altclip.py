@@ -297,7 +297,7 @@ class AltCLIPTextModelTester:
 @require_torch
 class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False  # Cannot support if `can_return_tuple`
     test_pruning = False
     test_head_masking = False
 
@@ -376,8 +376,10 @@ class AltCLIPModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return AltCLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return AltCLIPConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -411,7 +413,7 @@ def prepare_img():
 class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
-    fx_compatible = True
+    fx_compatible = False  # Cannot support if `can_return_tuple`
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False

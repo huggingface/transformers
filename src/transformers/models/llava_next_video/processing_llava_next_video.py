@@ -16,14 +16,14 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
@@ -115,7 +115,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
@@ -130,14 +130,14 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
@@ -157,8 +157,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             LlavaNextVideoProcessorKwargs,
@@ -178,7 +176,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if image_inputs:
             image_sizes = iter(image_inputs["image_sizes"])
@@ -266,6 +264,43 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         unpadded_features = current_height * current_width
         newline_features = current_height
         return (unpadded_features, newline_features)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (list[list[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = LlavaNextVideoProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = (
+                (size["shortest_edge"], size["shortest_edge"])
+                if "shortest_edge" in size
+                else (min(size["height"], size["width"]), min(size["height"], size["width"]))
+            )
+            processed_height, processed_width = size
+
+            batch_num_image_tokens = []
+            num_image_patches = [1] * len(image_sizes)  # llava-next doesn't batch pixels as Idefics, thus `1` patch`
+            for image_size in image_sizes:
+                orig_height, orig_width = image_size
+                num_image_tokens = self._get_number_of_features(
+                    orig_height, orig_width, processed_height, processed_width
+                )
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+                batch_num_image_tokens.append(num_image_tokens)
+            vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

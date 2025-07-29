@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -132,14 +133,12 @@ class Qwen2AudioModelTester:
 
 
 @require_torch
-class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2AudioForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
-    # Doesn't run generation tests. TODO eustache/joao: some generation tests are broken, the errors seem cache-related
-    all_generative_model_classes = ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True

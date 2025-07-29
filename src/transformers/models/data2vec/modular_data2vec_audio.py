@@ -20,6 +20,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ..wav2vec2.modeling_wav2vec2 import (
@@ -38,7 +39,7 @@ from ..wav2vec2.modeling_wav2vec2 import (
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
-class Data2VecAudioConvLayer(nn.Module):
+class Data2VecAudioConvLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -134,11 +135,11 @@ class Data2VecAudioAdapter(Wav2Vec2Adapter):
 
 
 class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
-    config_class = Data2VecAudioConfig
+    config: Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 

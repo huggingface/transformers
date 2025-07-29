@@ -223,7 +223,7 @@ class CLIPSegConfig(PretrainedConfig):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The initial value of the *logit_scale* parameter. Default is used as per the original CLIPSeg implementation.
-        extract_layers (`List[int]`, *optional*, defaults to `[3, 6, 9]`):
+        extract_layers (`list[int]`, *optional*, defaults to `[3, 6, 9]`):
             Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
         reduce_dim (`int`, *optional*, defaults to 64):
             Dimensionality to reduce the CLIP vision embedding.
@@ -379,18 +379,6 @@ class CLIPSegConfig(PretrainedConfig):
         self.conditional_layer = conditional_layer
         self.initializer_factor = 1.0
         self.use_complex_transposed_convolution = use_complex_transposed_convolution
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: CLIPSegTextConfig, vision_config: CLIPSegVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`CLIPSegConfig`] (or a derived class) from clipseg text model configuration and clipseg vision
-        model configuration.
-
-        Returns:
-            [`CLIPSegConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["CLIPSegConfig", "CLIPSegTextConfig", "CLIPSegVisionConfig"]

@@ -90,3 +90,16 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
         self.assertTrue(np.abs(orig_image - unnormalized_images).max() >= 1)
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
