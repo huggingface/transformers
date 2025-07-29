@@ -31,7 +31,7 @@ You can find all of the original BARThez checkpoints under the [BARThez](https:/
 
 > [!TIP]
 > This model was contributed by [moussakam](https://huggingface.co/moussakam).
-> Click on the BARThez models in the right sidebar for more examples of how to apply BARThez to different language tasks.
+> Refer to the [BART](./bart) docs for more usage examples.
 
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
