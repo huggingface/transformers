@@ -325,8 +325,9 @@ class SlidingWindowLayer(StaticLayer):
             sliding_window (`int`):
                 Effective window size: number of tokens that are kept on each update call.
         """
-        kwargs.pop("max_cache_len", None)
-        super().__init__(*args, max_cache_len=sliding_window, *args, **kwargs)
+        max_cache_len = kwargs.pop("max_cache_len", None)
+        max_cache_len = min(sliding_window, max_cache_len) if max_cache_len is not None else sliding_window
+        super().__init__(*args, max_cache_len=max_cache_len, *args, **kwargs)
 
     def update(
         self,
@@ -1277,9 +1278,7 @@ class Cache:
     def max_cache_len(self) -> int:
         """Return the maximum cache length of the cache"""
         values = [layer.max_cache_len for layer in self.layers]
-        if len(set(values)) > 1:
-            raise ValueError(f"Max cache length is not consistent across layers: {values}")
-        return values[0]
+        return max(values)
 
     @property
     def is_compileable(self) -> bool:
@@ -1655,7 +1654,7 @@ class QuantoQuantizedCache(QuantizedCache):
     """
 
     def __init__(self, **kwargs) -> None:
-        Cache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
+        DynamicCache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
 
 
 class HQQQuantizedCache(QuantizedCache):
@@ -1697,7 +1696,7 @@ class HQQQuantizedCache(QuantizedCache):
 
     def __init__(self, backend="HQQ", **kwargs) -> None:
         assert backend == "HQQ"
-        Cache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
+        DynamicCache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
 
 
 class EncoderDecoderCache(Cache):
@@ -1951,10 +1950,6 @@ def parse_layer_args_from_model_config(
                 )
         # Adjust max_cache_len for sliding window layers (they can't be larger than sliding window)
         max_cache_len = max_cache_len or config.max_position_embeddings
-        if getattr(config, "sliding_window", None) is not None:
-            sliding_window_len = min(config.sliding_window, max_cache_len)
-        else:
-            sliding_window_len = None
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads:
         head_dim = (
             config.head_dim
@@ -1981,7 +1976,7 @@ def parse_layer_args_from_model_config(
             "layer_device_map": layer_device_map,
             "head_dim": head_dim,
             "num_heads": num_heads,
-            "sliding_window": sliding_window_len,
+            "sliding_window": getattr(config, "sliding_window", None),
         }
         return {k: v for k, v in layer_args.items() if v is not None}
 

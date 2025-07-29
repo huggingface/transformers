@@ -233,7 +233,7 @@ class AttentionMaskVisualizer:
             attention_mask,
             img_token=self.image_token,
             sliding_window=getattr(self.config, "sliding_window", None),
-            token_type_ids=kwargs.get("token_type_ids", None),
+            token_type_ids=kwargs.get("token_type_ids"),
             image_seq_length=image_seq_length,
         )
         print(f_string)
