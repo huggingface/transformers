@@ -12,22 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-import re
+import shutil
 import tempfile
 import unittest
-import shutil
 
 import transformers.commands.add_new_model_like
-from transformers.commands.add_new_model_like import create_new_model_like, ModelInfos
+from transformers.commands.add_new_model_like import ModelInfos, create_new_model_like
 from transformers.testing_utils import require_torch
+
 
 REPO_PATH = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 MODELS_TO_COPY = ("auto", "llama", "phi4_multimodal")
 
+
 @require_torch
 class TestAddNewModelLike(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         """
@@ -53,7 +53,7 @@ class TestAddNewModelLike(unittest.TestCase):
             test_src = os.path.join(REPO_PATH, "tests", "models", model)
             shutil.copytree(test_src, test_src.replace(REPO_PATH, cls.FAKE_REPO))
 
-            if model != "auto:"
+            if model != "auto":
                 doc_src = os.path.join(REPO_PATH, "docs", "source", "en", f"{model}.md")
                 shutil.copy(doc_src, doc_src.replace(REPO_PATH, cls.FAKE_REPO))
 
@@ -72,15 +72,15 @@ class TestAddNewModelLike(unittest.TestCase):
     def test_llama_without_tokenizers(self):
         # This is the structure without adding the tokenizers
         filenames_to_add = (
-            (f"configuration_llama.py", True),
-            (f"modeling_llama.py", True),
-            (f"tokenization_llama.py", False),
-            (f"tokenization_llama_fast.py", False),
-            (f"image_processing_llama.py", False),
-            (f"image_processing_llama_fast.py", False),
-            (f"video_processing_llama.py", False),
-            (f"feature_extraction_llama.py", False),
-            (f"processing_llama.py", False),
+            ("configuration_llama.py", True),
+            ("modeling_llama.py", True),
+            ("tokenization_llama.py", False),
+            ("tokenization_llama_fast.py", False),
+            ("image_processing_llama.py", False),
+            ("image_processing_llama_fast.py", False),
+            ("video_processing_llama.py", False),
+            ("feature_extraction_llama.py", False),
+            ("processing_llama.py", False),
         )
         # Run the command
         create_new_model_like(
@@ -90,5 +90,3 @@ class TestAddNewModelLike(unittest.TestCase):
             filenames_to_add=filenames_to_add,
             create_fast_image_processor=False,
         )
-    
-        

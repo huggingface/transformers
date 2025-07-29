@@ -355,6 +355,7 @@ def find_modular_structure(
     modular_classes = "\n\n".join(
         f"class {class_.replace(old_cased_name, new_cased_name)}({class_}):\n    pass" for class_ in all_classes
     )
+    public_classes = [class_.replace(old_cased_name, new_cased_name) for class_ in public_classes]
     return imports, modular_classes, public_classes
 
 
@@ -535,13 +536,16 @@ def create_new_model_like(
 
     # 9. Run linters
     model_init_file = TRANSFORMERS_PATH / "models" / "__init__.py"
+    toctree_file = REPO_PATH / "docs" / "source" / "en" / "_toctree.yml"
     subprocess.run(
-        ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],
+        ["ruff", "check", new_module_folder, tests_folder, model_init_file, toctree_file, "--fix"],
         cwd=REPO_PATH,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        ["ruff", "format", new_module_folder, tests_folder, model_init_file], cwd=REPO_PATH, stdout=subprocess.DEVNULL
+        ["ruff", "format", new_module_folder, tests_folder, model_init_file, toctree_file],
+        cwd=REPO_PATH,
+        stdout=subprocess.DEVNULL,
     )
     subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=REPO_PATH, stdout=subprocess.DEVNULL)
 
