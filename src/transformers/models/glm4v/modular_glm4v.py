@@ -1313,6 +1313,13 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
+    
+    # Override to prevent rope_deltas inheritance from Qwen2.5VL - GLM4V doesn't need this
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
+        # Call grandparent method to skip Qwen2.5VL's rope_deltas logic
+        return super(Qwen2_5_VLForConditionalGeneration, self)._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
 
     def forward(
         self,
