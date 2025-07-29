@@ -344,7 +344,7 @@ class GPTBigCodeModelTester:
     def create_and_check_gpt_bigcode_weight_initialization(self, config, *args):
         model = GPTBigCodeModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -542,6 +542,8 @@ class GPTBigCodeMQATest(unittest.TestCase):
             attn_pdrop=0,
             resid_pdrop=0,
         )
+        # We need to set it here as it's normally set by the Model's __init__
+        config._attn_implementation = "sdpa"
         return GPTBigCodeAttention(config)
 
     @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])

@@ -45,6 +45,7 @@ AUTODOC_FILES = [
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
+    "video_processor_class": ("video_processing_auto", "VIDEO_PROCESSOR_MAPPING_NAMES"),
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
@@ -352,17 +353,13 @@ class ModelArgs:
     blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-    Two formats are allowed:
-        - a [`~cache_utils.Cache`] instance, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-        - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-        shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-        cache format.
+    Only [`~cache_utils.Cache`] instance is allowed as input, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+    If no `past_key_values` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
 
-    The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-    legacy cache format will be returned.
+    The model will output the same cache format that is fed as input.
 
-    If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-    have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+    If `past_key_values` are used, the user is expected to input only unprocessed `input_ids` (those that don't
+    have their past key value states given to this model) of shape `(batch_size, unprocessed_length)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
     """,
         "shape": None,
@@ -533,6 +530,15 @@ class ModelArgs:
         "shape": "of shape `(batch_size, num_channels, image_size, image_size)`",
     }
 
+    pixel_values_videos = {
+        "description": """
+    The tensors corresponding to the input video. Pixel values for videos can be obtained using
+    [`{video_processor_class}`]. See [`{video_processor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{video_processor_class}`] for processing videos).
+    """,
+        "shape": "of shape `(batch_size, num_frames, num_channels, frame_size, frame_size)`",
+    }
+
     vision_feature_layer = {
         "description": """
     The index of the layer to select the vision feature. If multiple indices are provided,
@@ -567,6 +573,15 @@ class ModelArgs:
     [What are attention masks?](../glossary#attention-mask)
     """,
         "shape": "of shape `(batch_size, height, width)`",
+    }
+
+    input_features = {
+        "description": """
+    The tensors corresponding to the input audio features. Audio features can be obtained using
+    [`{feature_extractor_class}`]. See [`{feature_extractor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{feature_extractor_class}`] for processing audios).
+    """,
+        "shape": "of shape `(batch_size, sequence_length, feature_dim)`",
     }
 
 
@@ -822,6 +837,20 @@ class ModelOutputArgs:
         "shape": "of shape `(batch_size,config.project_dim)`",
     }
 
+    image_hidden_states = {
+        "description": """
+    Image hidden states of the model produced by the vision encoder and after projecting the last hidden state.
+    """,
+        "shape": "of shape `(batch_size, num_images, sequence_length, hidden_size)`",
+    }
+
+    video_hidden_states = {
+        "description": """
+    Video hidden states of the model produced by the vision encoder and after projecting the last hidden state.
+    """,
+        "shape": "of shape `(batch_size * num_frames, num_images, sequence_length, hidden_size)`",
+    }
+
 
 class ClassDocstring:
     PreTrainedModel = r"""
@@ -927,11 +956,8 @@ class ClassAttrs:
     _skip_keys_device_placement = r"""
     A list of keys to ignore when moving inputs or outputs between devices when using the `accelerate` library.
     """
-    _supports_flash_attn_3 = r"""
-    Whether the model's attention implementation supports FlashAttention 3.0.
-    """
-    _supports_flash_attn_2 = r"""
-    Whether the model's attention implementation supports FlashAttention 2.0.
+    _supports_flash_attn = r"""
+    Whether the model's attention implementation supports FlashAttention.
     """
     _supports_sdpa = r"""
     Whether the model's attention implementation supports SDPA (Scaled Dot Product Attention).
@@ -939,14 +965,9 @@ class ClassAttrs:
     _supports_flex_attn = r"""
     Whether the model's attention implementation supports FlexAttention.
     """
-    _supports_cache_class = r"""
-    Whether the model supports a `Cache` instance as `past_key_values`.
-    """
-    _supports_quantized_cache = r"""
-    Whether the model supports a `QuantoQuantizedCache` instance as `past_key_values`.
-    """
-    _supports_static_cache = r"""
-    Whether the model supports a `StaticCache` instance as `past_key_values`.
+    _can_compile_fullgraph = r"""
+    Whether the model can `torch.compile` fullgraph without graph breaks. Models will auto-compile if this flag is set to `True`
+    in inference, if a compilable cache is used.
     """
     _supports_attention_backend = r"""
     Whether the model supports attention interface functions. This flag signal that the model can be used as an efficient backend in TGI and vLLM.
@@ -1122,40 +1143,44 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     for placeholder in placeholders:
         # Infer placeholders from the model name and the auto modules
         if placeholder in PLACEHOLDER_TO_AUTO_MODULE:
-            place_holder_value = getattr(
-                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
-                PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
-            )[model_name]
-            if isinstance(place_holder_value, (list, tuple)):
-                place_holder_value = place_holder_value[0]
-            placeholders_dict[placeholder] = place_holder_value
+            try:
+                place_holder_value = getattr(
+                    getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE[placeholder][0]),
+                    PLACEHOLDER_TO_AUTO_MODULE[placeholder][1],
+                ).get(model_name, None)
+            except ImportError:
+                # In case a library is not installed, we don't want to fail the docstring generation
+                place_holder_value = None
+            if place_holder_value is not None:
+                if isinstance(place_holder_value, (list, tuple)):
+                    place_holder_value = place_holder_value[0]
+                placeholders_dict[placeholder] = place_holder_value if place_holder_value is not None else placeholder
+            else:
+                placeholders_dict[placeholder] = placeholder
 
     return placeholders_dict
 
 
-def format_args_docstring(args, model_name):
+def format_args_docstring(docstring, model_name):
     """
     Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
     deducted from the model name and the auto modules.
     """
-    # first check if there are any placeholders in the args, if not return them as is
-    placeholders = set(re.findall(r"{(.*?)}", "".join(args[arg]["description"] for arg in args)))
+    # first check if there are any placeholders in the docstring, if not return it as is
+    placeholders = set(re.findall(r"{(.*?)}", docstring))
     if not placeholders:
-        return args
+        return docstring
 
     # get the placeholders dictionary for the given model name
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
-
-    # replace the placeholders in the args with the values from the placeholders_dict
-    for arg in args:
-        new_arg = args[arg]["description"]
-        placeholders = re.findall(r"{(.*?)}", new_arg)
-        placeholders = [placeholder for placeholder in placeholders if placeholder in placeholders_dict]
-        if placeholders:
-            new_arg = new_arg.format(**{placeholder: placeholders_dict[placeholder] for placeholder in placeholders})
-        args[arg]["description"] = new_arg
-
-    return args
+    # replace the placeholders in the docstring with the values from the placeholders_dict
+    for placeholder, value in placeholders_dict.items():
+        if placeholder is not None:
+            try:
+                docstring = docstring.replace(f"{{{placeholder}}}", value)
+            except Exception:
+                pass
+    return docstring
 
 
 def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
@@ -1251,7 +1276,7 @@ def _get_model_info(func, parent_class):
             else:
                 config_class = "ModelConfig"
                 print(
-                    f"🚨 Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/args_doc.py"
+                    f"🚨 Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
                 )
 
     return model_name_lowercase, class_name, config_class
@@ -1474,8 +1499,6 @@ def _process_kwargs_parameters(
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
                 documented_kwargs, _ = parse_docstring(kwargs_documentation)
-                if model_name_lowercase is not None:
-                    documented_kwargs = format_args_docstring(documented_kwargs, model_name_lowercase)
 
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
@@ -1553,8 +1576,6 @@ def _process_parameters_section(
     # Parse existing docstring if available
     if func_documentation is not None:
         documented_params, func_documentation = parse_docstring(func_documentation)
-        if model_name_lowercase is not None:
-            documented_params = format_args_docstring(documented_params, model_name_lowercase)
 
     # Process regular parameters
     param_docstring, missing_args = _process_regular_parameters(
@@ -1752,6 +1773,9 @@ def auto_method_docstring(
     )
     docstring += example_docstring
 
+    # Format the docstring with the placeholders
+    docstring = format_args_docstring(docstring, model_name_lowercase)
+
     # Assign the dynamically generated docstring to the wrapper function
     func.__doc__ = docstring
     return func
@@ -1873,27 +1897,150 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
 
 def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=None):
-    """
-    Automatically generates docstrings for classes and methods in the Transformers library.
+    r"""
+    Automatically generates comprehensive docstrings for model classes and methods in the Transformers library.
 
-    This decorator can be used in the following forms:
-    @auto_docstring
-    def my_function(...):
-        ...
-    or
-    @auto_docstring()
-    def my_function(...):
-        ...
-    or
-    @auto_docstring(custom_intro="Custom intro", ...)
-    def my_function(...):
-        ...
+    This decorator reduces boilerplate by automatically including standard argument descriptions while allowing
+    overrides to add new or custom arguments. It inspects function signatures, retrieves predefined docstrings
+    for common arguments (like `input_ids`, `attention_mask`, etc.), and generates complete documentation
+    including examples and return value descriptions.
+
+    For complete documentation and examples, read this [guide](https://huggingface.co/docs/transformers/auto_docstring).
+
+    Examples of usage:
+
+        Basic usage (no parameters):
+        ```python
+        @auto_docstring
+        class MyAwesomeModel(PreTrainedModel):
+            def __init__(self, config, custom_parameter: int = 10):
+                r'''
+                custom_parameter (`int`, *optional*, defaults to 10):
+                    Description of the custom parameter for MyAwesomeModel.
+                '''
+                super().__init__(config)
+                self.custom_parameter = custom_parameter
+        ```
+
+        Using `custom_intro` with a class:
+        ```python
+        @auto_docstring(
+            custom_intro="This model implements a novel attention mechanism for improved performance."
+        )
+        class MySpecialModel(PreTrainedModel):
+            def __init__(self, config, attention_type: str = "standard"):
+                r'''
+                attention_type (`str`, *optional*, defaults to "standard"):
+                    Type of attention mechanism to use.
+                '''
+                super().__init__(config)
+        ```
+
+        Using `custom_intro` with a method, and specify custom arguments and example directly in the docstring:
+        ```python
+        @auto_docstring(
+            custom_intro="Performs forward pass with enhanced attention computation."
+        )
+        def forward(
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+        ):
+            r'''
+            custom_parameter (`int`, *optional*, defaults to 10):
+                Description of the custom parameter for MyAwesomeModel.
+
+            Example:
+
+            ```python
+            >>> model = MyAwesomeModel(config)
+            >>> model.forward(input_ids=torch.tensor([1, 2, 3]), attention_mask=torch.tensor([1, 1, 1]))
+            ```
+            '''
+        ```
+
+        Using `custom_args` to define reusable arguments:
+        ```python
+        VISION_ARGS = r'''
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel values of the input images.
+        image_features (`torch.FloatTensor`, *optional*):
+            Pre-computed image features for efficient processing.
+        '''
+
+        @auto_docstring(custom_args=VISION_ARGS)
+        def encode_images(self, pixel_values=None, image_features=None):
+            # ... method implementation
+        ```
+
+        Combining `custom_intro` and `custom_args`:
+        ```python
+        MULTIMODAL_ARGS = r'''
+        vision_features (`torch.FloatTensor`, *optional*):
+            Pre-extracted vision features from the vision encoder.
+        fusion_strategy (`str`, *optional*, defaults to "concat"):
+            Strategy for fusing text and vision modalities.
+        '''
+
+        @auto_docstring(
+            custom_intro="Processes multimodal inputs combining text and vision.",
+            custom_args=MULTIMODAL_ARGS
+        )
+        def forward(
+            self,
+            input_ids,
+            attention_mask=None,
+            vision_features=None,
+            fusion_strategy="concat"
+        ):
+            # ... multimodal processing
+        ```
+
+        Using with ModelOutput classes:
+        ```python
+        @dataclass
+        @auto_docstring(
+            custom_intro="Custom model outputs with additional fields."
+        )
+        class MyModelOutput(ImageClassifierOutput):
+            r'''
+            loss (`torch.FloatTensor`, *optional*):
+                The loss of the model.
+            custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+                A custom output field specific to this model.
+            '''
+
+            # Standard fields like hidden_states, logits, attentions etc. can be automatically documented
+            # However, given that the loss docstring is often different per model, you should document it above
+            loss: Optional[torch.FloatTensor] = None
+            logits: Optional[torch.FloatTensor] = None
+            hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+            attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+            custom_field: Optional[torch.FloatTensor] = None
+        ```
 
     Args:
-        custom_intro (str, optional): Custom introduction text to add to the docstring. This will replace the default
-            introduction text generated by the decorator before the Args section.
-        checkpoint (str, optional): Checkpoint name to use in the docstring. This should be automatically inferred from the
-            model configuration class, but can be overridden if needed.
+        custom_intro (`str`, *optional*):
+            Custom introduction text to add to the docstring. This replaces the default
+            introduction text generated by the decorator before the Args section. Use this to describe what
+            makes your model or method special.
+        custom_args (`str`, *optional*):
+            Custom argument documentation in docstring format. This allows you to define
+            argument descriptions once and reuse them across multiple methods. The format should follow the
+            standard docstring convention: `arg_name (`type`, *optional*, defaults to `value`): Description.`
+        checkpoint (`str`, *optional*):
+            Checkpoint name to use in examples within the docstring. This is typically
+            automatically inferred from the model configuration class, but can be overridden if needed for
+            custom examples.
+
+    Note:
+        - Standard arguments (`input_ids`, `attention_mask`, `pixel_values`, etc.) are automatically documented
+          from predefined descriptions and should not be redefined unless their behavior differs in your model.
+        - New or custom arguments should be documented in the method's docstring using the `r''' '''` block
+          or passed via the `custom_args` parameter.
+        - For model classes, the decorator derives parameter descriptions from the `__init__` method's signature
+          and docstring.
+        - Return value documentation is automatically generated for methods that return ModelOutput subclasses.
     """
 
     def auto_docstring_decorator(obj):

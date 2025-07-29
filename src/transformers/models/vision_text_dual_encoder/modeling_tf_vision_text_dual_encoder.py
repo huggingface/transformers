@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -178,9 +177,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
     def __init__(
         self,
-        config: Optional[VisionTextDualEncoderConfig] = None,
-        vision_model: Optional[TFPreTrainedModel] = None,
-        text_model: Optional[TFPreTrainedModel] = None,
+        config: VisionTextDualEncoderConfig | None = None,
+        vision_model: TFPreTrainedModel | None = None,
+        text_model: TFPreTrainedModel | None = None,
     ):
         if config is None and (vision_model is None or text_model is None):
             raise ValueError("Either a configuration or an vision and a text model has to be provided")
@@ -351,13 +350,13 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         pixel_values: tf.Tensor | None = None,
         attention_mask: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
-        return_loss: Optional[bool] = None,
+        return_loss: bool | None = None,
         token_type_ids: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[tuple[tf.Tensor], TFCLIPOutput]:
+    ) -> tuple[tf.Tensor] | TFCLIPOutput:
         r"""
         Returns:
 
@@ -465,8 +464,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: Optional[str] = None,
-        text_model_name_or_path: Optional[str] = None,
+        vision_model_name_or_path: str | None = None,
+        text_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> TFPreTrainedModel:
@@ -526,9 +525,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         }
 
         # remove vision, text kwargs from kwargs
-        for key in kwargs_vision.keys():
+        for key in kwargs_vision:
             del kwargs["vision_" + key]
-        for key in kwargs_text.keys():
+        for key in kwargs_text:
             del kwargs["text_" + key]
 
         # Load and initialize the vision and text model

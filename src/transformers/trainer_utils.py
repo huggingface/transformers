@@ -288,9 +288,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
     speed_metrics = [
-        m
-        for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
     ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
@@ -444,6 +442,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 

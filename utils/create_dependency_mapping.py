@@ -17,7 +17,7 @@ def topological_sort(dependencies: dict) -> list[list[str]]:
     """
 
     # Nodes are the name of the models to convert (we only add those to the graph)
-    nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
+    nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies}
     # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
     graph = {}
     name_mapping = {}

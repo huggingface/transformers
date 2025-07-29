@@ -848,7 +848,7 @@ class SwinEncoder(nn.Module):
 
 @auto_docstring
 class SwinPreTrainedModel(PreTrainedModel):
-    config_class = SwinConfig
+    config: SwinConfig
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

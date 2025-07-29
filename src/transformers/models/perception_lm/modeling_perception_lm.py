@@ -87,32 +87,17 @@ class PerceptionLMMultiModalProjector(nn.Module):
 
 @auto_docstring
 class PerceptionLMPreTrainedModel(PreTrainedModel):
-    config_class = PerceptionLMConfig
+    config: PerceptionLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+
+    _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        # important: this ported version of PerceptionLM isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/PerceptionLM/tree/main/perception_lm should serve for that purpose
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
 
 @dataclass
@@ -131,10 +116,14 @@ class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -158,7 +147,10 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Image hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    video_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_videos, sequence_length, hidden_size)`.
+        Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -167,6 +159,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
@@ -232,41 +225,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMModelOutputWithPast]:
-        """
-        Forward pass of the PerceptionLM model.
-
-        Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Input image tensor of shape `(batch_size, num_tiles, channels, height, width)`.
-            pixel_values_videos (`torch.FloatTensor`, *optional*):
-                Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-            past_key_values (`list[torch.FloatTensor]`, *optional*):
-                Precomputed key and value hidden states for fast autoregressive generation.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-            use_cache (`bool`, *optional*):
-                Whether or not to use past key values to speed up decoding.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            cache_position (`torch.LongTensor`, *optional*):
-                Position indices for caching.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-                Number of logits to keep.
-            **lm_kwargs:
-                Additional keyword arguments for the language model.
-
-        Returns:
-            [`PerceptionLMModelOutputWithPast`] or `tuple`:
-                Model outputs as a `PerceptionLMModelOutputWithPast` if `return_dict=True`, otherwise a tuple.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -354,9 +312,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
@@ -382,43 +337,33 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
-        """
-        Forward pass for the PerceptionLMForConditionalGeneration model.
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        Args:
-            input_ids (`torch.LongTensor`, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Input image tensor of shape `(batch_size, num_tiles, channels, height, width)`.
-            pixel_values_videos (`torch.FloatTensor`, *optional*):
-                Input video tensor of shape `(batch_size, num_frames, channels, height, width)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor`, *optional*):
-                Indices of positions of each input sequence token in the position embeddings.
-            past_key_values (`list[torch.FloatTensor]`, *optional*):
-                Precomputed key and value hidden states for fast autoregressive generation.
-            inputs_embeds (`torch.FloatTensor`, *optional*):
-                Optionally, instead of passing `input_ids`, you can choose to directly pass an embedded representation.
-            labels (`torch.LongTensor`, *optional*):
-                Labels for computing the language modeling loss.
-            use_cache (`bool`, *optional*):
-                Whether or not to use past key values to speed up decoding.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
-            cache_position (`torch.LongTensor`, *optional*):
-                Position indices for caching.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-                Number of logits to keep.
-            **lm_kwargs:
-                Additional keyword arguments for the language model.
+        Example:
 
-        Returns:
-            [`PerceptionLMCausalLMOutputWithPast`] or `tuple`:
-                Model outputs as a `PerceptionLMCausalLMOutputWithPast` if `return_dict=True`, otherwise a tuple.
-        """
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, PerceptionLMForConditionalGeneration
+
+        >>> model = PerceptionLMForConditionalGeneration.from_pretrained("perception_lm-hf/perception_lm-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("perception_lm-hf/perception_lm-1.5-7b-hf")
+
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

@@ -248,6 +248,7 @@ class HfQuantizer(ABC):
         del model.hf_quantizer
         del model.config.quantization_config
         del model.config._pre_quantization_dtype
+        del model.quantization_method
         model.is_quantized = False
 
         return model
@@ -318,7 +319,7 @@ class HfQuantizer(ABC):
 
         for name, module in model.named_modules():
             module_class_name = module.__class__.__name__
-            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION.keys() and (
+            if module_class_name in MODULES_TO_PATCH_FOR_QUANTIZATION and (
                 self.quantization_config.quant_method
                 in MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["quantization_methods"]
             ):

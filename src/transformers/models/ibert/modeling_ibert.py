@@ -226,11 +226,6 @@ class IBertSelfAttention(nn.Module):
 
         self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states,
@@ -254,9 +249,14 @@ class IBertSelfAttention(nn.Module):
         )
 
         # Transpose
-        query_layer = self.transpose_for_scores(query_layer)
-        key_layer = self.transpose_for_scores(key_layer)
-        value_layer = self.transpose_for_scores(value_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = query_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
+        key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        value_layer = value_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -564,7 +564,6 @@ class IBertEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = None  # `config.add_cross_attention` is not supported
-        next_decoder_cache = None  # `config.use_cache` is not supported
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -592,7 +591,6 @@ class IBertEncoder(nn.Module):
                 v
                 for v in [
                     hidden_states,
-                    next_decoder_cache,
                     all_hidden_states,
                     all_self_attentions,
                     all_cross_attentions,
@@ -601,7 +599,6 @@ class IBertEncoder(nn.Module):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
@@ -626,7 +623,7 @@ class IBertPooler(nn.Module):
 
 @auto_docstring
 class IBertPreTrainedModel(PreTrainedModel):
-    config_class = IBertConfig
+    config: IBertConfig
     base_model_prefix = "ibert"
 
     def _init_weights(self, module):
@@ -765,7 +762,6 @@ class IBertModel(IBertPreTrainedModel):
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
