@@ -159,7 +159,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,)`):
+        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,) * 10 + (0.0,) * 25`):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model.
 

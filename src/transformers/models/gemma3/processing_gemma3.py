@@ -26,6 +26,10 @@ from ...utils import to_py_obj
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
+    do_pan_and_scan: Optional[bool]
+    pan_and_scan_min_crop_size: Optional[int]
+    pan_and_scan_max_num_crops: Optional[int]
+    pan_and_scan_min_ratio_to_activate: Optional[float]
     do_convert_rgb: Optional[bool]
 
 
@@ -38,6 +42,10 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "do_convert_rgb": True,
+            "do_pan_and_scan": False,
+            "pan_and_scan_min_crop_size": 256,
+            "pan_and_scan_max_num_crops": 4,
+            "pan_and_scan_min_ratio_to_activate": 1.2,
         },
     }
 
