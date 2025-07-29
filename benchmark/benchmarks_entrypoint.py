@@ -441,45 +441,6 @@ if __name__ == "__main__":
             logger.error(f"error running benchmarks for {module_name}: {e}")
             failed_benchmarks += 1
 
-    # Add some sample data if no data was actually collected (for testing purposes)
-    if generate_csv and global_metrics_recorder.collect_csv_data:
-        total_data_points = (len(global_metrics_recorder.benchmarks_df) + 
-                            len(global_metrics_recorder.device_measurements_df) + 
-                            len(global_metrics_recorder.model_measurements_df))
-    else:
-        total_data_points = 1  # Assume data exists if CSV is disabled
-    
-    if generate_csv and total_data_points == 0:
-        logger.warning("CSV is enabled but no data was collected from any benchmarks.")
-        logger.warning("Adding sample data for CSV export demonstration...")
-        sample_benchmark_id = global_metrics_recorder.initialise_benchmark({
-            "note": "Sample data - no actual data was collected",
-            "reason": "All benchmark modules failed or collected no data",
-            "model_name": "sample-model",
-            "gpu_name": "Sample GPU"
-        })
-        
-        # Add a few sample measurements
-        logger.info("Adding sample device measurements...")
-        for i in range(5):
-            global_metrics_recorder.collect_device_measurements(
-                sample_benchmark_id, 
-                25.0 + i*5, 
-                1024.0 + i*100, 
-                50.0 + i*10, 
-                2048.0 + i*200
-            )
-        
-        logger.info("Adding sample model measurements...")
-        global_metrics_recorder.collect_model_measurements(sample_benchmark_id, {
-            "sample_load_time": 2.5,
-            "sample_inference_time": 0.1,
-            "sample_throughput": 100.0,
-            "note": "This is sample data since no real benchmarks collected data"
-        })
-        
-        logger.info("Sample data added successfully.")
-
     # Export CSV results at the end (if enabled)
     try:
         if generate_csv:
