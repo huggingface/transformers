@@ -8,10 +8,59 @@
 </div>
 
 ## Overview
-TO BE COMPLETED
+
+Command Vision is a state-of-the-art multimodal model designed to seamlessly integrate visual and textual information for a wide range of applications. By combining advanced computer vision techniques with natural language processing capabilities, Command Vision enables users to analyze, understand, and generate insights from both visual and textual data.
+
+The model excels at tasks including image captioning, visual question answering, document understanding, and chart understanding. This makes it a versatile tool for AI practitioners. Its ability to process complex visual and textual inputs makes it useful in settings where text-only representations are imprecise or unavailable, like real-world image understanding and graphics-heavy document processing.
+
+Command Vision is built upon a robust architecture that leverages the latest advancements in VLMs. It's highly performant and efficient, even when dealing with large-scale datasets. The model's flexibility makes it suitable for a wide range of use cases, from content moderation and image search to medical imaging analysis and robotics.
 
 ## Usage tips
-TO BE COMPLETED
+
+The model and image processor can be loaded as follows:
+
+```python
+# pip install 'git+https://github.com/huggingface/transformers.git'
+
+import torch
+
+from transformers import AutoProcessor, AutoModelForImageTextToText
+
+model_id = "CohereLabs/command-a-vision-07-2025"
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id, device_map="auto", torch_dtype=torch.float16
+)
+
+# Format message with the aya-vision chat template
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://media.istockphoto.com/id/458012057/photo/istanbul-turkey.jpg?s=612x612&w=0&k=20&c=qogAOVvkpfUyqLUMr_XJQyq-HkACXyYUSZbKhBlPrxo=",
+            },
+            {"type": "text", "text": "Which monument is shown in this image?"},
+        ],
+    },
+]
+
+
+inputs = processor.apply_chat_template(
+    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+).to(model.device)
+
+gen_tokens = model.generate(
+    **inputs, 
+    max_new_tokens=300, 
+    do_sample=True, 
+    temperature=0.3,
+)
+
+print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+```
 
 ## Cohere2VisionConfig
 
