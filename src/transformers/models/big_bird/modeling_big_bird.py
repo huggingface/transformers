@@ -96,7 +96,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
 
                 name_items[0] = f"bert/encoder/layer_{layer_name_items[2]}"
 
-            name = "/".join([_TRIVIA_QA_MAPPING[x] if x in _TRIVIA_QA_MAPPING else x for x in name_items])[
+            name = "/".join([_TRIVIA_QA_MAPPING.get(x, x) for x in name_items])[
                 :-2
             ]  # remove last :0 in variable
 

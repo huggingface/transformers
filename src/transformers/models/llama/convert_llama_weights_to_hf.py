@@ -360,8 +360,8 @@ def write_model(
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
         write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-        multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+        ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+        multiple_of = params.get("multiple_of", 256)
 
         if is_llama_3(llama_version):
             bos_token_id = 128000
