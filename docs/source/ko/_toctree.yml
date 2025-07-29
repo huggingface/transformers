@@ -13,8 +13,8 @@
       title: (번역중) Loading models
     - local: custom_models
       title: 사용자 정의 모델 공유하기
-    - local: in_translation
-      title: (번역중) Customizing model components
+    - local: how_to_hack_models
+      title: 모델 구성 요소 맞춤 설정하기
     - local: model_sharing
       title: 만든 모델 공유하기
     - local: modular_transformers
