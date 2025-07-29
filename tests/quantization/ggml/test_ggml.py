@@ -981,18 +981,12 @@ class GgufModelTests(unittest.TestCase):
     def test_deci_weights_conversion_fp16(self):
         """Test that GGUF Deci model weights match the original model weights."""
         original_model_id = "Deci/DeciLM-7B"
-
-        try:
-            original_model = AutoModelForCausalLM.from_pretrained(
-                original_model_id,
-                torch_dtype=torch.float16,
-                trust_remote_code=True,
-                device_map="auto",
-            )
-        except Exception as e:
-            self.skipTest(f"Original Deci model not available for comparison: {e}")
-            return
-
+        original_model = AutoModelForCausalLM.from_pretrained(
+            original_model_id,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+            device_map="auto",
+        )
         # You need to have an FP16 version of your GGUF model for accurate comparison
 
         converted_model = AutoModelForCausalLM.from_pretrained(
