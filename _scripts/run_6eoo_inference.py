@@ -30,8 +30,45 @@ from transformers.models.cohere2_vision.processing_cohere2_vision import (
 from transformers.models.cohere2_vision.image_processing_cohere2_vision import (
     Cohere2VisionImageProcessor,
 )
+from transformers import Cohere2VisionForConditionalGeneration
+
 from PIL import Image
 from pathlib import Path
+CHAT_TEMPLATE = """{%- for message in messages -%}
+    <|START_OF_TURN_TOKEN|>{{ message.role | replace("user", "<|USER_TOKEN|>") | replace("assistant", "<|CHATBOT_TOKEN|><|START_RESPONSE|>") | replace("system", "<|SYSTEM_TOKEN|>") }}
+    {%- if message.content is defined -%}
+        {%- if message.content is string -%}
+{{ message.content }}
+        {%- else -%}
+            {%- for item in message.content -%}
+                {%- if item.type == 'image' -%}
+<image>
+                {%- elif item.type == 'text' -%}
+{{ item.text }}
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endif -%}
+    {%- elif message.message is defined -%}
+        {%- if message.message is string -%}
+{{ message.message }}
+        {%- else -%}
+            {%- for item in message.message -%}
+                {%- if item.type == 'image' -%}
+<image>
+                {%- elif item.type == 'text' -%}
+{{ item.text }}
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endif -%}
+    {%- endif -%}
+    {%- if message.role == "assistant" -%}
+<|END_RESPONSE|>
+    {%- endif -%}
+<|END_OF_TURN_TOKEN|>
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
+{%- endif -%}"""
 
 def build_content_turns():
     jpg_local_path = '/tmp/australia.jpg'
@@ -81,7 +118,8 @@ if __name__ == "__main__":
     assert isinstance(processor.image_processor, Cohere2VisionImageProcessor)
 
     print("processor loaded")
-
+    if args.small:
+        processor.chat_template = CHAT_TEMPLATE
     content_turns = build_content_turns()
 
     inputs = processor.apply_chat_template(
@@ -93,13 +131,20 @@ if __name__ == "__main__":
     )
     print("inputs prepared")
 
-    model, loading_info = AutoModelForCausalLM.from_pretrained(
+    model, loading_info = Cohere2VisionForConditionalGeneration.from_pretrained(
         model_id, device_map="auto", output_loading_info=True,
     )
     missing, unexpected = loading_info["missing_keys"], loading_info["unexpected_keys"]
-    assert not unexpected, 'All keys in source checkpoint should be used'
-    assert not missing, 'No keys should be missing'
-
+    try:
+        assert not unexpected, 'All keys in source checkpoint should be used'
+        assert not missing, 'No keys should be missing'
+    except AssertionError as e:
+        breakpoint()
+        raise e
+    print("model loaded")
+    model.save_pretrained("/tmp/small_model")
+    exit(0)
+    
     inputs = inputs.to(model.device)
 
     print("running generation...")
