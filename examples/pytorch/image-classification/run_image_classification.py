@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==4.54.0",
+#     "transformers==4.54.1",
 #     "accelerate>=0.12.0",
 #     "torch>=1.5.0",
 #     "torchvision>=0.6.0",
