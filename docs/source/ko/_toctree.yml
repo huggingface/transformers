@@ -24,7 +24,7 @@
     - local: in_translation
       title: (번역중) Documenting a model
     - local: attention_interface
-      title: 어텐션 함수 사용자 정의
+      title: 어텐션 함수 커스터마이징
     title: 모델
   - sections:
     - local: fast_tokenizers
