@@ -31,6 +31,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -1255,6 +1256,12 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def processor(self):
