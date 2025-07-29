@@ -68,7 +68,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     device_map="auto",
     attn_implementation="sdpa"
 )
-inputs = tokenizer("Les plantes produisent [MASK] grâce à un processus appelé photosynthèse.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to("cuda")
 
 with torch.no_grad():
     outputs = model(**inputs)
