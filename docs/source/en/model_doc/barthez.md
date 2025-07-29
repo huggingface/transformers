@@ -34,7 +34,7 @@ You can find all of the original BARThez checkpoints under the [BARThez](https:/
 > Refer to the [BART](./bart) docs for more usage examples.
 
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -89,17 +89,6 @@ echo -e "Les plantes produisent <mask> grâce à un processus appelé photosynth
 
 </hfoption>
 </hfoptions>
-
-## Notes
-- BARThez implementation is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on 
-configuration classes and their parameters.
-
-## Resources
-
-- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
-
-- The authors' original github repository can be found [here](https://github.com/moussaKam/BARThez).
 
 ## BarthezTokenizer
 
