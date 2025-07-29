@@ -153,7 +153,7 @@ class RequestState:
 
 
 @attach_tracer()
-class PagedAttentionCache(Cache):
+class PagedAttentionCache:
     def __init__(
         self,
         config: PretrainedConfig,
