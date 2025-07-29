@@ -282,7 +282,7 @@ def flex_attention_forward(
         value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False
 
-    kernel_options = kwargs.get("kernel_options", None)
+    kernel_options = kwargs.get("kernel_options")
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
