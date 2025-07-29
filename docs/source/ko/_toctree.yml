@@ -135,8 +135,8 @@
       title: 다중 GPU에서 학습 진행하기
     title: 분산 학습(Distributed training)
   - sections:
-    - local: in_translation
-      title: (번역중) GPU
+    - local: perf_train_gpu_one
+      title: GPU
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_special
