@@ -30,8 +30,7 @@ def check_all_biases_zero(safetensor_dir, unexpected_keys):
                         bias = f.get_tensor(k)
                         assert torch.all(bias == 0), f"Bias {k} is not all zeros in {safetensor_fp}. {bias=}"
                         keys.remove(k)
-    
-    # assert not keys, f"Not all unexpected biases were found in {safetensor_dir}: {keys}"
+    assert not keys, f"Not all unexpected biases were found in {safetensor_dir}: {keys}"
 
 def load_and_save_processor(model_path: str, checkpoint_path: str):
     

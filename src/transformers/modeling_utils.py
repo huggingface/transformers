@@ -234,7 +234,6 @@ VLMS = [
     "aria",
     "ayavision",
     "colpali",
-    "cohere2vision",
     "emu3",
     "fuyu",
     "gotocr2",
@@ -3920,7 +3919,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for allowed_name in VLMS
         ):
             reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
-            reverse_key_mapping = self._checkpoint_conversion_mapping
+
             original_state_dict = {}
             for key, value in state_dict.items():
                 for pattern, replacement in reverse_key_mapping.items():
