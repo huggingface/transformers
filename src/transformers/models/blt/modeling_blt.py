@@ -278,10 +278,11 @@ class BltSelfAttention(nn.Module):
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-        attn_impl = getattr(self.config, "_attn_implementation", None) or "eager"
+       
         attention_interface: Callable = eager_attention_forward
-        if attn_impl != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -540,10 +541,10 @@ class BltCrossAttention(nn.Module):
             raise ValueError(
                 "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
             )
-        attn_impl = getattr(self.config, "_attn_implementation", None) or "eager"
         attention_interface: Callable = eager_attention_forward
-        if attn_impl != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -943,6 +944,12 @@ class BltModel(BltPreTrainedModel):
         super().__init__(config)
         self.gradient_checkpointing = False
         self.config = config
+        # Set _attn_implementation on all sub-configs as they are not PreTrainedModels
+        config.patcher_config._attn_implementation = config._attn_implementation
+        config.encoder_config._attn_implementation = config._attn_implementation
+        config.decoder_config._attn_implementation = config._attn_implementation
+        config.global_config._attn_implementation = config._attn_implementation
+        
         self.local_encoder = BltLocalEncoder(config.encoder_config)
         self.global_transformer = BltGlobalTransformer(config.global_config)
         self.local_decoder = BltLocalDecoder(config.decoder_config)
@@ -1250,21 +1257,17 @@ class BltPatcher(BltPreTrainedModel):
     """
 )
 class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
-    config: BltConfig
-    _supports_static_cache = True  # only the LLM without cross attn can do compile
-    base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
-    supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
-    def __init__(self, config):
-        super().__init__(config.get_text_config())
-        self.text_config = config.get_text_config()
+    def __init__(self, config: BltConfig):
+        super().__init__(config)
         self.vocab_size = config.vocab_size
         self.model = BltModel(config)
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
+
 
     def get_input_embeddings(self):
         return self.model.local_encoder.embed_tokens

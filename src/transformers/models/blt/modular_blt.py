@@ -770,6 +770,12 @@ class BLTModel(BLTPreTrainedModel):
     def __init__(self, config: BLTConfig):
         super().__init__(config)
         self.config = config
+        
+        config.patcher_config._attn_implementation = config._attn_implementation
+        config.encoder_config._attn_implementation = config._attn_implementation
+        config.decoder_config._attn_implementation = config._attn_implementation
+        config.global_config._attn_implementation = config._attn_implementation
+
         self.local_encoder = BLTLocalEncoder(config.encoder_config)
         self.global_transformer = BLTGlobalTransformer(config.global_config)
         self.local_decoder = BLTLocalDecoder(config.decoder_config)
