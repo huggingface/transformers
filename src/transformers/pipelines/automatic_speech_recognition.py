@@ -384,7 +384,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # torchcodec always returns (num_channels, num_samples)
                 # while before (datasets < 4.0) we had (2, num_samples) if stereo, (num_samples,) if mono
                 _array = _audio_samples.data
-                _array = _array[0] if _array.shape[0] == 1 else _array
+                _array = _array[0] if _array.ndim == 2 and _array.shape[0] == 1 else _array
                 inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
 
         if isinstance(inputs, dict):
