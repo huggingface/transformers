@@ -32,14 +32,11 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
+from ...utils import TensorType, is_torch_available, logging, requires_backends
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

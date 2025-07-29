@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -42,21 +43,15 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class VideoMAEDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for VideoMAEDecoder's outputs, with potential hidden states and attentions.
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
-            Pixel reconstruction logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    """
+)
+class VideoMAEDecoderOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        Pixel reconstruction logits.
     """
 
     logits: Optional[torch.FloatTensor] = None
@@ -65,23 +60,17 @@ class VideoMAEDecoderOutput(ModelOutput):
 
 
 @dataclass
-class VideoMAEForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for VideoMAEForPreTraining's outputs, with potential hidden states and attentions.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`):
-            Pixel reconstruction loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
-            Pixel reconstruction logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+    """
+)
+class VideoMAEForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`):
+        Pixel reconstruction loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        Pixel reconstruction logits.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -250,22 +239,18 @@ class VideoMAESelfAttention(nn.Module):
             self.q_bias = None
             self.v_bias = None
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+        batch_size, seq_length, _ = hidden_states.shape
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
         keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
         values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
         queries = nn.functional.linear(input=hidden_states, weight=self.query.weight, bias=self.q_bias)
 
-        key_layer = self.transpose_for_scores(keys)
-        value_layer = self.transpose_for_scores(values)
-        query_layer = self.transpose_for_scores(queries)
+        key_layer = keys.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        value_layer = values.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        query_layer = queries.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -389,7 +374,7 @@ class VideoMAEOutput(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
-class VideoMAELayer(nn.Module):
+class VideoMAELayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: VideoMAEConfig) -> None:
@@ -456,15 +441,7 @@ class VideoMAEEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -485,12 +462,12 @@ class VideoMAEEncoder(nn.Module):
 
 @auto_docstring
 class VideoMAEPreTrainedModel(PreTrainedModel):
-    config_class = VideoMAEConfig
+    config: VideoMAEConfig
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -698,15 +675,7 @@ class VideoMAEDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    None,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
+            layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 

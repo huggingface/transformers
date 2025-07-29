@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -41,30 +42,19 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class HieraEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Hiera encoder's outputs, with potential hidden states and attentions.
+    """
+)
+class HieraEncoderOutput(ModelOutput):
+    r"""
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, height, width, hidden_size)`. These are the reshaped and re-rolled hidden states of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. Thesre are the unrolled hidden states of the model.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, height, width, hidden_size)`. These are the reshaped and re-rolled hidden states of the model.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -74,36 +64,25 @@ class HieraEncoderOutput(ModelOutput):
 
 
 @dataclass
-class HieraModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Hiera model's outputs that also contains a pooling of the last hidden states.
+    """
+)
+class HieraModelOutput(ModelOutput):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
+        Average pooling of the last layer hidden-state.
+    bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+        Tensor indicating which patches are masked (0) and which are not (1).
+    ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        Tensor containing the original index of the (shuffled) masked patches.
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, height, width, hidden_size)`. These are the reshaped and re-rolled hidden states of the model.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
-            Average pooling of the last layer hidden-state.
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
-            Tensor indicating which patches are masked (0) and which are not (1).
-        ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Tensor containing the original index of the (shuffled) masked patches.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. These are the unrolled hidden states of the model.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, height, width, hidden_size)`. These are the reshaped and re-rolled hidden states of the model.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -116,32 +95,34 @@ class HieraModelOutput(ModelOutput):
 
 
 @dataclass
-class HieraForImageClassificationOutput(ImageClassifierOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Hiera image classification outputs.
+    """
+)
+class HieraForImageClassificationOutput(ImageClassifierOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
+        Loss value for the training task.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        Prediction scores of the classification head (logits of the output layer).
+    hidden_states (`tuple(torch.FloatTensor)`, `optional`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, sequence_length, hidden_size)`. These are the unrolled hidden states of the model.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
-            Loss value for the training task.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Prediction scores of the classification head (logits of the output layer).
-        hidden_states (`tuple(torch.FloatTensor)`, `optional`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. These are the unrolled hidden states of the model.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+    attentions (`tuple(torch.FloatTensor)`, `optional`):
+        Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, `optional`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, `optional`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, height, width, hidden_size)`. These are the reshaped and re-rolled hidden states of the model.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, `optional`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, height, width, hidden_size)`. These are the reshaped and re-rolled hidden states of the model.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -152,31 +133,25 @@ class HieraForImageClassificationOutput(ImageClassifierOutput):
 
 
 @dataclass
-class HieraForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for HieraForPreTraining's outputs, with potential hidden states and attentions.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`):
-            Pixel reconstruction loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
-            Pixel reconstruction logits.
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
-            Tensor indicating which patches are masked (0) and which are not (1).
-        ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Tensor containing the original index of the (shuffled) masked patches.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, height, width, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs reshaped to include the spatial dimensions.
+    """
+)
+class HieraForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`):
+        Pixel reconstruction loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
+        Pixel reconstruction logits.
+    bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+        Tensor indicating which patches are masked (0) and which are not (1).
+    ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        Tensor containing the original index of the (shuffled) masked patches.
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        shape `(batch_size, height, width, hidden_size)`. Hidden-states of the model at the output of each layer
+        plus the initial embedding outputs reshaped to include the spatial dimensions.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -540,7 +515,7 @@ class HieraLayer(nn.Module):
         return (hidden_states, attn_weights)
 
 
-class HieraStage(nn.Module):
+class HieraStage(GradientCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -734,12 +709,7 @@ class HieraEncoder(nn.Module):
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, layer_head_mask, output_attentions
-                )
-            else:
-                layer_outputs = stage_module(hidden_states, layer_head_mask, output_attentions)
+            layer_outputs = stage_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -821,7 +791,7 @@ def unroll(
 
 @auto_docstring
 class HieraPreTrainedModel(PreTrainedModel):
-    config_class = HieraConfig
+    config: HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

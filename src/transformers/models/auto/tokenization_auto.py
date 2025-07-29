@@ -21,6 +21,8 @@ import warnings
 from collections import OrderedDict
 from typing import Any, Optional, Union
 
+from transformers.utils.import_utils import is_mistral_common_available
+
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -57,6 +59,13 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
     [
         (
+            "aimv2",
+            (
+                "CLIPTokenizer",
+                "CLIPTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "albert",
             (
                 "AlbertTokenizer" if is_sentencepiece_available() else None,
@@ -64,6 +73,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("arcee", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
         ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
@@ -170,12 +180,34 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         (
+            "deepseek_v2",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "deepseek_v3",
             (
                 "LlamaTokenizer" if is_sentencepiece_available() else None,
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "deepseek_vl",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "deepseek_vl_hybrid",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        ("dia", ("DiaTokenizer", None)),
         (
             "diffllama",
             (
@@ -194,8 +226,17 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
         ("emu3", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        ("ernie4_5", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        ("ernie4_5_moe", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
         ("esm", ("EsmTokenizer", None)),
+        (
+            "exaone4",
+            (
+                "GPT2Tokenizer" if is_tokenizers_available() else None,
+                "GPT2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("falcon_mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -234,9 +275,25 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "gemma3n",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "gemma3n_text",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("glm4_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("glm4v", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
         ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -356,15 +413,19 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "mistral",
             (
-                "LlamaTokenizer" if is_sentencepiece_available() else None,
-                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
         (
             "mixtral",
             (
-                "LlamaTokenizer" if is_sentencepiece_available() else None,
-                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
         ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
@@ -459,7 +520,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("phimoe", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("phobert", ("PhobertTokenizer", None)),
         ("pix2struct", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
-        ("pixtral", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        (
+            "pixtral",
+            (
+                None,
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("PreTrainedTokenizerFast" if is_tokenizers_available() else None),
+            ),
+        ),
         ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
         ("prophetnet", ("ProphetNetTokenizer", None)),
         ("qdqbert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
@@ -556,6 +625,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("smollm3", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
         ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
         ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -578,6 +648,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             (
                 "T5Tokenizer" if is_sentencepiece_available() else None,
                 "T5TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "t5gemma",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         ("tapas", ("TapasTokenizer", None)),
@@ -603,6 +680,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("vits", ("VitsTokenizer", None)),
+        (
+            "voxtral",
+            (
+                "MistralCommonTokenizer"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            ),
+        ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-bert", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
@@ -639,6 +725,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "XLNetTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xlstm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
             "xmod",
             (
@@ -682,14 +769,16 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             module_name = model_type_to_module_name(module_name)
-
-            module = importlib.import_module(f".{module_name}", "transformers.models")
+            if module_name in ["mistral", "mixtral"] and class_name == "MistralCommonTokenizer":
+                module = importlib.import_module(".tokenization_mistral_common", "transformers")
+            else:
+                module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
                 return getattr(module, class_name)
             except AttributeError:
                 continue
 
-    for config, tokenizers in TOKENIZER_MAPPING._extra_content.items():
+    for tokenizers in TOKENIZER_MAPPING._extra_content.values():
         for tokenizer in tokenizers:
             if getattr(tokenizer, "__name__", None) == class_name:
                 return tokenizer
@@ -741,7 +830,7 @@ def get_tokenizer_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

@@ -21,7 +21,7 @@ import torch
 
 from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
 from transformers.testing_utils import require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -31,9 +31,6 @@ if is_vision_available():
 
     if is_torchvision_available():
         from transformers import LlavaNextVideoVideoProcessor
-
-if is_torch_available:
-    pass
 
 
 @require_vision
@@ -77,6 +74,19 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "patch_size": 128,
             "vision_feature_select_strategy": "default",
         }
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):

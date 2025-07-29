@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -36,25 +37,19 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class FocalNetEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     FocalNet encoder's outputs, with potential hidden states.
+    """
+)
+class FocalNetEncoderOutput(ModelOutput):
+    r"""
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -63,26 +58,21 @@ class FocalNetEncoderOutput(ModelOutput):
 
 
 @dataclass
-class FocalNetModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     FocalNet model's outputs that also contains a pooling of the last hidden states.
+    """
+)
+class FocalNetModelOutput(ModelOutput):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
+        Average pooling of the last layer hidden-state.
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
-            Average pooling of the last layer hidden-state.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -92,26 +82,23 @@ class FocalNetModelOutput(ModelOutput):
 
 
 @dataclass
-class FocalNetMaskedImageModelingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     FocalNet masked image model outputs.
+    """
+)
+class FocalNetMaskedImageModelingOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
+        Masked image modeling (MLM) loss.
+    reconstruction (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        Reconstructed pixel values.
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
-            Masked image modeling (MLM) loss.
-        reconstruction (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Reconstructed pixel values.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -121,26 +108,23 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
 
 
 @dataclass
-class FocalNetImageClassifierOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     FocalNet outputs for image classification.
+    """
+)
+class FocalNetImageClassifierOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, hidden_size, height, width)`.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+        include the spatial dimensions.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -455,7 +439,7 @@ class FocalNetLayer(nn.Module):
         return hidden_state
 
 
-class FocalNetStage(nn.Module):
+class FocalNetStage(GradientCheckpointingLayer):
     def __init__(self, config, index, input_resolution):
         super().__init__()
 
@@ -560,14 +544,7 @@ class FocalNetEncoder(nn.Module):
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, stage_module in enumerate(self.stages):
-            if self.gradient_checkpointing and self.training:
-                stage_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__,
-                    hidden_states,
-                    input_dimensions,
-                )
-            else:
-                stage_outputs = stage_module(hidden_states, input_dimensions)
+            stage_outputs = stage_module(hidden_states, input_dimensions)
 
             hidden_states = stage_outputs[0]
             hidden_states_before_downsampling = stage_outputs[1]
@@ -605,7 +582,7 @@ class FocalNetEncoder(nn.Module):
 
 @auto_docstring
 class FocalNetPreTrainedModel(PreTrainedModel):
-    config_class = FocalNetConfig
+    config: FocalNetConfig
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

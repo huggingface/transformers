@@ -23,13 +23,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -177,10 +171,11 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         if crop_to_patches:
-            grouped_images, grouped_images_index = group_images_by_shape(images)
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
             processed_images_grouped = {}
             num_patches = {}
             for shape, stacked_images in grouped_images.items():
@@ -200,7 +195,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             num_patches = [1] * len(images)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -210,7 +205,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -228,7 +223,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number patches for a given image size.
 
@@ -242,10 +237,12 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of patches per image.
         """
-        min_patches = images_kwargs.get("min_patches", None) or self.min_patches
-        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
-        patch_size = images_kwargs.get("size", None) or self.size
-        crop_to_patches = images_kwargs.get("crop_to_patches", None) or self.crop_to_patches
+        min_patches = images_kwargs["min_patches"] if "min_patches" in images_kwargs else self.min_patches
+        max_patches = images_kwargs["max_patches"] if "max_patches" in images_kwargs else self.max_patches
+        patch_size = images_kwargs["patch_size"] if "patch_size" in images_kwargs else self.size
+        crop_to_patches = (
+            images_kwargs["crop_to_patches"] if "crop_to_patches" in images_kwargs else self.crop_to_patches
+        )
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:

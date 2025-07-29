@@ -231,11 +231,6 @@ class MobileBertSelfAttention(nn.Module):
         )
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         query_tensor: torch.Tensor,
@@ -245,13 +240,22 @@ class MobileBertSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
     ) -> tuple[torch.Tensor]:
-        mixed_query_layer = self.query(query_tensor)
-        mixed_key_layer = self.key(key_tensor)
-        mixed_value_layer = self.value(value_tensor)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        batch_size, seq_length, _ = query_tensor.shape
+        query_layer = (
+            self.query(query_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(key_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(value_tensor)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -654,7 +658,7 @@ class MobileBertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class MobileBertPreTrainedModel(PreTrainedModel):
-    config_class = MobileBertConfig
+    config: MobileBertConfig
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
 
@@ -678,30 +682,21 @@ class MobileBertPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class MobileBertForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`MobileBertForPreTraining`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction
-            (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class MobileBertForPreTrainingOutput(ModelOutput):
+    r"""
+    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+        Total loss as the sum of the masked language modeling loss and the next sequence prediction
+        (classification) loss.
+    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+        before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None

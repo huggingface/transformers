@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import math
 import unittest
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
@@ -28,7 +29,7 @@ from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -276,18 +277,37 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rescale_prenorm_residual = True
 
+        configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = model_class(config=config)
+            model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if "D" in name:
+                if "dt_proj.bias" in name:
+                    dt = torch.exp(
+                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                        + math.log(config.time_step_min)
+                    ).clamp(min=config.time_step_floor)
+                    inv_dt = dt + torch.log(-torch.expm1(-dt))
+                    if param.requires_grad:
+                        self.assertTrue(param.data.max().item() <= inv_dt[1])
+                        self.assertTrue(param.data.min().item() >= inv_dt[0])
+                elif "A_log" in name:
+                    A = torch.arange(1, config.num_heads + 1)
+                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
+                elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
                         torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-
-    @unittest.skip(reason="Mamba 2 weights are not tied")
-    def test_tied_weights_keys(self):
-        pass
+                else:
+                    if param.requires_grad:
+                        if "mixer.conv1d.weight" in name or "mixer.dt_bias" in name or "mixer.out_proj.weight" in name:
+                            continue
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):

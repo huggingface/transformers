@@ -9,6 +9,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -18,7 +19,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 
 
@@ -177,7 +178,7 @@ class GPTNeoXAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GPTNeoXLayer(nn.Module):
+class GPTNeoXLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
@@ -246,20 +247,6 @@ class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
     _no_split_modules = ["GPTNeoXLayer"]
     _keys_to_ignore_on_load_unexpected = [r"attention.bias", r"attention.masked_bias"]
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 GPT_NEOX_START_DOCSTRING = None  # Will be picked up by modular
 GPT_NEOX_INPUTS_DOCSTRING = None  # Will be picked up by modular
@@ -298,7 +285,7 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -319,6 +306,10 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
@@ -337,6 +328,7 @@ class GPTNeoXModel(LlamaModel, nn.Module):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         # Prepare head mask if needed
@@ -362,32 +354,18 @@ class GPTNeoXModel(LlamaModel, nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    head_mask[i],
-                    use_cache,
-                    past_key_values,
-                    output_attentions,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                outputs = layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    head_mask=head_mask[i],
-                    layer_past=past_key_values,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
+            outputs = layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                head_mask=head_mask[i],
+                layer_past=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
             hidden_states = outputs[0]
 
             if output_attentions:
@@ -404,9 +382,6 @@ class GPTNeoXModel(LlamaModel, nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -450,7 +425,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

@@ -40,26 +40,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`DPRQuestionEncoder`].
+    """
+)
 class DPRContextEncoderOutput(ModelOutput):
-    """
-    Class for outputs of [`DPRQuestionEncoder`].
-
-    Args:
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
-            The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
-            hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
-            This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+        The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
+        hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
+        This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
     """
 
     pooler_output: torch.FloatTensor
@@ -68,26 +59,17 @@ class DPRContextEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`DPRQuestionEncoder`].
+    """
+)
 class DPRQuestionEncoderOutput(ModelOutput):
-    """
-    Class for outputs of [`DPRQuestionEncoder`].
-
-    Args:
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
-            The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
-            hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
-            This output is to be used to embed questions for nearest neighbors queries with context embeddings.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+        The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
+        hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
+        This output is to be used to embed questions for nearest neighbors queries with context embeddings.
     """
 
     pooler_output: torch.FloatTensor
@@ -96,29 +78,20 @@ class DPRQuestionEncoderOutput(ModelOutput):
 
 
 @dataclass
-class DPRReaderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
-
-    Args:
-        start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
-            Logits of the start index of the span for each passage.
-        end_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
-            Logits of the end index of the span for each passage.
-        relevance_logits (`torch.FloatTensor` of shape `(n_passages, )`):
-            Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
-            question, compared to all the other passages.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DPRReaderOutput(ModelOutput):
+    r"""
+    start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+        Logits of the start index of the span for each passage.
+    end_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+        Logits of the end index of the span for each passage.
+    relevance_logits (`torch.FloatTensor` of shape `(n_passages, )`):
+        Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
+        question, compared to all the other passages.
     """
 
     start_logits: torch.FloatTensor
@@ -273,7 +246,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
 
@@ -284,7 +257,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "question_encoder"
 
@@ -295,7 +268,7 @@ class DPRPretrainedReader(DPRPreTrainedModel):
     models.
     """
 
-    config_class = DPRConfig
+    config: DPRConfig
     load_tf_weights = None
     base_model_prefix = "span_predictor"
 

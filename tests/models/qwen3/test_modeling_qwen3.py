@@ -207,6 +207,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
+                ("xpu", 3): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
                 ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
                 ("cuda", 8): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
             }
@@ -260,7 +261,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"

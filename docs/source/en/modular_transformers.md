@@ -1,4 +1,4 @@
-# Modular Transformers
+# Contributing a new model to Transformers
 
 Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
 
@@ -24,7 +24,7 @@ A linter "unravels" the modular file into a `modeling.py` file to preserve the s
 Run the command below to automatically generate a `modeling.py` file from a modular file.
 
 ```bash
-python utils/modular_model_converter.py --files_to_parse src/transformers/models/<your_model>/modular_<your_model>.py
+python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py
 ```
 
 For example:
@@ -94,7 +94,7 @@ ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should
 
 ## Implementing a modular file
 
-The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
+The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere2](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
 
 | Component | Model |
 |---|---|
@@ -539,6 +539,9 @@ This makes it very easy to switch decorators and makes it explicit that the only
 `**super_kwargs` should not be used to avoid being explicit when redefining methods though. If you overwrite a method, you should explicitly write the signature as you normally would. The `**super_kwargs` syntax is a shortcut for switching decorators and a few other niche cases.
 
 ## Docstring variables
+
+> [!TIP]
+> Refer to the [Documeting a model](./auto_docstring) guide for more information about how you can use the `@auto_docstring` decorator to help automatically generate consistent docstring arguments.
 
 If an object defined in both the modular and modeling file from which it inherits, the modular definition has precedence unless for assignments containing the pattern `DOCSTRING`. These variables are typically used in `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. They are big blocks of docstrings and the linter rewrites the names everywhere. For this reason, assignments containing the `DOCSTRING` variable can use the definition found in the source file without copying the whole docstring, by simply setting the variable to `None` in the modular file.
 

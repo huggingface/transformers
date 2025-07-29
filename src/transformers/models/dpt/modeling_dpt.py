@@ -29,6 +29,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -41,16 +42,18 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BaseModelOutputWithIntermediateActivations(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for model's outputs that also contains intermediate activations that can be used at later stages. Useful
     in the context of Vision models.:
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
-            Intermediate activations that can be used to compute hidden states of the model at various layers.
+    """
+)
+class BaseModelOutputWithIntermediateActivations(ModelOutput):
+    r"""
+    last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+        Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
     last_hidden_states: Optional[torch.FloatTensor] = None
@@ -58,32 +61,21 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
 
 
 @dataclass
-class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for model's outputs that also contains a pooling of the last hidden states as well as intermediate
     activations that can be used by the model at later stages.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
-            Intermediate activations that can be used to compute hidden states of the model at various layers.
+    """
+)
+class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Last layer hidden-state of the first token of the sequence (classification token) after further processing
+        through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+        the classification token after processing through a linear layer and a tanh activation function. The linear
+        layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+        Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -334,17 +326,28 @@ class DPTSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self,
+        hidden_states,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        batch_size, seq_length, _ = hidden_states.shape
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -469,7 +472,7 @@ class DPTViTOutput(nn.Module):
 
 
 # copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput
-class DPTViTLayer(nn.Module):
+class DPTViTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: DPTConfig) -> None:
@@ -536,15 +539,7 @@ class DPTViTEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -820,12 +815,12 @@ class DPTFeatureFusionLayer(nn.Module):
 
 @auto_docstring
 class DPTPreTrainedModel(PreTrainedModel):
-    config_class = DPTConfig
+    config: DPTConfig
     base_model_prefix = "dpt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 

@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -293,11 +292,11 @@ class TFOpenAIGPTMainLayer(keras.layers.Layer):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFBaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFBaseModelOutput:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -429,8 +428,8 @@ class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    logits: Optional[tf.Tensor] = None
-    mc_logits: Optional[tf.Tensor] = None
+    logits: tf.Tensor | None = None
+    mc_logits: tf.Tensor | None = None
     hidden_states: tuple[tf.Tensor] | None = None
     attentions: tuple[tf.Tensor] | None = None
 
@@ -557,11 +556,11 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFBaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFBaseModelOutput:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -620,12 +619,12 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFCausalLMOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFCausalLMOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -708,11 +707,11 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         mc_token_ids: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFOpenAIGPTDoubleHeadsModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> tuple | TFOpenAIGPTDoubleHeadsModelOutput:
         r"""
         mc_token_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
@@ -853,12 +852,12 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[tuple, TFSequenceClassifierOutput]:
+        training: bool | None = False,
+    ) -> tuple | TFSequenceClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,

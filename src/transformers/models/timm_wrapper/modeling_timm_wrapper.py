@@ -31,23 +31,23 @@ if is_timm_available():
 
 
 @dataclass
-class TimmWrapperModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor`):
-            The last hidden state of the model, output before applying the classification head.
-        pooler_output (`torch.FloatTensor`, *optional*):
-            The pooled output derived from the last hidden state, if applicable.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
-            Returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            A tuple containing the intermediate attention weights of the model at the output of each layer.
-            Returned if `output_attentions=True` is set or if `config.output_attentions=True`.
-            Note: Currently, Timm models do not support attentions output.
+    """
+)
+class TimmWrapperModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor`):
+        The last hidden state of the model, output before applying the classification head.
+    pooler_output (`torch.FloatTensor`, *optional*):
+        The pooled output derived from the last hidden state, if applicable.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`):
+        A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned if `output_attentions=True` is set or if `config.output_attentions=True`.):
+        A tuple containing the intermediate attention weights of the model at the output of each layer.
+        Note: Currently, Timm models do not support attentions output.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -59,7 +59,7 @@ class TimmWrapperModelOutput(ModelOutput):
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = TimmWrapperConfig
+    config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]
 
@@ -69,6 +69,10 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision", "timm"])
         super().__init__(*args, **kwargs)
+
+    def post_init(self):
+        self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        super().post_init()
 
     @staticmethod
     def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
@@ -107,6 +111,24 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
+    def _timm_model_supports_gradient_checkpointing(self):
+        """
+        Check if the timm model supports gradient checkpointing by checking if the `set_grad_checkpointing` method is available.
+        Some timm models will have the method but will raise an AssertionError when called so in this case we return False.
+        """
+        if not hasattr(self.timm_model, "set_grad_checkpointing"):
+            return False
+
+        try:
+            self.timm_model.set_grad_checkpointing(enable=True)
+            self.timm_model.set_grad_checkpointing(enable=False)
+            return True
+        except Exception:
+            return False
+
+    def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
+        self.timm_model.set_grad_checkpointing(enable)
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -135,8 +157,6 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         do_pooling (`bool`, *optional*):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
             `do_pooling` value from the config is used.

@@ -139,9 +139,6 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
-    def from_dict():
-        raise NotImplementedError("No need to override this method")
-
     def resize(
         self,
         image: "torch.Tensor",
@@ -224,18 +221,19 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
         keep_aspect_ratio: bool,
         ensure_multiple_of: Optional[int],
         do_pad: bool,
         size_divisor: Optional[int],
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         if do_reduce_labels:
             images = self.reduce_label(images)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -251,7 +249,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -266,7 +264,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return processed_images
+        return BatchFeature(data={"pixel_values": processed_images})
 
     def post_process_depth_estimation(
         self,

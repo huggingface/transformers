@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
             ("internvl", "InternVLVideoProcessor"),
@@ -83,7 +84,7 @@ def video_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in VIDEO_PROCESSOR_MAPPING._extra_content.items():
+    for extractor in VIDEO_PROCESSOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
@@ -133,7 +134,7 @@ def get_video_processor_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -248,7 +249,7 @@ class AutoVideoProcessor:
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

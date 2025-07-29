@@ -44,9 +44,9 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class VisionTextDualEncoderModel(PreTrainedModel):
-    config_class = VisionTextDualEncoderConfig
+    config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(

@@ -55,16 +55,19 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
+        ("dia", "DiaFeatureExtractor"),
         ("dinat", "ViTFeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
+        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("levit", "LevitFeatureExtractor"),
@@ -130,7 +133,7 @@ def feature_extractor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+    for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
             return extractor
 
@@ -180,7 +183,7 @@ def get_feature_extractor_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -297,7 +300,7 @@ class AutoFeatureExtractor:
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

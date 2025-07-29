@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     MaskedLMOutput,
@@ -166,17 +167,23 @@ class NystromformerSelfAttention(nn.Module):
             )
         return value
 
-    def transpose_for_scores(self, layer):
-        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        layer = layer.view(*new_layer_shape)
-        return layer.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         query_layer = query_layer / math.sqrt(math.sqrt(self.attention_head_size))
         key_layer = key_layer / math.sqrt(math.sqrt(self.attention_head_size))
@@ -311,7 +318,7 @@ class NystromformerOutput(nn.Module):
         return hidden_states
 
 
-class NystromformerLayer(nn.Module):
+class NystromformerLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -363,15 +370,7 @@ class NystromformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -444,7 +443,7 @@ class NystromformerOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class NystromformerPreTrainedModel(PreTrainedModel):
-    config_class = NystromformerConfig
+    config: NystromformerConfig
     base_model_prefix = "nystromformer"
     supports_gradient_checkpointing = True
 

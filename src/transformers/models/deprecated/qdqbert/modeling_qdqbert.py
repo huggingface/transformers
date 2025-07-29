@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -452,7 +453,7 @@ class QDQBertOutput(nn.Module):
 
 
 # Based on transformers.models.bert.modeling_bert.BertLayer with Bert -> QDQBert
-class QDQBertLayer(nn.Module):
+class QDQBertLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.seq_len_dim = 1
@@ -568,32 +569,15 @@ class QDQBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning_once(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -724,7 +708,7 @@ class QDQBertPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = QDQBertConfig
+    config: QDQBertConfig
     load_tf_weights = load_tf_weights_in_qdqbert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
@@ -924,7 +908,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -1138,7 +1122,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
 
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

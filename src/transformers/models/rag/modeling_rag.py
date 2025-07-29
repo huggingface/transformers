@@ -21,6 +21,7 @@ from typing import Callable, Optional, Union
 import torch
 from torch import nn
 
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
@@ -34,85 +35,87 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class RetrievAugLMMarginOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for retriever augmented marginalized models outputs.
+    """
+)
+class RetrievAugLMMarginOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
+        each vocabulary token.
+    doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
+        Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
+        `question_encoder_last_hidden_state`.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
+        num_heads, sequence_length, embed_size_per_head)`).
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
-            each vocabulary token.
-        doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
-            Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
-            `question_encoder_last_hidden_state`.
-        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-            num_heads, sequence_length, embed_size_per_head)`).
+        Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
+        (see `past_key_values` input) to speed up sequential decoding.
+    retrieved_doc_embeds (`torch.FloatTensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
+        Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
+        the `doc_scores`.
+    retrieved_doc_ids (`torch.LongTensor` of shape `(batch_size, config.n_docs)`, *optional*, returned when *output_retrieved=True*):
+        The indexes of the embedded documents retrieved by the retriever.
+    context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+        Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
+    context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+        Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+        retriever.
+    question_encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden states at the output of the last layer of the question encoder pooled output of the
+        model.
+    question_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
 
-            Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
-            (see `past_key_values` input) to speed up sequential decoding.
-        retrieved_doc_embeds (`torch.FloatTensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
-            Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
-            the `doc_scores`.
-        retrieved_doc_ids (`torch.LongTensor` of shape `(batch_size, config.n_docs)`, *optional*, returned when *output_retrieved=True*):
-            The indexes of the embedded documents retrieved by the retriever.
-        context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-            Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
-        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever.
-        question_encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden states at the output of the last layer of the question encoder pooled output of the
-            model.
-        question_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden states of the question encoder at the output of each layer plus the initial embedding outputs.
+    question_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Hidden states of the question encoder at the output of each layer plus the initial embedding outputs.
-        question_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights of the question encoder, after the attention softmax, used to compute the weighted
+        average in the self-attention heads.
+    generator_enc_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the generator encoder of the model.
+    generator_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
 
-            Attentions weights of the question encoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        generator_enc_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the generator encoder of the model.
-        generator_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden states of the generator encoder at the output of each layer plus the initial embedding outputs.
+    generator_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Hidden states of the generator encoder at the output of each layer plus the initial embedding outputs.
-        generator_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights of the generator encoder, after the attention softmax, used to compute the weighted
+        average in the self-attention heads.
+    generator_dec_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
 
-            Attentions weights of the generator encoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        generator_dec_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden states of the generator decoder at the output of each layer plus the initial embedding outputs.
+    generator_dec_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Hidden states of the generator decoder at the output of each layer plus the initial embedding outputs.
-        generator_dec_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights of the generator decoder, after the attention softmax, used to compute the weighted
+        average in the self-attention heads.
+    generator_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Attentions weights of the generator decoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        generator_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Cross-attentions weights of the generator decoder, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+        Cross-attentions weights of the generator decoder, after the attention softmax, used to compute the
+        weighted average in the cross-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
@@ -129,80 +132,80 @@ class RetrievAugLMMarginOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class RetrievAugLMOutput(ModelOutput):
-    """
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
-            each vocabulary token.
-        doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
-            Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
-            `question_encoder_last_hidden_state`.
-        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-            num_heads, sequence_length, embed_size_per_head)`).
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
+        each vocabulary token.
+    doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
+        Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
+        `question_encoder_last_hidden_state`.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
+        num_heads, sequence_length, embed_size_per_head)`).
 
-            Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
-            (see `past_key_values` input) to speed up sequential decoding.
-        retrieved_doc_embeds (`torch.FloatTensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
-            Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
-            the `doc_scores`.
-        retrieved_doc_ids (`torch.LongTensor` of shape `(batch_size, config.n_docs)`, *optional*, returned when *output_retrieved=True*):
-            The indexes of the embedded documents retrieved by the retriever.
-        context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-            Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
-        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever.
-        question_encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden states at the output of the last layer of the question encoder pooled output of the
-            model.
-        question_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
+        (see `past_key_values` input) to speed up sequential decoding.
+    retrieved_doc_embeds (`torch.FloatTensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
+        Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
+        the `doc_scores`.
+    retrieved_doc_ids (`torch.LongTensor` of shape `(batch_size, config.n_docs)`, *optional*, returned when *output_retrieved=True*):
+        The indexes of the embedded documents retrieved by the retriever.
+    context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+        Input ids post-processed from the retrieved documents and the question encoder input_ids by the retriever.
+    context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+        Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+        retriever.
+    question_encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden states at the output of the last layer of the question encoder pooled output of the
+        model.
+    question_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden states of the question encoder at the output of each layer plus the initial embedding outputs.
-        question_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Hidden states of the question encoder at the output of each layer plus the initial embedding outputs.
+    question_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Attentions weights of the question encoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        generator_enc_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the generator encoder of the model.
-        generator_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Attentions weights of the question encoder, after the attention softmax, used to compute the weighted
+        average in the self-attention heads.
+    generator_enc_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the generator encoder of the model.
+    generator_enc_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden states of the generator encoder at the output of each layer plus the initial embedding outputs.
-        generator_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Hidden states of the generator encoder at the output of each layer plus the initial embedding outputs.
+    generator_enc_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Attentions weights of the generator encoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        generator_dec_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Attentions weights of the generator encoder, after the attention softmax, used to compute the weighted
+        average in the self-attention heads.
+    generator_dec_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden states of the generator decoder at the output of each layer plus the initial embedding outputs.
-        generator_dec_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Hidden states of the generator decoder at the output of each layer plus the initial embedding outputs.
+    generator_dec_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Attentions weights of the generator decoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        generator_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        Attentions weights of the generator decoder, after the attention softmax, used to compute the weighted
+        average in the self-attention heads.
+    generator_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-            Cross-attentions weights of the generator decoder, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+        Cross-attentions weights of the generator decoder, after the attention softmax, used to compute the
+        weighted average in the cross-attention heads.
     """
 
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
@@ -227,10 +230,11 @@ class RetrievAugLMOutput(ModelOutput):
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
     """
 )
+@auto_docstring
 class RagPreTrainedModel(PreTrainedModel):
-    config_class = RagConfig
+    config: RagConfig
     base_model_prefix = "rag"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     @classmethod
@@ -435,7 +439,7 @@ class RagModel(RagPreTrainedModel):
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
@@ -709,7 +713,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1197,6 +1201,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             reordered_past += (
                 tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
+        if isinstance(past_key_values, EncoderDecoderCache):
+            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
         return reordered_past
 
@@ -1219,7 +1225,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1557,6 +1563,15 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
 
+        self._prepare_cache_for_generation(
+            generation_config,
+            model_kwargs,
+            assistant_model=None,
+            batch_size=input_ids.shape[0],
+            max_cache_length=generation_config.max_length - 1,
+            device=input_ids.device,
+        )
+
         if generation_config.num_beams == 1:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
@@ -1575,6 +1590,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         elif generation_config.num_beams > 1:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+
             return self._beam_search(
                 input_ids,
                 logits_processor=pre_processor,
@@ -1587,6 +1603,14 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             raise ValueError(
                 f"`num_beams` has to be an integer strictly superior to 0 (≥ 1), but is {generation_config.num_beams}"
             )
+
+    # Auxiliary functions for beam search
+    def _temporary_reorder_cache(self, past_key_values, beam_idx):
+        # RAG should always use the legacy path even though the LM backbone (T5) uses new cache format
+        # because RAG expands input for doc-size internally. TODO: raushan, remove me when all models support
+        # new cache format
+        past_key_values = self._reorder_cache(past_key_values, beam_idx)
+        return past_key_values
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()

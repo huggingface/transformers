@@ -25,18 +25,24 @@ import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ..chameleon.modeling_chameleon import ChameleonPreTrainedModel, ChameleonVQVAEEncoderConvDownsample
-from ..llama.modeling_llama import KwargsForCausalLM, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel
+from ..chameleon.modeling_chameleon import (
+    ChameleonPreTrainedModel,
+    ChameleonVQVAEEncoderConvDownsample,
+)
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel, TransformersKwargs
 from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class Emu3Attention(LlamaAttention):
+    pass
 
 
 # Has extra dropout which no other model in the library has
@@ -51,42 +57,19 @@ class Emu3DecoderLayer(LlamaDecoderLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -94,18 +77,11 @@ class Emu3DecoderLayer(LlamaDecoderLayer):
         )
         hidden_states = residual + self.dropout(hidden_states)
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class Emu3VQVAEVectorQuantizer(nn.Module):
@@ -698,11 +674,11 @@ class Emu3VQVAEDecoder(nn.Module):
     """
 )
 class Emu3VQVAE(PreTrainedModel):
-    config_class = Emu3VQVAEConfig
+    config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _no_split_modules = [
@@ -869,21 +845,13 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Emu3RMSNorm):  # noqa: F821
-            module.weight.data.fill_(1.0)
-
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Emu3DecoderLayer,
+        "attentions": Emu3Attention,
+    }
+
     def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -892,7 +860,7 @@ class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
 
 
 class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
-    config_class = Emu3TextConfig
+    config: Emu3TextConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -921,7 +889,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
 
 class Emu3Model(Emu3PreTrainedModel):
     _checkpoint_conversion_mapping = {"text_model.model": "text_model"}
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
 
     def __init__(self, config):
         super().__init__(config)
@@ -1010,11 +977,8 @@ class Emu3Model(Emu3PreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
@@ -1022,39 +986,36 @@ class Emu3Model(Emu3PreTrainedModel):
             [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
             [`Emu3ImageProcessor`] for processing images).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
-            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
-            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+            image_embeds = self.get_image_features(pixel_values, image_sizes)
+            image_embeds = torch.cat(image_embeds, dim=0)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.vocabulary_mapping.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.text_model(
-            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1070,7 +1031,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         "^vqmodel": "model.vqmodel",
         "^text_model.lm_head": "lm_head",
     }
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
 
     def __init__(self, config):
         super().__init__(config)
@@ -1087,9 +1047,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
@@ -1125,13 +1082,10 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
@@ -1178,12 +1132,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1191,9 +1139,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
