@@ -1246,7 +1246,29 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             input_ids_length=input_ids_length,
         )
 
-        # 6. Prepare `input_ids` which will be used for auto-regressive generation
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
+
+        # 6. Prepare the cache.
+        # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
+        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - `max_length`, prepared above, is used to determine the maximum cache length
+        max_cache_length = generation_config.max_length - 1
+        if (
+            input_ids_length.shape[1] != input_ids_length
+            and model_input_name == "inputs_embeds"
+            and not self.config.is_encoder_decoder
+        ):
+            max_cache_length += input_ids_length.shape[1]
+        self._prepare_cache_for_generation(
+            generation_config,
+            model_kwargs,
+            assistant_model=None,
+            batch_size=batch_size,
+            max_cache_length=max_cache_length,
+            device=input_ids_length.device,
+        )
+
+        # 7. Prepare `input_ids` which will be used for auto-regressive generation
         # Build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
         input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
             input_ids,
@@ -1260,15 +1282,15 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         # stash the delay mask so that we don't have to recompute it in each forward pass
         model_kwargs["delay_pattern_mask"] = delay_pattern_mask
 
-        # 7. determine generation mode
+        # 8. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
+        # 9. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None
 
-        # 9. prepare distribution pre_processing samplers
+        # 10. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,

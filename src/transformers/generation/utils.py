@@ -2055,7 +2055,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = None
 
         generation_config.cache_implementation = generation_config.cache_implementation or getattr(
-            self.config.get_text_config(), "cache_implementation", None
+            self.config.get_text_config(decoder=True), "cache_implementation", None
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
