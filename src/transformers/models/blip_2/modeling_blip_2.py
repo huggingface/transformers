@@ -1455,6 +1455,20 @@ class Blip2Model(Blip2PreTrainedModel):
 
         return query_outputs
 
+    def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            ).all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        return special_image_mask
+
     @auto_docstring
     def forward(
         self,
@@ -1545,16 +1559,8 @@ class Blip2Model(Blip2PreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
         inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
             special_image_mask, language_model_inputs
         )
@@ -1938,6 +1944,20 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             return language_model_inputs, vision_outputs, query_outputs
         return language_model_inputs
 
+    def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            ).all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        return special_image_mask
+
     @auto_docstring
     def forward(
         self,
@@ -2042,16 +2062,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
         inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
             special_image_mask, language_model_inputs
         )
