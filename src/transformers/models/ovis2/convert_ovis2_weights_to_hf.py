@@ -23,7 +23,7 @@ from PIL import Image
 
 from transformers import (
     AutoModelForCausalLM,
-    AutoModelForVision2Seq,
+    AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
 )
@@ -209,6 +209,7 @@ def get_ovis2_config(model_name_or_path):
         vision_config=Ovis2VisionConfig(**visual_tokenizer_config),
         hidden_size=llm_config["hidden_size"],
         vocab_size=llm_config["vocab_size"],
+        initializer_range=llm_config["initializer_range"],
     )
 
 
@@ -225,8 +226,6 @@ def load_orig_state_dict(model_name_or_path):
     model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
         torch_dtype=torch.bfloat16,
-        low_cpu_mem_usage=True,
-        use_flash_attn=True,
         trust_remote_code=True,
     ).eval()
 
@@ -289,7 +288,6 @@ def convert_model(model_name_or_path):
 
     config = get_ovis2_config(model_name_or_path)
     config.architectures = ["Ovis2ForConditionalGeneration"]
-    # config.save_pretrained(save_dir)
 
     # Load and convert weights
     orig_state_dict = load_orig_state_dict(model_name_or_path)
@@ -364,14 +362,13 @@ def main():
         model.push_to_hub(args.hub_dir, use_temp_dir=True)
 
     model = (
-        AutoModelForVision2Seq.from_pretrained(
+        AutoModelForImageTextToText.from_pretrained(
             args.save_dir,
             torch_dtype=torch.bfloat16,
         )
         .eval()
         .to("cuda:0")
     )
-
     processor = AutoProcessor.from_pretrained(args.save_dir)
 
     messages = [

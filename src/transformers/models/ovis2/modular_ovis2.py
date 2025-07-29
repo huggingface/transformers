@@ -140,9 +140,42 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
         return torch.matmul(visual_tokens, self.weight)
 
 
-class Ovis2VisionModel(nn.Module):
+class Ovis2PreTrainedModel(PreTrainedModel):
+    config: Ovis2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Ovis2VisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_static_cache = True
+
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (Ovis2RMSNorm, nn.LayerNorm)):
+            module.weight.data.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+
+
+class Ovis2VisionModel(Ovis2PreTrainedModel):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.transformer = Ovis2VisionTransformer(config)
         self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
@@ -187,40 +220,6 @@ class Ovis2VisionModel(nn.Module):
             prob_token = nn.functional.softmax(logits, dim=-1)
 
         return prob_token
-
-
-class Ovis2PreTrainedModel(PreTrainedModel):
-    config_class: Ovis2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Ovis2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_static_cache = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (Ovis2RMSNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
 
 
 class Ovis2Model(LlavaModel):

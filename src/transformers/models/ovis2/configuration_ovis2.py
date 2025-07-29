@@ -77,6 +77,7 @@ class Ovis2VisionConfig(PretrainedConfig):
         vocab_size=16384,
         hidden_stride=1,
         num_visual_indicator_tokens=5,
+        initializer_range=0.02,
         tokenize_function="softmax",
         **kwargs,
     ):
@@ -99,6 +100,7 @@ class Ovis2VisionConfig(PretrainedConfig):
         self.hidden_stride = hidden_stride
         self.num_visual_indicator_tokens = num_visual_indicator_tokens
         self.tokenize_function = tokenize_function
+        self.initializer_range = initializer_range
 
 
 class Ovis2Config(PretrainedConfig):
@@ -167,7 +169,6 @@ class Ovis2Config(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-
         self.image_token_id = image_token_id
         self.visual_indicator_token_ids = visual_indicator_token_ids
         super().__init__(**kwargs)

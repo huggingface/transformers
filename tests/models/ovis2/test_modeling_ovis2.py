@@ -64,11 +64,11 @@ class Ovis2VisionText2TextModelTester:
             "is_training": True,
             "use_labels": True,
             "vocab_size": 99,
-            "hidden_size": 32,
+            "hidden_size": 64,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
-            "intermediate_size": 27,
+            "intermediate_size": 54,
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
             "max_position_embeddings": 580,
@@ -81,12 +81,12 @@ class Ovis2VisionText2TextModelTester:
             "image_size": 32,
             "patch_size": 8,
             "num_channels": 3,
-            "hidden_size": 32,
+            "hidden_size": 64,
             "vocab_size": 99,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 27,
-            "attention_dropout": 0.1,
+            "intermediate_size": 54,
+            "attention_dropout": 0.0,
             "hidden_act": "silu",
             "qkv_bias": False,
             "hidden_stride": 2,
@@ -98,7 +98,7 @@ class Ovis2VisionText2TextModelTester:
         visual_indicator_token_ids=[2, 3, 4, 5, 6],
         vocab_size=99,
         sliding_window=256,
-        hidden_size=32,
+        hidden_size=64,
         ignore_id=-100,
     ):
         self.parent = parent
@@ -162,7 +162,7 @@ class Ovis2VisionText2TextModelTester:
             input_ids[input_ids == visual_indicator_token_id] = self.pad_token_id
 
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
-        labels[:, : self.image_seq_length] == self.ignore_id
+        labels[:, : self.image_seq_length] = self.ignore_id
 
         inputs_dict = {
             "pixel_values": pixel_values,
