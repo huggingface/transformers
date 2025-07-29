@@ -6022,7 +6022,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
         if device.type in ["cuda", "xpu"]:
-            torch_accelerator_module = getattr(torch, device.type, torch.cuda)
+            torch_accelerator_module = getattr(torch, device.type)
             index = device.index if device.index is not None else torch_accelerator_module.current_device()
             device_memory = torch_accelerator_module.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
