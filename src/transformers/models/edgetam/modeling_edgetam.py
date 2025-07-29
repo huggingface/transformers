@@ -1186,7 +1186,6 @@ class EdgeTamAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        print("attention_interface", attention_interface)
         attn_output, attn_weights = attention_interface(
             self,
             query,
@@ -1518,7 +1517,7 @@ class EdgeTamRoPEAttentionV2(EdgeTamAttention):
             or self._cached_sin_k is None
             or self._cached_feat_sizes_k != current_feat_sizes_k
         ):
-            cos_k, sin_k = self.rotary_emb_k(current_feat_sizes_k, repeat_freqs=rope_k_repeat)
+            cos_k, sin_k = self.rotary_emb_k(current_feat_sizes_k)
             self._cached_cos_k = cos_k
             self._cached_sin_k = sin_k
             self._cached_feat_sizes_k = current_feat_sizes_k
@@ -1526,7 +1525,7 @@ class EdgeTamRoPEAttentionV2(EdgeTamAttention):
             cos_k = self._cached_cos_k
             sin_k = self._cached_sin_k
 
-        query, key = apply_rotary_pos_emb_2d_v2(query, cos_q, sin_q, repeat_freqs=1)
+        query = apply_rotary_pos_emb_2d_v2(query, cos_q, sin_q, repeat_freqs=1)
         num_k_rope = key.shape[-2] - num_k_exclude_rope
         key[:, :, :num_k_rope] = apply_rotary_pos_emb_2d_v2(
             key[:, :, :num_k_rope], cos_k, sin_k, repeat_freqs=rope_k_repeat
@@ -1976,7 +1975,7 @@ class PerceiverResampler(nn.Module):
 
         latents_2d = latents_2d.view(B, num_window, num_window, C).permute(0, 3, 1, 2)
 
-        pos_2d = self.position_encoding(latents_2d)
+        pos_2d = self.position_encoding(latents_2d).to(dtype=x.dtype)
         pos_2d = pos_2d.permute(0, 2, 3, 1).flatten(1, 2)
 
         latents_2d = latents_2d.permute(0, 2, 3, 1).flatten(1, 2)
@@ -4044,11 +4043,11 @@ class EdgeTamVideoModel(EdgeTamModel):
 
                 # Spatial positional encoding (potentially from CPU to GPU)
                 spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"][-1].to(device, non_blocking=True)
+                spatial_memory_pos_embed = spatial_memory_pos_embed.squeeze(1)
                 if spatial_memory_pos_embed.ndim == 3:  # (B, HW, C) because of spatial perceiver
                     spatial_memory_pos_embed = spatial_memory_pos_embed.permute(1, 0, 2)
                 else:  # (B, C, H, W)
                     spatial_memory_pos_embed = spatial_memory_pos_embed.flatten(2).permute(2, 0, 1)
-
                 # Add temporal positional encoding
                 # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
                 temporal_encoding_index = self.num_maskmem - temporal_pos_offset - 1
