@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 1. Standard library
 import difflib
 import os
 import re
@@ -22,18 +21,23 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
-import libcst as cst
-from libcst import CSTVisitor
-from libcst import matchers as m
-
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
+from ..utils import is_libcst_available
 from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
+
+
+# We protect this import to avoid requiring it for all CLI `transformers` commands - however it is actually
+# strictly required for this one (we need it both for modular and for direct use in this file as well)
+if is_libcst_available():
+    import libcst as cst
+    from libcst import CSTVisitor
+    from libcst import matchers as m
 
 
 CURRENT_YEAR = date.today().year
@@ -494,6 +498,10 @@ def create_new_model_like(
         create_fast_image_processor (`bool`):
             If it makes sense, whether to add a fast processor as well, even if the old model does not have one.
     """
+    # As the import was protected, raise if not present (as it's actually a hard dependency for this command)
+    if not is_libcst_available():
+        raise ValueError("You need to install `libcst` to run this command -> `pip install libcst`")
+
     old_lowercase_name = old_model_infos.lowercase_name
 
     # 1. We create the folder for our new model
