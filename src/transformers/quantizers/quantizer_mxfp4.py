@@ -61,7 +61,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         if not is_accelerate_available():
             raise ImportError(
-                "Using mxfp4 requires Accelerate: `pip install 'accelerate>=1.8.0'`"
+                "Using mxfp4 requires Accelerate: `pip install accelerate`"
         )
 
         if self.quantization_config.dequantize:
