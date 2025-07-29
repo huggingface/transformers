@@ -66,7 +66,6 @@ model = AutoModelForMaskedLM.from_pretrained(
     "moussaKam/barthez",
     torch_dtype=torch.float16,
     device_map="auto",
-    attn_implementation="sdpa"
 )
 inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to("cuda")
 
