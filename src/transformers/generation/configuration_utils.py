@@ -35,7 +35,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from ..utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -576,7 +575,6 @@ class GenerationConfig(PushToHubMixin):
                 )
         return generation_mode
 
-    @deprecate_kwarg("is_init", version="4.54.0")
     def validate(self, strict=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
@@ -921,7 +919,7 @@ class GenerationConfig(PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
