@@ -96,7 +96,7 @@
       title: (번역중) torch.compile
     - local: perf_infer_gpu_one
       title: 하나의 GPU를 활용한 추론
-    - local: in_translation
+    - local: perf_infer_gpu_multi
       title: (번역중) Distributed inference
     - local: perf_infer_cpu
       title: CPU로 추론하기
@@ -119,7 +119,7 @@
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     title: Trainer API
   - sections:
-    - local: in_translation
+    - local: accelerator_selection
       title: (번역중) Accelerator selection
     - local: accelerate
       title: 🤗 Accelerate로 분산 학습 구성하기
@@ -346,7 +346,7 @@
       title: Trainer
     - local: in_translation
       title: (번역중) DeepSpeed
-    - local: main_classes/executorch
+    - local: in_translation
       title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 피쳐 추출기
@@ -357,11 +357,11 @@
     title: 메인 클래스
   - sections:
     - sections:
-      - local: model_doc/albert
+      - local: in_translation
         title: ALBERT
-      - local: model_doc/arcee
+      - local: in_translation
         title: Arcee
-      - local: model_doc/bamba
+      - local: in_translation
         title: Bamba
       - local: model_doc/bart
         title: BART
@@ -371,49 +371,49 @@
         title: BARTpho
       - local: model_doc/bert
         title: BERT
-      - local: model_doc/bert-generation
+      - local: in_translation
         title: BertGeneration
       - local: model_doc/bert-japanese
         title: BertJapanese
       - local: model_doc/bertweet
         title: BERTweet
-      - local: model_doc/big_bird
+      - local: in_translation
         title: BigBird
-      - local: model_doc/bigbird_pegasus
+      - local: in_translation
         title: BigBirdPegasus
       - local: model_doc/biogpt
         title: BioGpt
-      - local: model_doc/bitnet
+      - local: in_translation
         title: BitNet
-      - local: model_doc/blenderbot
+      - local: in_translation
         title: Blenderbot
-      - local: model_doc/blenderbot-small
+      - local: in_translation
         title: Blenderbot Small
-      - local: model_doc/bloom
+      - local: in_translation
         title: BLOOM
-      - local: model_doc/bort
+      - local: in_translation
         title: BORT
-      - local: model_doc/byt5
+      - local: in_translation
         title: ByT5
-      - local: model_doc/camembert
+      - local: in_translation
         title: CamemBERT
-      - local: model_doc/canine
+      - local: in_translation
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
-      - local: model_doc/code_llama
+      - local: in_translation
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
-      - local: model_doc/cohere2
+      - local: in_translation
         title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
-      - local: model_doc/cpm
+      - local: in_translation
         title: CPM
-      - local: model_doc/cpmant
+      - local: in_translation
         title: CPMANT
-      - local: model_doc/ctrl
+      - local: in_translation
         title: CTRL
       - local: model_doc/dbrx
         title: DBRX
@@ -421,105 +421,105 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
-      - local: model_doc/deepseek_v3
+      - local: in_translation
         title: DeepSeek-V3
-      - local: model_doc/dialogpt
+      - local: in_translation
         title: DialoGPT
-      - local: model_doc/diffllama
+      - local: in_translation
         title: DiffLlama
-      - local: model_doc/distilbert
+      - local: in_translation
         title: DistilBERT
-      - local: model_doc/doge
+      - local: in_translation
         title: Doge
-      - local: model_doc/dots1
+      - local: in_translation
         title: dots1
-      - local: model_doc/dpr
+      - local: in_translation
         title: DPR
       - local: model_doc/electra
         title: ELECTRA
       - local: model_doc/encoder-decoder
         title: Encoder Decoder Models
-      - local: model_doc/ernie
+      - local: in_translation
         title: ERNIE
-      - local: model_doc/ernie_m
+      - local: in_translation
         title: ErnieM
       - local: model_doc/esm
         title: ESM
       - local: model_doc/exaone4
         title: EXAONE-4.0
-      - local: model_doc/falcon
+      - local: in_translation
         title: Falcon
-      - local: model_doc/falcon3
+      - local: in_translation
         title: Falcon3
-      - local: model_doc/falcon_h1
+      - local: in_translation
         title: FalconH1
-      - local: model_doc/falcon_mamba
+      - local: in_translation
         title: FalconMamba
-      - local: model_doc/flan-t5
+      - local: in_translation
         title: FLAN-T5
-      - local: model_doc/flan-ul2
+      - local: in_translation
         title: FLAN-UL2
-      - local: model_doc/flaubert
+      - local: in_translation
         title: FlauBERT
-      - local: model_doc/fnet
+      - local: in_translation
         title: FNet
-      - local: model_doc/fsmt
+      - local: in_translation
         title: FSMT
-      - local: model_doc/funnel
+      - local: in_translation
         title: Funnel Transformer
-      - local: model_doc/fuyu
+      - local: in_translation
         title: Fuyu
       - local: model_doc/gemma
         title: Gemma
       - local: model_doc/gemma2
         title: Gemma2
-      - local: model_doc/glm
+      - local: in_translation
         title: GLM
-      - local: model_doc/glm4
+      - local: in_translation
         title: glm4
       - local: model_doc/openai-gpt
         title: GPT
-      - local: model_doc/gpt_neo
+      - local: in_translation
         title: GPT Neo
-      - local: model_doc/gpt_neox
+      - local: in_translation
         title: GPT NeoX
       - local: model_doc/gpt_neox_japanese
         title: GPT NeoX Japanese
-      - local: model_doc/gptj
+      - local: in_translation
         title: GPT-J
-      - local: model_doc/gpt2
+      - local: in_translation
         title: GPT2
-      - local: model_doc/gpt_bigcode
+      - local: in_translation
         title: GPTBigCode
-      - local: model_doc/gptsan-japanese
+      - local: in_translation
         title: GPTSAN Japanese
-      - local: model_doc/gpt-sw3
+      - local: in_translation
         title: GPTSw3
-      - local: model_doc/granite
+      - local: in_translation
         title: Granite
-      - local: model_doc/granitemoe
+      - local: in_translation
         title: GraniteMoe
-      - local: model_doc/granitemoehybrid
+      - local: in_translation
         title: GraniteMoeHybrid
-      - local: model_doc/granitemoeshared
+      - local: in_translation
         title: GraniteMoeShared
-      - local: model_doc/helium
+      - local: in_translation
         title: Helium
-      - local: model_doc/herbert
+      - local: in_translation
         title: HerBERT
-      - local: model_doc/hgnet_v2
+      - local: in_translation
         title: HGNet-V2
-      - local: model_doc/ibert
+      - local: in_translation
         title: I-BERT
-      - local: model_doc/jamba
+      - local: in_translation
         title: Jamba
-      - local: model_doc/jetmoe
+      - local: in_translation
         title: JetMoe
-      - local: model_doc/jukebox
+      - local: in_translation
         title: Jukebox
-      - local: model_doc/led
+      - local: in_translation
         title: LED
-      - local: model_doc/lfm2
+      - local: in_translation
         title: LFM2
       - local: model_doc/llama
         title: LLaMA
@@ -527,15 +527,15 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
-      - local: model_doc/longformer
+      - local: in_translation
         title: Longformer
-      - local: model_doc/longt5
+      - local: in_translation
         title: LongT5
-      - local: model_doc/luke
+      - local: in_translation
         title: LUKE
-      - local: model_doc/m2m_100
+      - local: in_translation
         title: M2M100
-      - local: model_doc/madlad-400
+      - local: in_translation
         title: MADLAD-400
       - local: model_doc/mamba
         title: Mamba
@@ -543,265 +543,265 @@
         title: Mamba2
       - local: model_doc/marian
         title: MarianMT
-      - local: model_doc/markuplm
+      - local: in_translation
         title: MarkupLM
-      - local: model_doc/mbart
+      - local: in_translation
         title: MBart and MBart-50
-      - local: model_doc/mega
+      - local: in_translation
         title: MEGA
-      - local: model_doc/megatron-bert
+      - local: in_translation
         title: MegatronBERT
-      - local: model_doc/megatron_gpt2
+      - local: in_translation
         title: MegatronGPT2
-      - local: model_doc/minimax
+      - local: in_translation
         title: MiniMax
       - local: model_doc/mistral
         title: Mistral
-      - local: model_doc/mixtral
+      - local: in_translation
         title: Mixtral
-      - local: model_doc/mluke
+      - local: in_translation
         title: mLUKE
-      - local: model_doc/mobilebert
+      - local: in_translation
         title: MobileBERT
-      - local: model_doc/modernbert
+      - local: in_translation
         title: ModernBert
-      - local: model_doc/modernbert-decoder
+      - local: in_translation
         title: ModernBERTDecoder
-      - local: model_doc/mpnet
+      - local: in_translation
         title: MPNet
-      - local: model_doc/mpt
+      - local: in_translation
         title: MPT
-      - local: model_doc/mra
+      - local: in_translation
         title: MRA
-      - local: model_doc/mt5
+      - local: in_translation
         title: MT5
-      - local: model_doc/mvp
+      - local: in_translation
         title: MVP
-      - local: model_doc/myt5
+      - local: in_translation
         title: myt5
-      - local: model_doc/nemotron
+      - local: in_translation
         title: Nemotron
-      - local: model_doc/nezha
+      - local: in_translation
         title: NEZHA
-      - local: model_doc/nllb
+      - local: in_translation
         title: NLLB
-      - local: model_doc/nllb-moe
+      - local: in_translation
         title: NLLB-MoE
-      - local: model_doc/nystromformer
+      - local: in_translation
         title: Nyströmformer
-      - local: model_doc/olmo
+      - local: in_translation
         title: OLMo
-      - local: model_doc/olmo2
+      - local: in_translation
         title: OLMo2
-      - local: model_doc/olmoe
+      - local: in_translation
         title: OLMoE
-      - local: model_doc/open-llama
+      - local: in_translation
         title: Open-Llama
-      - local: model_doc/opt
+      - local: in_translation
         title: OPT
-      - local: model_doc/pegasus
+      - local: in_translation
         title: Pegasus
-      - local: model_doc/pegasus_x
+      - local: in_translation
         title: PEGASUS-X
-      - local: model_doc/persimmon
+      - local: in_translation
         title: Persimmon
-      - local: model_doc/phi
+      - local: in_translation
         title: Phi
-      - local: model_doc/phi3
+      - local: in_translation
         title: Phi-3
-      - local: model_doc/phimoe
+      - local: in_translation
         title: PhiMoE
-      - local: model_doc/phobert
+      - local: in_translation
         title: PhoBERT
-      - local: model_doc/plbart
+      - local: in_translation
         title: PLBart
-      - local: model_doc/prophetnet
+      - local: in_translation
         title: ProphetNet
-      - local: model_doc/qdqbert
+      - local: in_translation
         title: QDQBert
-      - local: model_doc/qwen2
+      - local: in_translation
         title: Qwen2
-      - local: model_doc/qwen2_moe
+      - local: in_translation
         title: Qwen2MoE
-      - local: model_doc/qwen3
+      - local: in_translation
         title: Qwen3
-      - local: model_doc/qwen3_moe
+      - local: in_translation
         title: Qwen3MoE
       - local: model_doc/rag
         title: RAG
-      - local: model_doc/realm
+      - local: in_translation
         title: REALM
-      - local: model_doc/recurrent_gemma
+      - local: in_translation
         title: RecurrentGemma
-      - local: model_doc/reformer
+      - local: in_translation
         title: Reformer
-      - local: model_doc/rembert
+      - local: in_translation
         title: RemBERT
-      - local: model_doc/retribert
+      - local: in_translation
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
-      - local: model_doc/roberta-prelayernorm
+      - local: in_translation
         title: RoBERTa-PreLayerNorm
-      - local: model_doc/roc_bert
+      - local: in_translation
         title: RoCBert
-      - local: model_doc/roformer
+      - local: in_translation
         title: RoFormer
-      - local: model_doc/rwkv
+      - local: in_translation
         title: RWKV
-      - local: model_doc/splinter
+      - local: in_translation
         title: Splinter
-      - local: model_doc/squeezebert
+      - local: in_translation
         title: SqueezeBERT
-      - local: model_doc/stablelm
+      - local: in_translation
         title: StableLm
-      - local: model_doc/starcoder2
+      - local: in_translation
         title: Starcoder2
-      - local: model_doc/switch_transformers
+      - local: in_translation
         title: SwitchTransformers
-      - local: model_doc/t5
+      - local: in_translation
         title: T5
-      - local: model_doc/t5gemma
+      - local: in_translation
         title: T5Gemma
-      - local: model_doc/t5v1.1
+      - local: in_translation
         title: T5v1.1
-      - local: model_doc/tapex
+      - local: in_translation
         title: TAPEX
-      - local: model_doc/transfo-xl
+      - local: in_translation
         title: Transformer XL
-      - local: model_doc/ul2
+      - local: in_translation
         title: UL2
-      - local: model_doc/umt5
+      - local: in_translation
         title: UMT5
-      - local: model_doc/xmod
+      - local: in_translation
         title: X-MOD
-      - local: model_doc/xglm
+      - local: in_translation
         title: XGLM
-      - local: model_doc/xlm
+      - local: in_translation
         title: XLM
-      - local: model_doc/xlm-prophetnet
+      - local: in_translation
         title: XLM-ProphetNet
-      - local: model_doc/xlm-roberta
+      - local: in_translation
         title: XLM-RoBERTa
-      - local: model_doc/xlm-roberta-xl
+      - local: in_translation
         title: XLM-RoBERTa-XL
-      - local: model_doc/xlm-v
+      - local: in_translation
         title: XLM-V
-      - local: model_doc/xlnet
+      - local: in_translation
         title: XLNet
-      - local: model_doc/yoso
+      - local: in_translation
         title: YOSO
-      - local: model_doc/zamba
+      - local: in_translation
         title: Zamba
-      - local: model_doc/zamba2
+      - local: in_translation
         title: Zamba2
       title: 텍스트 모델
     - sections:
-      - local: model_doc/aimv2
+      - local: in_translation
         title: Aimv2
-      - local: model_doc/beit
+      - local: in_translation
         title: BEiT
-      - local: model_doc/bit
+      - local: in_translation
         title: BiT
-      - local: model_doc/conditional_detr
+      - local: in_translation
         title: Conditional DETR
-      - local: model_doc/convnext
+      - local: in_translation
         title: ConvNeXT
-      - local: model_doc/convnextv2
+      - local: in_translation
         title: ConvNeXTV2
-      - local: model_doc/cvt
+      - local: in_translation
         title: CvT
-      - local: model_doc/d_fine
+      - local: in_translation
         title: D-FINE
-      - local: model_doc/dab-detr
+      - local: in_translation
         title: DAB-DETR
-      - local: model_doc/deepseek_v2
+      - local: in_translation
         title: DeepSeek-V2
-      - local: model_doc/deformable_detr
+      - local: in_translation
         title: Deformable DETR
-      - local: model_doc/deit
+      - local: in_translation
         title: DeiT
-      - local: model_doc/depth_anything
+      - local: in_translation
         title: Depth Anything
-      - local: model_doc/depth_anything_v2
+      - local: in_translation
         title: Depth Anything V2
-      - local: model_doc/depth_pro
+      - local: in_translation
         title: DepthPro
-      - local: model_doc/deta
+      - local: in_translation
         title: DETA
-      - local: model_doc/detr
+      - local: in_translation
         title: DETR
-      - local: model_doc/dinat
+      - local: in_translation
         title: DiNAT
-      - local: model_doc/dinov2
+      - local: in_translation
         title: DINOV2
-      - local: model_doc/dinov2_with_registers
+      - local: in_translation
         title: DINOv2 with Registers
-      - local: model_doc/dit
+      - local: in_translation
         title: DiT
-      - local: model_doc/dpt
+      - local: in_translation
         title: DPT
-      - local: model_doc/efficientformer
+      - local: in_translation
         title: EfficientFormer
-      - local: model_doc/efficientnet
+      - local: in_translation
         title: EfficientNet
-      - local: model_doc/eomt
+      - local: in_translation
         title: EoMT
-      - local: model_doc/focalnet
+      - local: in_translation
         title: FocalNet
-      - local: model_doc/glpn
+      - local: in_translation
         title: GLPN
-      - local: model_doc/hiera
+      - local: in_translation
         title: Hiera
-      - local: model_doc/ijepa
+      - local: in_translation
         title: I-JEPA
-      - local: model_doc/imagegpt
+      - local: in_translation
         title: ImageGPT
-      - local: model_doc/levit
+      - local: in_translation
         title: LeViT
-      - local: model_doc/lightglue
+      - local: in_translation
         title: LightGlue
-      - local: model_doc/mask2former
+      - local: in_translation
         title: Mask2Former
-      - local: model_doc/maskformer
+      - local: in_translation
         title: MaskFormer
-      - local: model_doc/mlcd
+      - local: in_translation
         title: MLCD
-      - local: model_doc/mobilenet_v1
+      - local: in_translation
         title: MobileNetV1
-      - local: model_doc/mobilenet_v2
+      - local: in_translation
         title: MobileNetV2
-      - local: model_doc/mobilevit
+      - local: in_translation
         title: MobileViT
-      - local: model_doc/mobilevitv2
+      - local: in_translation
         title: MobileViTV2
-      - local: model_doc/nat
+      - local: in_translation
         title: NAT
-      - local: model_doc/poolformer
+      - local: in_translation
         title: PoolFormer
-      - local: model_doc/prompt_depth_anything
+      - local: in_translation
         title: Prompt Depth Anything
-      - local: model_doc/pvt
+      - local: in_translation
         title: Pyramid Vision Transformer (PVT)
-      - local: model_doc/pvt_v2
+      - local: in_translation
         title: Pyramid Vision Transformer v2 (PVTv2)
-      - local: model_doc/regnet
+      - local: in_translation
         title: RegNet
-      - local: model_doc/resnet
+      - local: in_translation
         title: ResNet
-      - local: model_doc/rt_detr
+      - local: in_translation
         title: RT-DETR
-      - local: model_doc/rt_detr_v2
+      - local: in_translation
         title: RT-DETRv2
-      - local: model_doc/segformer
+      - local: in_translation
         title: SegFormer
-      - local: model_doc/seggpt
+      - local: in_translation
         title: SegGpt
-      - local: model_doc/superglue
+      - local: in_translation
         title: SuperGlue
-      - local: model_doc/superpoint
+      - local: in_translation
         title: SuperPoint
-      - local: model_doc/swiftformer
+      - local: in_translation
         title: SwiftFormer
       - local: model_doc/swin
         title: Swin Transformer
@@ -809,301 +809,301 @@
         title: Swin Transformer V2
       - local: model_doc/swin2sr
         title: Swin2SR
-      - local: model_doc/table-transformer
+      - local: in_translation
         title: Table Transformer
-      - local: model_doc/textnet
+      - local: in_translation
         title: TextNet
-      - local: model_doc/timm_wrapper
+      - local: in_translation
         title: Timm Wrapper
-      - local: model_doc/upernet
+      - local: in_translation
         title: UperNet
-      - local: model_doc/van
+      - local: in_translation
         title: VAN
       - local: model_doc/vit
         title: Vision Transformer (ViT)
-      - local: model_doc/vit_hybrid
+      - local: in_translation
         title: ViT Hybrid
-      - local: model_doc/vitdet
+      - local: in_translation
         title: ViTDet
-      - local: model_doc/vit_mae
+      - local: in_translation
         title: ViTMAE
-      - local: model_doc/vitmatte
+      - local: in_translation
         title: ViTMatte
-      - local: model_doc/vit_msn
+      - local: in_translation
         title: ViTMSN
-      - local: model_doc/vitpose
+      - local: in_translation
         title: ViTPose
-      - local: model_doc/yolos
+      - local: in_translation
         title: YOLOS
-      - local: model_doc/zoedepth
+      - local: in_translation
         title: ZoeDepth
       title: 비전 모델
     - sections:
-      - local: model_doc/audio-spectrogram-transformer
+      - local: in_translation
         title: Audio Spectrogram Transformer
-      - local: model_doc/bark
+      - local: in_translation
         title: Bark
-      - local: model_doc/clap
+      - local: in_translation
         title: CLAP
-      - local: model_doc/csm
+      - local: in_translation
         title: CSM
-      - local: model_doc/dac
+      - local: in_translation
         title: dac
-      - local: model_doc/dia
+      - local: in_translation
         title: Dia
-      - local: model_doc/encodec
+      - local: in_translation
         title: EnCodec
-      - local: model_doc/fastspeech2_conformer
+      - local: in_translation
         title: FastSpeech2Conformer
-      - local: model_doc/granite_speech
+      - local: in_translation
         title: GraniteSpeech
-      - local: model_doc/hubert
+      - local: in_translation
         title: Hubert
-      - local: model_doc/kyutai_speech_to_text
+      - local: in_translation
         title: Kyutai Speech-To-Text
-      - local: model_doc/mctct
+      - local: in_translation
         title: MCTCT
-      - local: model_doc/mimi
+      - local: in_translation
         title: Mimi
-      - local: model_doc/mms
+      - local: in_translation
         title: MMS
-      - local: model_doc/moonshine
+      - local: in_translation
         title: Moonshine
-      - local: model_doc/moshi
+      - local: in_translation
         title: Moshi
-      - local: model_doc/musicgen
+      - local: in_translation
         title: MusicGen
-      - local: model_doc/musicgen_melody
+      - local: in_translation
         title: MusicGen Melody
-      - local: model_doc/pop2piano
+      - local: in_translation
         title: Pop2Piano
-      - local: model_doc/seamless_m4t
+      - local: in_translation
         title: Seamless-M4T
-      - local: model_doc/seamless_m4t_v2
+      - local: in_translation
         title: SeamlessM4T-v2
-      - local: model_doc/sew
+      - local: in_translation
         title: SEW
-      - local: model_doc/sew-d
+      - local: in_translation
         title: SEW-D
-      - local: model_doc/speech_to_text
+      - local: in_translation
         title: Speech2Text
-      - local: model_doc/speech_to_text_2
+      - local: in_translation
         title: Speech2Text2
-      - local: model_doc/speecht5
+      - local: in_translation
         title: SpeechT5
-      - local: model_doc/unispeech
+      - local: in_translation
         title: UniSpeech
-      - local: model_doc/unispeech-sat
+      - local: in_translation
         title: UniSpeech-SAT
-      - local: model_doc/univnet
+      - local: in_translation
         title: UnivNet
-      - local: model_doc/vits
+      - local: in_translation
         title: VITS
-      - local: model_doc/wav2vec2
+      - local: in_translation
         title: Wav2Vec2
-      - local: model_doc/wav2vec2-bert
+      - local: in_translation
         title: Wav2Vec2-BERT
-      - local: model_doc/wav2vec2-conformer
+      - local: in_translation
         title: Wav2Vec2-Conformer
-      - local: model_doc/wav2vec2_phoneme
+      - local: in_translation
         title: Wav2Vec2Phoneme
-      - local: model_doc/wavlm
+      - local: in_translation
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
-      - local: model_doc/xls_r
+      - local: in_translation
         title: XLS-R
-      - local: model_doc/xlsr_wav2vec2
+      - local: in_translation
         title: XLSR-Wav2Vec2
       title: 오디오 모델
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
-      - local: model_doc/vjepa2
+      - local: in_translation
         title: V-JEPA 2
-      - local: model_doc/videomae
+      - local: in_translation
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
       title: 비디오 모델
     - sections:
-      - local: model_doc/align
+      - local: in_translation
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
-      - local: model_doc/aria
+      - local: in_translation
         title: Aria
-      - local: model_doc/aya_vision
+      - local: in_translation
         title: AyaVision
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/blip-2
         title: BLIP-2
-      - local: model_doc/bridgetower
+      - local: in_translation
         title: BridgeTower
-      - local: model_doc/bros
+      - local: in_translation
         title: BROS
       - local: model_doc/chameleon
         title: Chameleon
-      - local: model_doc/chinese_clip
+      - local: in_translation
         title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
-      - local: model_doc/clipseg
+      - local: in_translation
         title: CLIPSeg
-      - local: model_doc/clvp
+      - local: in_translation
         title: CLVP
-      - local: model_doc/colpali
+      - local: in_translation
         title: ColPali
-      - local: model_doc/colqwen2
+      - local: in_translation
         title: ColQwen2
-      - local: model_doc/data2vec
+      - local: in_translation
         title: Data2Vec
-      - local: model_doc/deplot
+      - local: in_translation
         title: DePlot
-      - local: model_doc/donut
+      - local: in_translation
         title: Donut
-      - local: model_doc/emu3
+      - local: in_translation
         title: Emu3
-      - local: model_doc/flava
+      - local: in_translation
         title: FLAVA
-      - local: model_doc/gemma3
+      - local: in_translation
         title: Gemma3
-      - local: model_doc/gemma3n
+      - local: in_translation
         title: Gemma3n
-      - local: model_doc/git
+      - local: in_translation
         title: GIT
-      - local: model_doc/glm4v
+      - local: in_translation
         title: glm4v
-      - local: model_doc/got_ocr2
+      - local: in_translation
         title: GOT-OCR2
-      - local: model_doc/granitevision
+      - local: in_translation
         title: GraniteVision
-      - local: model_doc/grounding-dino
+      - local: in_translation
         title: Grounding DINO
-      - local: model_doc/groupvit
+      - local: in_translation
         title: GroupViT
-      - local: model_doc/idefics
+      - local: in_translation
         title: IDEFICS
-      - local: model_doc/idefics2
+      - local: in_translation
         title: Idefics2
-      - local: model_doc/idefics3
+      - local: in_translation
         title: Idefics3
-      - local: model_doc/instructblip
+      - local: in_translation
         title: InstructBLIP
-      - local: model_doc/instructblipvideo
+      - local: in_translation
         title: InstructBlipVideo
-      - local: model_doc/internvl
+      - local: in_translation
         title: InternVL
-      - local: model_doc/janus
+      - local: in_translation
         title: Janus
-      - local: model_doc/kosmos-2
+      - local: in_translation
         title: KOSMOS-2
-      - local: model_doc/layoutlm
+      - local: in_translation
         title: LayoutLM
-      - local: model_doc/layoutlmv2
+      - local: in_translation
         title: LayoutLMV2
-      - local: model_doc/layoutlmv3
+      - local: in_translation
         title: LayoutLMV3
-      - local: model_doc/layoutxlm
+      - local: in_translation
         title: LayoutXLM
-      - local: model_doc/lilt
+      - local: in_translation
         title: LiLT
-      - local: model_doc/llama4
+      - local: in_translation
         title: Llama4
-      - local: model_doc/llava
+      - local: in_translation
         title: Llava
-      - local: model_doc/llava_next
+      - local: in_translation
         title: LLaVA-NeXT
-      - local: model_doc/llava_next_video
+      - local: in_translation
         title: LLaVa-NeXT-Video
-      - local: model_doc/llava_onevision
+      - local: in_translation
         title: LLaVA-Onevision
-      - local: model_doc/lxmert
+      - local: in_translation
         title: LXMERT
-      - local: model_doc/matcha
+      - local: in_translation
         title: MatCha
-      - local: model_doc/mgp-str
+      - local: in_translation
         title: MGP-STR
-      - local: model_doc/mistral3
+      - local: in_translation
         title: Mistral3
-      - local: model_doc/mllama
+      - local: in_translation
         title: mllama
-      - local: model_doc/nougat
+      - local: in_translation
         title: Nougat
-      - local: model_doc/omdet-turbo
+      - local: in_translation
         title: OmDet-Turbo
-      - local: model_doc/oneformer
+      - local: in_translation
         title: OneFormer
-      - local: model_doc/owlvit
+      - local: in_translation
         title: OWL-ViT
-      - local: model_doc/owlv2
+      - local: in_translation
         title: OWLv2
       - local: model_doc/paligemma
         title: PaliGemma
-      - local: model_doc/perceiver
+      - local: in_translation
         title: Perceiver
-      - local: model_doc/perception_lm
+      - local: in_translation
         title: PerceptionLM
-      - local: model_doc/phi4_multimodal
+      - local: in_translation
         title: Phi4 Multimodal
-      - local: model_doc/pix2struct
+      - local: in_translation
         title: Pix2Struct
-      - local: model_doc/pixtral
+      - local: in_translation
         title: Pixtral
-      - local: model_doc/qwen2_5_omni
+      - local: in_translation
         title: Qwen2.5-Omni
-      - local: model_doc/qwen2_5_vl
+      - local: in_translation
         title: Qwen2.5-VL
-      - local: model_doc/qwen2_audio
+      - local: in_translation
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
-      - local: model_doc/sam
+      - local: in_translation
         title: Segment Anything
-      - local: model_doc/sam_hq
+      - local: in_translation
         title: Segment Anything High Quality
-      - local: model_doc/shieldgemma2
+      - local: in_translation
         title: ShieldGemma2
       - local: model_doc/siglip
         title: SigLIP
-      - local: model_doc/siglip2
+      - local: in_translation
         title: SigLIP2
-      - local: model_doc/smollm3
+      - local: in_translation
         title: SmolLM3
-      - local: model_doc/smolvlm
+      - local: in_translation
         title: SmolVLM
-      - local: model_doc/speech-encoder-decoder
+      - local: in_translation
         title: Speech Encoder Decoder Models
-      - local: model_doc/tapas
+      - local: in_translation
         title: TAPAS
-      - local: model_doc/trocr
+      - local: in_translation
         title: TrOCR
-      - local: model_doc/tvlt
+      - local: in_translation
         title: TVLT
-      - local: model_doc/tvp
+      - local: in_translation
         title: TVP
-      - local: model_doc/udop
+      - local: in_translation
         title: UDOP
-      - local: model_doc/video_llava
+      - local: in_translation
         title: VideoLlava
-      - local: model_doc/vilt
+      - local: in_translation
         title: ViLT
-      - local: model_doc/vipllava
+      - local: in_translation
         title: VipLlava
-      - local: model_doc/vision-encoder-decoder
+      - local: in_translation
         title: Vision Encoder Decoder Models
-      - local: model_doc/vision-text-dual-encoder
+      - local: in_translation
         title: Vision Text Dual Encoder
-      - local: model_doc/visual_bert
+      - local: in_translation
         title: VisualBERT
-      - local: model_doc/voxtral
+      - local: in_translation
         title: Voxtral
-      - local: model_doc/xclip
+      - local: in_translation
         title: X-CLIP
       title: 멀티모달 모델
     - sections:
-      - local: model_doc/decision_transformer
+      - local: in_translation
         title: Decision Transformer
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
@@ -1119,7 +1119,7 @@
         title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
-      - local: model_doc/timesfm
+      - local: in_translation
         title: TimesFM
       title: 시게열 모델
     - sections:
