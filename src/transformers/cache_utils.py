@@ -1629,7 +1629,7 @@ class QuantoQuantizedCache(QuantizedCache):
     """
 
     def __init__(self, **kwargs) -> None:
-        Cache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
+        DynamicCache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
 
 
 class HQQQuantizedCache(QuantizedCache):
@@ -1671,7 +1671,7 @@ class HQQQuantizedCache(QuantizedCache):
 
     def __init__(self, backend="HQQ", **kwargs) -> None:
         assert backend == "HQQ"
-        Cache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
+        DynamicCache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
 
 
 class EncoderDecoderCache(Cache):
