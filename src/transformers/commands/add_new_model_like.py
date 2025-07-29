@@ -140,6 +140,14 @@ def add_model_to_auto_mappings(
     filenames_to_add = [
         (filename.replace(old_lowercase_name, "auto"), to_add) for filename, to_add in filenames_to_add[1:]
     ]
+    # fast tokenizer/image processor have the same auto mappings as normal ones
+    corrected_filenames_to_add = []
+    for file, to_add in filenames_to_add:
+        if re.search(r"(?:tokenization)|(?:image_processing)_auto_fast.py", file):
+            previous_file, previous_to_add = corrected_filenames_to_add[-1]
+            corrected_filenames_to_add[-1] = (previous_file, previous_to_add or to_add)
+        else:
+            corrected_filenames_to_add.append((file, to_add))
 
     # Add the config mappings directly as the handling for config is a bit different
     add_content_to_file(
@@ -153,8 +161,10 @@ def add_model_to_auto_mappings(
         add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
     )
 
-    for filename, to_add in filenames_to_add:
-        if to_add and "fast" not in filename:
+    for filename, to_add in corrected_filenames_to_add:
+        if to_add:
+            # The auto mapping
+            filename = filename.replace("_fast.py", ".py")
             with open(TRANSFORMERS_PATH / "models" / "auto" / filename) as f:
                 file = f.read()
             # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
@@ -427,24 +437,21 @@ def create_test_files(old_model_infos: ModelInfos, new_lowercase_name, filenames
     new_cased_name = "".join(x.title() for x in new_lowercase_name.replace("-", "_").split("_"))
     old_lowercase_name = old_model_infos.lowercase_name
     old_cased_name = old_model_infos.camelcase_name
-
-    test_tokenization = filenames_to_add[2][1] or filenames_to_add[3][1]
-    test_image_processing = filenames_to_add[4][1] or filenames_to_add[5][1]
-    test_video_processor = filenames_to_add[6][1]
-    test_feature_extractor = filenames_to_add[7][1]
-    test_processor = filenames_to_add[8][1]
-
-    filenames_to_add = (
-        (f"test_modeling_{new_lowercase_name}.py", True),
-        (f"test_tokenization_{new_lowercase_name}.py", test_tokenization),
-        (f"test_image_processing_{new_lowercase_name}.py", test_image_processing),
-        (f"test_video_processing_{new_lowercase_name}.py", test_video_processor),
-        (f"test_feature_extraction_{new_lowercase_name}.py", test_feature_extractor),
-        (f"test_processing_{new_lowercase_name}.py", test_processor),
-    )
+    filenames_to_add = [
+        ("test_" + filename.replace(old_lowercase_name, new_lowercase_name), to_add)
+        for filename, to_add in filenames_to_add[1:]
+    ]
+    # fast tokenizer/image processor have the same test files as normal ones
+    corrected_filenames_to_add = []
+    for file, to_add in filenames_to_add:
+        if re.search(rf"test_(?:tokenization)|(?:image_processing)_{new_lowercase_name}_fast.py", file):
+            previous_file, previous_to_add = corrected_filenames_to_add[-1]
+            corrected_filenames_to_add[-1] = (previous_file, previous_to_add or to_add)
+        else:
+            corrected_filenames_to_add.append((file, to_add))
 
     test_files = {}
-    for new_file, to_add in filenames_to_add:
+    for new_file, to_add in corrected_filenames_to_add:
         if to_add:
             original_test_file = new_file.replace(new_lowercase_name, old_lowercase_name)
             original_test_path = REPO_PATH / "tests" / "models" / old_lowercase_name / original_test_file

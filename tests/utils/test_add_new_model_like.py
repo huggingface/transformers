@@ -120,27 +120,41 @@ class TestAddNewModelLike(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "test_modeling_my_test.py")))
 
         # Now assert the correct imports/auto mappings/toctree were added
-        self.assertInFile("from .my_test import *\n", os.path.join(self.MODEL_PATH, "__init__.py"))
         self.assertInFile(
-            '("my_test", "MyTestConfig"),\n', os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py")
+            "from .my_test import *\n",
+            os.path.join(self.MODEL_PATH, "__init__.py"),
         )
-        self.assertInFile('("my_test", "MyTest"),\n', os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"))
-        self.assertInFile('("my_test", "MyTestModel"),\n', os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"))
         self.assertInFile(
-            '("my_test", "MyTestForCausalLM"),\n', os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py")
+            '("my_test", "MyTestConfig"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test", "MyTest"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test", "MyTestModel"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test", "MyTestForCausalLM"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
         )
         self.assertInFile(
             '("my_test", "MyTestForSequenceClassification"),\n',
             os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
         )
         self.assertInFile(
-            '("my_test", "MyTestForQuestionAnswering"),\n', os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py")
+            '("my_test", "MyTestForQuestionAnswering"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
         )
         self.assertInFile(
-            '("my_test", "MyTestForTokenClassification"),\n', os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py")
+            '("my_test", "MyTestForTokenClassification"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
         )
         self.assertInFile(
-            "- local: model_doc/my_test\n        title: MyTest\n", os.path.join(self.DOC_PATH, "_toctree.yml")
+            "- local: model_doc/my_test\n        title: MyTest\n",
+            os.path.join(self.DOC_PATH, "_toctree.yml"),
         )
 
         # Check some exact file creation. For model definition, only check modular as modeling/config/etc... are created
@@ -391,24 +405,41 @@ class TestAddNewModelLike(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(tests_repo, "test_image_processing_my_test2.py")))
 
         # Now assert the correct imports/auto mappings/toctree were added
-        self.assertInFile("from .my_test2 import *\n", os.path.join(self.MODEL_PATH, "__init__.py"))
         self.assertInFile(
-            '("my_test2", "MyTest2Config"),\n', os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py")
+            "from .my_test2 import *\n",
+            os.path.join(self.MODEL_PATH, "__init__.py"),
         )
-        self.assertInFile('("my_test2", "MyTest2"),\n', os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"))
-        self.assertInFile('("my_test2", "MyTest2Model"),\n', os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"))
         self.assertInFile(
-            '("my_test2", "MyTest2ForCausalLM"),\n', os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py")
+            '("my_test2", "MyTest2Config"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test2", "MyTest2"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test2", "MyTest2Model"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test2", "MyTest2ForCausalLM"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
+        )
+        self.assertInFile(
+            '("my_test2", (None, "MyTest2ImageProcessorFast")),\n',
+            os.path.join(self.MODEL_PATH, "auto", "image_processing_auto.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2FeatureExtractor"),\n',
             os.path.join(self.MODEL_PATH, "auto", "feature_extraction_auto.py"),
         )
         self.assertInFile(
-            '("my_test2", "MyTest2Processor"),\n', os.path.join(self.MODEL_PATH, "auto", "processing_auto.py")
+            '("my_test2", "MyTest2Processor"),\n',
+            os.path.join(self.MODEL_PATH, "auto", "processing_auto.py"),
         )
         self.assertInFile(
-            "- local: model_doc/my_test2\n        title: MyTest2\n", os.path.join(self.DOC_PATH, "_toctree.yml")
+            "- local: model_doc/my_test2\n        title: MyTest2\n",
+            os.path.join(self.DOC_PATH, "_toctree.yml"),
         )
 
         # Check some exact file creation. For model definition, only check modular as modeling/config/etc... are created
