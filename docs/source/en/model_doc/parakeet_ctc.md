@@ -12,7 +12,10 @@ The ParakeetCTC model consists of two main components:
 
 1. **FastConformer Encoder**: A linearly scalable Conformer architecture that processes mel-spectrogram features and reduces sequence length through subsampling (see [`FastConformerModel`] for encoder details).
 
-2. **CTC Decoder**: A linear projection layer that maps encoder hidden states to vocabulary logits, followed by CTC decoding for speech recognition.
+2. **CTC Decoder**: Simple but effective decoder consisting of:
+   - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility)
+   - CTC loss computation for training
+   - Greedy CTC decoding for inference
 
 ParakeetCTC achieves state-of-the-art accuracy while being computationally efficient, making it suitable for both research and production deployments. The model supports various vocabulary sizes and can handle character-level, subword, or word-level tokenization.
 
@@ -177,7 +180,7 @@ ParakeetCTC follows an encoder-decoder architecture specifically designed for CT
    - Efficient linear-scalable attention mechanisms
 
 2. **CTC Decoder**: Simple but effective decoder consisting of:
-   - Linear projection from encoder hidden size to vocabulary size
+   - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility)
    - CTC loss computation for training
    - Greedy CTC decoding for inference
 
@@ -198,12 +201,12 @@ ParakeetCTC follows an encoder-decoder architecture specifically designed for CT
 - ParakeetCTC is specifically designed for speech recognition tasks using CTC. For other speech tasks, consider the base [`FastConformerModel`] with custom decoders.
 - The model expects mel-spectrogram features as input. Use [`FastConformerFeatureExtractor`] for proper preprocessing.
 - For best results, ensure your audio is sampled at 16kHz as expected by the feature extractor.
-- Use the `ctc_decode=True` parameter when calling tokenizer methods to get proper CTC-decoded text.
+- The `model.generate()` method performs CTC decoding internally and returns already-decoded token sequences. Simply use `tokenizer.decode()` to convert these to text.
 - The model automatically handles sequence length computation and attention masking for batched inputs.
 
 ## Conversion from NeMo
 
-ParakeetCTC models can be converted from NVIDIA NeMo CTC model checkpoints:
+ParakeetCTC models can be converted from NVIDIA NeMo CTC model checkpoints with full feature parity and numerical equivalence:
 
 ```bash
 python src/transformers/models/parakeet_ctc/convert_nemo_to_parakeet_ctc.py \

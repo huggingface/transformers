@@ -177,10 +177,10 @@ class ParakeetCTCDecoderTest(unittest.TestCase):
         """Test decoder initialization."""
         decoder = ParakeetCTCDecoder(self.config)
 
-        # Check CTC head
-        self.assertIsInstance(decoder.ctc_head, torch.nn.Linear)
-        self.assertEqual(decoder.ctc_head.in_features, 64)  # encoder hidden_size
-        self.assertEqual(decoder.ctc_head.out_features, 128)  # vocab_size
+        self.assertIsInstance(decoder.ctc_head, torch.nn.Conv1d)
+        self.assertEqual(decoder.ctc_head.in_channels, 64)  # encoder hidden_size
+        self.assertEqual(decoder.ctc_head.out_channels, 128)  # vocab_size
+        self.assertEqual(decoder.ctc_head.kernel_size, (1,))  # kernel_size=1
 
         # Check CTC parameters
         self.assertEqual(decoder.blank_token_id, 127)
@@ -317,7 +317,7 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
         decoded_tokens = model.generate(features.input_features, features.attention_mask, features.input_lengths)
         print(decoded_tokens)
-        text = tokenizer.decode(decoded_tokens[0], ctc_decode=True)
+        text = tokenizer.decode(decoded_tokens[0])
 
         EXPECTED_TOKENS = [[130, 103, 38, 994, 62]]
         EXPECTED_TEXT = "what are you working on"
@@ -535,6 +535,52 @@ class ParakeetCTCModelTest(ModelTesterMixin, unittest.TestCase):
         # Check that loss is computed correctly
         self.assertIsNotNone(model_outputs.loss)
         self.assertTrue(torch.isfinite(model_outputs.loss))
+
+    def test_generate_returns_ctc_decoded_sequences(self):
+        """Test that generate method returns already CTC-decoded sequences."""
+        fastconformer_config = FastConformerConfig(
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_mel_bins=40,
+        )
+
+        config = ParakeetCTCConfig(
+            vocab_size=10,
+            blank_token_id=0,
+            ctc_loss_reduction="mean",
+            encoder_config=fastconformer_config,
+        )
+
+        model = ParakeetCTC(config)
+        model.to(torch_device)
+        model.eval()
+
+        # Create test input
+        batch_size, seq_len, mel_bins = 2, 100, 40
+        input_features = torch.randn(batch_size, seq_len, mel_bins).to(torch_device)
+        input_lengths = torch.tensor([seq_len, seq_len // 2], dtype=torch.long).to(torch_device)
+
+        # Generate sequences
+        with torch.no_grad():
+            decoded_sequences = model.generate(
+                input_features=input_features,
+                input_lengths=input_lengths,
+            )
+
+        # Verify output format
+        self.assertEqual(len(decoded_sequences), batch_size)
+        for seq in decoded_sequences:
+            self.assertIsInstance(seq, list)
+            # All tokens should be valid (< vocab_size) and not blank_token_id
+            for token in seq:
+                self.assertIsInstance(token, int)
+                self.assertGreaterEqual(token, 0)
+                self.assertLess(token, config.vocab_size)
+                self.assertNotEqual(token, config.blank_token_id)  # Should not contain blanks
+
+        # Note: We can't easily test for no consecutive duplicates without knowing the exact output,
+        # but the important thing is that blanks are removed and the sequences are valid token lists
 
 
 if __name__ == "__main__":

@@ -57,7 +57,7 @@ class ParakeetCTCDecoder(nn.Module):
         self.config = config
 
         # CTC head - linear projection from encoder hidden size to vocabulary size
-        self.ctc_head = nn.Linear(config.encoder_config.hidden_size, config.vocab_size)
+        self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         # Store CTC-specific parameters for easy access
         self.blank_token_id = config.blank_token_id
@@ -74,7 +74,9 @@ class ParakeetCTCDecoder(nn.Module):
         Returns:
             CTC logits of shape (batch_size, sequence_length, vocab_size)
         """
-        return self.ctc_head(hidden_states)
+        decoder_output = self.ctc_head(hidden_states.transpose(1, 2))
+        logits = torch.nn.functional.log_softmax(decoder_output.transpose(1, 2), dim=-1)
+        return logits
 
     def compute_ctc_loss(
         self,
@@ -323,18 +325,15 @@ class ParakeetCTC(ParakeetCTCPreTrainedModel):
                     ).item()
                     sequence = sequence[:actual_length]
 
-                # CTC collapse: remove blanks and repeated tokens
+                # CTC collapse: remove blanks and repeated tokens (matching NeMo's algorithm)
                 decoded_tokens = []
-                prev_token = None
+                prev_token = self.decoder.blank_token_id  # Initialize as blank
 
                 for token_id in sequence.tolist():
-                    # Skip blank tokens (using the decoder's blank token ID)
-                    if token_id == self.decoder.blank_token_id:
-                        prev_token = token_id
-                        continue
-
-                    # Skip repeated tokens (CTC collapse)
-                    if token_id != prev_token:
+                    # NeMo's CTC logic: (p != previous or previous == blank_id) and p != blank_id
+                    if (
+                        token_id != prev_token or prev_token == self.decoder.blank_token_id
+                    ) and token_id != self.decoder.blank_token_id:
                         decoded_tokens.append(token_id)
 
                     prev_token = token_id

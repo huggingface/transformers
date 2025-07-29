@@ -29,12 +29,10 @@ from ...utils import is_librosa_available, is_torch_available, logging, requires
 if is_torch_available():
     import torch
 
+EPSILON = 1e-10
+LOG_ZERO_GUARD_VALUE = 2**-24
 
 logger = logging.get_logger(__name__)
-
-# Constants for preprocessing (matching NeMo implementation)
-LOG_ZERO_GUARD_VALUE = 2**-24
-EPSILON = 1e-5
 
 
 class FastConformerFeatureExtractor(SequenceFeatureExtractor):
@@ -124,37 +122,90 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
 
         # Mel filterbank will be created on-demand
         self._filterbanks = None
+        self._window = None
+
+    @classmethod
+    def from_pretrained(cls, model_name_or_path, **kwargs):
+        """Load feature extractor and attempt to load preprocessing weights from model."""
+        # Load feature extractor normally
+        instance = super().from_pretrained(model_name_or_path, **kwargs)
+
+        # Try to load preprocessing weights from model files
+        try:
+            from pathlib import Path
+
+            model_path = Path(model_name_or_path)
+
+            # Try safetensors first, then pytorch_model.bin
+            model_files = ["model.safetensors", "pytorch_model.bin"]
+
+            for file_name in model_files:
+                weight_file = model_path / file_name
+                if weight_file.exists():
+                    if file_name.endswith(".safetensors"):
+                        try:
+                            from safetensors.torch import load_file
+
+                            weights = load_file(weight_file)
+                        except ImportError:
+                            continue
+                    else:
+                        weights = torch.load(weight_file, map_location="cpu")
+
+                    # Load preprocessing weights if they exist
+                    if "feature_extractor.window" in weights:
+                        instance._window = weights["feature_extractor.window"]
+                        logger.info("Loaded pretrained window function")
+
+                    if "feature_extractor.filterbanks" in weights:
+                        instance._filterbanks = weights["feature_extractor.filterbanks"]
+                        logger.info("Loaded pretrained mel filterbanks")
+
+                    break
+
+        except Exception as e:
+            logger.debug(f"Could not load preprocessing weights: {e}")
+            # Fallback to computed weights - this is fine
+            pass
+
+        return instance
 
     def get_filterbanks(self, device, dtype):
         """Get mel filterbanks, creating them if needed."""
-        if self._filterbanks is None:
-            if not is_torch_available():
-                raise ImportError("PyTorch is required for FastConformer feature extraction")
+        if self._filterbanks is not None:
+            return self._filterbanks.to(device=device, dtype=dtype)
 
-            if not is_librosa_available():
-                raise ImportError(
-                    "librosa is required for FastConformer feature extraction. "
-                    "Please install it with `pip install librosa`."
-                )
+        if not is_torch_available():
+            raise ImportError("PyTorch is required for FastConformer feature extraction")
 
-            import librosa
-
-            self._filterbanks = torch.tensor(
-                librosa.filters.mel(
-                    sr=self.sampling_rate,
-                    n_fft=self.n_fft,
-                    n_mels=self.feature_size,
-                    fmin=0,
-                    fmax=self.sampling_rate / 2,
-                    norm=self.mel_scale,
-                ),
-                dtype=torch.float32,
+        if not is_librosa_available():
+            raise ImportError(
+                "librosa is required for FastConformer feature extraction. "
+                "Please install it with `pip install librosa`."
             )
+
+        import librosa
+
+        self._filterbanks = torch.tensor(
+            librosa.filters.mel(
+                sr=self.sampling_rate,
+                n_fft=self.n_fft,
+                n_mels=self.feature_size,
+                fmin=0,
+                fmax=self.sampling_rate / 2,
+                norm=self.mel_scale,
+            ),
+            dtype=torch.float32,
+        )
 
         return self._filterbanks.to(device=device, dtype=dtype)
 
     def get_window(self, win_length: int, window_type: str, device, dtype) -> "torch.Tensor":
         """Get window function based on type."""
+        # Use pretrained window if available and correct length
+        if self._window is not None and self._window.numel() == win_length:
+            return self._window.to(device=device, dtype=dtype)
+
         window_fns = {
             "hann": torch.hann_window,
             "hamming": torch.hamming_window,
@@ -439,6 +490,7 @@ class FastConformerFeatureExtractor(SequenceFeatureExtractor):
         output = super().to_dict()
         # Remove cached tensors that shouldn't be serialized
         output.pop("_filterbanks", None)
+        output.pop("_window", None)
         return output
 
 

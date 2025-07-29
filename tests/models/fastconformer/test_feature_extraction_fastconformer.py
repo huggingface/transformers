@@ -222,6 +222,34 @@ class FastConformerFeatureExtractionTest(unittest.TestCase):
                 audio = [1, 2, 3, 4, 5]  # Simple list of numbers
                 feat_extract(audio)
 
+    @require_torch
+    def test_pretrained_weight_loading(self):
+        """Test that feature extractor can optionally load pretrained preprocessing weights."""
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+
+        # Initially should have no pretrained weights
+        self.assertIsNone(feat_extract._window)
+        self.assertIsNone(feat_extract._filterbanks)
+
+        # Test that get_window still works (creates window on demand)
+        window = feat_extract.get_window(400, "hann", device="cpu", dtype=torch.float32)
+        self.assertEqual(window.shape, (400,))
+
+        # Test that get_filterbanks still works (creates filterbanks on demand)
+        filterbanks = feat_extract.get_filterbanks(device="cpu", dtype=torch.float32)
+        self.assertEqual(filterbanks.shape, (feat_extract.feature_size, feat_extract.n_fft // 2 + 1))
+
+        # Test with mock pretrained weights
+        feat_extract._window = torch.hann_window(400)
+        feat_extract._filterbanks = torch.randn(128, 257)  # Mock filterbanks
+
+        # Should now use the pretrained weights
+        loaded_window = feat_extract.get_window(400, "hann", device="cpu", dtype=torch.float32)
+        loaded_filterbanks = feat_extract.get_filterbanks(device="cpu", dtype=torch.float32)
+
+        self.assertTrue(torch.equal(loaded_window, feat_extract._window))
+        self.assertTrue(torch.equal(loaded_filterbanks, feat_extract._filterbanks))
+
 
 if __name__ == "__main__":
     unittest.main()

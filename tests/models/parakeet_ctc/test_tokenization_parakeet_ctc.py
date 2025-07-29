@@ -86,41 +86,6 @@ class ParakeetCTCTokenizationTest(unittest.TestCase):
         self.assertEqual(tokenizer._convert_id_to_token(1), "▁the")
         self.assertEqual(tokenizer._convert_id_to_token(999), "<unk>")
 
-    def test_ctc_decoding(self):
-        """Test CTC decoding functionality."""
-        tokenizer = ParakeetCTCTokenizer(
-            vocab_file=str(self.vocab_file),
-            blank_token_id=13,
-        )
-
-        # Test case: [blank, "▁the", "▁the", blank, "▁to", blank, blank]
-        ctc_output = [13, 1, 1, 13, 2, 13, 13]
-        decoded_ids = tokenizer.ctc_decode_ids(ctc_output)
-
-        # Should be [1, 2] after removing blanks and collapsing
-        expected_ids = [1, 2]
-        self.assertEqual(decoded_ids, expected_ids)
-
-        # Test full CTC decoding to text
-        decoded_text = tokenizer.decode_ctc_tokens(ctc_output)
-        expected_text = "the to"
-        self.assertEqual(decoded_text, expected_text)
-
-    def test_consecutive_collapse(self):
-        """Test consecutive token collapse in CTC decoding."""
-        tokenizer = ParakeetCTCTokenizer(
-            vocab_file=str(self.vocab_file),
-            blank_token_id=13,
-        )
-
-        # Multiple consecutive identical tokens
-        ctc_output = [1, 1, 1, 2, 2, 3, 3, 3, 3]
-        decoded_ids = tokenizer.ctc_decode_ids(ctc_output)
-
-        # Should collapse to [1, 2, 3]
-        expected_ids = [1, 2, 3]
-        self.assertEqual(decoded_ids, expected_ids)
-
     def test_sentencepiece_processing(self):
         """Test SentencePiece-style token processing."""
         tokenizer = ParakeetCTCTokenizer(
@@ -134,48 +99,49 @@ class ParakeetCTCTokenizationTest(unittest.TestCase):
         expected = "hello world"
         self.assertEqual(text, expected)
 
-        # Test with CTC decoding
-        ctc_output = [10, 11]  # "▁hello", "▁world"
-        decoded_text = tokenizer.decode_ctc_tokens(ctc_output)
+        # Test with already CTC-decoded token IDs (as would come from model.generate())
+        ctc_decoded_ids = [10, 11]  # "▁hello", "▁world" - already collapsed
+        decoded_text = tokenizer.decode(ctc_decoded_ids)
         self.assertEqual(decoded_text, "hello world")
 
     def test_decode_methods(self):
-        """Test various decode methods."""
+        """Test decode methods expecting already CTC-decoded sequences."""
         tokenizer = ParakeetCTCTokenizer(
             vocab_file=str(self.vocab_file),
             blank_token_id=13,
         )
 
-        token_ids = [13, 1, 1, 13, 2, 13]
+        # These token sequences are already CTC-decoded (from model.generate())
+        # So they should not contain blanks or consecutive duplicates
+        already_decoded_ids = [1, 2]  # "▁the", "▁to"
 
-        # Test CTC decode (default)
-        ctc_text = tokenizer.decode(token_ids, ctc_decode=True)
-        self.assertEqual(ctc_text, "the to")
-
-        # Test non-CTC decode
-        non_ctc_text = tokenizer.decode(token_ids, ctc_decode=False)
-        # Should include all tokens (except those >= vocab_size)
-        self.assertIn("the", non_ctc_text)
-        self.assertIn("to", non_ctc_text)
+        # Test standard decode (expects CTC-decoded input)
+        text = tokenizer.decode(already_decoded_ids)
+        self.assertEqual(text, "the to")
 
         # Test with single token
-        single_text = tokenizer.decode(1, ctc_decode=True)
+        single_text = tokenizer.decode(1)
         self.assertEqual(single_text, "the")
 
+        # Test with empty sequence
+        empty_text = tokenizer.decode([])
+        self.assertEqual(empty_text, "")
+
     def test_batch_decode(self):
-        """Test batch decoding functionality."""
+        """Test batch decoding functionality with already CTC-decoded sequences."""
         tokenizer = ParakeetCTCTokenizer(
             vocab_file=str(self.vocab_file),
             blank_token_id=13,
         )
 
+        # These are already CTC-decoded sequences (as would come from model.generate())
         batch_outputs = [
-            [13, 1, 13, 2, 13],  # "the to"
-            [13, 3, 13, 4, 13],  # "and a"
+            [1, 2],  # "the to"
+            [3, 4],  # "and a"
             [10, 11],  # "hello world"
         ]
 
-        batch_decoded = tokenizer.batch_decode(batch_outputs, ctc_decode=True)
+        batch_decoded = tokenizer.batch_decode(batch_outputs)
         expected = ["the to", "and a", "hello world"]
         self.assertEqual(batch_decoded, expected)
 
@@ -197,10 +163,10 @@ class ParakeetCTCTokenizationTest(unittest.TestCase):
         # Load tokenizer
         loaded_tokenizer = ParakeetCTCTokenizer.from_pretrained(save_dir)
 
-        # Test that loaded tokenizer works the same
-        ctc_output = [13, 1, 1, 13, 2, 13]
-        original_text = tokenizer.decode_ctc_tokens(ctc_output)
-        loaded_text = loaded_tokenizer.decode_ctc_tokens(ctc_output)
+        # Test that loaded tokenizer works the same with already CTC-decoded sequences
+        already_decoded_ids = [1, 2]  # "▁the", "▁to"
+        original_text = tokenizer.decode(already_decoded_ids)
+        loaded_text = loaded_tokenizer.decode(already_decoded_ids)
 
         self.assertEqual(original_text, loaded_text)
         self.assertEqual(loaded_tokenizer.vocab_size, tokenizer.vocab_size)
@@ -224,9 +190,9 @@ class ParakeetCTCTokenizationTest(unittest.TestCase):
         # Verify it's the correct type
         self.assertIsInstance(auto_tokenizer, ParakeetCTCTokenizer)
 
-        # Test functionality
-        ctc_output = [13, 1, 13, 2, 13]
-        text = auto_tokenizer.decode(ctc_output, ctc_decode=True)
+        # Test functionality with already CTC-decoded sequences
+        already_decoded_ids = [1, 2]  # "▁the", "▁to"
+        text = auto_tokenizer.decode(already_decoded_ids)
         self.assertEqual(text, "the to")
 
     def test_edge_cases(self):
@@ -237,17 +203,37 @@ class ParakeetCTCTokenizationTest(unittest.TestCase):
         )
 
         # Empty input
-        self.assertEqual(tokenizer.decode_ctc_tokens([]), "")
         self.assertEqual(tokenizer.decode([]), "")
 
-        # Only blank tokens
-        blank_only = [13, 13, 13]
-        self.assertEqual(tokenizer.decode_ctc_tokens(blank_only), "")
+        # Out of vocab tokens (should be mapped to UNK token)
+        out_of_vocab = [999]  # Should map to UNK token ID 0
+        decoded = tokenizer.decode(out_of_vocab)
+        # Since 999 maps to UNK token which is "<unk>", we expect that
+        # But actually _convert_id_to_token returns the unk_token string for unknown IDs
+        self.assertIn("<unk>", decoded)
 
-        # Out of vocab tokens
-        out_of_vocab = [999, 1000]
-        decoded = tokenizer.decode_ctc_tokens(out_of_vocab)
-        self.assertEqual(decoded, "")  # Filtered out
+        # Test various input types
+        self.assertEqual(tokenizer.decode(1), "the")  # Single int
+        self.assertEqual(tokenizer.decode([1]), "the")  # List with single int
+
+    def test_tokenizer_expects_ctc_decoded_input(self):
+        """Test that tokenizer is designed to work with already CTC-decoded sequences."""
+        tokenizer = ParakeetCTCTokenizer(
+            vocab_file=str(self.vocab_file),
+            blank_token_id=13,
+        )
+
+        # The tokenizer should expect input from model.generate() which is already CTC-decoded
+        # This means no blanks and no consecutive duplicates
+        model_output = [1, 2, 3, 4]  # Already CTC-decoded: "▁the", "▁to", "▁and", "▁a"
+
+        result = tokenizer.decode(model_output)
+        expected = "the to and a"
+        self.assertEqual(result, expected)
+
+        # Verify the docstring mentions this expectation
+        self.assertIn("already been CTC-decoded", tokenizer.__class__.__doc__)
+        self.assertIn("model.generate", tokenizer.__class__.__doc__)
 
 
 if __name__ == "__main__":

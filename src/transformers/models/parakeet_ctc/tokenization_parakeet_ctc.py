@@ -33,11 +33,16 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
     """
     Parakeet CTC tokenizer for CTC-based speech recognition models.
 
-    This tokenizer is designed specifically for CTC (Connectionist Temporal Classification) models
-    that use character-level or subword-level vocabularies. It handles CTC decoding which includes:
-    - Removing blank tokens
-    - Collapsing consecutive identical tokens
+    This tokenizer is designed to work with ParakeetCTC models that internally handle CTC decoding.
+    The tokenizer expects token sequences that have already been CTC-decoded (with blanks removed
+    and consecutive identical tokens collapsed) from the model's generate() method.
+
+    The tokenizer handles:
     - Converting token IDs to text with SentencePiece-style processing
+    - Proper handling of subword tokens and spacing
+
+    Note: Unlike traditional CTC tokenizers, this tokenizer does NOT perform CTC decoding
+    (blank removal and repetition collapse) as this is handled by the ParakeetCTC model itself.
 
     Args:
         vocab_file (`str`):
@@ -49,6 +54,23 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             The ID of the blank token used in CTC. If not provided, defaults to vocab_size.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
+
+    Example:
+        ```python
+        >>> from transformers import ParakeetCTC, ParakeetCTCTokenizer, FastConformerFeatureExtractor
+        >>>
+        >>> # Load model, tokenizer, and feature extractor
+        >>> model = ParakeetCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        >>> tokenizer = ParakeetCTCTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        >>> feature_extractor = FastConformerFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        >>>
+        >>> # Process audio and generate token sequences (already CTC-decoded)
+        >>> inputs = feature_extractor(audio, sampling_rate=16000)
+        >>> token_sequences = model.generate(**inputs)
+        >>>
+        >>> # Decode to text (no additional CTC decoding needed)
+        >>> transcription = tokenizer.decode(token_sequences[0])
+        ```
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -133,71 +155,11 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
         return text
 
-    def ctc_decode_ids(self, token_ids: list[int]) -> list[int]:
-        """
-        Perform CTC decoding on a sequence of token IDs.
-
-        This removes blank tokens and collapses consecutive identical tokens.
-        Also filters out out-of-vocabulary tokens.
-
-        Args:
-            token_ids: List of token IDs from CTC model output
-
-        Returns:
-            List of decoded token IDs
-        """
-        if not token_ids:
-            return []
-
-        decoded_ids = []
-        prev_id = None
-
-        for token_id in token_ids:
-            # Skip blank tokens
-            if token_id == self.blank_token_id:
-                prev_id = token_id
-                continue
-
-            # Skip out-of-vocabulary tokens
-            if token_id not in self.ids_to_tokens:
-                prev_id = token_id
-                continue
-
-            # Skip repeated tokens (CTC collapse)
-            if token_id != prev_id:
-                decoded_ids.append(token_id)
-
-            prev_id = token_id
-
-        return decoded_ids
-
-    def decode_ctc_tokens(self, token_ids: list[int]) -> str:
-        """
-        Decode CTC token IDs to text.
-
-        Args:
-            token_ids: List of token IDs from CTC model output
-
-        Returns:
-            Decoded text string
-        """
-        # First apply CTC decoding
-        decoded_ids = self.ctc_decode_ids(token_ids)
-
-        # Convert IDs to tokens
-        tokens = [self._convert_id_to_token(id_) for id_ in decoded_ids]
-
-        # Convert tokens to string
-        text = self.convert_tokens_to_string(tokens)
-
-        return text
-
     def decode(
         self,
         token_ids: Union[int, list[int], list[list[int]]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
-        ctc_decode: bool = True,
         **kwargs,
     ) -> str:
         """
@@ -208,7 +170,6 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             token_ids: List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-            ctc_decode: Whether to apply CTC decoding (remove blanks and collapse repetitions).
         """
         # Handle single integer
         if isinstance(token_ids, int):
@@ -224,24 +185,18 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
                 token_ids,
                 skip_special_tokens=skip_special_tokens,
                 clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                ctc_decode=ctc_decode,
                 **kwargs,
             )
 
-        # Single sequence
-        if ctc_decode:
-            return self.decode_ctc_tokens(token_ids)
-        else:
-            # Standard decoding without CTC
-            tokens = [self._convert_id_to_token(id_) for id_ in token_ids]
-            return self.convert_tokens_to_string(tokens)
+        # Convert IDs to tokens and then to string
+        tokens = [self._convert_id_to_token(id_) for id_ in token_ids]
+        return self.convert_tokens_to_string(tokens)
 
     def batch_decode(
         self,
         sequences: list[list[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
-        ctc_decode: bool = True,
         **kwargs,
     ) -> list[str]:
         """
@@ -251,14 +206,12 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             sequences: List of tokenized input ids.
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
-            ctc_decode: Whether to apply CTC decoding.
         """
         return [
             self.decode(
                 seq,
                 skip_special_tokens=skip_special_tokens,
                 clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                ctc_decode=ctc_decode,
                 **kwargs,
             )
             for seq in sequences
