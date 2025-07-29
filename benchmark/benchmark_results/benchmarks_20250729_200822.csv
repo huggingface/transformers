@@ -1,2 +1,0 @@
-benchmark_id,repository,branch,commit_id,commit_message,metadata,created_at
-06eccf8f-a72d-4b1a-a5bb-cfbf7e688c70,repository=,brnach=,commit_id=,commit_msg=,"{""model_name"": ""mock-transformer-7b"", ""gpu_name"": ""Mock GPU RTX 4090"", ""benchmark_type"": ""mock_inference_test"", ""simulation_duration_seconds"": 15}",2025-07-29T20:08:07.875408
