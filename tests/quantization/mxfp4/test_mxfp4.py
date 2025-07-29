@@ -13,28 +13,20 @@
 # limitations under the License.
 
 import gc
-import tempfile
 import unittest
 from unittest.mock import patch
 
-import pytest
-
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Mxfp4Config, OpenAIMoeForCausalLM
+from transformers import AutoTokenizer, Mxfp4Config, OpenAIMoeForCausalLM
 from transformers.testing_utils import (
-    require_accelerate,
+    require_torch,
+    require_torch_gpu,
     require_torch_large_gpu,
     require_triton,
     require_triton_kernels,
-    require_torch,
-    require_torch_gpu,
     slow,
-    torch_device,
 )
 from transformers.utils import (
-    is_triton_available,
-    is_triton_kernels_availalble,
     is_torch_available,
-    is_accelerate_available,
 )
 
 
@@ -315,9 +307,9 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertIsNotNone(mx_ctx)
 
 
-# @require_torch
-# @require_torch_large_gpu
-# @slow
+@require_torch
+@require_torch_large_gpu
+@slow
 class Mxfp4ModelTest(unittest.TestCase):
     """Test mxfp4 with actual models (requires specific model and hardware)"""
 
