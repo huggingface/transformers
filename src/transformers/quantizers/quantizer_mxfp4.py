@@ -166,7 +166,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
+        if is_triton_kernels_availalble():
+            from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
 
         from ..integrations import Mxfp4OpenAIMoeExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
