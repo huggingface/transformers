@@ -19,7 +19,7 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -50,6 +50,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import ModelOutput
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torchdynamo_compiling, logging
@@ -760,6 +761,23 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             rope_deltas=outputs.rope_deltas,
         )
 
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+
+        # Preserve rope_deltas for CFG and multi-pass generation
+        if hasattr(self.model, "rope_deltas") and self.model.rope_deltas is not None:
+            model_kwargs["rope_deltas"] = self.model.rope_deltas
+
+        return model_kwargs
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -777,6 +795,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        # Restore rope_deltas from kwargs if available (needed for CFG generation)
+        if "rope_deltas" in kwargs and kwargs["rope_deltas"] is not None:
+            self.model.rope_deltas = kwargs["rope_deltas"]
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
