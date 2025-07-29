@@ -176,50 +176,12 @@ def get_box_points(rect):
 
 class FastImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Fast image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
-            `do_resize` in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 640}`):
-            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
-            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-            method.
-        size_divisor (`int`, *optional*, defaults to 32):
-            Ensures height and width are rounded to a multiple of this value after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `False`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`dict[str, int]` *optional*, defaults to 224):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-            the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-
-        min_area (`int`, *optional*, defaults to 250):
-            Minimum area (in pixels) for a region to be considered a valid detection.
-            Regions smaller than this threshold will be ignored during post-processing.
-        pooling_size (`int`, *optional*, defaults to 9):
-            Size of the pooling window used during region proposal aggregation or feature map downsampling.
-            This controls the granularity of spatial features extracted from the image.
+    min_area (`int`, *optional*, defaults to 250):
+        Minimum area (in pixels) for a region to be considered a valid detection.
+        Regions smaller than this threshold will be ignored during post-processing.
+    pooling_size (`int`, *optional*, defaults to 9):
+        Size of the pooling window used during region proposal aggregation or feature map downsampling.
+        This controls the granularity of spatial features extracted from the image.
     """
 
     model_input_names = ["pixel_values"]
