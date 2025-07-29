@@ -112,7 +112,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key.startswith("clip_model") and "attn.in_proj" in key:
@@ -172,7 +172,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # remove some keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.startswith("model"):
             state_dict.pop(key, None)
 

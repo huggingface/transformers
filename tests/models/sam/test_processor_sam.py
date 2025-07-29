@@ -98,7 +98,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
         for image in input_feat_extract.pixel_values:
@@ -123,7 +123,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
         input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
         for label in input_feat_extract.labels:

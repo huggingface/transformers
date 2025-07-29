@@ -438,7 +438,7 @@ class AriaProjector(nn.Module):
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
-        if num_patches not in self.patch_to_query_dict.keys():
+        if num_patches not in self.patch_to_query_dict:
             raise KeyError(
                 f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
             )
@@ -901,8 +901,8 @@ class AriaImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        split_image = images_kwargs.get("split_image", None) or self.split_image
-        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+        split_image = images_kwargs["split_image"] if "split_image" in images_kwargs else self.split_image
+        max_image_size = images_kwargs["max_image_size"] if "max_image_size" in images_kwargs else self.max_image_size
 
         resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
         num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size

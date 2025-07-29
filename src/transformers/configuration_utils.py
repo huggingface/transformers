@@ -678,7 +678,7 @@ class PretrainedConfig(PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
 
-        gguf_file = kwargs.get("gguf_file", None)
+        gguf_file = kwargs.get("gguf_file")
 
         if trust_remote_code is True:
             logger.warning(
@@ -1033,7 +1033,7 @@ class PretrainedConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None:
+        if d.get("torch_dtype") is not None:
             if isinstance(d["torch_dtype"], dict):
                 d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
             elif not isinstance(d["torch_dtype"], str):
@@ -1198,6 +1198,42 @@ class PretrainedConfig(PushToHubMixin):
         else:
             config_to_return = self
         return config_to_return
+
+    @classmethod
+    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and vision model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
+            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+    @classmethod
+    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and audio model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
+            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:
