@@ -634,7 +634,7 @@ class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, nn.BatchNorm2d]) -> None:
         """Initialize the weights"""
