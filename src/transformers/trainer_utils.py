@@ -894,7 +894,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
-        is_regex = True if optim_target_modules != key else False
+        is_regex = optim_target_modules != key
     elif key in optim_target_modules:  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True

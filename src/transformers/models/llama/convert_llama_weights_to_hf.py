@@ -398,7 +398,7 @@ def write_model(
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=True if llama_version in ["3.2"] else False,
+            tie_word_embeddings=llama_version in ["3.2"],
         )
 
         config.save_pretrained(tmp_model_path)

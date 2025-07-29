@@ -142,7 +142,7 @@ class ColQwen2Processor(ProcessorMixin):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = True if suffix is not None else False
+        return_token_type_ids = suffix is not None
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
