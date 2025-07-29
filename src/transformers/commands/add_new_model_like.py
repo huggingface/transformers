@@ -743,7 +743,6 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.filenames_to_add,
             self.create_fast_image_processor,
         ) = get_user_input()
-
         self.path_to_repo = path_to_repo
 
     def run(self):
