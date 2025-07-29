@@ -23,8 +23,7 @@ if TYPE_CHECKING:
     # from .feature_extraction_llasa import *
     # from .generation_llasa import *
     from .modeling_llasa import *
-
-    # from .processing_llasa import *
+    from .processing_llasa import *
     from .tokenization_llasa import *
 else:
     import sys

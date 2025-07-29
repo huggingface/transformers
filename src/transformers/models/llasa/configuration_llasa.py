@@ -166,13 +166,13 @@ class LlasaConfig(PretrainedConfig):
         num_attention_heads=32,
         num_key_value_heads=None,
         hidden_act="silu",
-        max_position_embeddings=2048,
+        max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
-        eos_token_id=2,
+        eos_token_id=128261,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -223,12 +223,19 @@ class LlasaConfig(PretrainedConfig):
 
         # Adjust vocab size to accommodate the new tokenizer
         # https://github.com/zhenye234/LLaSA_training/blob/main/train_tts.py#L249-L251
-        self.llm_vocab_size = vocab_size
         self.codebook_size = codebook_size
         if llasa_start_end_tokens is None:
             llasa_start_end_tokens = TTS_TOKENS_DICT
         self.llasa_start_end_tokens = llasa_start_end_tokens
-        self.vocab_size += codebook_size + len(llasa_start_end_tokens)
+
+    @classmethod
+    def from_pretrained_llm(cls, *args, **kwargs):
+        """
+        Load LLM config and add relevant Llasa tokens.
+        """
+        config = super().from_pretrained(*args, **kwargs)
+        config.vocab_size += config.codebook_size + len(config.llasa_start_end_tokens)
+        return config
 
 
 __all__ = ["LlasaConfig"]

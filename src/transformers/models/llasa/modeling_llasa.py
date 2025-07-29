@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llasa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from typing import Callable, Optional, Union
 
 import torch
@@ -461,18 +460,6 @@ class LlasaForCausalLM(LlasaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def extract_speech_ids(speech_tokens_str):
-        speech_ids = []
-        for token_str in speech_tokens_str:
-            if token_str.startswith("<|s_") and token_str.endswith("|>"):
-                # TODO fix hardcoded integers
-                num_str = token_str[4:-2]
-                num = int(num_str)
-                speech_ids.append(num)
-            else:
-                raise ValueError(f"Unexpected token: {token_str}")
-        return speech_ids
 
 
 __all__ = ["LlasaForCausalLM", "LlasaModel", "LlasaPreTrainedModel"]

@@ -5,10 +5,6 @@
 #                          modular_llasa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from typing import Optional, Union
-
-from transformers.utils import TensorType
-
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 
 
@@ -43,7 +39,7 @@ class LlasaTokenizer(PreTrainedTokenizerFast):
     def __init__(self, model_max_length=2048, codebook_size=65536, llasa_start_end_tokens=None, *args, **kwargs):
         super().__init__(model_max_length=model_max_length, *args, **kwargs)
 
-        # correct way to overwrite variables?
+        # TODO: correct way to overwrite variables?
         self.pad_token = self.eos_token
 
         # codebook indices
@@ -52,31 +48,15 @@ class LlasaTokenizer(PreTrainedTokenizerFast):
         self.llasa_token = llasa_start_end_tokens
         self.codebook_size = codebook_size
         self.speech_tokens = [f"<|s_{i}|>" for i in range(codebook_size)]
-        self.add_tokens(list(self.llasa_token.values()) + self.speech_tokens)
 
-    def custom_prepare(
-        self,
-        text: str,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        continue_final_message: bool = True,
-        **kwargs,
-    ) -> list[int]:
+    @classmethod
+    def from_pretrained_llm(cls, *args, **kwargs):
         """
-        Prepare text for the model by adding start and end tokens with chat template.
-        https://github.com/zhenye234/LLaSA_training/blob/ef5c2605927190ba40656d09b3a9e10df6631149/train_tts.py#L114
-        Easier to see in their example on their model card: https://huggingface.co/HKUSTAudio/Llasa-1B#how-to-use
+        Load the tokenizer from a pre-trained LLM model, and add relevant speech and Llasa tokens.
         """
-        formatted_text = (
-            f"{self.llasa_token['text_understanding_start']}{text}{self.llasa_token['text_understanding_end']}"
-        )
-        chat = [
-            {"role": "user", "content": "Convert the text to speech:" + formatted_text},
-            {"role": "assistant", "content": self.llasa_token["speech_generation_start"]},
-        ]
-        input_ids = self.apply_chat_template(
-            chat, return_tensors=return_tensors, continue_final_message=continue_final_message, **kwargs
-        )
-        return input_ids
+        tokenizer = super().from_pretrained(*args, **kwargs)
+        tokenizer.add_tokens(list(tokenizer.llasa_token.values()) + tokenizer.speech_tokens)
+        return tokenizer
 
 
 __all__ = ["LlasaTokenizer"]
