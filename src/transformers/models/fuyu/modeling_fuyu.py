@@ -34,15 +34,13 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
-    config_class = FuyuConfig
+    config: FuyuConfig
     base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
@@ -256,12 +254,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
 
@@ -390,15 +382,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             model_inputs["image_patches"] = None
 
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

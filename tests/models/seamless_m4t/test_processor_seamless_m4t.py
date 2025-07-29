@@ -51,9 +51,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         processor = SeamlessM4TProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        tokenizer_instance = isinstance(processor.tokenizer, SeamlessM4TTokenizerFast) or isinstance(
-            processor.tokenizer, SeamlessM4TTokenizer
-        )
+        tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
         self.assertTrue(tokenizer_instance)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
@@ -75,9 +73,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
 
-        tokenizer_instance = isinstance(processor.tokenizer, SeamlessM4TTokenizerFast) or isinstance(
-            processor.tokenizer, SeamlessM4TTokenizer
-        )
+        tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
         self.assertTrue(tokenizer_instance)
 
     # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->SeamlessM4T
@@ -92,7 +88,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
         input_processor = processor(audios=raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer with Whisper->SeamlessM4T
@@ -108,7 +104,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer_decode with Whisper->SeamlessM4T

@@ -29,7 +29,6 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import requires
 
 
@@ -319,8 +318,6 @@ class OmDetTurboProcessor(ProcessorMixin):
         )
         return height, width
 
-    @deprecate_kwarg("score_threshold", new_name="threshold", version="4.51.0")
-    @deprecate_kwarg("classes", new_name="text_labels", version="4.51.0")
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",

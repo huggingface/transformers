@@ -100,7 +100,11 @@ class ProcessorTesterMixin:
         assert attribute in self.processor_class.attributes
         component_class_name = getattr(self.processor_class, f"{attribute}_class")
         if isinstance(component_class_name, tuple):
-            component_class_name = component_class_name[0]
+            if attribute == "image_processor":
+                # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
+                component_class_name = component_class_name[0]
+            else:
+                component_class_name = component_class_name[-1]
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
@@ -933,7 +937,7 @@ class ProcessorTesterMixin:
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
         )
 
-    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    @parameterized.expand([(1, "pt"), (2, "pt")])  # fast image processors supports only torchvision
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
@@ -1110,3 +1114,116 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+
+    def test_chat_template_jinja_kwargs(self):
+        """Tests that users can pass any kwargs and they will be used in jinja templates."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Which of these animals is making the sound?"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "It is a cow."}],
+            },
+        ]
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if add_system_prompt %}"
+            "{{'You are a helpful assistant.'}}"
+            "{% endif %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_system_prompt=True, tokenize=False, chat_template=dummy_template
+        )
+        expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
+        self.assertEqual(formatted_prompt, expected_prompt)
+
+    @require_torch
+    def test_apply_chat_template_assistant_mask(self):
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is the capital of France?"},
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "The capital of France is Paris."},
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What about Italy?"},
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "The capital of Italy is Rome."},
+                    ],
+                },
+            ]
+        ]
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{% generation %}"
+            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{% endgeneration %}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=False,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            return_assistant_tokens_mask=True,
+            chat_template=dummy_template,
+        )
+        self.assertTrue("assistant_masks" in inputs)
+        self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
+
+        mask = inputs["assistant_masks"].bool()
+        assistant_ids = inputs["input_ids"][mask]
+
+        assistant_text = (
+            "The capital of France is Paris.<|special_end|>\nThe capital of Italy is Rome.<|special_end|>\n"
+        )
+
+        # Some tokenizers add extra spaces which aren't then removed when decoding, so we need to check token ids
+        # if we can't get identical text outputs
+        text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
+        ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
+        self.assertTrue(text_is_same or ids_is_same)

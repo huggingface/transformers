@@ -31,7 +31,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
 
     def __call__(self, inputs: Union[str, list[str]], **kwargs):
         is_split_into_words = kwargs.get("is_split_into_words", False)
-        delimiter = kwargs.get("delimiter", None)
+        delimiter = kwargs.get("delimiter")
 
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
@@ -135,6 +135,11 @@ class TokenClassificationPipeline(ChunkPipeline):
     """
 
     default_input_names = "sequences"
+
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)

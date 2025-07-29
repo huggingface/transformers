@@ -220,7 +220,7 @@ def copy_class_box_heads(hf_model, flax_params):
 
     # Copy flax params to PyTorch params
     for name, param in new_params.items():
-        if name in pt_params.keys():
+        if name in pt_params:
             pt_params[name].copy_(param)
 
 
@@ -313,8 +313,8 @@ def convert_clip_backbone(flax_params, torch_config):
 
     # Copy flax CLIP backbone params to PyTorch params
     for name, param in new_torch_params.items():
-        if name in torch_clip_params.keys():
-            new_param = torch.from_numpy(new_torch_params[name])
+        if name in torch_clip_params:
+            new_param = torch.from_numpy(param)
             torch_clip_params[name].copy_(new_param)
         else:
             attn_params[name] = param

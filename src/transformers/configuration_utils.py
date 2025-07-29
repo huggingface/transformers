@@ -323,9 +323,8 @@ class PretrainedConfig(PushToHubMixin):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
-        # Attention implementation to use, if relevant.
-        self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
-        self._attn_implementation_autoset = False
+        # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -370,8 +369,11 @@ class PretrainedConfig(PushToHubMixin):
         return self._output_attentions
 
     @output_attentions.setter
-    def output_attentions(self, value):
-        if value is True and self._attn_implementation != "eager":
+    def output_attentions(self, value: bool):
+        # If we set `output_attentions` explictily before the attn implementation, dispatch eager
+        if value and self._attn_implementation is None:
+            self._attn_implementation = "eager"
+        if value and self._attn_implementation != "eager":
             raise ValueError(
                 "The `output_attentions` attribute is not supported when using the `attn_implementation` set to "
                 f"{self._attn_implementation}. Please set it to 'eager' instead."
@@ -402,19 +404,23 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def _attn_implementation(self):
-        # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
-        if hasattr(self, "_attn_implementation_internal"):
-            if self._attn_implementation_internal is None:
-                # `config.attn_implementation` should never be None, for backward compatibility.
-                return "eager"
-            else:
-                return self._attn_implementation_internal
-        else:
-            return "eager"
+        return self._attn_implementation_internal
 
     @_attn_implementation.setter
-    def _attn_implementation(self, value):
-        self._attn_implementation_internal = value
+    def _attn_implementation(self, value: Optional[Union[str, dict]]):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        attn_implementation = value if not isinstance(value, dict) else value.get("", self._attn_implementation)
+        self._attn_implementation_internal = attn_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
+                )
+                subconfig._attn_implementation = sub_implementation
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
@@ -544,7 +550,7 @@ class PretrainedConfig(PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -607,7 +613,7 @@ class PretrainedConfig(PushToHubMixin):
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             # sometimes the config has no `base_config_key` if the config is used in several composite models
             # e.g. LlamaConfig. In that case we try to see if there is match in `model_type` before raising a warning
-            for k, v in config_dict.items():
+            for v in config_dict.values():
                 if isinstance(v, dict) and v.get("model_type") == cls.model_type:
                     config_dict = v
 
@@ -672,7 +678,7 @@ class PretrainedConfig(PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
 
-        gguf_file = kwargs.get("gguf_file", None)
+        gguf_file = kwargs.get("gguf_file")
 
         if trust_remote_code is True:
             logger.warning(
@@ -1027,7 +1033,7 @@ class PretrainedConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None:
+        if d.get("torch_dtype") is not None:
             if isinstance(d["torch_dtype"], dict):
                 d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
             elif not isinstance(d["torch_dtype"], str):
@@ -1053,8 +1059,6 @@ class PretrainedConfig(PushToHubMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
-        if "_attn_implementation_autoset" in d:
-            del d["_attn_implementation_autoset"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
@@ -1194,6 +1198,42 @@ class PretrainedConfig(PushToHubMixin):
         else:
             config_to_return = self
         return config_to_return
+
+    @classmethod
+    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and vision model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
+            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+    @classmethod
+    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and audio model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
+            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:
