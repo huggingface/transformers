@@ -3,11 +3,12 @@ import importlib.util
 import logging
 import os
 import sys
-import csv
 import json
 import uuid
 from datetime import datetime
 from typing import Dict, Tuple, Optional, List
+
+import pandas as pd
 
 try:
     from psycopg2.extensions import register_adapter
@@ -41,15 +42,30 @@ class MetricsRecorder:
         self.commit_msg = commit_msg
         self.collect_csv_data = collect_csv_data
         
-        # For CSV export - store all data in memory (only if CSV collection is enabled)
+        # For CSV export - store all data in pandas DataFrames (only if CSV collection is enabled)
         if self.collect_csv_data:
-            self.csv_data = {
-                'benchmarks': [],
-                'device_measurements': [],
-                'model_measurements': []
-            }
+            # Initialize empty DataFrames with proper schemas
+            self.benchmarks_df = pd.DataFrame(columns=[
+                'benchmark_id', 'repository', 'branch', 'commit_id', 'commit_message', 
+                'metadata', 'created_at'
+            ])
+            self.device_measurements_df = pd.DataFrame(columns=[
+                'benchmark_id', 'cpu_util', 'mem_megabytes', 'gpu_util', 
+                'gpu_mem_megabytes', 'time'
+            ])
+            self.model_measurements_df = pd.DataFrame(columns=[
+                'benchmark_id', 'time', 'model_load_time', 'first_eager_forward_pass_time_secs',
+                'second_eager_forward_pass_time_secs', 'first_eager_generate_time_secs',
+                'second_eager_generate_time_secs', 'time_to_first_token_secs',
+                'time_to_second_token_secs', 'time_to_third_token_secs',
+                'time_to_next_token_mean_secs', 'first_compile_generate_time_secs',
+                'second_compile_generate_time_secs', 'third_compile_generate_time_secs',
+                'fourth_compile_generate_time_secs'
+            ])
         else:
-            self.csv_data = None
+            self.benchmarks_df = None
+            self.device_measurements_df = None
+            self.model_measurements_df = None
 
     def initialise_benchmark(self, metadata: dict[str, str]) -> str:
         """
@@ -68,7 +84,8 @@ class MetricsRecorder:
         
         # Store benchmark data for CSV export (if enabled)
         if self.collect_csv_data:
-            self.csv_data['benchmarks'].append({
+            # Add row to pandas DataFrame
+            new_row = pd.DataFrame([{
                 'benchmark_id': benchmark_id,
                 'repository': self.repository,
                 'branch': self.branch,
@@ -76,7 +93,8 @@ class MetricsRecorder:
                 'commit_message': self.commit_msg,
                 'metadata': json.dumps(metadata),
                 'created_at': datetime.utcnow().isoformat()
-            })
+            }])
+            self.benchmarks_df = pd.concat([self.benchmarks_df, new_row], ignore_index=True)
             
         mode_info = []
         if self.use_database:
@@ -94,14 +112,16 @@ class MetricsRecorder:
         """
         # Store device measurements for CSV export (if enabled)
         if self.collect_csv_data:
-            self.csv_data['device_measurements'].append({
+            # Add row to pandas DataFrame
+            new_row = pd.DataFrame([{
                 'benchmark_id': benchmark_id,
                 'cpu_util': cpu_util,
                 'mem_megabytes': mem_megabytes,
                 'gpu_util': gpu_util,
                 'gpu_mem_megabytes': gpu_mem_megabytes,
                 'time': datetime.utcnow().isoformat()
-            })
+            }])
+            self.device_measurements_df = pd.concat([self.device_measurements_df, new_row], ignore_index=True)
         
         # Store in database if available
         if self.use_database:
@@ -118,11 +138,16 @@ class MetricsRecorder:
     def collect_model_measurements(self, benchmark_id: str, measurements: dict[str, float]):
         # Store model measurements for CSV export (if enabled)
         if self.collect_csv_data:
-            self.csv_data['model_measurements'].append({
+            # Add row to pandas DataFrame with flattened measurements
+            row_data = {
                 'benchmark_id': benchmark_id,
-                'measurements': json.dumps(measurements),
                 'time': datetime.utcnow().isoformat()
-            })
+            }
+            # Flatten the measurements dict into the row
+            row_data.update(measurements)
+            
+            new_row = pd.DataFrame([row_data])
+            self.model_measurements_df = pd.concat([self.model_measurements_df, new_row], ignore_index=True)
         
         # Store in database if available
         if self.use_database:
@@ -144,14 +169,10 @@ class MetricsRecorder:
 
     def export_to_csv(self, output_dir: str = "benchmark_results"):
         """
-        Export all collected data to CSV files
+        Export all collected data to CSV files using pandas DataFrames
         """
         if not self.collect_csv_data:
             self.logger.warning("CSV data collection is disabled - no CSV files will be generated")
-            return
-            
-        if self.csv_data is None:
-            self.logger.error("No CSV data available for export")
             return
             
         if not os.path.exists(output_dir):
@@ -161,120 +182,81 @@ class MetricsRecorder:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         files_created = []
         
-        # Export benchmarks (always create file, even if empty)
-        benchmarks_file = os.path.join(output_dir, f"benchmarks_{timestamp}.csv")
-        with open(benchmarks_file, 'w', newline='') as csvfile:
-            fieldnames = ['benchmark_id', 'repository', 'branch', 'commit_id', 'commit_message', 'metadata', 'created_at']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            if self.csv_data['benchmarks']:
-                writer.writerows(self.csv_data['benchmarks'])
-        files_created.append(benchmarks_file)
-        self.logger.info(f"Exported {len(self.csv_data['benchmarks'])} benchmark records to {benchmarks_file}")
-        
-        # Export device measurements (always create file, even if empty)
-        device_file = os.path.join(output_dir, f"device_measurements_{timestamp}.csv")
-        with open(device_file, 'w', newline='') as csvfile:
-            fieldnames = ['benchmark_id', 'cpu_util', 'mem_megabytes', 'gpu_util', 'gpu_mem_megabytes', 'time']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            if self.csv_data['device_measurements']:
-                writer.writerows(self.csv_data['device_measurements'])
-        files_created.append(device_file)
-        self.logger.info(f"Exported {len(self.csv_data['device_measurements'])} device measurement records to {device_file}")
-        
-        # Export model measurements (flattened, always create file)
-        model_file = os.path.join(output_dir, f"model_measurements_{timestamp}.csv")
-        with open(model_file, 'w', newline='') as csvfile:
-            flattened_data = []
-            if self.csv_data['model_measurements']:
-                for record in self.csv_data['model_measurements']:
-                    measurements = json.loads(record['measurements'])
-                    row = {
-                        'benchmark_id': record['benchmark_id'],
-                        'time': record['time']
-                    }
-                    row.update(measurements)
-                    flattened_data.append(row)
-            
-            if flattened_data:
-                fieldnames = list(flattened_data[0].keys())
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(flattened_data)
-            else:
-                # Create empty file with basic structure
-                fieldnames = ['benchmark_id', 'time']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-        files_created.append(model_file)
-        self.logger.info(f"Exported {len(self.csv_data['model_measurements'])} model measurement records to {model_file}")
-        
-        # Create a summary file
-        summary_file = os.path.join(output_dir, f"benchmark_summary_{timestamp}.csv")
-        self._create_summary_csv(summary_file)
-        files_created.append(summary_file)
+        # Export using pandas DataFrames
+        self._export_pandas_data(output_dir, timestamp, files_created)
         
         self.logger.info(f"CSV export complete! Created {len(files_created)} files in {output_dir}")
-        
-    def _create_summary_csv(self, summary_file: str):
+    
+    def _export_pandas_data(self, output_dir: str, timestamp: str, files_created: list):
         """
-        Create a summary CSV that combines all benchmark data into a single comprehensive view
+        Export CSV files using pandas DataFrames
         """
-        summary_data = []
+        # Export benchmarks
+        benchmarks_file = os.path.join(output_dir, f"benchmarks_{timestamp}.csv")
+        self.benchmarks_df.to_csv(benchmarks_file, index=False)
+        files_created.append(benchmarks_file)
+        self.logger.info(f"Exported {len(self.benchmarks_df)} benchmark records to {benchmarks_file}")
         
-        for benchmark in self.csv_data['benchmarks']:
-            benchmark_id = benchmark['benchmark_id']
-            
-            # Get model measurements for this benchmark
-            model_measurements = {}
-            for model_record in self.csv_data['model_measurements']:
-                if model_record['benchmark_id'] == benchmark_id:
-                    model_measurements.update(json.loads(model_record['measurements']))
-            
-            # Calculate device measurement aggregates
-            device_stats = {
-                'avg_cpu_util': 0,
-                'max_cpu_util': 0,
-                'avg_mem_megabytes': 0,
-                'max_mem_megabytes': 0,
-                'avg_gpu_util': 0,
-                'max_gpu_util': 0,
-                'avg_gpu_mem_megabytes': 0,
-                'max_gpu_mem_megabytes': 0,
-                'device_measurement_count': 0
-            }
-            
-            device_measurements = [d for d in self.csv_data['device_measurements'] if d['benchmark_id'] == benchmark_id]
-            if device_measurements:
-                cpu_utils = [d['cpu_util'] for d in device_measurements if d['cpu_util'] is not None]
-                mem_values = [d['mem_megabytes'] for d in device_measurements if d['mem_megabytes'] is not None]
-                gpu_utils = [d['gpu_util'] for d in device_measurements if d['gpu_util'] is not None]
-                gpu_mems = [d['gpu_mem_megabytes'] for d in device_measurements if d['gpu_mem_megabytes'] is not None]
-                
-                device_stats.update({
-                    'avg_cpu_util': sum(cpu_utils) / len(cpu_utils) if cpu_utils else 0,
-                    'max_cpu_util': max(cpu_utils) if cpu_utils else 0,
-                    'avg_mem_megabytes': sum(mem_values) / len(mem_values) if mem_values else 0,
-                    'max_mem_megabytes': max(mem_values) if mem_values else 0,
-                    'avg_gpu_util': sum(gpu_utils) / len(gpu_utils) if gpu_utils else 0,
-                    'max_gpu_util': max(gpu_utils) if gpu_utils else 0,
-                    'avg_gpu_mem_megabytes': sum(gpu_mems) / len(gpu_mems) if gpu_mems else 0,
-                    'max_gpu_mem_megabytes': max(gpu_mems) if gpu_mems else 0,
-                    'device_measurement_count': len(device_measurements)
-                })
-            
-            # Combine all data into summary row
-            summary_row = {**benchmark, **model_measurements, **device_stats}
-            summary_data.append(summary_row)
+        # Export device measurements  
+        device_file = os.path.join(output_dir, f"device_measurements_{timestamp}.csv")
+        self.device_measurements_df.to_csv(device_file, index=False)
+        files_created.append(device_file)
+        self.logger.info(f"Exported {len(self.device_measurements_df)} device measurement records to {device_file}")
         
-        if summary_data:
-            with open(summary_file, 'w', newline='') as csvfile:
-                fieldnames = list(summary_data[0].keys())
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(summary_data)
-            self.logger.info(f"Created benchmark summary at {summary_file}")
+        # Export model measurements (already flattened)
+        model_file = os.path.join(output_dir, f"model_measurements_{timestamp}.csv")
+        self.model_measurements_df.to_csv(model_file, index=False)
+        files_created.append(model_file)
+        self.logger.info(f"Exported {len(self.model_measurements_df)} model measurement records to {model_file}")
+        
+        # Create comprehensive summary using pandas operations
+        summary_file = os.path.join(output_dir, f"benchmark_summary_{timestamp}.csv")
+        self._create_summary(summary_file)
+        files_created.append(summary_file)
+    
+    def _create_summary(self, summary_file: str):
+        """
+        Create a comprehensive summary CSV using pandas operations
+        """
+        if len(self.benchmarks_df) == 0:
+            # Create empty summary file
+            summary_df = pd.DataFrame()
+            summary_df.to_csv(summary_file, index=False)
+            self.logger.info(f"Created empty benchmark summary at {summary_file}")
+            return
+        
+        # Start with benchmarks as the base
+        summary_df = self.benchmarks_df.copy()
+        
+        # Add model measurements (join on benchmark_id)
+        if len(self.model_measurements_df) > 0:
+            # Drop 'time' column from model measurements to avoid conflicts
+            model_df = self.model_measurements_df.drop(columns=['time'], errors='ignore')
+            summary_df = summary_df.merge(model_df, on='benchmark_id', how='left')
+        
+        # Calculate device measurement aggregates using pandas groupby
+        if len(self.device_measurements_df) > 0:
+            device_agg = self.device_measurements_df.groupby('benchmark_id').agg({
+                'cpu_util': ['mean', 'max', 'std', 'count'],
+                'mem_megabytes': ['mean', 'max', 'std'],
+                'gpu_util': ['mean', 'max', 'std'],
+                'gpu_mem_megabytes': ['mean', 'max', 'std']
+            }).round(3)
+            
+            # Flatten column names
+            device_agg.columns = [f"{col[0]}_{col[1]}" for col in device_agg.columns]
+            device_agg = device_agg.reset_index()
+            
+            # Rename count column to be more descriptive
+            if 'cpu_util_count' in device_agg.columns:
+                device_agg = device_agg.rename(columns={'cpu_util_count': 'device_measurement_count'})
+            
+            # Merge with summary
+            summary_df = summary_df.merge(device_agg, on='benchmark_id', how='left')
+        
+        # Export the comprehensive summary
+        summary_df.to_csv(summary_file, index=False)
+        self.logger.info(f"Created comprehensive benchmark summary with {len(summary_df)} records at {summary_file}")
 
     def close(self):
         if self.use_database and self.conn:
@@ -463,10 +445,10 @@ if __name__ == "__main__":
             failed_benchmarks += 1
 
     # Add some sample data if no data was actually collected (for testing purposes)
-    if generate_csv and global_metrics_recorder.csv_data is not None:
-        total_data_points = (len(global_metrics_recorder.csv_data['benchmarks']) + 
-                            len(global_metrics_recorder.csv_data['device_measurements']) + 
-                            len(global_metrics_recorder.csv_data['model_measurements']))
+    if generate_csv and global_metrics_recorder.collect_csv_data:
+        total_data_points = (len(global_metrics_recorder.benchmarks_df) + 
+                            len(global_metrics_recorder.device_measurements_df) + 
+                            len(global_metrics_recorder.model_measurements_df))
     else:
         total_data_points = 1  # Assume data exists if CSV is disabled
     
