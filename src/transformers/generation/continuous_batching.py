@@ -32,7 +32,6 @@ from tokenizers.decoders import DecodeStream
 from torch.profiler import profile, schedule, tensorboard_trace_handler
 from tqdm import tqdm
 
-from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
