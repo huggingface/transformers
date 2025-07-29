@@ -21,7 +21,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 class InternS1VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternS1VisionModel`]. It is used to instantiate
-    an InternS1VisionModel model according to the specified arguments, defining the model architecture.
+    an InternS1VisionModel model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Intern-S1.
+    e.g. [internlm/Intern-S1](https://huggingface.co/internlm/Intern-S1)
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -141,6 +143,8 @@ class InternS1Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternS1ForConditionalGeneration`].
     It is used to instantiate a InternS1 model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Intern-S1.
+    e.g. [internlm/Intern-S1](https://huggingface.co/internlm/Intern-S1)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

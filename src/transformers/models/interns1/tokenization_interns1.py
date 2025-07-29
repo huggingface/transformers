@@ -14,33 +14,32 @@
 # limitations under the License.
 """Tokenization classes for InternS1."""
 
-from typing import Union, Dict, List, Optional, Tuple
 import json
 import os
-from functools import lru_cache
 from abc import ABC, abstractmethod
-import regex as re
-
-import sentencepiece as spm
 from collections import OrderedDict
+from functools import lru_cache
+from typing import Optional, Union
 
-from ...tokenization_utils_base import AddedToken, TextInput
+import regex as re
+import sentencepiece as spm
+
 from ...models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
+from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 try:
-    from rdkit import Chem
-    from rdkit import RDLogger
+    from rdkit import Chem, RDLogger
 
     RDLogger.DisableLog("rdApp.error")
     RDLogger.DisableLog("rdApp.*")
     RDKIT_AVAILABLE = True
 except ImportError:
     logger.warning_once(
-        f"If tokenization with SMILES formula is of necessity, please 'pip install RDKit' for better tokenization quality."
+        "If tokenization with SMILES formula is of necessity, please 'pip install RDKit' for better tokenization quality."
     )
     RDKIT_AVAILABLE = False
 
@@ -76,7 +75,7 @@ class InternS1CheckModuleMixin(ABC):
     def check_legitimacy(self, candidate: str) -> bool:
         pass
 
-    def re_split(self, texts: Union[str, List[str]]) -> List[str]:
+    def re_split(self, texts: Union[str, list[str]]) -> list[str]:
         if isinstance(texts, str):
             texts = [texts]
 
@@ -418,30 +417,30 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         self._extra_special_tokens = []
 
         self._extra_tokenizer_list = [
-            dict(
-                tokenizer_name="tokenizer_SMILES",
-                tokenizer_path=os.path.join(os.path.dirname(vocab_file), "tokenizer_SMILES.model"),
-                begin_sp_tokens=["<SMILES>", "<SELFIES>"],
-                end_sp_tokens=["</SMILES>", "</SELFIES>"],
-                auto_begin_sp_tokens=["<SMILES_AUTO_DETECT>"],
-                auto_end_sp_tokens=["</SMILES_AUTO_DETECT>"],
-            ),
-            dict(
-                tokenizer_name="tokenizer_IUPAC",
-                tokenizer_path=os.path.join(os.path.dirname(vocab_file), "tokenizer_IUPAC.model"),
-                begin_sp_tokens=["<IUPAC>"],
-                end_sp_tokens=["</IUPAC>"],
-                auto_begin_sp_tokens=[],
-                auto_end_sp_tokens=[],
-            ),
-            dict(
-                tokenizer_name="tokenizer_FASTA",
-                tokenizer_path=os.path.join(os.path.dirname(vocab_file), "tokenizer_FASTA.model"),
-                begin_sp_tokens=[],
-                end_sp_tokens=[],
-                auto_begin_sp_tokens=["<FASTA_AUTO_DETECT>"],
-                auto_end_sp_tokens=["</FASTA_AUTO_DETECT>"],
-            ),
+            {
+                "tokenizer_name": "tokenizer_SMILES",
+                "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_SMILES.model"),
+                "begin_sp_tokens": ["<SMILES>", "<SELFIES>"],
+                "end_sp_tokens": ["</SMILES>", "</SELFIES>"],
+                "auto_begin_sp_tokens": ["<SMILES_AUTO_DETECT>"],
+                "auto_end_sp_tokens": ["</SMILES_AUTO_DETECT>"],
+            },
+            {
+                "tokenizer_name": "tokenizer_IUPAC",
+                "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_IUPAC.model"),
+                "begin_sp_tokens": ["<IUPAC>"],
+                "end_sp_tokens": ["</IUPAC>"],
+                "auto_begin_sp_tokens": [],
+                "auto_end_sp_tokens": [],
+            },
+            {
+                "tokenizer_name": "tokenizer_FASTA",
+                "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_FASTA.model"),
+                "begin_sp_tokens": [],
+                "end_sp_tokens": [],
+                "auto_begin_sp_tokens": ["<FASTA_AUTO_DETECT>"],
+                "auto_end_sp_tokens": ["</FASTA_AUTO_DETECT>"],
+            },
         ]
         # Content wrapped in these sp tokens won't be tokenized
         self.protect_begin_sp_tokens = ["<MOLFORMULA>"]
@@ -543,7 +542,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             self.extra_tokenizer_start_mapping.update({begin_sp_token: tokenizer_config["tokenizer_name"]})
             self.extra_tokenizer_end_mapping.update({end_sp_token: tokenizer_config["tokenizer_name"]})
 
-    def _build_extra_decoder(self, tokenizer_config: dict) -> Dict[int, str]:
+    def _build_extra_decoder(self, tokenizer_config: dict) -> dict[int, str]:
         """Build domain-specific tokenizers' decoder"""
         extra_decoder = {}
         sp_model = self.tokenizer_mapping[tokenizer_config["tokenizer_name"]]
@@ -627,7 +626,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             )
             logger.warning_once("This may lead to unexpected behaviour of the tokenizer, please check your input.")
 
-    def tokenize(self, text: TextInput, **kwargs) -> List[str]:
+    def tokenize(self, text: TextInput, **kwargs) -> list[str]:
         """
         Converts a string into a sequence of tokens, using the tokenizer.
 
@@ -742,7 +741,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
 
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+    def _add_tokens(self, new_tokens: Union[list[str], list[AddedToken]], special_tokens: bool = False) -> int:
         """
         Modified from `transformers.tokenization_utils._add_tokens`.
 
@@ -800,7 +799,6 @@ class InternS1Tokenizer(Qwen2Tokenizer):
 
         return added_tokens
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize
     def _tokenize(self, text, **kwargs):
         """
         Modified from `transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize`.
@@ -833,7 +831,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
-    def convert_tokens_to_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
         """
         Modified from `transformers.tokenization_utils.PreTrainedTokenzier.convert_tokens_to_ids`.
 
@@ -928,8 +926,7 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             **kwargs,
         )
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Modified from `transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary` to support saving custom extension.
         """

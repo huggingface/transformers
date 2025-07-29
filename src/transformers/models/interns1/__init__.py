@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from .configuration_interns1 import *
     from .modeling_interns1 import *
     from .processing_interns1 import *
-    from .video_processing_interns1 import *
     from .tokenization_interns1 import *
+    from .video_processing_interns1 import *
 else:
     import sys
 
