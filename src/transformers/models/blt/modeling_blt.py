@@ -300,6 +300,8 @@ class BltSelfAttention(nn.Module):
         cache_position=None,
         **kwargs,
     ):
+        if hidden_states.dim() == 2:
+            hidden_states = hidden_states.unsqueeze(0)
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -1280,29 +1282,32 @@ class BltPatcher(BltPreTrainedModel):
         return patch_lengths
 
 
+@auto_docstring(
+    custom_intro="""
+    The Blt Text Model with a language modeling head on top.
+    """
+)
 class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
+    config: BltConfig
+    _can_compile_fullgraph = False
+    base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
     _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
     def __init__(self, config: BltConfig):
-        super().__init__(config)
+        super().__init__(config.get_text_config())
+        self.text_config = config.get_text_config()
         self.vocab_size = config.vocab_size
         self.model = BltModel(config)
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.local_encoder.embed_tokens
+    def set_decoder(self, decoder):
+        self.model = decoder
 
-    def set_input_embeddings(self, value):
-        self.model.local_encoder.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+    def get_decoder(self):
+        return self.model
 
     @can_return_tuple
     @auto_docstring
@@ -1321,53 +1326,15 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
-        cross_attention_states (`torch.FloatTensor`, *optional*):
-            Output of the vision model, used for cross-attention. This tensor contains the processed image features that
-            the language model will attend to.
-        cross_attention_mask (`torch.Tensor` of shape `(batch_size, seq_length, max_num_images, max_num_tiles)`, *optional*):
-            Cross-attention mask to control the interaction between text tokens and image tiles.
-            This 4D tensor defines which image tiles each text token should attend to.
-
-            For each text token (in seq_length):
-            - 1 indicates the token **should attend** to the corresponding image tile
-            - 0 indicates the token **should not attend** to the corresponding image tile
-        full_text_row_masked_out_mask (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
-            A tuple containing two tensors that mask out rows in the cross-attention mechanism:
-            - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
-              A value of 0 indicates that the corresponding text token's entire row in the cross-attention
-              matrix should be masked out (all image tokens ignored).
-            - The second tensor has the same shape and is used internally to apply the masking during
-              the forward pass of cross-attention layers.
-            This mask is derived from the cross_attention_mask and is used to handle cases where a text token
-            should not attend to any image token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, XBltForCausalLM
-
-        >>> model = XBltForCausalLM.from_pretrained("Llama-3.2-11B-Vision")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Llama-3.2-11B-Vision")
-
-        >>> prompt = "If I had to write a haiku, it would be:"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=40, do_sample=True, temperature=0.6)
-        >>> result = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        >>> print(result)
-        If I had to write a haiku, it would be: "Snowflakes gently fall" - simple, yet peaceful.
-        I love the idea of snowflakes gently falling, each one
-        ```
         """
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs = self.model(
             input_ids=input_ids,
             cross_attention_states=cross_attention_states,
             attention_mask=attention_mask,
@@ -1381,7 +1348,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
 
@@ -1396,5 +1363,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 __all__ = ["BltPreTrainedModel", "BltModel", "BltPatcher", "BltForCausalLM"]
