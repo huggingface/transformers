@@ -34,9 +34,7 @@ from .utils import (
     is_mistral_common_available,
     is_pretty_midi_available,
 )
-from .utils import (
-    is_bitsandbytes_available as is_bitsandbytes_available,
-)
+from .utils import is_bitsandbytes_available as is_bitsandbytes_available
 from .utils import (
     is_flax_available as is_flax_available,
 )
