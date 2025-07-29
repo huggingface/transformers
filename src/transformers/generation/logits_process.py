@@ -1241,13 +1241,13 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {sequence_bias}."
             )
         if isinstance(sequence_bias, dict) and any(
-            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias.keys()
+            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias
         ):
             raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {sequence_bias}.")
         if isinstance(sequence_bias, dict) and any(
             any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in sequence_ids)
             or len(sequence_ids) == 0
-            for sequence_ids in sequence_bias.keys()
+            for sequence_ids in sequence_bias
         ):
             raise ValueError(
                 f"Each key in `sequence_bias` has to be a non-empty tuple of positive integers, but is "

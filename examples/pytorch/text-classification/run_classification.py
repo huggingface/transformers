@@ -378,7 +378,7 @@ def main():
             else:
                 raise ValueError("Need either a dataset name or a test file for `do_predict`.")
 
-        for key in data_files.keys():
+        for key in data_files:
             logger.info(f"load a local file for {key}: {data_files[key]}")
 
         if data_args.train_file.endswith(".csv"):
@@ -422,13 +422,13 @@ def main():
         raw_datasets.pop(data_args.test_split_name)
 
     if data_args.remove_columns is not None:
-        for split in raw_datasets.keys():
+        for split in raw_datasets:
             for column in data_args.remove_columns.split(","):
                 logger.info(f"removing column {column} from split {split}")
                 raw_datasets[split] = raw_datasets[split].remove_columns(column)
 
     if data_args.label_column_name is not None and data_args.label_column_name != "label":
-        for key in raw_datasets.keys():
+        for key in raw_datasets:
             raw_datasets[key] = raw_datasets[key].rename_column(data_args.label_column_name, "label")
 
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
@@ -444,7 +444,7 @@ def main():
         label_list = None
         num_labels = 1
         # regression requires float as label type, let's cast it if needed
-        for split in raw_datasets.keys():
+        for split in raw_datasets:
             if raw_datasets[split].features["label"].dtype not in ["float32", "float64"]:
                 logger.warning(
                     f"Label type for {split} set to float32, was {raw_datasets[split].features['label'].dtype}"

@@ -291,7 +291,7 @@ class AutoVideoProcessor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -364,7 +364,7 @@ class AutoVideoProcessor:
         raise ValueError(
             f"Unrecognized video processor in {pretrained_model_name_or_path}. Should have a "
             f"`video_processor_type` key in its {VIDEO_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in VIDEO_PROCESSOR_MAPPING_NAMES.keys())}"
+            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in VIDEO_PROCESSOR_MAPPING_NAMES)}"
         )
 
     @staticmethod

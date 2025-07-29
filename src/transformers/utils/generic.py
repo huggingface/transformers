@@ -830,7 +830,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs]
                 invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message
@@ -993,7 +993,7 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache", None)
+        use_cache = kwargs.get("use_cache")
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
 

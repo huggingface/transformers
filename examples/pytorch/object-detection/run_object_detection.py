@@ -403,7 +403,7 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation
-    data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
+    data_args.train_val_split = None if "validation" in dataset else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(data_args.train_val_split, seed=training_args.seed)
         dataset["train"] = split["train"]
