@@ -336,7 +336,7 @@ class GPT2Attention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if using_eager and self.reorder_and_upcast_attn and False:
+        if using_eager and self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(
                 query_states, key_states, value_states, attention_mask, head_mask
             )
