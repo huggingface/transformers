@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_vision import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
