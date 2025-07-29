@@ -805,12 +805,6 @@ class BltPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-    config_class = BltConfig
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = False
-    _supports_cache_class = False
-
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
@@ -818,24 +812,6 @@ class BltPreTrainedModel(PreTrainedModel):
         "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
     }
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, BltRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.RMSNorm):
-            module.weight.data.fill_(1.0)
 
     def _update_causal_mask(
         self,
@@ -1406,11 +1382,3 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             output.global_attentions = outputs.global_attentions
             
         return output
-
-
-__all__ = [
-    "BltPreTrainedModel",
-    "BltModel",
-    "BltPatcher",
-    "BltForCausalLM",
-]
