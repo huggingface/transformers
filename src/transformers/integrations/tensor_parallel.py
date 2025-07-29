@@ -821,8 +821,6 @@ class GroupedGemmParallel(TensorParallelLayer):
         param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
-        if "gate_up" in param_type and False:
-            param = torch.cat([param[..., ::2], param[..., 1::2]], dim=-1)
         return param
 
 
