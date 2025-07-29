@@ -2639,6 +2639,7 @@ class Trainer:
                             from torch.distributed._tensor.experimental import implicit_replication
 
                             context = implicit_replication
+
                         with context():
                             self.optimizer.step()
 

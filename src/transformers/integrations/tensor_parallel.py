@@ -24,6 +24,7 @@ import torch.distributed as dist
 from torch.autograd import Function
 from torch import nn
 
+from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 
@@ -120,20 +121,22 @@ def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int
         return [single_size] * blocks
 
 
-def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> str | None:
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
 
     The TP plan is a dictionary that maps parameter names to TP styles.
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+
+    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
+    not parrent classes for `post_init` calls
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
-    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
+    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan and is_weight:
         return tp_plan[generic_param_name.rsplit(".", 1)[0]]
-    else:
-        return None
+    return None
 
 
 str_to_torch_dtype = {
@@ -439,13 +442,19 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        if hasattr(mod, "kernel_layer_name"):  # kernels usually handle this themselves
-            return outputs
         if isinstance(outputs, torch.Tensor):
             dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
         else:
             dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
         return outputs
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
+        )
 
 
 class IsolatedParallel(TensorParallelLayer):
@@ -518,12 +527,12 @@ class ReplicateParallel(TensorParallelLayer):
         param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
         return param
 
-class VocabParallel(TensorParallelLayer):
 
+class VocabParallel(TensorParallelLayer):
     """
     VocabParallel is a tensor parallel layer that shards the embedding table along the last dimension.
     No need to do input masking as embedding would be stored in `_MaskPartial` which handles it (https://github.com/pytorch/pytorch/blob/main/torch/distributed/tensor/_ops/_embedding_ops.py#L70)
-    
+
     This is useful if you want to train with long sequence length!
     """
 
@@ -574,6 +583,7 @@ class VocabParallel(TensorParallelLayer):
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         return outputs.to_local() if use_local_output else outputs
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -871,6 +881,8 @@ class GroupedGemmParallel(TensorParallelLayer):
         param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
+        if "gate_up" in param_type and False:
+            param = torch.cat([param[..., ::2], param[..., 1::2]], dim=-1)
         return param
 
 
@@ -1026,24 +1038,14 @@ def replace_state_dict_local_with_dtensor(
 def add_tensor_parallel_hooks_to_module(
     model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None
 ):
-    """
-    Add hooks to the module holding the layer. Meaning:
-    ```
-    class MyModel(nn.Module):
-        def __init__(self):
-            self.layer = nn.Linear(10, 10)
-    ```
-    has state_dict like:
-    ```
-    {
-        "layer.weight": torch.Tensor,
-        "layer.bias": torch.Tensor
-    }
-    ```
-    we add hooks to `MyModel` as well as `layer` to make sure that the tensors are correctly sharded and gathered.
-    """
+    r"""
+    This function is called in `PretrainedModel.post_init()`. It is responsible of adding hooks
+    to the modules of the `model`, based on the `PretrainedModel._tp_plan`.
 
-    # 1. We add hooks to the layer being loaded:
+    This is the place where we add the `pre_forward` and `post_forwards` hooks. These are defined
+    for each `TensorParallelLayer` as `_prepare_input_fn` and `_prepare_output_fn`.
+
+    """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
@@ -1053,24 +1055,18 @@ def add_tensor_parallel_hooks_to_module(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
 
-    # 2. We add hooks to the parent module if needed
-    if "." in layer_name and current_module_plan != "replicate":
-        parent_layer_name = parameter_name.rsplit(".", 1)[0]
-        generic_name = re.sub(r"\d+", "*", parent_layer_name)
-        # The module itself needs hooks
-        if module_plan := tp_plan.get(generic_name, False):
-            tp_layer = ALL_PARALLEL_STYLES[module_plan]
-            module_to_tp_ = model.get_submodule(parent_layer_name)
-            if not getattr(module_to_tp_, "_hf_tp_plan", False):
-                tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
-                module_to_tp_._hf_tp_plan = current_module_plan
-                module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
+        module._hf_tp_plan = current_module_plan
+        module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
 
 def shard_and_distribute_module(
     model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
 ):  # TODO: rename to shard_and_distribute_param
     r"""
+    This function is called in `from_pretrained` when loading a model's checkpoints.
+    It receives the pointer to the parameter (or the parameter itself) and takes care of "sharding".
+    All process run this function, so they just load the partition of the tensor that they require.
+
     Main uses cases:
     - column / rowise parallelism, you just shard all the weights of the layer (weight and bias)
     - packed layers: you slice the weights, then shard like above
@@ -1083,23 +1079,13 @@ def shard_and_distribute_module(
     tp_plan = model._tp_plan
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
-
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
 
-    if current_shard_plan is None:
-        if dist.get_rank() == 0:
+    if dist.get_rank() == 0:
+        if current_shard_plan is None:
             logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
-    else:
-        if dist.get_rank() == 0:
+        else:
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
-
-    # Add hooks to the module if not done yet
-    # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
-    if not getattr(module_to_tp, "_is_hooked", False):
-        add_tensor_parallel_hooks_to_module(
-            model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name
-        )
-        module_to_tp._is_hooked = True
 
     if current_shard_plan is not None:
         try:
@@ -1153,3 +1139,45 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+
+
+def distribute_model(model, distributed_config, device_mesh, tp_size):
+    _plan = "_tp_plan"
+    model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
+    model._tp_size = tp_size
+    model._device_mesh = device_mesh
+    if distributed_config is not None:
+        if isinstance(DistributedConfig, dict):
+            distributed_config = DistributedConfig.from_dict(distributed_config)
+        if distributed_config.enable_expert_parallel:
+            _plan = "_ep_plan"
+            model._tp_plan = getattr(model.config, "base_model_ep_plan", model._tp_plan).copy()
+
+    for name, module in model.named_children():
+        if plan := getattr(module, _plan, getattr(module, "tp_plan", None)):
+            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+        if hasattr(module, "config"):
+            plan = getattr(module.config, f"base_model{_plan}", {})
+            if plan == {}:
+                plan = getattr(module.config, "base_model_tp_plan", {})
+            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+    if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        for v in model._tp_plan.values():
+            if v not in ALL_PARALLEL_STYLES:
+                raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
+        for name, module in model.named_modules():
+            if not getattr(module, "_is_hooked", False):
+                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+
+                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
+                add_tensor_parallel_hooks_to_module(
+                    model=model,
+                    module=module,
+                    tp_plan=model._tp_plan,
+                    layer_name="",
+                    current_module_plan=plan,
+                    device_mesh=device_mesh,
+                )
+            module._is_hooked = True
+    return model

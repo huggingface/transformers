@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-import json
-from typing import Any, Dict, Union
-import os
 import copy
+import json
+import os
+from dataclasses import dataclass
+from typing import Any, Union
 
 
 @dataclass
@@ -35,7 +35,6 @@ class DistributedConfig:
         Args:
             config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
             **kwargs: Additional keyword arguments to override dictionary values.
-
         Returns:
             DistributedConfig: Instance of DistributedConfig constructed from the dictionary.
         """
@@ -53,7 +52,6 @@ class DistributedConfig:
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):
         """
         Save this instance to a JSON file.
-
         Args:
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
@@ -67,8 +65,7 @@ class DistributedConfig:
 
             writer.write(json_string)
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_dict
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
@@ -93,16 +90,13 @@ class DistributedConfig:
         """
         return json.dumps(self.__dict__, indent=2) + "\n"
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.update
     def update(self, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
-
         Args:
             kwargs (`Dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
-
         Returns:
             `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
         """
@@ -115,4 +109,3 @@ class DistributedConfig:
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
-
