@@ -58,11 +58,6 @@ print(f"Text embeddings: {text_features}")
 
 </hfoption>
 </hfoptions>
-  
-## Resources
-
-- [Original paper](https://huggingface.co/papers/2211.06687)
-- [Official GitHub repo](https://github.com/LAION-AI/CLAP)
 
 ## ClapConfig
 
