@@ -877,9 +877,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
-            if not isinstance(ids_or_pair_ids, (list, tuple)):
-                ids, pair_ids = ids_or_pair_ids, None
-            elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
+            if (
+                not isinstance(ids_or_pair_ids, (list, tuple))
+                or is_split_into_words
+                and not isinstance(ids_or_pair_ids[0], (list, tuple))
+            ):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
                 ids, pair_ids = ids_or_pair_ids

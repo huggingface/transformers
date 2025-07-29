@@ -167,7 +167,7 @@ class KerasMetricCallback(keras.callbacks.Callback):
             # If it's a dict with only one key, just return the array
             if len(outputs) == 1:
                 outputs = list(outputs.values())[0]
-        elif isinstance(inputs[0], list) or isinstance(inputs[0], tuple):
+        elif isinstance(inputs[0], (tuple, list)):
             outputs = []
             for input_list in zip(*inputs):
                 outputs.append(self._concatenate_batches(input_list))

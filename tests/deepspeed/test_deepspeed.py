@@ -1222,7 +1222,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
-        fp32 = True if dtype == "fp32" else False
+        fp32 = dtype == "fp32"
         self.run_and_check(
             stage=ZERO3,
             dtype=dtype,
@@ -1337,13 +1337,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         if do_eval:
             actions += 1
-            args.extend(
-                """
-            --do_eval
-            --max_eval_samples 16
-            --per_device_eval_batch_size 2
-            """.split()
-            )
+            args.extend(["--do_eval", "--max_eval_samples", "16", "--per_device_eval_batch_size", "2"])
 
         assert actions > 0, "need at least do_train or do_eval for the test to run"
 

@@ -45,7 +45,7 @@ def replace_with_vptq_linear(
             should not be passed by the user.
     """
 
-    modules_to_not_convert = ["lm_head"] if not modules_to_not_convert else modules_to_not_convert
+    modules_to_not_convert = modules_to_not_convert if modules_to_not_convert else ["lm_head"]
 
     for name, module in model.named_children():
         if current_key_name is None:

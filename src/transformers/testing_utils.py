@@ -2622,9 +2622,7 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.tolist())
     elif isinstance(obj, Mapping):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
-    elif isinstance(obj, (str, int, np.int64)):
-        return obj
-    elif obj is None:
+    elif isinstance(obj, (str, int, np.int64)) or obj is None:
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)

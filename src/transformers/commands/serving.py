@@ -891,7 +891,7 @@ class ServeCommand(BaseTransformersCLICommand):
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
-            tools=req.get("tools", None),
+            tools=req.get("tools"),
             return_tensors="pt",
             return_dict=True,
             tokenize=True,
