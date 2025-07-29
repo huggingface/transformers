@@ -19,9 +19,6 @@ except ImportError:
     PSYCOPG2_AVAILABLE = False
 
 
-register_adapter(dict, Json)
-
-
 class ImportModuleException(Exception):
     pass
 

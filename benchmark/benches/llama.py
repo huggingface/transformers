@@ -12,15 +12,26 @@ from benchmarks_entrypoint import MetricsRecorder
 import gpustat
 import psutil
 import psycopg2
-import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
-
+# Optional heavy ML dependencies - only required when actually running the benchmark
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
+    GenerationConfig = None
+    StaticCache = None
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
-torch.set_float32_matmul_precision("high")
+
+# Only set torch precision if torch is available
+if TRANSFORMERS_AVAILABLE:
+    torch.set_float32_matmul_precision("high")
 
 
 def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
@@ -41,6 +52,13 @@ def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
 def run_benchmark(
     logger: Logger, repository: str, branch: str, commit_id: str, commit_msg: str, metrics_recorder=None, num_tokens_to_generate=100
 ):
+    # Check if required ML dependencies are available
+    if not TRANSFORMERS_AVAILABLE:
+        logger.error("Transformers and torch are required to run the LLaMA benchmark. Please install them with:")
+        logger.error("pip install torch transformers")
+        logger.error("Skipping LLaMA benchmark due to missing dependencies.")
+        return
+    
     continue_metric_collection = Event()
     metrics_thread = None
     model_id = "meta-llama/Llama-2-7b-hf"
