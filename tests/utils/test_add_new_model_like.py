@@ -49,6 +49,9 @@ class TestAddNewModelLike(unittest.TestCase):
         shutil.copy(model_init, model_init.replace(REPO_PATH, cls.FAKE_REPO))
         doc_toc = os.path.join(REPO_PATH, "docs", "source", "en", "_toctree.yml")
         shutil.copy(doc_toc, doc_toc.replace(REPO_PATH, cls.FAKE_REPO))
+        # We need the pyproject for ruff as well
+        pyproject = os.path.join(REPO_PATH, "pyproject.toml")
+        shutil.copy(pyproject, pyproject.replace(REPO_PATH, cls.FAKE_REPO))
         # Copy over all the specific model files
         for model in MODELS_TO_COPY:
             model_src = os.path.join(REPO_PATH, "src", "transformers", "models", model)
