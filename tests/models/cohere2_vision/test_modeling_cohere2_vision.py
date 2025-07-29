@@ -1,161 +1,467 @@
-"""Testing suite for the PyTorch Cohere2Vision model."""
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch GotOcr2 model."""
 
 import unittest
 
-import pytest
-import torch
-from PIL import Image
+from transformers import (
+    AutoProcessor,
+    Cohere2VisionConfig,
+    is_torch_available,
+)
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    get_device_properties,
+    require_deterministic_for_xpu,
+    require_read_token,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
-from transformers import AutoModel, AutoProcessor, Cohere2VisionConfig, is_torch_available
-from transformers.testing_utils import require_torch
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
-    from transformers import Cohere2VisionForConditionalGeneration, Cohere2VisionPreTrainedModel
+
+    from transformers import (
+        Cohere2VisionForConditionalGeneration,
+        Cohere2VisionModel,
+    )
 
 
-class Cohere2VisionModelTester:
-    def __init__(self, parent):
+class Cohere2VisionText2TextModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        seq_length=7,
+        vision_feature_layer=-1,
+        downsample_factor=2,
+        ignore_index=-100,
+        image_token_id=2,
+        num_channels=3,
+        image_size=64,
+        model_type="aya_vision",
+        is_training=True,
+        text_config={
+            "model_type": "cohere2",
+            "vocab_size": 99,
+            "hidden_size": 128,
+            "intermediate_size": 37,
+            "num_hidden_layers": 4,
+            "num_attention_heads": 4,
+            "output_channels": 64,
+            "hidden_act": "silu",
+            "max_position_embeddings": 512,
+            "tie_word_embeddings": True,
+            "bos_token_id": 0,
+            "eos_token_id": 0,
+            "pad_token_id": 0,
+        },
+        vision_config={
+            "model_type": "siglip_vision_model",
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 128,
+            "image_size": 64,
+            "patch_size": 8,
+            "vision_use_head": False,
+        },
+    ):
         self.parent = parent
+        self.ignore_index = ignore_index
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
+        self.image_token_id = image_token_id
+        self.model_type = model_type
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.batch_size = batch_size
+        self.vision_feature_layer = vision_feature_layer
+        self.downsample_factor = downsample_factor
+        self.is_training = is_training
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.image_seq_length = (image_size // (vision_config["patch_size"] * downsample_factor)) ** 2
+        self.seq_length = seq_length + self.image_seq_length
 
-    def get_small_vision_config(self):
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+
+    def get_config(self):
         return Cohere2VisionConfig(
-            vision_config={
-                "hidden_size": 16,
-                "image_size": 32,
-                "intermediate_size": 16,
-                "num_attention_heads": 4,
-                "num_hidden_layers": 4,
-            },
-            text_config={
-                "hidden_size": 32,
-                "num_hidden_layers": 4,
-                "num_attention_heads": 4,
-            },
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            image_token_id=self.image_token_id,
+            downsample_factor=self.downsample_factor,
         )
 
     def prepare_config_and_inputs(self):
-        config = self.get_small_vision_config()
-        pixel_values = torch.rand(2, 3, 32, 32)
-        input_ids = torch.randint(0, 100, (2, 8))
-        image_num_patches = torch.tensor([1, 1])
-        return config, pixel_values, input_ids, image_num_patches
+        config = self.get_config()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        image_num_patches = torch.tensor([1] * self.batch_size).to(torch_device)
 
-    def create_and_check_model(self):
-        config, pixel_values, input_ids, image_num_patches = self.prepare_config_and_inputs()
-        model = Cohere2VisionForConditionalGeneration(config)
-        model.eval()
-        with torch.no_grad():
-            result = model(input_ids=input_ids, pixel_values=pixel_values, image_num_patches=image_num_patches)
-        assert result.logits is not None
+        return config, pixel_values, image_num_patches
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values, image_num_patches = config_and_inputs
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
+
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "image_num_patches": image_num_patches,
+        }
+        return config, inputs_dict
 
 
 @require_torch
-class Cohere2VisionModelTest(unittest.TestCase):
-    all_model_classes = (Cohere2VisionForConditionalGeneration, Cohere2VisionPreTrainedModel) if is_torch_available() else ()
+class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (
+            Cohere2VisionModel,
+            Cohere2VisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    all_generative_model_classes = (Cohere2VisionForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-text-to-text": Cohere2VisionForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
+    fx_compatible = False
+    test_pruning = False
+    test_torchscript = False
+    test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
-        self.model_tester = Cohere2VisionModelTester(self)
+        self.model_tester = Cohere2VisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Cohere2VisionConfig, has_text_modality=False)
 
-    def test_model(self):
-        self.model_tester.create_and_check_model()
-
-
-@pytest.fixture(scope="session")
-def model_id():
-    return "CohereLabs/command-a-vision-07-2025"
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
 
-@pytest.fixture(scope="session")
-def processor(model_id):
-    return AutoProcessor.from_pretrained(model_id)
+@require_read_token
+@require_torch
+class Cohere2IntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.model_checkpoint = "CohereForAI/Cohere2-Vision"
+        cls.model = None
 
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        cleanup(torch_device, gc_collect=True)
 
-@pytest.fixture(scope="session")
-def model(model_id):
-    return AutoModel.from_pretrained(model_id, device_map="auto")
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
+    @classmethod
+    def get_model(cls):
+        # Use 4-bit on T4
+        device_type, major, _ = get_device_properties()
+        load_in_4bit = (device_type == "cuda") and (major < 8)
+        torch_dtype = None if load_in_4bit else torch.float16
 
-def open_img(img_path):
-    return Image.open(img_path).convert("RGB")
+        if cls.model is None:
+            cls.model = Cohere2VisionForConditionalGeneration.from_pretrained(
+                cls.model_checkpoint,
+                device_map=torch_device,
+                torch_dtype=torch_dtype,
+                load_in_4bit=load_in_4bit,
+            )
+        return cls.model
 
-def test_model_generation(processor, model):
-    # Prepare conversations
-    conversation1 = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": open_img("tests/test_images/image_resized.png")},
-                {"type": "text", "text": "Describe this image"},
-            ],
-        },
-    ]
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_forward(self):
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
 
-    def test_fn1(x):
-        return "golden retriever" in x.lower()
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device, dtype=torch.float16)
+        # Forward
+        with torch.inference_mode():
+            output = model(**inputs)
 
-    conversation2 = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": open_img("tests/test_images/v1_93.jpg")},
-                {"type": "text", "text": "Describe this image"},
-            ],
-        },
-    ]
+        actual_logits = output.logits[0, -1, :5].cpu()
 
-    def test_fn2(x):
-        return "connecticut law of 1642" in x.lower()
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
+                # 4-bit
+                ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
+                ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
 
-    conversation3 = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What is the capital of France?"},
-            ],
-        },
-    ]
-
-    def test_fn3(x):
-        return "paris" in x.lower()
-
-    # Batch of conversations to test
-    batch_of_conversations = [
-        conversation1,
-        conversation2,
-        conversation3,
-    ]
-
-    test_functions = [test_fn1, test_fn2, test_fn3]
-
-    # Process the conversations
-    inputs = processor.apply_chat_template(
-        batch_of_conversations,
-        tokenize=True,
-        add_generation_prompt=True,
-        return_tensors="pt",
-        return_dict=True,
-    ).to(model.device)
-    inputs["image_sizes"] = inputs["image_num_patches"]
-
-    # Generate outputs
-    with torch.no_grad():
-        output = model.generate(
-            **inputs, max_new_tokens=100, do_sample=True, top_k=1, num_return_sequences=1, use_cache=False
+        self.assertTrue(
+            torch.allclose(actual_logits, expected_logits, atol=0.1),
+            f"Actual logits: {actual_logits}"
+            f"\nExpected logits: {expected_logits}"
+            f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
         )
 
-    # Decode the outputs
-    decoded_outputs = []
-    for i in range(len(output)):
-        decoded_output = processor.tokenizer.decode(
-            output[i][inputs.input_ids.shape[1] :], skip_special_tokens=True
-        ).strip()
-        decoded_outputs.append(decoded_output)
-        print(f"Output for conversation {i + 1}: {decoded_output}\n")
+    @slow
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
+    def test_small_model_integration_generate_text_only(self):
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Write a haiku"},
+                ],
+            }
+        ]
 
-    # Assertions to verify the outputs
-    assert len(decoded_outputs) == len(test_functions), "Number of outputs does not match expected."
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device, dtype=torch.float16)
+        with torch.no_grad():
+            generate_ids = model.generate(**inputs, max_new_tokens=25, do_sample=False)
+            decoded_output = processor.decode(
+                generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            )
 
-    for idx, (generated, test_fn) in enumerate(zip(decoded_outputs, test_functions), start=1):
-        assert test_fn(generated), f"Output for conversation {idx} does not match expected."
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                # 4-bit
+                ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
+                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
+        self.assertEqual(decoded_output, expected_output)
+
+    @slow
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
+    def test_small_model_integration_generate_chat_template(self):
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
+
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device, dtype=torch.float16)
+        with torch.no_grad():
+            generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+            decoded_output = processor.decode(
+                generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            )
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+                # 4-bit
+                ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
+                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
+        self.assertEqual(decoded_output, expected_output)
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_batched_generate(self):
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        # Prepare inputs
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {"type": "text", "text": "Write a haiku for this image"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {"type": "text", "text": "Describe this image"},
+                    ],
+                },
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.float16)
+
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        # Check first output
+        decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                # 4-bit
+                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check second output
+        decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                # 4-bit
+                ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
+                ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+    @slow
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
+    def test_small_model_integration_batched_generate_multi_image(self):
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        # Prepare inputs
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {"type": "text", "text": "Write a haiku for this image"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                        },
+                        {
+                            "type": "image",
+                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                        },
+                        {
+                            "type": "text",
+                            "text": "These images depict two different landmarks. Can you identify them?",
+                        },
+                    ],
+                },
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.float16)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        # Check first output
+        decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check second output
+        decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
+                ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
+                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )

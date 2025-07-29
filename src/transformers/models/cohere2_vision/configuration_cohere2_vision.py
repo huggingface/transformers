@@ -37,7 +37,7 @@ class Cohere2VisionConfig(PretrainedConfig):
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
         downsample_factor (`int`, *optional*, defaults to 2): The factor by which to downsample the input image.
-        image_token (`int`, *optional*, defaults to 255036): The token ID to use for the image input.
+        image_token_id (`int`, *optional*, defaults to 255036): The token ID to use for the image input.
         alignment_intermediate_size (`int`, *optional*, defaults to 36864): The size of the intermediate layer for alignment.
     """
 
@@ -49,11 +49,11 @@ class Cohere2VisionConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         downsample_factor=2,
-        image_token=255036,
+        image_token_id=255036,
         alignment_intermediate_size=36864,
         **kwargs,
     ):
-        self.image_token = image_token
+        self.image_token_id = image_token_id
         self.downsample_factor = downsample_factor
         self.alignment_intermediate_size = alignment_intermediate_size
 
