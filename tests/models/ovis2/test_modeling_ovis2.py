@@ -152,14 +152,14 @@ class Ovis2VisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+
+        safe_start = max(config.visual_indicator_token_ids) + 1
+        vocab_range = config.text_config.vocab_size - safe_start
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_range) + safe_start
+        input_ids[:, :self.image_seq_length] = config.image_token_id
+
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-
-        input_ids[input_ids == config.image_token_id] = self.pad_token_id
-        input_ids[:, : self.image_seq_length] = config.image_token_id
-
-        for visual_indicator_token_id in config.visual_indicator_token_ids:
-            input_ids[input_ids == visual_indicator_token_id] = self.pad_token_id
 
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
         labels[:, : self.image_seq_length] = self.ignore_id

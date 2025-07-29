@@ -150,7 +150,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_static_cache = True
-    _supports_param_buffer_assignment = False
 
     _supports_attention_backend = True
 
