@@ -137,6 +137,73 @@ messages = [
 ]
 ```
 
+### Passing decoded video objects
+In addition to loading videos from a URL or file path, you can also pass decoded video data directly. 
+
+This is useful if you’ve already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
+
+- Use the `"video"` type with a dictionary that includes:
+    - `"frames"` (`np.ndarray` or `torch.Tensor`):
+        A 4D array of shape (num_frames, channels, height, width) containing decoded video frames.
+    - `"metadata"` (`"VideoMetadata"` or `"dict"`):
+        Describes metadata for the video. If you provide a dictionary, it must include at least one of:
+        - `"fps"` (frames per second)
+        - `"duration"` (video duration in seconds)
+        if both `"fps"` and `"duration"` is provided, `"fps"` gets priority and `"duration"` is calculated based on `"fps"`
+
+```python
+import numpy as np
+
+video_object1 = {
+    "frames": np.random.randint(0, 255, size=(16, 3, 224, 224), dtype=np.uint8),
+    "metadata": {"fps": 16, "duration": 2.0}
+}
+
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": video_object1},
+            {"type": "text", "text": "What do you see in this video?"}
+        ],
+    },
+]
+```
+You can also use existing (`"load_video()"`) function to load a video, edit the video in memory and pass it in the messages.
+```python
+
+# Make sure a video backend library (pyav, decord, or torchvision) is available.
+from transformers.video_utils import load_video
+
+# load a video file in memory for testing
+frames, metadata = load_video(
+    "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4"
+)
+
+video_object2 = {
+    "frames": frames,
+    "metadata": metadata,
+}
+
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": video_object2},
+            {"type": "text", "text": "What do you see in this video?"}
+        ],
+    },
+]
+```
+
 Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. There are a few extra parameters to include in [`~ProcessorMixin.apply_chat_template`] that controls the sampling process.
 
 The `video_load_backend` parameter refers to a specific framework to load a video. It supports [PyAV](https://pyav.basswood-io.com/docs/stable/), [Decord](https://github.com/dmlc/decord), [OpenCV](https://github.com/opencv/opencv), and [torchvision](https://pytorch.org/vision/stable/index.html).
