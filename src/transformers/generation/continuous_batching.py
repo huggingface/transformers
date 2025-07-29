@@ -839,7 +839,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata).to(self.model_device, non_blocking=True)
         self.block_tables = torch.full(
-            (T, 100),
+            (T, 200),
             fill_value=-1,
             dtype=torch.int32,
         ).to(self.model_device, non_blocking=True)
@@ -1029,7 +1029,7 @@ class ContinuousBatchProcessor:
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
         if (
-            self.config._attn_implementation != "paged_attention" and self.max_seqlen_q != 1
+            self.config._attn_implementation != "paged_attention"
         ):  # we set `is_causal` to True in paged call`
             # when decoding with sdpa paged, no need for a mask
             for i in range(len(cumulative_seqlens_q) - 1):
