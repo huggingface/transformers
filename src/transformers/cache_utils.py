@@ -1348,6 +1348,8 @@ class DynamicCache(Cache):
         backward compatibility.
         """
         cache = cls()
+        if past_key_values is None:
+            raise ValueError("from_legacy_cache expects a non-None past_key_values")
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
