@@ -1730,9 +1730,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return self.apply_chat_template([message], add_generation_prompt=False, tokenize=True, **kwargs)
 
         conversation = conversation_history + [message]
-        tokens = self.apply_chat_template(
-            conversation, add_generation_prompt=False, tokenize=True, **kwargs
-        )
+        tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
 
         prefix_tokens = self.apply_chat_template(
             conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
