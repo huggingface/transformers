@@ -19,52 +19,52 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(num_kv_heads * n_rep, slen, head_dim)
 
 
-# def sdpa_attention_paged_forward__(
-#     module: torch.nn.Module,
-#     query: torch.Tensor,
-#     key: torch.Tensor,
-#     value: torch.Tensor,
-#     attention_mask: Optional[torch.Tensor],
-#     dropout: float = 0.0,
-#     scaling: Optional[float] = None,
-#     reshaping_function=None,
-#     is_causal: Optional[bool] = None,
-#     **kwargs,
-# ) -> tuple[torch.Tensor, None]:
-#     cache = kwargs.pop("cache", None)
-#     if cache is not None:
-#         key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
+def sdpa_attention_paged_forward__(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    reshaping_function=None,
+    is_causal: Optional[bool] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, None]:
+    cache = kwargs.pop("cache", None)
+    if cache is not None:
+        key, value = cache.update(key, value, module.layer_idx, reshaping_function=reshaping_function, **kwargs)
 
-#     # because of the kernel, the shape of the cache is different
-#     # it return [num_tokens, num_kv_heads, head_dim]
+    # because of the kernel, the shape of the cache is different
+    # it return [num_tokens, num_kv_heads, head_dim]
 
-#     if key.ndim == 3:
-#         key = key.permute(1, 0, 2)
-#         value = value.permute(1, 0, 2)
-#     else:
-#         key = key.view(-1, key.shape[-2], key.shape[-1]).permute(1, 0, 2)
-#         value = value.view(-1, value.shape[-2], value.shape[-1]).permute(1, 0, 2)
+    if key.ndim == 3:
+        key = key.permute(1, 0, 2)
+        value = value.permute(1, 0, 2)
+    else:
+        key = key.view(-1, key.shape[-2], key.shape[-1]).permute(1, 0, 2)
+        value = value.view(-1, value.shape[-2], value.shape[-1]).permute(1, 0, 2)
 
-#     if hasattr(module, "num_key_value_groups"):
-#         key = repeat_kv(key, module.num_key_value_groups)
-#         value = repeat_kv(value, module.num_key_value_groups)
-#     causal_mask = attention_mask
-#     # print(f"causal_mask.shape: {causal_mask.shape}")
-#     query = query.contiguous()
-#     key = key.contiguous()
-#     value = value.contiguous()
-#     attn_output = torch.nn.functional.scaled_dot_product_attention(
-#         query,
-#         key,
-#         value,
-#         attn_mask=causal_mask,
-#         scale=scaling,
-#         dropout_p=dropout,
-#         is_causal=is_causal,
-#     )
+    if hasattr(module, "num_key_value_groups"):
+        key = repeat_kv(key, module.num_key_value_groups)
+        value = repeat_kv(value, module.num_key_value_groups)
+    causal_mask = attention_mask
+    # print(f"causal_mask.shape: {causal_mask.shape}")
+    query = query.contiguous()
+    key = key.contiguous()
+    value = value.contiguous()
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=causal_mask,
+        scale=scaling,
+        dropout_p=dropout,
+        is_causal=is_causal,
+    )
 
-#     attn_output = attn_output.transpose(1, 2).contiguous()
-#     return attn_output, None
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, None
 
 # def sdpa_attention_paged_forward_flash__(
 #     module: torch.nn.Module,
@@ -146,6 +146,7 @@ def sdpa_attention_paged_forward(
     reshaping_function = paged_attention_kernel.reshape_and_cache_flash
 
     is_decoding = kwargs.get("is_decoding")
+    # is_decoding = False
     if not is_decoding:
         return sdpa_attention_paged_forward__(
             module,

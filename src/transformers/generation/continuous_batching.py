@@ -205,7 +205,8 @@ class PagedAttentionCache:
             # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
             num_key_value_heads //= tp_size
 
-        self.cache_shape = (num_key_value_heads, num_blocks, self.block_size, self.head_dim)
+        # self.cache_shape = (num_key_value_heads, num_blocks, self.block_size, self.head_dim)
+        self.cache_shape = (num_blocks, self.block_size, self.num_key_value_heads, self.head_dim)
 
         self.dtype = dtype
         self.device = device
@@ -1006,7 +1007,7 @@ class ContinuousBatchProcessor:
         )
 
         self.metrics.record_kv_cache_memory_metrics(self.cache)
-        
+
         self.is_decoding = (self.max_seqlen_q == 1)
     @traced
     def _build_tensors(
