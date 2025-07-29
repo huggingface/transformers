@@ -1,58 +1,84 @@
-import re
+# coding=utf-8
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Optional, Union
 
 import numpy as np
-from PIL import Image
 
-from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
+class Cohere2VisionImagesKwargs(ImagesKwargs, total=False):
+    max_patches: Optional[int]
+
+
 class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Cohere2VisionImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": "longest",
             "padding_side": "left",
-            "truncation": True,
-        },
-        "images_kwargs": {
-            "do_pad": True,
+            "padding": True,
+            "return_mm_token_type_ids": False,
         },
     }
 
 
 class Cohere2VisionProcessor(ProcessorMixin):
-    """
-    A processor that handles all the pre-processing steps needed to convert raw images and text into the format required by the Cohere2Vision model.
+    r"""
+    Constructs a Cohere2Vision processor which wraps a [`AutoImageProcessor`] and
+    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    tokenizer functionalities. See the [`~Cohere2VisionProcessor.__call__`] and [`~Cohere2VisionProcessor.decode`] for more information.
+    Args:
+        image_processor ([`AutoImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Cohere2VisionImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
-        chat_template: Optional[str] = None,
-        **kwargs: Unpack[Cohere2VisionProcessorKwargs],
+        chat_template=None,
+        **kwargs,
     ):
-        assert tokenizer is not None, "tokenizer must be provided"
-        assert image_processor is not None, "image_processor must be provided"
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-        self.image_processor = image_processor
-        self.tokenizer = tokenizer
+        self.image_size = self.image_processor.image_size
+        self.patch_size = self.image_processor.patch_size
+        self.boi_token = tokenizer.boi_token
+        self.eoi_token = tokenizer.eoi_token
+        self.image_token = tokenizer.image_token
+        self.img_line_break_token = tokenizer.img_line_break_token
 
-        super().__init__(
-            image_processor=self.image_processor,
-            tokenizer=self.tokenizer,
-            chat_template=chat_template if chat_template else None,
+        self.image_token_id = tokenizer.image_token_id
+        self.image_ids = tokenizer.convert_tokens_to_ids(
+            [
+                tokenizer.image_token,
+                tokenizer.boi_token,
+                tokenizer.eoi_token,
+            ]
         )
 
     def __call__(
@@ -62,188 +88,128 @@ class Cohere2VisionProcessor(ProcessorMixin):
         **kwargs: Unpack[Cohere2VisionProcessorKwargs],
     ) -> BatchFeature:
         """
-        TODO
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
+        To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
+        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`str`, `list[str]`, `list[list[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if text is None:
             raise ValueError("You have to specify text.")
-
-        if not isinstance(text, (list, tuple)):
+        elif not isinstance(text, (list, tuple)):
             text = [text]
 
-        if not isinstance(images, (list, tuple)):
-            images = [images] if images is not None else None
-
-        if images and not isinstance(images[0], (list, tuple)):
-            images = [images]
-
-        if images is None:
-            text_prompts = text
-            all_image_patches = [[] for _ in range(len(text))]
-            image_num_patches = [0 for _ in range(len(text))]
-            return self._make_batch_feature(
-                text_prompts=text_prompts,
-                all_image_patches=all_image_patches,
-                image_num_patches=image_num_patches,
-                **kwargs,
-            )
-
-        text_prompts = []
-        all_image_patches = []
-        image_num_patches = []
-
-        # if some batch items don't have images then len(images) < len(text)
-        assert len(images) <= len(text), (
-            f"Number of images ({len(images)}) cannot exceed number of text prompts ({len(text)})."
-        )
-
-        img_idx = 0
-        for text_idx in range(len(text)):
-            prompt = text[text_idx]
-            if "<image>" in prompt:
-                imgs = images[img_idx]
-                img_idx += 1
-            else:
-                imgs = []
-
-            text_prompt, image_patches, num_patches = self.prepare_sample(
-                images=imgs,
-                text=prompt,
-            )
-            text_prompts.append(text_prompt)
-            all_image_patches.append(image_patches)
-            image_num_patches.append(num_patches)
-
-        return self._make_batch_feature(
-            text_prompts=text_prompts,
-            all_image_patches=all_image_patches,
-            image_num_patches=image_num_patches,
-            **kwargs,
-        )
-
-    def prepare_sample(
-        self,
-        images: list[Image.Image],
-        text: str,
-    ) -> tuple[str, list[np.ndarray], int]:
-        """
-        Process a single text + its list of images.
-
-        - text: may contain N occurrences of "<image>"
-        - images: length N list of PIL images
-
-        Returns:
-            text_prompt:        text with each "<image>" replaced by the model's image-token string
-            image_patches:      flat List[np.ndarray] of all patches, in order
-            image_num_patches:  int, total number of patches across all images
-        """
-        splitter = re.compile(r"(<image>)")
-
-        parts = splitter.split(text)
-        n_tags = parts.count("<image>")
-        if n_tags != len(images):
-            raise ValueError(f"Expected {n_tags} images (one per '<image>'), but got {len(images)}.")
-
-        out_text = []
-        image_patches: list[np.ndarray] = []
-        image_num_patches: int = 0
-        img_idx = 0
-
-        for chunk in parts:
-            if chunk == "<image>":
-                img = images[img_idx]
-                img_idx += 1
-
-                token_str, patch_list, _ = self.image_processor.process_image(img)
-
-                # insert the token placeholder
-                out_text.append(token_str)
-
-                # collect patches
-                image_patches.extend(patch_list)
-                image_num_patches += len(patch_list)
-            else:
-                # plain text
-                out_text.append(chunk)
-
-        # join all text pieces back into one string
-        text_prompt = "".join(out_text)
-        return text_prompt, image_patches, image_num_patches
-
-    def _make_batch_feature(
-        self,
-        text_prompts: list[str],
-        all_image_patches: list[list[np.ndarray]],
-        image_num_patches: list[int],
-        **kwargs: Unpack[Cohere2VisionProcessorKwargs],
-    ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             Cohere2VisionProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        text_kwargs = output_kwargs["text_kwargs"]
+        # Process images
+        image_inputs = {}
+        if images is not None:
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            num_patches = iter(image_inputs.pop("num_patches"))
+            processed_text = []
+            for sample in text:
+                while self.image_token in sample:
+                    img_patches_per_tile = (self.image_size // self.patch_size) ** 2
+                    img_string = f"{self.boi_token}"
+                    for idx in range(1, num_patches):
+                        img_string += f"{self.image_token}" * img_patches_per_tile + self.img_line_break_token
+                    img_string += f"{self.image_token}" * img_patches_per_tile + self.img_line_break_token
+                    img_string += f"{self.eoi_token}"
 
-        text_inputs = self.tokenizer(text_prompts, **text_kwargs)
+                    sample = sample.replace(self.image_token, img_string, 1)
+                processed_text.append(sample)
+            text = processed_text
 
-        # Zero-pad the image patches across the batch
-        max_num_patches = max(image_num_patches)
-        padded_image_patches = []
-        img_size = self.image_processor.img_size
-        padding_image = np.zeros((img_size, img_size, 3))
-        for i, patch_seq in enumerate(all_image_patches):
-            # Normalize the patch images
-            patch_seq = self.image_processor.normalize_patches(patch_seq)
-            padded = patch_seq + [padding_image for _ in range(max_num_patches - len(patch_seq))]
-            padded_image_patches.append(padded)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
-        # If there are *any* images in the batch, convert to np.array
-        if any(len(p) > 0 for p in padded_image_patches):
-            # shape = (batch_size, num_patches, H, W, C)
-            padded_image_patches = np.array(padded_image_patches)
-            # We want (batch_size, num_patches, channels, height, width)
-            padded_image_patches = padded_image_patches.transpose(0, 1, 4, 2, 3)
-            padded_image_patches = padded_image_patches.astype(np.float16)
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
-            # Return the final BatchFeature with text + image data
-            return BatchFeature(
-                data={
-                    **text_inputs,
-                    "pixel_values": padded_image_patches,
-                    "image_num_patches": np.array(image_num_patches),
-                },
-                tensor_type="pt",
-            )
-        else:
-            # No images in the entire batch (text-only). Return text
-            return BatchFeature(
-                data={**text_inputs},
-                tensor_type="pt",
-            )
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Cohere2VisionProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+
+            token_per_patch = (self.img_size // self.patch_size) ** 2
+            num_image_tokens = [
+                token_per_patch + 3 + sum(token_per_patch + 1 for _ in range(1, num_patches))
+                for num_patches in num_image_patches
+            ]  # Add +3 and +1 for BOI/EOI and image tile tokens
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """
-        Forwards all arguments to the tokenizer's batch_decode method.
-
-        This method forwards all its arguments to PreTrainedTokenizerBase's [`~PreTrainedTokenizer.batch_decode`].
-        Please refer to the docstring of this method for more information.
-
-        Returns:
-            List[str]: A list of decoded texts.
+        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        Forwards all arguments to the tokenizer's decode method.
-
-        This method forwards all its arguments to PreTrainedTokenizerBase's [`~PreTrainedTokenizer.decode`].
-        Please refer to the docstring of this method for more information.
-
-        Returns:
-            str: The decoded text.
+        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(tokenizer_input_names) + list(image_processor_input_names)
 
-__all__ = ["Cohere2VisionProcessor", "Cohere2VisionProcessorKwargs"]
+
+__all__ = ["Cohere2VisionProcessor"]

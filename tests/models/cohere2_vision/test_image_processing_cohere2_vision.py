@@ -1,74 +1,131 @@
-import numpy as np
-import pytest
-from PIL import Image
-
-from transformers import BaseImageProcessor
-from transformers.models.cohere2_vision.image_processing_cohere2_vision import Cohere2VisionImageProcessor
-
-
-MAX_CROPS = 12
-
-
-@pytest.fixture
-def image_processor():
-    return Cohere2VisionImageProcessor(
-        max_patches=MAX_CROPS,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        img_size=512,
-        patch_size=16,
-        downsample_factor=2,
-    )
+# Copyright 2025 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
-def test_inheritance(image_processor):
-    assert isinstance(image_processor, BaseImageProcessor)
+import unittest
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available
+
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
-def test_preprocess_raises_error(image_processor):
-    img = Image.new("RGB", (100, 200), color=(255, 0, 0))
-    with pytest.raises(NotImplementedError):
-        image_processor.preprocess(img)
-
-    with pytest.raises(NotImplementedError):
-        image_processor(images=img)
+if is_torchvision_available():
+    from transformers import Cohere2VisionImageProcessorFast
 
 
-@pytest.mark.parametrize(
-    ["hw", "expected_resolution"],
-    [
-        [(512, 512), (2, 2)],
-        [(1000, 200), (3, 1)],
-        [(200, 1000), (1, 3)],
-    ],
-)
-def test_select_tiling(hw: tuple[int, int], expected_resolution: tuple[int, int], image_processor):
-    resolutions = image_processor.get_all_possible_resolutions(MAX_CROPS)
-    h, w = hw
-    base_image_size = 384
-    selected_resolution = image_processor.select_tiling(h, w, base_image_size, resolutions)
-    assert np.all(selected_resolution == np.array(expected_resolution))
+class Cohere2VisionImageProcessingTester(unittest.TestCase):
+    def __init__(
+        self,
+        parent,
+        batch_size=7,
+        num_channels=3,
+        image_size=18,
+        min_resolution=30,
+        max_resolution=400,
+        do_resize=True,
+        size=None,
+        do_normalize=True,
+        do_pad=False,
+        image_mean=[0.48145466, 0.4578275, 0.40821073],
+        image_std=[0.26862954, 0.26130258, 0.27577711],
+        do_convert_rgb=True,
+    ):
+        super().__init__()
+        size = size if size is not None else {"longest_edge": 30}
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+        self.do_resize = do_resize
+        self.size = size
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.do_pad = do_pad
+        self.do_convert_rgb = do_convert_rgb
+
+    def prepare_image_processor_dict(self):
+        return {
+            "do_resize": self.do_resize,
+            "size": self.size,
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
+            "do_convert_rgb": self.do_convert_rgb,
+            "do_pad": self.do_pad,
+        }
+
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["longest_edge"], self.size["longest_edge"]
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
 
 
-@pytest.mark.parametrize(["hw", "crops", "crops_size"], [[(512, 512), 5, 384], [(1000, 1000), 10, 384]])
-def test_scale_to_optimal_aspect_ratio(hw: tuple[int, int], crops: int, crops_size: int, image_processor):
-    all_resolutions = image_processor.get_all_possible_resolutions(MAX_CROPS)
-    h, w = hw
-    image = Image.new("RGB", (h, w))
-    tiles = image_processor.scale_to_optimal_aspect_ratio(image, all_resolutions, crops_size)
-    assert len(tiles) == crops
-    assert all(crop.size == (crops_size, crops_size) for crop in tiles)
+@require_torch
+@require_vision
+class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    fast_image_processing_class = Cohere2VisionImageProcessorFast if is_torchvision_available() else None
 
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester = Cohere2VisionImageProcessingTester(self)
 
-def test_image_encoder(image_processor):
-    image = Image.new("RGB", (1000, 1000))
-    _, encoded_images, _ = image_processor.process_image(image)
-    assert len(encoded_images) == 5
+    @property
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
+    def test_image_processor_properties(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processor, "do_resize"))
+            self.assertTrue(hasattr(image_processor, "size"))
+            self.assertTrue(hasattr(image_processor, "do_normalize"))
+            self.assertTrue(hasattr(image_processor, "image_mean"))
+            self.assertTrue(hasattr(image_processor, "image_std"))
+            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-def test_normalization(image_processor):
-    random_array = np.random.randint(-128, 128, (512, 512, 3), dtype=np.int8).astype(float)
-    (normalized_image_processor,) = image_processor.normalize_patches([random_array])
-    normalized_expected_code = random_array / (255 / 2) - 1
+    def test_crop_to_patches(self):
+        # test slow image processor
+        image_processor = self.image_processor_list[0](**self.image_processor_dict)
+        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
+        processed_images = image_processor.crop_image_to_patches(
+            image,
+            max_patches=6,
+            patch_size=20,
+        )
+        self.assertEqual(len(processed_images), 5)
+        self.assertEqual(processed_images[0].shape[:2], (20, 20))
 
-    assert np.array_equal(normalized_expected_code, normalized_image_processor)
+        # test fast image processor (process batch)
+        image_processor = self.image_processor_list[1](**self.image_processor_dict)
+        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+        processed_images = image_processor.crop_image_to_patches(
+            image.unsqueeze(0),
+            max_patches=6,
+            patch_size=20,
+        )
+        self.assertEqual(len(processed_images[0]), 5)
+        self.assertEqual(processed_images.shape[-2:], (20, 20))
