@@ -192,6 +192,9 @@ class CsmProcessor(ProcessorMixin):
         for audio_value, p in zip(audio, saving_path):
             if isinstance(audio_value, torch.Tensor):
                 audio_value = audio_value.cpu().float().numpy()
+            if audio_value.ndim == 2 and audio_value.shape[0] in (1, 2):
+                # (nb_channels, audio_length) -> (audio_length, nb_channels), as expected by `soundfile`
+                audio_value = np.transpose(audio_value)
             sf.write(p, audio_value, sampling_rate)
 
     def __call__(

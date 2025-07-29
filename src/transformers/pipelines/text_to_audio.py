@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
 import inspect
-from typing import Any, Union, overload
+from typing import Any, Optional, Union, overload
+
 import numpy as np
 
 from ..generation import GenerationConfig
@@ -115,26 +116,8 @@ class TextToAudioPipeline(Pipeline):
                 else vocoder
             )
 
-        self.sampling_rate = sampling_rate
-        if self.vocoder is not None:
-            self.sampling_rate = self.vocoder.config.sampling_rate
-
-        if self.sampling_rate is None:
-            # get sampling_rate from config and generation config
-
-            config = self.model.config
-            gen_config = self.model.__dict__.get("generation_config", None)
-            if gen_config is not None:
-                config.update(gen_config.to_dict())
-
-            for sampling_rate_name in ["sample_rate", "sampling_rate"]:
-                sampling_rate = getattr(config, sampling_rate_name, None)
-                if sampling_rate is not None:
-                    self.sampling_rate = sampling_rate
-
-        # last fallback to get the sampling rate based on processor
-        if self.sampling_rate is None and self.processor is not None and hasattr(self.processor, "feature_extractor"):
-            self.sampling_rate = self.processor.feature_extractor.sampling_rate
+        self.audio_channels = self._get_audio_channels()
+        self.sampling_rate = self._get_sampling_rate(sampling_rate)
 
         # Text to audio models are a diverse bunch: this section contains a best-effort to attempt to identify types
         # of models, to control the behavior of the pipeline (set `generate` flags, preprocess differently, etc.)
@@ -148,7 +131,57 @@ class TextToAudioPipeline(Pipeline):
         self._has_voice_digit_in_chat_role = "isdigit()" in chat_template if chat_template is not None else False
         # 3 - voice selection: some TTS models use speaker embeddings and have a `voice_preset` parameter in the
         # processor. E.g. Bark
-        self._has_voice_preset_in_processor = "voice_preset" in inspect.signature(self.processor).parameters
+        self._has_voice_preset_in_processor = (
+            "voice_preset" in inspect.signature(self.processor).parameters if self.processor is not None else False
+        )
+
+    def _get_sampling_rate(self, sampling_rate: Optional[int] = None) -> Optional[int]:
+        """
+        Get the sampling rate from the model config, generation config, processor, or vocoder. Can be overridden by
+        `sampling_rate` in `__init__`.
+        """
+        if sampling_rate is not None:
+            return sampling_rate
+
+        if self.vocoder is not None:
+            sampling_rate = self.vocoder.config.sampling_rate
+
+        if sampling_rate is None:
+            # get sampling_rate from config and generation config
+
+            config = self.model.config
+            gen_config = self.model.__dict__.get("generation_config", None)
+            if gen_config is not None:
+                config.update(gen_config.to_dict())
+
+            for sampling_rate_name in ["sample_rate", "sampling_rate"]:
+                sampling_rate = getattr(config, sampling_rate_name, None)
+                if sampling_rate is not None:
+                    break
+
+        # last fallback to get the sampling rate based on processor
+        if sampling_rate is None and self.processor is not None and hasattr(self.processor, "feature_extractor"):
+            sampling_rate = self.processor.feature_extractor.sampling_rate
+        return sampling_rate
+
+    def _get_audio_channels(self) -> Optional[int]:
+        """
+        Get the number of audio channels from the model config.
+        """
+        # the number of audio channels is stored in different places in the config, depending on the model
+        for nested_name in [None, "audio_config", "codec_config"]:
+            if nested_name is None:
+                obj = self.model.config
+            else:
+                obj = getattr(self.model.config, nested_name, None)
+            if obj is None:
+                continue
+            # searches among potential names for the number of audio channels
+            for attr in ["audio_channels", "num_audio_channels"]:
+                audio_channels = getattr(obj, attr, None)
+                if audio_channels is not None:
+                    break
+        return audio_channels
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
@@ -161,7 +194,6 @@ class TextToAudioPipeline(Pipeline):
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
-                # "padding": "max_length",
             }
             # priority is given to kwargs
             new_kwargs.update(kwargs)
@@ -283,16 +315,17 @@ class TextToAudioPipeline(Pipeline):
         else:
             waveform = audio
 
-        # Expected format: (batch_size [optional], nb_channels, audio_length)
-        if not 2 <= len(waveform.shape) <= 3:
+        if not 1 <= len(waveform.shape) <= 3:
             raise ValueError(
-                f"Invalid waveform shape: {waveform.shape}, expected (batch_size [optional], nb_channels, "
-                "audio_length)"
+                f"Invalid waveform shape: {waveform.shape}, expected (batch_size [optional, implicitly 1], "
+                "nb_channels [optional if audio_channels is 1], audio_length)"
             )
 
         # bsz == 1 -> output a single dict
         if len(waveform.shape) == 3 and waveform.shape[0] == 1:
             waveform = waveform[0]
+        if len(waveform.shape) == 1 and self.audio_channels == 1:
+            waveform = waveform.unsqueeze(0)
         if len(waveform.shape) == 2:
             output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
             output_dict["sampling_rate"] = self.sampling_rate
@@ -346,5 +379,6 @@ class TextToAudioPipeline(Pipeline):
                 # If the processor does not have a save_audio method, does a best effort to save the audio. This may
                 # fail if the audio data returned by the model is not in the format expected by soundfile's defaults.
                 # Add more complexity if there is demand for it.
-                squeezed_audio = np.squeeze(audio_dict["audio"])  # to correctly save mono audio with `soundfile`
-                sf.write(audio_file_path, squeezed_audio, audio_dict["sampling_rate"])
+                # (nb_channels, audio_length) -> (audio_length, nb_channels), as expected by `soundfile`
+                sf_audio = np.transpose(audio_dict["audio"])
+                sf.write(audio_file_path, sf_audio, audio_dict["sampling_rate"])

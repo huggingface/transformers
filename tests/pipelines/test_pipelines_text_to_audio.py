@@ -107,6 +107,13 @@ class TextToAudioPipelineTests(unittest.TestCase):
             audio = [output["audio"] for output in outputs]
             self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
+            # test saving audio
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                # 2 files and 1 path -> append a number suffix to the path
+                speech_generator.save_audio(outputs, os.path.join(tmp_dir, "audio.wav"))
+                self.assertTrue(os.path.exists(os.path.join(tmp_dir, "audio_0.wav")))
+                self.assertTrue(os.path.exists(os.path.join(tmp_dir, "audio_1.wav")))
+
     @slow
     @require_torch
     def test_small_bark(self):
@@ -143,11 +150,15 @@ class TextToAudioPipelineTests(unittest.TestCase):
         audio = outputs["audio"]
         self.assertEqual(ANY(np.ndarray), audio)
 
+        # test saving audio
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            speech_generator.save_audio(outputs, os.path.join(tmp_dir, "audio.wav"))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "audio.wav")))
+
     @slow
     @require_torch
     def test_small_bark_set_speaker(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
-        breakpoint()
 
         # BC: test using a speaker embedding
         forward_params = {
@@ -170,6 +181,8 @@ class TextToAudioPipelineTests(unittest.TestCase):
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio_bc)
 
         # test using `voice` pipeline parameter
+        audio = speech_generator("This is a test", voice="v2/en_speaker_5", do_sample=True)
+        self.assertEqual(ANY(np.ndarray), audio["audio"])
 
     @slow
     @require_torch_accelerator
@@ -188,7 +201,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "add_special_tokens": False,
             "return_attention_mask": True,
             "return_token_type_ids": False,
-            "padding": "max_length",
         }
         outputs = speech_generator(
             "This is a test",
@@ -228,6 +240,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
         # test batching
         outputs = speech_generator(["This is a test", "This is a second test"], batch_size=2)
         self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+
+        # test saving audio
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            speech_generator.save_audio(outputs[0], os.path.join(tmp_dir, "audio.wav"))
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "audio.wav")))
 
     @require_torch
     def test_forward_model_kwargs(self):
