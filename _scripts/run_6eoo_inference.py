@@ -109,7 +109,7 @@ if __name__ == "__main__":
         help="Use a smaller model for testing purposes. Overrides model_id.",
     )
     args = parser.parse_args()
-    model_id = args.model_id if not args.small else "../ckpts/tmp_tif_export_7b/poseidon"
+    model_id = args.model_id if not args.small else "../ckpts/reexport_7b/" 
 
     processor = AutoProcessor.from_pretrained(model_id, use_auth_token=True)
     img_processor = AutoImageProcessor.from_pretrained(model_id, use_auth_token=True)
