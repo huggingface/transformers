@@ -1694,7 +1694,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             return rendered_chat
 
-    def encode_message(
+    def encode_message_with_chat_template(
         self,
         message: dict[str, str],
         conversation_history: Optional[list[dict[str, str]]] = None,
