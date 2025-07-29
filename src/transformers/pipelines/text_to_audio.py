@@ -90,7 +90,7 @@ class TextToAudioPipeline(Pipeline):
     """
 
     _pipeline_calls_generate = True
-    _load_processor = True
+    _load_processor = None  # optional
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -162,7 +162,6 @@ class TextToAudioPipeline(Pipeline):
             new_kwargs.update(kwargs)
             kwargs = new_kwargs
 
-        preprocessor = self.tokenizer if self.processor is None else self.processor
         if self._has_voice_digit_in_chat_role:
             voice = str(kwargs.pop("voice", "0"))
             if not voice.isdigit():
@@ -172,11 +171,11 @@ class TextToAudioPipeline(Pipeline):
                 )
                 voice = "0"
             conversation = [{"role": voice, "content": [{"type": "text", "text": text[0]}]}]
-            output = preprocessor.apply_chat_template(
+            output = self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
             )
         else:
-            output = preprocessor(text, **kwargs, return_tensors="pt")
+            output = self.tokenizer(text, **kwargs, return_tensors="pt")
 
         return output
 
@@ -240,10 +239,10 @@ class TextToAudioPipeline(Pipeline):
             preprocess_params["voice"] = voice
 
         forward_params = {}
-        if "generate_kwargs" in kwargs:  # BC
-            forward_params.update(kwargs.pop("generate_kwargs"))
         if "forward_params" in kwargs:  # BC
             forward_params.update(kwargs.pop("forward_params"))
+        if "generate_kwargs" in kwargs:  # BC, `generate_kwargs` take precedence over `forward_params`
+            forward_params.update(kwargs.pop("generate_kwargs"))
         forward_params.update(kwargs)
 
         # generate-specific input preparation
@@ -266,17 +265,17 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, audio):
         output_dict = {}
 
-        # We need to postprocess to get the waveform
-        if self.processor is not None and hasattr(self.processor, "decode"):
-            waveform = self.processor.decode(audio)
-        # Or we can use the waveform directly
+        # # We need to postprocess to get the waveform
+        # if self.processor is not None and hasattr(self.processor, "decode"):
+        #     waveform = self.processor.decode(audio)
+        # # Or we can use the waveform directly
+        # else:
+        if isinstance(audio, dict):
+            waveform = audio.get("waveform")
+        elif isinstance(audio, (tuple, list)):
+            waveform = audio[0]
         else:
-            if isinstance(audio, dict):
-                waveform = audio.get("waveform")
-            elif isinstance(audio, (tuple, list)):
-                waveform = audio[0]
-            else:
-                waveform = audio
+            waveform = audio
 
         output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate

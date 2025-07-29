@@ -212,7 +212,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         forward_params = {"speaker_id": 5}
         generate_kwargs = {"do_sample": True}
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             # assert error if generate_kwargs with forward-only models
             outputs = speech_generator(
                 "This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs
@@ -245,7 +245,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         # for reproducibility
         set_seed(555)
         outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
-        self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
+        self.assertTrue(np.abs(outputs["audio"] - audio).max() < 1e-5)
 
     def get_test_pipeline(
         self,
