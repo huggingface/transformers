@@ -36,7 +36,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+
+
+if is_torchvision_available():
+    from transformers.image_processing_utils_fast import BaseImageProcessorFast
 
 
 if is_torch_available():
