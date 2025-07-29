@@ -19,9 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_llasa import *
-
-    # from .feature_extraction_llasa import *
-    # from .generation_llasa import *
     from .modeling_llasa import *
     from .processing_llasa import *
     from .tokenization_llasa import *
