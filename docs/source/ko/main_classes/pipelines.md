@@ -101,7 +101,7 @@ for out in pipe(data()):
 
 ## 파이프라인 배치 처리 [[pipeline-batching]]
 
-모든 파이프라인은 배치 처리를 지원합니다. 리스트, `데이터셋`, `제너레이터` 전달 시 스트리밍 기능을 사용할 때 작동합니다.
+모든 파이프라인은 배치 처리를 지원합니다. 리스트, `Dataset`, `Generator` 전달 시 스트리밍 기능을 사용할 때 작동합니다.
 
 ```python
 from transformers import pipeline
