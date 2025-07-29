@@ -227,7 +227,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,) * 10 + (0.0,) * 25,
+        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,),
         **kwargs,
     ):
         super().__init__(
@@ -291,9 +291,13 @@ class Gemma3nTextConfig(PretrainedConfig):
         if activation_sparsity_pattern is None:
             activation_sparsity_pattern = [0.0] * num_hidden_layers
 
+        # Default value for activation sparsity pattern
+        if activation_sparsity_pattern == (0.95,):
+            activation_sparsity_pattern += (0.0,) * (num_hidden_layers - 1)
+
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
-                "activation_sparsity_pattern must have an explicit activation sparsity value for every layer."
+                "activation_sparsity_pattern must have an explicit activation sparsity value for every layer. "
                 f"Expected {num_hidden_layers} values but got {len_asp}."
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
