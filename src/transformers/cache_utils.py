@@ -1950,10 +1950,6 @@ def parse_layer_args_from_model_config(
                 )
         # Adjust max_cache_len for sliding window layers (they can't be larger than sliding window)
         max_cache_len = max_cache_len or config.max_position_embeddings
-        if getattr(config, "sliding_window", None) is not None:
-            sliding_window_len = min(config.sliding_window, max_cache_len)
-        else:
-            sliding_window_len = None
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads:
         head_dim = (
             config.head_dim
@@ -1980,7 +1976,7 @@ def parse_layer_args_from_model_config(
             "layer_device_map": layer_device_map,
             "head_dim": head_dim,
             "num_heads": num_heads,
-            "sliding_window": sliding_window_len,
+            "sliding_window": getattr(config, "sliding_window", None),
         }
         return {k: v for k, v in layer_args.items() if v is not None}
 
