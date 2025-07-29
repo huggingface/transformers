@@ -32,7 +32,7 @@ from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
 
 
-# We protect this import to avoid requiring it for all CLI `transformers` commands - however it is actually
+# We protect this import to avoid requiring it for all `transformers` CLI commands - however it is actually
 # strictly required for this one (we need it both for modular and for the following Visitor)
 if is_libcst_available():
     import libcst as cst
