@@ -525,9 +525,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         }
 
         # remove vision, text kwargs from kwargs
-        for key in kwargs_vision.keys():
+        for key in kwargs_vision:
             del kwargs["vision_" + key]
-        for key in kwargs_text.keys():
+        for key in kwargs_text:
             del kwargs["text_" + key]
 
         # Load and initialize the vision and text model

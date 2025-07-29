@@ -80,7 +80,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         checkpoint_info = flatten_dict(checkpoint_info, sep="/")
 
     all_layers = {}
-    for layer in checkpoint_info.keys():
+    for layer in checkpoint_info:
         curr_real_layer_name, split_layer, content = get_key_and_tensorstore_dict(
             layer, checkpoint_info, switch_checkpoint_path
         )

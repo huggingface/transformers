@@ -123,5 +123,5 @@ class BarkProcessorTest(unittest.TestCase):
             return_token_type_ids=False,
         )
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key].squeeze().tolist())

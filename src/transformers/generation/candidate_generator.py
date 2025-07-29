@@ -132,7 +132,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 )
 
         # Remove potential default "logits_to_keep" key
-        if "logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_logits_to_keep():
+        if "logits_to_keep" in assistant_kwargs and not assistant_model._supports_logits_to_keep():
             del assistant_kwargs["logits_to_keep"]
 
         # If the assistant is an encoder-decoder model, assume the encoder is different on the assistant.
