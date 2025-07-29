@@ -149,6 +149,7 @@ else:
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor", "SamImageProcessorFast")),
             ("sam2", ("Sam2ImageProcessor", "Sam2ImageProcessorFast")),
+            ("edgetam", ("Sam2ImageProcessorFast")),
             ("sam_hq", ("SamImageProcessor", "SamImageProcessorFast")),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
