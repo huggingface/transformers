@@ -33,11 +33,40 @@ from .add_fast_image_processor import add_fast_image_processor
 
 
 # We protect this import to avoid requiring it for all CLI `transformers` commands - however it is actually
-# strictly required for this one (we need it both for modular and for direct use in this file as well)
+# strictly required for this one (we need it both for modular and for the following Visitor)
 if is_libcst_available():
     import libcst as cst
     from libcst import CSTVisitor
     from libcst import matchers as m
+
+    class ClassFinder(CSTVisitor):
+        """
+        A visitor to find all classes in a python module.
+        """
+
+        def __init__(self):
+            self.classes: list = []
+            self.public_classes: list = []
+            self.is_in_class = False
+
+        def visit_ClassDef(self, node: cst.ClassDef) -> None:
+            """Record class names. We assume classes always only appear at top-level (i.e. no class definition in function or similar)"""
+            self.classes.append(node.name.value)
+            self.is_in_class = True
+
+        def leave_ClassDef(self, node: cst.ClassDef):
+            self.is_in_class = False
+
+        def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine):
+            """Record all public classes inside the `__all__` assignment."""
+            simple_top_level_assign_structure = m.SimpleStatementLine(
+                body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
+            )
+            if not self.is_in_class and m.matches(node, simple_top_level_assign_structure):
+                assigned_variable = node.body[0].targets[0].target.value
+                if assigned_variable == "__all__":
+                    elements = node.body[0].value.elements
+                    self.public_classes = [element.value.value for element in elements]
 
 
 CURRENT_YEAR = date.today().year
@@ -300,36 +329,6 @@ def create_init_file(old_lowercase_name: str, new_lowercase_name: str, filenames
         """
     )
     return init_file
-
-
-class ClassFinder(CSTVisitor):
-    """
-    A visitor to find all classes in a python module.
-    """
-
-    def __init__(self):
-        self.classes: list = []
-        self.public_classes: list = []
-        self.is_in_class = False
-
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:
-        """Record class names. We assume classes always only appear at top-level (i.e. no class definition in function or similar)"""
-        self.classes.append(node.name.value)
-        self.is_in_class = True
-
-    def leave_ClassDef(self, node: cst.ClassDef):
-        self.is_in_class = False
-
-    def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine):
-        """Record all public classes inside the `__all__` assignment."""
-        simple_top_level_assign_structure = m.SimpleStatementLine(
-            body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
-        )
-        if not self.is_in_class and m.matches(node, simple_top_level_assign_structure):
-            assigned_variable = node.body[0].targets[0].target.value
-            if assigned_variable == "__all__":
-                elements = node.body[0].value.elements
-                self.public_classes = [element.value.value for element in elements]
 
 
 def find_all_classes_from_file(module_name: str) -> set:
