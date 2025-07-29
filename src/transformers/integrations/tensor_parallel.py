@@ -151,6 +151,8 @@ str_to_torch_dtype = {
     "F64": torch.float64,
     "I64": torch.int64,
     "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
+    
 }
 
 
@@ -1058,7 +1060,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     This function is called in `from_pretrained` when loading a model's checkpoints.
@@ -1102,7 +1104,8 @@ def shard_and_distribute_module(
     # otherwise loading is crazy slow
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
-    setattr(module_to_tp, param_type, param)
+    if set_param:
+        setattr(module_to_tp, param_type, param)
     # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
 

@@ -114,6 +114,7 @@ from .hub import (
 from .import_utils import (
     ACCELERATE_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
+    TRITON_MIN_VERSION,
     ENV_VARS_TRUE_VALUES,
     GGUF_MIN_VERSION,
     TORCH_FX_REQUIRED_VERSION,
@@ -274,6 +275,8 @@ from .import_utils import (
     is_yt_dlp_available,
     requires_backends,
     torch_only_method,
+    is_triton_available,
+    is_triton_kernels_availalble,
 )
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
