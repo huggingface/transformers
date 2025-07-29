@@ -244,7 +244,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
             self.inner_table = [list(values.keys()), list(values.values())]
         else:
             columns = self.inner_table[0]
-            for key in values.keys():
+            for key in values:
                 if key not in columns:
                     columns.append(key)
             self.inner_table[0] = columns
@@ -258,7 +258,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
                     # update last line
                     new_values = values
                     for c in columns:
-                        if c not in new_values.keys():
+                        if c not in new_values:
                             new_values[c] = last_values[columns.index(c)]
                     self.inner_table[-1] = [new_values[c] for c in columns]
             else:

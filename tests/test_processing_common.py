@@ -937,7 +937,7 @@ class ProcessorTesterMixin:
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
         )
 
-    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    @parameterized.expand([(1, "pt"), (2, "pt")])  # fast image processors supports only torchvision
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]

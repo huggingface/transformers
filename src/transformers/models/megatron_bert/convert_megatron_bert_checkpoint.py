@@ -57,7 +57,7 @@ def recursive_print(name, val, spaces=0):
     if isinstance(val, dict):
         if msg is not None:
             print(msg)
-        for k in val.keys():
+        for k in val:
             recursive_print(k, val[k], spaces + 2)
     elif isinstance(val, torch.Tensor):
         print(msg, ":", val.size())
@@ -116,7 +116,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # The hidden_size per head.
     hidden_size_per_head = config.hidden_size // heads
     # Megatron-LM checkpoint version
-    if "checkpoint_version" in input_state_dict.keys():
+    if "checkpoint_version" in input_state_dict:
         checkpoint_version = input_state_dict["checkpoint_version"]
     else:
         checkpoint_version = 0.0
@@ -147,7 +147,7 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     output_state_dict["bert.embeddings.token_type_embeddings.weight"] = tokentype_embeddings
 
     # The transformer.
-    transformer = lm["transformer"] if "transformer" in lm.keys() else lm["encoder"]
+    transformer = lm["transformer"] if "transformer" in lm else lm["encoder"]
 
     # The regex to extract layer names.
     layer_re = re.compile(r"layers\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")

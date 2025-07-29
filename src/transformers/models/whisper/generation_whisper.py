@@ -1149,8 +1149,8 @@ class WhisperGenerationMixin(GenerationMixin):
                     for layer_idx in range(self.config.decoder_layers):
                         layer_past_key_values = []
                         for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.key_cache, cache_cls.value_cache]:
-                                layer_past_key_values.append(v[layer_idx][batch_idx][None].cpu())
+                            for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
+                                layer_past_key_values.append(v[batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
                 else:
@@ -1181,7 +1181,7 @@ class WhisperGenerationMixin(GenerationMixin):
     def _stack_split_outputs(self, seek_outputs, model_output_type, device, kwargs):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
-        for key in seek_outputs[0].keys():
+        for key in seek_outputs[0]:
             if key in ["sequences", "beam_indices", "token_timestamps"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
@@ -1212,7 +1212,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 else:
                     outputs[key] = None
 
-        token_timestamps = outputs.get("token_timestamps", None)
+        token_timestamps = outputs.get("token_timestamps")
         if token_timestamps is not None:
             model_output_type = dict
 
@@ -1442,9 +1442,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         def language_to_id(language: str) -> int:
             language = language.lower()
-            if language in generation_config.lang_to_id.keys():
+            if language in generation_config.lang_to_id:
                 language_token = language
-            elif language in TO_LANGUAGE_CODE.keys():
+            elif language in TO_LANGUAGE_CODE:
                 language_token = f"<|{TO_LANGUAGE_CODE[language]}|>"
             elif language in TO_LANGUAGE_CODE.values():
                 language_token = f"<|{language}|>"

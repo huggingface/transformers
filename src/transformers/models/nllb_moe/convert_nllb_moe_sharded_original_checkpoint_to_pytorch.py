@@ -46,7 +46,7 @@ def make_linear_from_emb(emb):
 
 def rename_fairseq_keys(state_dict, expert_idx=None):
     new_dict = {}
-    for old_key in state_dict.keys():
+    for old_key in state_dict:
         key = old_key
         if "moe_layer.experts." in key:
             if expert_idx is not None:

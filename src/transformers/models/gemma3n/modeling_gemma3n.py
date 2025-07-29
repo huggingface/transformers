@@ -47,7 +47,6 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -1329,7 +1328,7 @@ class Gemma3nTextAttention(nn.Module):
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
             # Device of past layer may be different from current one
-            indices = cache_position.to(past_key_value.key_cache[self.kv_shared_layer_index].device)
+            indices = cache_position.to(past_key_value.layers[self.kv_shared_layer_index].keys.device)
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
             if isinstance(past_key_value, HybridCache) and self.is_sliding:
                 max_length = past_key_value.sliding_window
@@ -1340,9 +1339,9 @@ class Gemma3nTextAttention(nn.Module):
                 )
 
             # Device of past layer may be different from current one
-            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices].to(query_states.device)
-            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices].to(
-                query_states.device
+            key_states = past_key_value.layers[self.kv_shared_layer_index].keys[:, :, indices].to(query_states.device)
+            value_states = (
+                past_key_value.layers[self.kv_shared_layer_index].values[:, :, indices].to(query_states.device)
             )
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
@@ -1408,7 +1407,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1490,7 +1488,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Gemma3nTextDecoderLayer,
@@ -1498,22 +1496,8 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        # important: this ported version of Gemma2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Gemma3nRMSNorm):
-            if module.with_scale:
-                module.weight.data.fill_(1.0)
-        elif isinstance(module, Gemma3nAudioCumulativeGroupNorm):
+        super()._init_weights(module)
+        if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
             module.per_dim_scale.data.zero_()

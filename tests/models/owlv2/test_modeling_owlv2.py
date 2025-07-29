@@ -375,7 +375,11 @@ class Owlv2ModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Owlv2Config.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return Owlv2Config(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = Owlv2Model(config).to(torch_device).eval()
@@ -520,8 +524,8 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -589,7 +593,11 @@ class Owlv2ForObjectDetectionTester:
         return config, pixel_values, input_ids, attention_mask
 
     def get_config(self):
-        return Owlv2Config.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return Owlv2Config(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
         model = Owlv2ForObjectDetection(config).to(torch_device).eval()
@@ -730,8 +738,8 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
