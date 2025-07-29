@@ -1056,7 +1056,9 @@ class HunYuanSdpaAttention(HunYuanAttention):
         value_states = value_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         assert position_ids is not None, "position_ids must be provided for HunYuanSdpaAttention"
-        kv_seq_len = position_ids.max().item() + 1
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
         if self.use_rotary_pos_emb:
             cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
