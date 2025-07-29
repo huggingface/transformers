@@ -168,19 +168,6 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
 
         return intermediate_cache3
 
-def mlp_forward(self, hidden_states):
-    import torch.distributed as dist
-    if dist.is_available() and dist.is_initialized():
-        routing = routing_torch_dist
-    else:
-        from triton_kernels.routing import routing
-        routing = routing
-    hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
-    router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
-    routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
-    return routed_out, router_logits
-
 def routing_torch_dist(
     logits,
     n_expts_act,
@@ -244,6 +231,19 @@ def routing_torch_dist(
 
         hitted_experts = n_expts_act
     return RoutingData(gate_scal, hist, n_local_experts, hitted_experts, expt_data), gather_indx, scatter_indx
+
+def mlp_forward(self, hidden_states):
+    import torch.distributed as dist
+    if dist.is_available() and dist.is_initialized():
+        routing = routing_torch_dist
+    else:
+        from triton_kernels.routing import routing
+        routing = routing
+    hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
+    router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
+    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
+    routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
+    return routed_out, router_logits
 
 def should_convert_module(current_key_name, patterns):
     current_key_name_str = ".".join(current_key_name)
