@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 - \[`파이프라인`]은 다른 모든 파이프라인을 캡슐화하는 가장 강력한 객체입니다.
 - 작업별 파이프라인은 [오디오](#audio), [컴퓨터 비전](#computer-vision), [자연어 처리](#natural-language-processing), [멀티모달](#multimodal) 작업에 사용할 수 있습니다.
 
-## 파이프라인 추상화 [[transformers.pipeline]]
+## 파이프라인 추상화 [[the-pipeline-abstraction]]
 
 *파이프라인* 추상화는 사용 가능한 모든 파이프라인을 감싸는 래퍼입니다. 다른 파이프라인처럼 인스턴스화되며, 추가적인 편의 기능을 제공합니다.
 
