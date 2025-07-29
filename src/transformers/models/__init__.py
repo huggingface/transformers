@@ -262,6 +262,7 @@ if TYPE_CHECKING:
     from .pvt_v2 import *
     from .qwen2 import *
     from .qwen2_5_vl import *
+    from .qwen2_5_omni import *
     from .qwen2_audio import *
     from .qwen2_moe import *
     from .qwen2_vl import *
