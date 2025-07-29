@@ -1539,16 +1539,25 @@ class Blip2Model(Blip2PreTrainedModel):
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
-        language_model_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
+
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds], dim=1)
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        expected_device = language_model_attention_mask.device
-        attention_mask = torch.cat([language_model_attention_mask, attention_mask.to(expected_device)], dim=1)
+
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
+            special_image_mask, language_model_inputs
+        )
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
@@ -2026,9 +2035,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         )
         vision_outputs = vision_outputs.to_tuple() if not return_dict else vision_outputs
         query_outputs = query_outputs.to_tuple() if not return_dict else query_outputs
-        language_model_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -2036,34 +2042,19 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        # if the model already has "image_token_id" then the input is expanded to account for image embeds
-        # otherwise we expand manually by concatenating
-        if getattr(self.config, "image_token_id", None) is not None:
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            special_image_mask = (
-                special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
-                special_image_mask, language_model_inputs
-            )
+            special_image_mask = special_image_mask.all(-1)
         else:
-            logger.warning_once(
-                "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
-                "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
-            )
-            inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
-            attention_mask = torch.cat(
-                [language_model_attention_mask, attention_mask.to(language_model_attention_mask.device)], dim=1
-            )
+            special_image_mask = input_ids == self.config.image_token_id
+
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
+            special_image_mask, language_model_inputs
+        )
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
@@ -2172,15 +2163,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             query_output = query_output.to(image_embeds.dtype)
 
         language_model_inputs = self.language_projection(query_output)
-        language_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
 
         if inputs_embeds is None:
             if input_ids is None:
-                start_tokens = [self.config.text_config.bos_token_id]
-                if getattr(self.config, "image_token_id", None) is not None:
-                    start_tokens = [self.config.image_token_id] * self.config.num_query_tokens + start_tokens
+                image_tokens = [self.config.image_token_index] * self.config.num_query_tokens
+                start_tokens = image_tokens + [self.config.text_config.bos_token_id]
                 input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
                 input_ids = input_ids.repeat(batch_size, 1)
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -2188,53 +2175,24 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        # if the model already has "image_token_id" then the input is expanded to account for image embeds
-        # otherwise we expand manually by concatenating
-        if getattr(self.config, "image_token_id", None) is not None:
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            special_image_mask = (
-                special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(language_model_inputs.device)
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            language_model_inputs = language_model_inputs.to(inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.to(language_model_inputs.device).masked_scatter(
-                special_image_mask, language_model_inputs
-            )
-
-            attention_mask = attention_mask.to(language_attention_mask.device)
+            special_image_mask = special_image_mask.all(-1)
         else:
-            logger.warning_once(
-                "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
-                "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
-            )
-            inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
-            attention_mask = torch.cat(
-                [language_attention_mask, attention_mask.to(language_attention_mask.device)], dim=1
-            )
+            special_image_mask = input_ids == self.config.image_token_id
 
-            # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
-            # -1 is to account for the prepended BOS after `generate.`
-            # TODO (joao, raushan): refactor `generate` to avoid these operations with VLMs
-            if not self.language_model.config.is_encoder_decoder:
-                generate_kwargs["max_length"] = (
-                    generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1] - 1
-                )
-                generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            if input_ids is not None:
-                input_ids = input_ids.to(language_model_inputs.device)
             inputs["input_ids"] = input_ids
 
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
+
         return outputs
 
 
@@ -2362,8 +2320,13 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         if use_image_text_matching_head:
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device)
-            attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
+            if self.config.image_token_index is not None:
+                input_ids = input_ids[:, self.config.num_query_tokens :]
+            else:
+                query_attention_mask = torch.ones(
+                    query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device
+                )
+                attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
 
             query_embeds = self.embeddings(
                 input_ids=input_ids,
@@ -2394,6 +2357,10 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             )
             image_embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
             image_embeds = image_embeds.to(dtype=self.vision_projection.weight.dtype)
+
+            if self.config.image_token_index is not None:
+                input_ids = input_ids[:, self.config.num_query_tokens :]
+                attention_mask = attention_mask[:, self.config.num_query_tokens :]
 
             query_embeds = self.embeddings(
                 input_ids=input_ids,
