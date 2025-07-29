@@ -267,7 +267,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
     read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "conditional_detr.model." if is_panoptic else "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if is_panoptic:
             if (
                 key.startswith("conditional_detr")
