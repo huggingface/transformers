@@ -26,7 +26,6 @@ from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
@@ -239,7 +238,6 @@ class GroundingDinoProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    @deprecate_kwarg("box_threshold", new_name="threshold", version="4.51.0")
     def post_process_grounded_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
