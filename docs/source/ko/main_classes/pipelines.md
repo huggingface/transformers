@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 파이프라인 [[pipelines]]
 
-파이프라인은 모델을 추론에 활용할 수 있는 훌륭하고 쉬운 방법입니다. 이 파이프라인은 라이브러리의 복잡한 코드를 대부분 추상화하여, 개체명 인식(Named Entity Recognition), 마스킹 언어 모델링(Masked Language Modeling), 감정 분석(Sentiment Analysis), 특성 추출(Feature Extraction), 질의응답(Question Answering) 등의 여러 작업에 특화된 간단한 API를 제공합니다. 사용 예시는 [작업 요약](../task_summary)을 참고하세요.
+파이프라인은 모델을 추론에 활용할 수 있는 훌륭하고 쉬운 방법입니다. 이 파이프라인은 라이브러리의 복잡한 코드를 대부분 추상화하여, 개체명 인식(Named Entity Recognition), 마스크드 언어 모델링(Masked Language Modeling), 감정 분석(Sentiment Analysis), 특성 추출(Feature Extraction), 질의응답(Question Answering) 등의 여러 작업에 특화된 간단한 API를 제공합니다. 사용 예시는 [작업 요약](../task_summary)을 참고하세요.
 
 파이프라인 추상화는 다음 두 가지 범주로 나뉩니다:
 
