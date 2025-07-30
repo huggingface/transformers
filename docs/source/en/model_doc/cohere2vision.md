@@ -1,4 +1,4 @@
-# Cohere
+# command-A-vision
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -20,6 +20,7 @@ Command Vision is built upon a robust architecture that leverages the latest adv
 The model and image processor can be loaded as follows:
 
 ```python
+# TODO(julian) match model card snippet
 # pip install 'git+https://github.com/huggingface/transformers.git'
 
 import torch
@@ -33,7 +34,7 @@ model = AutoModelForImageTextToText.from_pretrained(
     model_id, device_map="auto", torch_dtype=torch.float16
 )
 
-# Format message with the aya-vision chat template
+# Format message with the command-A-vision chat template
 messages = [
     {
         "role": "user",
