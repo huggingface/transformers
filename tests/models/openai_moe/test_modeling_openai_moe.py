@@ -243,16 +243,16 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
 class OpenAIMoeTPTest(TensorParallelTestBase):
     def test_model_training(self):
         self.run_tensor_parallel_test(
-            model_id="openai/openai-moe-20b", mode="training", expected_output="you with something?"
+            model_id="/fsx/vb/new-oai/20b-converted-quantized", mode="training", expected_output="you with something?"
         )
         self.run_tensor_parallel_test(
-            model_id="openai/openai-moe-120b", mode="training", expected_output="you with something?"
+            model_id="/fsx/vb/new-oai/120b-converted-quantized", mode="training", expected_output="you with something?"
         )
 
     def test_model_generate(self):
         self.run_tensor_parallel_test(
-            model_id="openai/openai-moe-20b", mode="generate", expected_output="with something"
+            model_id="/fsx/vb/new-oai/20b-converted-quantized", mode="generate", expected_output="with something"
         )
         self.run_tensor_parallel_test(
-            model_id="openai/openai-moe-120b", mode="generate", expected_output="with something"
+            model_id="/fsx/vb/new-oai/120b-converted-quantized", mode="generate", expected_output="with something"
         )
