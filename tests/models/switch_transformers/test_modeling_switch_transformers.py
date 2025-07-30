@@ -1029,7 +1029,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(
+        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", dtype=torch.bfloat16).to(
             torch_device
         )
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
@@ -1069,7 +1069,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         # Generate test using the smalled switch-C model.
 
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/switch-base-8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
         model = model.to(torch_device)
@@ -1097,7 +1097,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
     def test_small_batch_generate(self):
         BATCH_SIZE = 4
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/switch-base-8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
 

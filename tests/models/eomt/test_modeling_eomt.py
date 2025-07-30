@@ -319,7 +319,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_fp16(self):
         model = EomtForUniversalSegmentation.from_pretrained(
-            self.model_id, torch_dtype=torch.float16, device_map="auto"
+            self.model_id, dtype=torch.float16, device_map="auto"
         )
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 

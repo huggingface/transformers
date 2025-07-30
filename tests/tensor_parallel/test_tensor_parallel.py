@@ -78,7 +78,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
             has_dtensor = 0
@@ -144,7 +144,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
             model.forward = torch.compile(model.forward)

@@ -772,7 +772,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         return ds[:num_samples]
 
     def test_inference_ctc_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", torch_dtype=torch.float16).to(
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", dtype=torch.float16).to(
             torch_device
         )
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
@@ -798,7 +798,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_keyword_spotting(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-ks", torch_dtype=torch.float16
+            "superb/hubert-base-superb-ks", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
         input_data = self._load_superb("ks", 4)
@@ -819,7 +819,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_intent_classification(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-ic", torch_dtype=torch.float16
+            "superb/hubert-base-superb-ic", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ic")
         input_data = self._load_superb("ic", 4)
@@ -858,7 +858,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_speaker_identification(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-sid", torch_dtype=torch.float16
+            "superb/hubert-base-superb-sid", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-sid")
         input_data = self._load_superb("si", 4)
@@ -884,7 +884,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_emotion_recognition(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-er", torch_dtype=torch.float16
+            "superb/hubert-base-superb-er", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-er")
         input_data = self._load_superb("er", 4)

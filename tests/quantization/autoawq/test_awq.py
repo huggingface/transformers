@@ -196,7 +196,7 @@ class AwqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16).to(
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.bfloat16).to(
             torch_device
         )
 
@@ -512,7 +512,7 @@ class AwqScaleTest(unittest.TestCase):
         Simple test that checks if the scales have been replaced in the quantized model
         """
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
+            "TechxGenus/starcoder2-3b-AWQ", dtype=torch.float16, device_map=torch_device
         )
         self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
 
