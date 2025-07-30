@@ -263,6 +263,7 @@ class PretrainedConfig(PushToHubMixin):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
         # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
         if torch_dtype := kwargs.get("torch_dtype", None) is not None:
+            # If both are provided, keep `dtype`
             dtype = dtype if dtype is not None else torch_dtype
         if dtype is not None and isinstance(dtype, str) and is_torch_available():
             # we will start using self.dtype in v5, but to be consistent with
@@ -818,7 +819,7 @@ class PretrainedConfig(PushToHubMixin):
                 if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
                     value = current_attr.__class__(**value)
                 setattr(config, key, value)
-                if key != "dtype":
+                if key not in ("dtype", "torch_dtype"):
                     to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
