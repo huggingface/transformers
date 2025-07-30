@@ -1054,6 +1054,10 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             image_index, video_index = 0, 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
+                if not attention_mask[i].any():
+                    position_ids[..., i, :] = 1
+                    mrope_position_deltas.append(0)
+                    continue
                 input_ids = input_ids[attention_mask[i] == 1]
                 image_nums, video_nums = 0, 0
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
