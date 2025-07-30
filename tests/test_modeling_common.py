@@ -5074,6 +5074,29 @@ class ModelTesterMixin:
             for subconfig_key in model.config.sub_configs:
                 self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
+    @require_torch
+    def test_bc_torch_dtype(self):
+        """
+        Test that we can still use `torch_dtype` argument correctly, for BC.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # First check that it works correctly
+            model = model_class(copy.deepcopy(config))
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Check that it works for all dtypes
+                for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                    model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
+                    model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+                    for (k1, v1), (k2, v2) in zip(
+                        model_torch_dtype.named_parameters(), model_dtype.named_parameters()
+                    ):
+                        self.assertEqual(k1, k2)
+                        self.assertEqual(v1.dtype, v2.dtype)
+                        self.assertTrue((v1 == v2).all())
+
 
 global_rng = random.Random()
 
