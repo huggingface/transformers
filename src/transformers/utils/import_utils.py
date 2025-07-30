@@ -76,6 +76,11 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_version = importlib.metadata.version("amd-quark")
                 except Exception:
                     package_exists = False
+            elif pkg_name == "triton":
+                try:
+                    package_version = importlib.metadata.version("pytorch-triton")
+                except Exception:
+                    package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False

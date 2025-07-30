@@ -101,22 +101,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "This is not supported when the model is quantized on the fly. "
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
-        from triton_kernels.numerics_details.mxfp import SwizzlingType
-
-        # TODO: Explain what swizzle_mx_value and swizzle_mx_scale are
-        if major < 9:
-            # NYI for Ampere
-            swizzle_mx_value = None
-            swizzle_mx_scale = None
-        elif major < 10:
-            swizzle_mx_value = SwizzlingType.HOPPER
-            swizzle_mx_scale = None
-        else:
-            swizzle_mx_value = None
-            swizzle_mx_scale = SwizzlingType.BLACKWELL
-
-        self.swizzle_mx_value = swizzle_mx_value
-        self.swizzle_mx_scale = swizzle_mx_scale
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -166,7 +150,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if is_triton_kernels_availalble():
-            from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
+            from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig, InFlexData
 
         from ..integrations import Mxfp4OpenAIMoeExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
@@ -181,24 +165,20 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         loaded_weight = torch.nn.functional.pad(
                             param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         )
-                        loaded_weight, flex, mx = quantize_to_mxfp4(
-                            loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale
-                        )
+                        quantized, weight_scale = quantize_to_mxfp4(loaded_weight)
                         module.gate_up_proj_precision_config = PrecisionConfig(
-                            mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex)
+                            weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
                         )
-                        module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
+                        module.gate_up_proj = torch.nn.Parameter(quantized, requires_grad=False)
                     elif "down_proj" in param_name:
                         right_pad = module.down_proj_right_pad
                         bottom_pad = module.down_proj_bottom_pad
                         loaded_weight = torch.nn.functional.pad(
                             param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         ).to(target_device)
-                        loaded_weight, flex, mx = quantize_to_mxfp4(
-                            loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale
-                        )
-                        module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
-                        module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
+                        quantized, weight_scale = quantize_to_mxfp4(loaded_weight)
+                        module.down_proj_precision_config = PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData()))
+                        module.down_proj = torch.nn.Parameter(quantized, requires_grad=False)
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
@@ -236,8 +216,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         param_name,
                         param_value,
                         target_device,
-                        self.swizzle_mx_value,
-                        self.swizzle_mx_scale,
                         **shard_kwargs,
                     )
 

@@ -1085,6 +1085,7 @@ def shard_and_distribute_module(
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
     if current_shard_plan is not None:
+        print(current_shard_plan)
         try:
             tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
             param = tp_layer.partition_tensor(
