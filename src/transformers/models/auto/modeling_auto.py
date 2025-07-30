@@ -301,7 +301,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sam2", "Sam2Model"),
         ("edgetam", "EdgeTamModel"),
         ("edgetam_vision_model", "EdgeTamVisionModel"),
-        ("edgetam_vision_backbone", "TimmWrapperModel"),
         ("sam2_hiera_det_model", "Sam2HieraDetModel"),
         ("sam2_vision_model", "Sam2VisionModel"),
         ("sam_hq", "SamHQModel"),

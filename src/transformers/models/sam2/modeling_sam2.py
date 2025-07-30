@@ -209,7 +209,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
 
 class Sam2VisionNeck(nn.Module):
-    def __init__(self, config: Sam2HieraDetConfig):
+    def __init__(self, config: Sam2VisionConfig):
         super().__init__()
         self.config = config
 

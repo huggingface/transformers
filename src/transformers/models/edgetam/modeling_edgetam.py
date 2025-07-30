@@ -22,7 +22,6 @@
 import math
 import warnings
 from collections import OrderedDict
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
@@ -34,7 +33,6 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-from transformers import TimmWrapperModel
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
@@ -43,11 +41,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModel
 from .configuration_edgetam import (
     EdgeTamConfig,
@@ -58,6 +52,116 @@ from .configuration_edgetam import (
 
 
 logger = logging.get_logger(__name__)
+
+
+class EdgeTamHieraDetModel:
+    pass
+
+
+class EdgeTamLayerNorm(nn.Module):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.data_format = data_format
+        if self.data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.data_format == "channels_last":
+            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        elif self.data_format == "channels_first":
+            input_dtype = x.dtype
+            x = x.float()
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = x.to(dtype=input_dtype)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
+
+
+# TODO refactor or remove?
+
+
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+class EdgeTamDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+
+
+# Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
+class EdgeTamMemoryFuserCXBlock(GradientCheckpointingLayer):
+    def __init__(self, config: EdgeTamConfig, drop_path: float = 0.0):
+        super().__init__()
+        memory_fuser_embed_dim = config.memory_fuser_embed_dim
+        memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
+        self.depthwise_conv = nn.Conv2d(
+            memory_fuser_embed_dim,
+            memory_fuser_embed_dim,
+            kernel_size=config.memory_fuser_kernel_size,
+            padding=config.memory_fuser_padding,
+            groups=memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
+        )  # depthwise conv
+        self.layer_norm = EdgeTamLayerNorm(memory_fuser_embed_dim, eps=1e-6)
+        self.activation = ACT2FN[config.memory_fuser_hidden_act]
+        self.pointwise_conv1 = nn.Linear(
+            memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
+        )  # pointwise/1x1 convs, implemented with linear layers
+        self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
+        self.scale = nn.Parameter(
+            memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
+        )
+        self.drop_path = EdgeTamDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+
+    def forward(self, hidden_states):
+        input = hidden_states
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+        hidden_states = self.pointwise_conv1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise_conv2(hidden_states)
+        hidden_states = self.scale * hidden_states
+        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+
+        hidden_states = input + self.drop_path(hidden_states)
+        return hidden_states
 
 
 @dataclass
@@ -87,6 +191,509 @@ class EdgeTamVisionEncoderOutput(ModelOutput):
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+
+
+def init_2d_position_ids(end_x: int, end_y: int):
+    """Generate 2D position indices for axial rotary embedding."""
+    t = torch.arange(end_x * end_y, dtype=torch.long)
+    t_x = t % end_x
+    t_y = torch.div(t, end_x, rounding_mode="floor")
+    return t_x, t_y
+
+
+class EdgeTamVisionRotaryEmbedding(nn.Module):
+    """
+    Vision Rotary Position Embedding for EDGETAM, following transformers library standards.
+    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    """
+
+    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
+        super().__init__()
+        # Ensure even dimension for proper axial splitting
+        if dim % 4 != 0:
+            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
+
+        self.dim = dim
+        self.theta = theta
+        self.max_end_x = end_x
+
+        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        t_x, t_y = init_2d_position_ids(end_x, end_y)
+        freqs_x = torch.outer(t_x, freqs).float()
+        freqs_y = torch.outer(t_y, freqs).float()
+        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
+
+    @torch.no_grad()
+    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Generate cosine and sine position embeddings for 2D spatial dimensions.
+
+        Args:
+            feat_sizes (`tuple[int, int]`):
+                Tuple of (width, height) for the feature map
+
+        Returns:
+            `tuple[torch.Tensor, torch.Tensor]`: A tuple of (cos, sin) tensors of shape (seq_len, dim).
+        """
+        end_x, end_y = feat_sizes
+        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
+        cos = freqs.cos()
+        sin = freqs.sin()
+        return cos, sin
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class EdgeTamAttention(nn.Module):
+    """
+    EDGETAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
+
+    def __init__(
+        self,
+        config: Union[EdgeTamConfig, EdgeTamMaskDecoderConfig],
+        hidden_size: Optional[int] = None,
+        num_attention_heads: Optional[int] = None,
+        downsample_rate: Optional[int] = None,
+        kv_in_dim: Optional[int] = None,
+    ):
+        super().__init__()
+        self.config = config
+        self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
+
+        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
+
+        self.internal_dim = self.hidden_size // downsample_rate
+        self.num_attention_heads = (
+            num_attention_heads if num_attention_heads is not None else config.num_attention_heads
+        )
+        if self.internal_dim % self.num_attention_heads != 0:
+            raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
+
+        self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
+        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
+        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+        self.is_causal = False
+
+    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
+        batch, point_batch_size, n_tokens, channel = hidden_states.shape
+        c_per_head = channel // num_attention_heads
+        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
+        return hidden_states.transpose(1, 2)
+
+    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
+        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
+        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+
+    def forward(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_similarity: Optional[Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Tensor:
+        # Input projections
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        point_batch_size = query.shape[1]
+        # Separate into heads
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
+
+        # EdgeTamAttention
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_similarity,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=self.scaling,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
+    x_rotated[..., ::2] = -x[..., 1::2]
+    x_rotated[..., 1::2] = x[..., ::2]
+    return x_rotated
+
+
+# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
+def apply_rotary_pos_emb_2d(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    repeat_freqs_k: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply rotary position embedding to query and key tensors for vision models.
+    Follows the standard transformers library pattern.
+
+    Args:
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
+        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
+
+    Returns:
+        Rotated (q, k) tensors
+    """
+    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
+    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
+    q_embed = q.float()  # force upscale to float32 as in the original implementation
+    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
+    if k.shape[-2] == 0:
+        # Handle case where keys might be empty due to dropout
+        return q_embed.type_as(q), k
+
+    # Handle key tensor - may need to repeat frequencies if different sequence length
+    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
+        # Repeat cos/sin to match key sequence length
+        repeat_factor = k.shape[-2] // q.shape[-2]
+        cos_k = cos.repeat(1, 1, repeat_factor, 1)
+        sin_k = sin.repeat(1, 1, repeat_factor, 1)
+    else:
+        cos_k = cos
+        sin_k = sin
+
+    # Apply rotary embedding to keys
+    k_embed = k.float()  # force upscale to float32 as in the original implementation
+    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
+    return q_embed.type_as(q), k_embed.type_as(k)
+
+
+class EdgeTamRoPEAttention(EdgeTamAttention):
+    """Attention with rotary position encoding."""
+
+    def __init__(self, *args, dropout=0.0, rope_theta=10000.0, rope_k_repeat=False, feat_sizes=(64, 64), **kwargs):
+        super().__init__(*args, **kwargs)
+
+        head_dim = self.internal_dim // self.num_attention_heads
+        self.rotary_emb = EdgeTamVisionRotaryEmbedding(
+            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=rope_theta
+        )
+        self.rope_k_repeat = rope_k_repeat
+        self.feat_sizes = feat_sizes
+        self.dropout_p = dropout
+
+        # Cache for position embeddings
+        self._cached_cos = None
+        self._cached_sin = None
+        self._cached_feat_sizes = None
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        num_k_exclude_rope: int = 0,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tensor:
+        # Input projections
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        point_batch_size = query.shape[1]
+        # Separate into heads
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
+
+        # Determine feature map size - assume square for simplicity and infer from sequence length
+        seq_len = query.shape[-2]
+        width = height = int(math.sqrt(seq_len))
+        current_feat_sizes = (width, height)
+
+        # Generate or use cached position embeddings
+        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
+            cos, sin = self.rotary_emb(current_feat_sizes)
+            self._cached_cos = cos
+            self._cached_sin = sin
+            self._cached_feat_sizes = current_feat_sizes
+        else:
+            cos = self._cached_cos
+            sin = self._cached_sin
+
+        # Apply rotary position encoding, excluding some keys if specified
+        if num_k_exclude_rope > 0:
+            # Split keys into rope and non-rope parts
+            k_rope = key[:, :, :-num_k_exclude_rope]
+            k_no_rope = key[:, :, -num_k_exclude_rope:]
+
+            # Apply rope only to the rope part
+            q_rope, k_rope = apply_rotary_pos_emb_2d(query, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
+
+            # Concatenate back
+            key = torch.cat([k_rope, k_no_rope], dim=-2)
+            query = q_rope
+        else:
+            # Apply rope to all queries and keys
+            query, key = apply_rotary_pos_emb_2d(query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat)
+
+        scale = query.shape[-1] ** -0.5
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+        return attn_output
+
+
+class EdgeTamTwoWayAttentionBlock(nn.Module):
+    def __init__(self, config: EdgeTamMaskDecoderConfig, skip_first_layer_pe: bool = False):
+        """
+        A transformer block with four layers:
+            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
+            sparse inputs (4) cross attention of dense inputs -> sparse inputs
+
+        Arguments:
+            config (`EdgeTamMaskDecoderConfig`):
+                The configuration file used to instantiate the block
+            attention_downsample_rate (*optionalk*, int, defaults to 2):
+                The downsample ratio of the block used to reduce the inner dim of the attention.
+            skip_first_layer_pe (*optional*, bool, defaults to `False`):
+                Whether or not to skip the addition of the query_point_embedding on the first layer.
+        """
+        super().__init__()
+        self.self_attn = EdgeTamAttention(config, downsample_rate=1)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+
+        self.cross_attn_token_to_image = EdgeTamAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+
+        self.mlp = EdgeTamFeedForward(
+            config.hidden_size,
+            config.mlp_dim,
+            config.hidden_size,
+            num_layers=config.num_hidden_layers,
+            activation=config.two_way_transformer_activation,
+        )
+        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
+
+        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
+        self.cross_attn_image_to_token = EdgeTamAttention(config)
+
+        self.skip_first_layer_pe = skip_first_layer_pe
+
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Tensor,
+        key_point_embedding: Tensor,
+        attention_similarity: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Self attention block
+        if self.skip_first_layer_pe:
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
+        else:
+            query = queries + query_point_embedding
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
+            queries = queries + attn_out
+        queries = self.layer_norm1(queries)
+
+        # Cross attention block, tokens attending to image embedding
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_token_to_image(
+            query=query, key=key, value=keys, attention_similarity=attention_similarity
+        )
+        queries = queries + attn_out
+
+        queries = self.layer_norm2(queries)
+
+        # MLP block
+        mlp_out = self.mlp(queries)
+        queries = queries + mlp_out
+        queries = self.layer_norm3(queries)
+
+        # Cross attention block, image embedding attending to tokens
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        keys = keys + attn_out
+
+        keys = self.layer_norm4(keys)
+        return queries, keys, attn_out
+
+
+class EdgeTamMemoryFuser(nn.Module):
+    def __init__(self, config: EdgeTamConfig):
+        super().__init__()
+        self.layers = nn.ModuleList([EdgeTamMemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)])
+
+    def forward(self, hidden_states):
+        # normally hidden_states: (N, C, H, W)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
+class EdgeTamMaskDownSampler(nn.Module):
+    """
+    Progressively downsample a mask by total_stride, each time by stride.
+    Note that LayerNorm is applied per *token*, like in ViT.
+
+    With each downsample (by a factor stride**2), channel capacity increases by the same factor.
+    In the end, we linearly project to embed_dim channels.
+    """
+
+    def __init__(self, config: EdgeTamConfig):
+        super().__init__()
+
+        num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
+
+        self.encoder = nn.Sequential()
+        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
+        mask_in_chans, mask_out_chans = 1, 1
+        for _ in range(num_layers):
+            mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
+            self.encoder.append(
+                nn.Conv2d(
+                    mask_in_chans,
+                    mask_out_chans,
+                    kernel_size=config.mask_downsampler_kernel_size,
+                    stride=config.mask_downsampler_stride,
+                    padding=config.mask_downsampler_padding,
+                )
+            )
+            self.encoder.append(EdgeTamLayerNorm(mask_out_chans))
+            self.encoder.append(self.activation)
+            mask_in_chans = mask_out_chans
+
+        self.encoder.append(nn.Conv2d(mask_out_chans, config.mask_downsampler_embed_dim, kernel_size=1))
+
+    def forward(self, x):
+        return self.encoder(x)
+
+
+class EdgeTamMemoryEncoder(nn.Module):
+    def __init__(self, config: EdgeTamConfig):
+        super().__init__()
+
+        hidden_size = config.memory_encoder_hidden_size
+        output_channels = config.memory_encoder_output_channels
+        self.mask_downsampler = EdgeTamMaskDownSampler(config)
+        self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+        self.memory_fuser = EdgeTamMemoryFuser(config)
+        self.position_encoding = EdgeTamPositionEmbeddingSine(num_pos_feats=output_channels)
+        self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
+
+    def forward(
+        self,
+        vision_features: torch.Tensor,
+        masks: torch.Tensor,
+        skip_mask_sigmoid: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        ## Process masks
+        # sigmoid, so that less domain shift from gt masks which are bool
+        if not skip_mask_sigmoid:
+            masks = F.sigmoid(masks)
+        masks = self.mask_downsampler(masks)
+        ## Fuse pixel_features and downsampled masks
+
+        vision_features = self.feature_projection(vision_features)
+        vision_features = vision_features + masks
+        vision_features = self.memory_fuser(vision_features)
+        vision_features = self.projection(vision_features)
+
+        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
+
+        return vision_features, [vision_pos_enc]
+
+
+class EdgeTamFeedForward(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        num_layers: int,
+        activation: str = "relu",
+        sigmoid_output: bool = False,
+    ):
+        super().__init__()
+        self.num_layers = num_layers
+        self.activation = ACT2FN[activation]
+        self.proj_in = nn.Linear(input_dim, hidden_dim)
+        self.proj_out = nn.Linear(hidden_dim, output_dim)
+        self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
+        self.sigmoid_output = sigmoid_output
+
+    def forward(self, hidden_states):
+        hidden_states = self.proj_in(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        for layer in self.layers:
+            hidden_states = self.activation(layer(hidden_states))
+
+        hidden_states = self.proj_out(hidden_states)
+        if self.sigmoid_output:
+            hidden_states = F.sigmoid(hidden_states)
+        return hidden_states
 
 
 @dataclass
@@ -150,288 +757,6 @@ class EdgeTamVideoSegmentationOutput(ModelOutput):
     video_res_masks: torch.FloatTensor = None
     consolidated_res_masks: torch.FloatTensor = None
     frame_idx: int = None
-
-
-def to_pair(x: Union[int, Iterable[int]]) -> tuple[int, int]:
-    if isinstance(x, int):
-        return (x, x)
-    elif isinstance(x, Iterable) and len(x) == 2:
-        return tuple(x)
-    else:
-        raise ValueError(f"Invalid input: {x}")
-
-
-class EdgeTamVisionNeck(nn.Module):
-    def __init__(self, config: EdgeTamVisionConfig):
-        super().__init__()
-        self.config = config
-
-        self.position_encoding = EdgeTamPositionEmbeddingSine(
-            num_pos_feats=config.fpn_hidden_size, normalize=True, temperature=10000
-        )
-        self.convs = nn.ModuleList()
-        for in_channels in config.backbone_channel_list:
-            self.convs.append(
-                nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=config.fpn_hidden_size,
-                    kernel_size=config.fpn_kernel_size,
-                    stride=config.fpn_stride,
-                    padding=config.fpn_padding,
-                ),
-            )
-
-        self.fpn_interpolation_mode = config.fpn_interpolation_mode
-        self.fuse_type = config.fuse_type
-
-        # levels to have top-down features in its outputs
-        # e.g. if fpn_top_down_levels is [2, 3], then only outputs of level 2 and 3
-        # have top-down propagation, while outputs of level 0 and level 1 have only
-        # lateral features from the same backbone level.
-        if config.fpn_top_down_levels is None:
-            # default is to have top-down features on all levels
-            config.fpn_top_down_levels = range(len(self.convs))
-        self.fpn_top_down_levels = list(config.fpn_top_down_levels)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
-        fpn_hidden_states = ()
-        fpn_position_encoding = ()
-
-        # forward in top-down order (from low to high resolution)
-        n = len(self.convs) - 1
-        for i in range(n, -1, -1):
-            lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
-            if i not in self.fpn_top_down_levels or i == n:
-                prev_features = lateral_features
-            else:
-                top_down_features = F.interpolate(
-                    prev_features.to(dtype=torch.float32),
-                    scale_factor=2.0,
-                    mode=self.fpn_interpolation_mode,
-                    align_corners=(None if self.fpn_interpolation_mode == "nearest" else False),
-                    antialias=False,
-                ).to(lateral_features.dtype)
-                prev_features = lateral_features + top_down_features
-                if self.fuse_type == "average":
-                    prev_features /= 2
-
-            prev_position_encoding = self.position_encoding(prev_features).to(prev_features.dtype)
-
-            fpn_hidden_states += (prev_features,)
-            fpn_position_encoding += (prev_position_encoding,)
-
-        return fpn_hidden_states, fpn_position_encoding
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-def do_pool(x: torch.Tensor, query_stride: Optional[int] = None) -> torch.Tensor:
-    if query_stride is None:
-        return x
-    # (B, H, W, C) -> (B, C, H, W)
-    x = x.permute(0, 3, 1, 2)
-    x = nn.functional.max_pool2d(x, kernel_size=query_stride, stride=query_stride, ceil_mode=False)
-    # (B, C, H', W') -> (B, H', W', C)
-    x = x.permute(0, 2, 3, 1)
-    return x
-
-
-def window_partition(hidden_state, window_size):
-    """
-    Partition into non-overlapping windows with padding if needed.
-
-    Args:
-        hidden_state (`torch.Tensor`):
-            Input tokens with [batch_size, height, width, num_channels].
-        window_size (`int`):
-            Window size.
-
-    Returns:
-        `tuple(torch.FloatTensor)` comprising various elements:
-        - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
-        - (padded_height, padded_width): padded height and width before partition
-    """
-    batch_size, height, width, num_channels = hidden_state.shape
-
-    pad_height = (window_size - height % window_size) % window_size
-    pad_width = (window_size - width % window_size) % window_size
-
-    # Noop in case pad_width == 0 and pad_height == 0.
-    hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))
-
-    padded_height, padded_width = height + pad_height, width + pad_width
-
-    hidden_state = hidden_state.view(
-        batch_size, padded_height // window_size, window_size, padded_width // window_size, window_size, num_channels
-    )
-    windows = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
-    return windows, (padded_height, padded_width)
-
-
-def window_unpartition(windows, window_size, pad_height_width, height_width):
-    """
-    Window unpartition into original sequences and removing padding.
-
-    Args:
-        windows (`torch.Tensor`):
-            Input tokens with [batch_size * num_windows, window_size, window_size, num_channels].
-        window_size (`int`):
-            Window size.
-        pad_height_width (`tuple[int]`):
-            Padded height and width (padded_height, padded_width).
-        height_width (`tuple[int]`):
-            Original height and width before padding.
-
-    Returns:
-        hidden_state: unpartitioned sequences with [batch_size, height, width, num_channels].
-    """
-    padded_height, padded_width = pad_height_width
-    height, width = height_width
-    batch_size = windows.shape[0] // (padded_height * padded_width // window_size // window_size)
-    hidden_state = windows.view(
-        batch_size, padded_height // window_size, padded_width // window_size, window_size, window_size, -1
-    )
-    hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous()
-    hidden_state = hidden_state.view(batch_size, padded_height, padded_width, -1)
-
-    # We always have height <= padded_height and width <= padded_width
-    hidden_state = hidden_state[:, :height, :width, :].contiguous()
-    return hidden_state
-
-
-# TODO refactor or remove?
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-@auto_docstring
-class EdgeTamPreTrainedModel(PreTrainedModel):
-    config_class = EdgeTamConfig
-    base_model_prefix = "edgetam"
-    main_input_name = "pixel_values"
-    _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        if isinstance(module, EdgeTamModel):
-            if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
-        elif isinstance(module, EdgeTamVideoModel):
-            if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
-            if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
-            if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
-            if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
-        if isinstance(module, EdgeTamMemoryFuserCXBlock):
-            if module.scale is not None:
-                module.scale.data.zero_()
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from Sam without any head or projection on top.
-    """
-)
-class EdgeTamVisionModel(EdgeTamPreTrainedModel):
-    config_class = EdgeTamVisionConfig
-    main_input_name = "pixel_values"
-    _can_record_outputs = {
-        "hidden_states": TimmWrapperModel,
-        "attentions": TimmWrapperModel,
-    }
-
-    def __init__(self, config: EdgeTamVisionConfig):
-        super().__init__(config)
-        self.config = config
-
-        self.backbone = AutoModel.from_config(config.backbone_config)
-
-        self.neck = EdgeTamVisionNeck(config)
-        self.num_feature_levels = config.num_feature_levels
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.backbone.get_input_embeddings()
-
-    @check_model_inputs
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Forward through backbone
-        backbone_output = self.backbone(pixel_values)
-        intermediate_hidden_states = backbone_output.last_hidden_state
-        intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
-
-        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
-        # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
-        fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
-        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
-
-        return EdgeTamVisionEncoderOutput(
-            last_hidden_state=intermediate_hidden_states[-1],
-            fpn_hidden_states=fpn_hidden_states,
-            fpn_position_encoding=fpn_position_encoding,
-        )
 
 
 class EdgeTamPositionalEmbedding(nn.Module):
@@ -607,87 +932,6 @@ class EdgeTamPromptEncoder(nn.Module):
         return sparse_embeddings, dense_embeddings
 
 
-class EdgeTamTwoWayAttentionBlock(nn.Module):
-    def __init__(self, config: EdgeTamMaskDecoderConfig, skip_first_layer_pe: bool = False):
-        """
-        A transformer block with four layers:
-            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
-            sparse inputs (4) cross attention of dense inputs -> sparse inputs
-
-        Arguments:
-            config (`EdgeTamMaskDecoderConfig`):
-                The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
-                The downsample ratio of the block used to reduce the inner dim of the attention.
-            skip_first_layer_pe (*optional*, bool, defaults to `False`):
-                Whether or not to skip the addition of the query_point_embedding on the first layer.
-        """
-        super().__init__()
-        self.self_attn = EdgeTamAttention(config, downsample_rate=1)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-
-        self.cross_attn_token_to_image = EdgeTamAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
-
-        self.mlp = EdgeTamFeedForward(
-            config.hidden_size,
-            config.mlp_dim,
-            config.hidden_size,
-            num_layers=config.num_hidden_layers,
-            activation=config.two_way_transformer_activation,
-        )
-        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
-
-        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
-        self.cross_attn_image_to_token = EdgeTamAttention(config)
-
-        self.skip_first_layer_pe = skip_first_layer_pe
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Tensor,
-        key_point_embedding: Tensor,
-        attention_similarity: Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # Self attention block
-        if self.skip_first_layer_pe:
-            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
-        else:
-            query = queries + query_point_embedding
-            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
-            queries = queries + attn_out
-        queries = self.layer_norm1(queries)
-
-        # Cross attention block, tokens attending to image embedding
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_token_to_image(
-            query=query, key=key, value=keys, attention_similarity=attention_similarity
-        )
-        queries = queries + attn_out
-
-        queries = self.layer_norm2(queries)
-
-        # MLP block
-        mlp_out = self.mlp(queries)
-        queries = queries + mlp_out
-        queries = self.layer_norm3(queries)
-
-        # Cross attention block, image embedding attending to tokens
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
-        keys = keys + attn_out
-
-        keys = self.layer_norm4(keys)
-        return queries, keys, attn_out
-
-
 class EdgeTamTwoWayTransformer(nn.Module):
     def __init__(self, config: EdgeTamMaskDecoderConfig):
         super().__init__()
@@ -743,36 +987,6 @@ class EdgeTamTwoWayTransformer(nn.Module):
         queries = queries + attn_out
         queries = self.layer_norm_final_attn(queries)
         return queries, keys
-
-
-class EdgeTamLayerNorm(nn.Module):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
 
 
 class EdgeTamMaskDecoder(nn.Module):
@@ -986,1193 +1200,6 @@ class EdgeTamMaskDecoder(nn.Module):
         return masks, iou_pred, sam_tokens_out, object_score_logits
 
 
-class EdgeTamPositionEmbeddingSine(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention is all you need paper, generalized to work on images.
-    """
-
-    def __init__(
-        self,
-        num_pos_feats,
-        temperature: int = 10000,
-        normalize: bool = True,
-        scale: Optional[float] = None,
-    ):
-        super().__init__()
-        self.num_pos_feats = num_pos_feats // 2
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-        self.cache = {}
-
-    def _encode_xy(self, x, y):
-        # The positions are expected to be normalized
-        x_embed = x * self.scale
-        y_embed = y * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, None] / dim_t
-        pos_y = y_embed[:, None] / dim_t
-        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
-        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
-        return pos_x, pos_y
-
-    @torch.no_grad()
-    def encode_boxes(self, x, y, w, h):
-        pos_x, pos_y = self._encode_xy(x, y)
-        pos = torch.cat((pos_y, pos_x, h[:, None], w[:, None]), dim=1)
-        return pos
-
-    @torch.no_grad()
-    def encode_points(self, x, y, labels):
-        (bx, nx), (by, ny) = x.shape, y.shape
-        pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
-        pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
-        pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
-        return pos
-
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor):
-        cache_key = (x.shape[-2], x.shape[-1])
-        if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
-        y_embed = (
-            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
-            .view(1, -1, 1)
-            .repeat(x.shape[0], 1, x.shape[-1])
-        )
-        x_embed = (
-            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
-            .view(1, 1, -1)
-            .repeat(x.shape[0], x.shape[-2], 1)
-        )
-
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = pos[0]
-        return pos
-
-
-class EdgeTamFeedForward(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        output_dim: int,
-        num_layers: int,
-        activation: str = "relu",
-        sigmoid_output: bool = False,
-    ):
-        super().__init__()
-        self.num_layers = num_layers
-        self.activation = ACT2FN[activation]
-        self.proj_in = nn.Linear(input_dim, hidden_dim)
-        self.proj_out = nn.Linear(hidden_dim, output_dim)
-        self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
-        self.sigmoid_output = sigmoid_output
-
-    def forward(self, hidden_states):
-        hidden_states = self.proj_in(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        for layer in self.layers:
-            hidden_states = self.activation(layer(hidden_states))
-
-        hidden_states = self.proj_out(hidden_states)
-        if self.sigmoid_output:
-            hidden_states = F.sigmoid(hidden_states)
-        return hidden_states
-
-
-class EdgeTamDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
-
-class EdgeTamAttention(nn.Module):
-    """
-    EDGETAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values.
-    """
-
-    def __init__(
-        self,
-        config: Union[EdgeTamConfig, EdgeTamMaskDecoderConfig],
-        hidden_size: Optional[int] = None,
-        num_attention_heads: Optional[int] = None,
-        downsample_rate: Optional[int] = None,
-        kv_in_dim: Optional[int] = None,
-    ):
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
-
-        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
-
-        self.internal_dim = self.hidden_size // downsample_rate
-        self.num_attention_heads = (
-            num_attention_heads if num_attention_heads is not None else config.num_attention_heads
-        )
-        if self.internal_dim % self.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
-
-        self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-        self.is_causal = False
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
-
-    def forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # EdgeTamAttention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        attn_output, attn_weights = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=self.scaling,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-def init_2d_position_ids(end_x: int, end_y: int):
-    """Generate 2D position indices for axial rotary embedding."""
-    t = torch.arange(end_x * end_y, dtype=torch.long)
-    t_x = t % end_x
-    t_y = torch.div(t, end_x, rounding_mode="floor")
-    return t_x, t_y
-
-
-class EdgeTamVisionRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for EDGETAM, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
-
-    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
-        super().__init__()
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-
-        self.dim = dim
-        self.theta = theta
-        self.max_end_x = end_x
-
-        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-        t_x, t_y = init_2d_position_ids(end_x, end_y)
-        freqs_x = torch.outer(t_x, freqs).float()
-        freqs_y = torch.outer(t_y, freqs).float()
-        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
-
-    @torch.no_grad()
-    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Generate cosine and sine position embeddings for 2D spatial dimensions.
-
-        Args:
-            feat_sizes (`tuple[int, int]`):
-                Tuple of (width, height) for the feature map
-
-        Returns:
-            `tuple[torch.Tensor, torch.Tensor]`: A tuple of (cos, sin) tensors of shape (seq_len, dim).
-        """
-        end_x, end_y = feat_sizes
-        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
-        cos = freqs.cos()
-        sin = freqs.sin()
-        return cos, sin
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
-    x_rotated[..., ::2] = -x[..., 1::2]
-    x_rotated[..., 1::2] = x[..., ::2]
-    return x_rotated
-
-
-# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
-def apply_rotary_pos_emb_2d(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    repeat_freqs_k: bool = False,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embedding to query and key tensors for vision models.
-    Follows the standard transformers library pattern.
-
-    Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
-        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
-
-    Returns:
-        Rotated (q, k) tensors
-    """
-    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
-    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
-    q_embed = q.float()  # force upscale to float32 as in the original implementation
-    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
-    if k.shape[-2] == 0:
-        # Handle case where keys might be empty due to dropout
-        return q_embed.type_as(q), k
-
-    # Handle key tensor - may need to repeat frequencies if different sequence length
-    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
-        # Repeat cos/sin to match key sequence length
-        repeat_factor = k.shape[-2] // q.shape[-2]
-        cos_k = cos.repeat(1, 1, repeat_factor, 1)
-        sin_k = sin.repeat(1, 1, repeat_factor, 1)
-    else:
-        cos_k = cos
-        sin_k = sin
-
-    # Apply rotary embedding to keys
-    k_embed = k.float()  # force upscale to float32 as in the original implementation
-    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
-    return q_embed.type_as(q), k_embed.type_as(k)
-
-
-def apply_rotary_pos_emb_2d_v2(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    repeat_freqs: int = 0,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embedding to query and key tensors for vision models.
-    Follows the standard transformers library pattern.
-
-    Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
-        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
-
-    Returns:
-        Rotated (q, k) tensors
-    """
-    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
-    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
-    batch_size, num_heads, num_tokens, channels_per_head = x.shape
-    if num_tokens == cos.shape[-2]:
-        x_rope = x
-        x_no_rope = None
-    else:
-        rope_tokens = cos.shape[-2]
-        no_rope_tokens = num_tokens // repeat_freqs - rope_tokens
-        x = x.view(batch_size, num_heads, repeat_freqs, num_tokens // repeat_freqs, channels_per_head)
-        x_rope = x[..., no_rope_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
-        x_no_rope = x[..., :no_rope_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
-
-    if repeat_freqs > 1:
-        cos = cos.repeat(1, 1, repeat_freqs, 1)
-        sin = sin.repeat(1, 1, repeat_freqs, 1)
-    x_embed = (x_rope * cos) + (rotate_half(x_rope) * sin)
-    if x_no_rope is not None:
-        x_embed = x_embed.view(batch_size, num_heads, repeat_freqs, -1, channels_per_head)
-        x_no_rope = x_no_rope.view(batch_size, num_heads, repeat_freqs, -1, channels_per_head)
-        x_embed = torch.cat((x_no_rope, x_embed), dim=3).view(batch_size, num_heads, num_tokens, channels_per_head)
-    return x_embed.type_as(x)
-
-
-class EdgeTamRoPEAttention(EdgeTamAttention):
-    """Attention with rotary position encoding."""
-
-    def __init__(self, *args, dropout=0.0, rope_theta=10000.0, rope_k_repeat=False, feat_sizes=(64, 64), **kwargs):
-        super().__init__(*args, **kwargs)
-
-        head_dim = self.internal_dim // self.num_attention_heads
-        self.rotary_emb = EdgeTamVisionRotaryEmbedding(
-            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=rope_theta
-        )
-        self.rope_k_repeat = rope_k_repeat
-        self.feat_sizes = feat_sizes
-        self.dropout_p = dropout
-
-        # Cache for position embeddings
-        self._cached_cos = None
-        self._cached_sin = None
-        self._cached_feat_sizes = None
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        num_k_exclude_rope: int = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Determine feature map size - assume square for simplicity and infer from sequence length
-        seq_len = query.shape[-2]
-        width = height = int(math.sqrt(seq_len))
-        current_feat_sizes = (width, height)
-
-        # Generate or use cached position embeddings
-        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
-            cos, sin = self.rotary_emb(current_feat_sizes)
-            self._cached_cos = cos
-            self._cached_sin = sin
-            self._cached_feat_sizes = current_feat_sizes
-        else:
-            cos = self._cached_cos
-            sin = self._cached_sin
-
-        # Apply rotary position encoding, excluding some keys if specified
-        if num_k_exclude_rope > 0:
-            # Split keys into rope and non-rope parts
-            k_rope = key[:, :, :-num_k_exclude_rope]
-            k_no_rope = key[:, :, -num_k_exclude_rope:]
-
-            # Apply rope only to the rope part
-            q_rope, k_rope = apply_rotary_pos_emb_2d(query, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-            # Concatenate back
-            key = torch.cat([k_rope, k_no_rope], dim=-2)
-            query = q_rope
-        else:
-            # Apply rope to all queries and keys
-            query, key = apply_rotary_pos_emb_2d(query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-        scale = query.shape[-1] ** -0.5
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-        return attn_output
-
-
-class EdgeTamRoPEAttentionV2(EdgeTamAttention):
-    """Attention with rotary position encoding."""
-
-    def __init__(self, *args, dropout=0.0, rope_theta=10000.0, q_sizes=(64, 64), k_sizes=(16, 16), **kwargs):
-        super().__init__(*args, **kwargs)
-
-        head_dim = self.internal_dim // self.num_attention_heads
-        self.rotary_emb_q = EdgeTamVisionRotaryEmbedding(
-            dim=head_dim, end_x=q_sizes[0], end_y=q_sizes[1], theta=rope_theta
-        )
-        self.rotary_emb_k = EdgeTamVisionRotaryEmbedding(
-            dim=head_dim, end_x=k_sizes[0], end_y=k_sizes[1], theta=rope_theta
-        )
-        self.q_sizes = q_sizes
-        self.k_sizes = k_sizes
-        self.dropout_p = dropout
-
-        # Cache for position embeddings
-        self._cached_cos_q = None
-        self._cached_sin_q = None
-        self._cached_cos_k = None
-        self._cached_sin_k = None
-        self._cached_feat_sizes_q = None
-        self._cached_feat_sizes_k = None
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        num_k_exclude_rope: int = 0,
-        rope_k_repeat: int = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Determine feature map size - assume square for simplicity and infer from sequence length
-        seq_len_q = query.shape[-2]
-        width_q = height_q = int(math.sqrt(seq_len_q))
-        current_feat_sizes_q = (width_q, height_q)
-        seq_len_k = key.shape[-2]
-        width_k = height_k = int(math.sqrt(seq_len_k))
-        current_feat_sizes_k = (width_k, height_k)
-        # Generate or use cached position embeddings
-        if (
-            self._cached_cos_q is None
-            or self._cached_sin_q is None
-            or self._cached_feat_sizes_q != current_feat_sizes_q
-        ):
-            cos_q, sin_q = self.rotary_emb_q(current_feat_sizes_q)
-            self._cached_cos_q = cos_q
-            self._cached_sin_q = sin_q
-            self._cached_feat_sizes_q = current_feat_sizes_q
-        else:
-            cos_q = self._cached_cos_q
-            sin_q = self._cached_sin_q
-        if (
-            self._cached_cos_k is None
-            or self._cached_sin_k is None
-            or self._cached_feat_sizes_k != current_feat_sizes_k
-        ):
-            cos_k, sin_k = self.rotary_emb_k(current_feat_sizes_k)
-            self._cached_cos_k = cos_k
-            self._cached_sin_k = sin_k
-            self._cached_feat_sizes_k = current_feat_sizes_k
-        else:
-            cos_k = self._cached_cos_k
-            sin_k = self._cached_sin_k
-
-        query = apply_rotary_pos_emb_2d_v2(query, cos_q, sin_q, repeat_freqs=1)
-        num_k_rope = key.shape[-2] - num_k_exclude_rope
-        key[:, :, :num_k_rope] = apply_rotary_pos_emb_2d_v2(
-            key[:, :, :num_k_rope], cos_k, sin_k, repeat_freqs=rope_k_repeat
-        )
-        scale = query.shape[-1] ** -0.5
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-        return attn_output
-
-
-class EdgeTamMemoryAttentionLayer(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        hidden_size = config.memory_attention_hidden_size
-        self.self_attn = EdgeTamRoPEAttention(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=config.memory_attention_num_attention_heads,
-            downsample_rate=config.memory_attention_downsample_rate,
-            rope_theta=config.memory_attention_rope_theta,
-            feat_sizes=config.memory_attention_rope_feat_sizes,
-            dropout=config.memory_attention_rope_dropout,
-        )
-        self.cross_attn_image = EdgeTamRoPEAttentionV2(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=config.memory_attention_num_attention_heads,
-            downsample_rate=config.memory_attention_downsample_rate,
-            rope_theta=config.memory_attention_rope_theta,
-            dropout=config.memory_attention_rope_dropout,
-            q_sizes=config.memory_attention_rope_q_sizes,
-            k_sizes=config.memory_attention_rope_k_sizes,
-            kv_in_dim=64,
-        )
-
-        # Implementation of Feedforward model
-        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
-        self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
-
-        self.layer_norm1 = nn.LayerNorm(hidden_size)
-        self.layer_norm2 = nn.LayerNorm(hidden_size)
-        self.layer_norm3 = nn.LayerNorm(hidden_size)
-        self.dropout1 = nn.Dropout(config.memory_attention_dropout)
-        self.dropout2 = nn.Dropout(config.memory_attention_dropout)
-        self.dropout3 = nn.Dropout(config.memory_attention_dropout)
-
-        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
-
-        # Where to add pos enc
-        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
-        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
-        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Optional[Tensor] = None,
-        key_point_embedding: Optional[Tensor] = None,
-        num_k_exclude_rope: int = 0,
-        rope_k_repeat: int = 0,
-    ) -> torch.Tensor:
-        # Self-Attention
-        query = self.layer_norm1(queries)
-        if self.apply_pe_at_self_attn:
-            query = self.self_attn(query=query + query_point_embedding, key=query + query_point_embedding, value=query)
-        else:
-            query = self.self_attn(query=query, key=query, value=query)
-        queries = queries + self.dropout1(query)
-
-        # Cross-Attention
-        query = self.layer_norm2(queries)
-        query = self.cross_attn_image(
-            query=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
-            key=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
-            value=keys,
-            num_k_exclude_rope=num_k_exclude_rope,
-            rope_k_repeat=rope_k_repeat,
-        )
-        queries = queries + self.dropout2(query)
-        # MLP
-        query = self.layer_norm3(queries)
-        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
-        queries = queries + self.dropout3(query)
-        return queries
-
-
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
-
-import torch
-import torch.nn as nn
-
-
-def FeedForward(dim, mult=4):
-    inner_dim = int(dim * mult)
-    return nn.Sequential(
-        nn.LayerNorm(dim),
-        nn.Linear(dim, inner_dim, bias=False),
-        nn.GELU(),
-        nn.Linear(inner_dim, dim, bias=False),
-    )
-
-
-class PerceiverAttention(nn.Module):
-    def __init__(self, *, dim, dim_head=64, heads=8, dropout_p=0.05, concat_kv_latents=True):
-        super().__init__()
-        self.scale = dim_head**-0.5
-        self.heads = heads
-        inner_dim = dim_head * heads
-
-        self.layer_norm_x = nn.LayerNorm(dim)
-        self.layer_norm_latents = nn.LayerNorm(dim)
-
-        self.to_q = nn.Linear(dim, inner_dim, bias=False)
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
-        self.to_out = nn.Linear(inner_dim, dim, bias=False)
-
-        self.dropout_p = dropout_p
-        self.concat_kv_latents = concat_kv_latents
-
-    def _separate_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
-        b, n, c = x.shape
-        x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
-
-    def _recombine_heads(self, x: torch.Tensor) -> torch.Tensor:
-        b, n_heads, n_tokens, c_per_head = x.shape
-        x = x.transpose(1, 2)
-        return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
-
-    def forward(self, latents, x, pos=None):
-        latents = self.layer_norm_latents(latents)
-        x = self.layer_norm_x(x)
-
-        q = self.to_q(latents)
-
-        # the paper differs from Perceiver in which they also concat the key / values derived from the latents to be attended to
-        if self.concat_kv_latents:
-            kv_input = torch.cat((x, latents), dim=-2)
-        else:
-            kv_input = x
-        k, v = self.to_kv(kv_input).chunk(2, dim=-1)
-
-        q = self._separate_heads(q, self.heads)
-        k = self._separate_heads(k, self.heads)
-        v = self._separate_heads(v, self.heads)
-
-        if pos is not None:
-            assert not self.concat_kv_latents
-            pos = self._separate_heads(pos, self.heads)
-            k, v = k + pos, v + pos
-
-        out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=None,
-            dropout_p=self.dropout_p if self.training else 0.0,
-        )
-        out = self._recombine_heads(out)
-        return self.to_out(out)
-
-
-class Attention(nn.Module):
-    def __init__(self, *, dim, dim_head=64, heads=8, dropout_p=0.05):
-        super().__init__()
-        self.scale = dim_head**-0.5
-        self.heads = heads
-        inner_dim = dim_head * heads
-
-        self.layer_norm = nn.LayerNorm(dim)
-
-        self.to_q = nn.Linear(dim, inner_dim, bias=False)
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
-        self.to_out = nn.Linear(inner_dim, dim, bias=False)
-
-        self.dropout_p = dropout_p
-
-    def _separate_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
-        b, n, c = x.shape
-        x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
-
-    def _recombine_heads(self, x: torch.Tensor) -> torch.Tensor:
-        b, n_heads, n_tokens, c_per_head = x.shape
-        x = x.transpose(1, 2)
-        return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
-
-    def forward(self, x):
-        x = self.layer_norm(x)
-
-        q = self.to_q(x)
-        k, v = self.to_kv(x).chunk(2, dim=-1)
-
-        q = self._separate_heads(q, self.heads)
-        k = self._separate_heads(k, self.heads)
-        v = self._separate_heads(v, self.heads)
-
-        out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=None,
-            dropout_p=self.dropout_p if self.training else 0.0,
-        )
-        out = self._recombine_heads(out)
-        return self.to_out(out)
-
-
-class PerceiverEncoderLayer(nn.Module):
-    def __init__(
-        self,
-        dim,
-        dim_head=64,
-        heads=8,
-        ff_mult=4,
-        hidden_dropout_p=0.0,
-        attention_dropout_p=0.0,
-        concat_kv_latents=False,
-        use_self_attn=False,
-    ):
-        super().__init__()
-        self.attn = PerceiverAttention(
-            dim=dim,
-            dim_head=dim_head,
-            heads=heads,
-            dropout_p=attention_dropout_p,
-            concat_kv_latents=concat_kv_latents,
-        )
-        self.ff = FeedForward(dim=dim, mult=ff_mult)
-        self.dropout = nn.Dropout(hidden_dropout_p)
-        self.use_self_attn = use_self_attn
-        if use_self_attn:
-            self.self_attn = Attention(
-                dim=dim,
-                dim_head=dim_head,
-                heads=heads,
-                dropout_p=attention_dropout_p,
-            )
-            self.self_ff = FeedForward(dim=dim, mult=ff_mult)
-
-    def forward(self, latents, x, pos=None):
-        latents = self.attn(latents, x, pos) + latents
-        latents = self.dropout(latents)
-        latents = self.ff(latents) + latents
-        if self.use_self_attn:
-            latents = self.self_attn(latents) + latents
-            latents = self.self_ff(latents) + latents
-        return latents
-
-
-class PositionEmbeddingSine(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention Is All You Need paper, generalized to work on images.
-    """
-
-    def __init__(
-        self,
-        num_pos_feats,
-        temperature: int = 10000,
-        normalize: bool = True,
-        scale: Optional[float] = None,
-    ):
-        super().__init__()
-        assert num_pos_feats % 2 == 0, "Expecting even model width"
-        self.num_pos_feats = num_pos_feats // 2
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-        self.cache = {}
-
-    def _encode_xy(self, x, y):
-        # The positions are expected to be normalized
-        assert len(x) == len(y) and x.ndim == y.ndim == 1
-        x_embed = x * self.scale
-        y_embed = y * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, None] / dim_t
-        pos_y = y_embed[:, None] / dim_t
-        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
-        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
-        return pos_x, pos_y
-
-    @torch.no_grad()
-    def encode_boxes(self, x, y, w, h):
-        pos_x, pos_y = self._encode_xy(x, y)
-        pos = torch.cat((pos_y, pos_x, h[:, None], w[:, None]), dim=1)
-        return pos
-
-    encode = encode_boxes  # Backwards compatibility
-
-    @torch.no_grad()
-    def encode_points(self, x, y, labels):
-        (bx, nx), (by, ny), (bl, nl) = x.shape, y.shape, labels.shape
-        assert bx == by and nx == ny and bx == bl and nx == nl
-        pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
-        pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
-        pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
-        return pos
-
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor):
-        cache_key = (x.shape[-2], x.shape[-1])
-        if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
-        y_embed = (
-            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
-            .view(1, -1, 1)
-            .repeat(x.shape[0], 1, x.shape[-1])
-        )
-        x_embed = (
-            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
-            .view(1, 1, -1)
-            .repeat(x.shape[0], x.shape[-2], 1)
-        )
-
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = pos[0]
-        return pos
-
-
-class PerceiverResampler(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        self.num_latents = config.num_latents
-        self.num_latents_2d = config.num_latents_2d
-
-        if self.num_latents > 0:
-            self.latents = nn.Parameter(torch.randn(self.num_latents, config.dim))
-        if self.num_latents_2d > 0:
-            self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, config.dim))
-        self.position_encoding = PositionEmbeddingSine(config.dim)
-
-        self.layers = nn.ModuleList([])
-        for _ in range(config.depth):
-            self.layers.append(
-                PerceiverEncoderLayer(
-                    dim=config.dim,
-                    dim_head=config.dim_head,
-                    heads=config.heads,
-                    ff_mult=config.ff_mult,
-                    hidden_dropout_p=config.hidden_dropout_p,
-                    attention_dropout_p=config.attention_dropout_p,
-                    concat_kv_latents=config.concat_kv_latents,
-                    use_self_attn=config.use_self_attn,
-                )
-            )
-
-        self.layer_norm = nn.LayerNorm(config.dim)
-        self.pos_enc_at_key_value = config.pos_enc_at_key_value
-
-    def forward(self, x, pos=None):
-        out_latents = []
-        out_pos = []
-        if self.num_latents > 0:
-            latents_1d, pos_1d = self.forward_1d(x, pos)
-            out_latents.append(latents_1d)
-            out_pos.append(pos_1d)
-        if self.num_latents_2d > 0:
-            latents_2d, pos_2d = self.forward_2d(x)
-            out_latents.append(latents_2d)
-            out_pos.append(pos_2d)
-
-        latents = torch.concat(out_latents, dim=1)
-        if pos is not None:
-            pos = torch.concat(out_pos, dim=1)
-
-        return latents, pos
-
-    def forward_1d(self, x, pos):
-        latents = self.latents.unsqueeze(0).expand(x.shape[0], -1, -1)
-        x = x.permute(0, 2, 3, 1).flatten(1, 2)
-
-        if not self.pos_enc_at_key_value:
-            _pos = None
-        if pos is not None:
-            _pos = pos.permute(0, 2, 3, 1).flatten(1, 2)
-        else:
-            _pos = None
-
-        for layer in self.layers:
-            latents = layer(latents, x, _pos)
-
-        if pos is not None:
-            pos = torch.zeros_like(latents)
-
-        latents = self.layer_norm(latents)
-        return latents, pos
-
-    def forward_2d(self, x):
-        B, C, H, W = x.shape
-
-        latents_2d = self.latents_2d.unsqueeze(0).expand(B, -1, -1).view(-1, 1, C)
-
-        num_window = int(math.sqrt(self.num_latents_2d))
-        window_size = H // num_window
-        x = x.permute(0, 2, 3, 1)
-
-        x, _ = window_partition(x, window_size)
-        x = x.flatten(1, 2)
-
-        for layer in self.layers:
-            latents_2d = layer(latents_2d, x)
-
-        latents_2d = latents_2d.view(B, num_window, num_window, C).permute(0, 3, 1, 2)
-
-        pos_2d = self.position_encoding(latents_2d).to(dtype=x.dtype)
-        pos_2d = pos_2d.permute(0, 2, 3, 1).flatten(1, 2)
-
-        latents_2d = latents_2d.permute(0, 2, 3, 1).flatten(1, 2)
-
-        latents_2d = self.layer_norm(latents_2d)
-
-        return latents_2d, pos_2d
-
-
-class EdgeTamMemoryAttention(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        self.layers = nn.ModuleList(
-            [EdgeTamMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
-        )
-        self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
-
-    def forward(
-        self,
-        current_vision_features: torch.Tensor,
-        memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
-        num_object_pointer_tokens: int = 0,
-        num_spatial_memory_tokens: int = -1,
-    ):
-        """
-        Args:
-            current_vision_features (`torch.FloatTensor`):
-                The current vision features used for self-attention.
-            memory (`torch.FloatTensor`):
-                The memory features used for cross-attention.
-            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
-                The position embeddings for the current vision features.
-            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
-                The position embeddings for the memory features.
-            num_object_pointer_tokens (`int`, *optional*, defaults to 0):
-                The number of object pointer tokens.
-        """
-        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
-            current_vision_features, current_vision_position_embeddings = (
-                current_vision_features[0],
-                current_vision_position_embeddings[0],
-            )
-
-        output = current_vision_features
-        if current_vision_position_embeddings is not None:
-            output = output + 0.1 * current_vision_position_embeddings
-
-        # Convert to batch first
-        output = output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-        memory = memory.transpose(0, 1)
-        memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
-
-        for layer in self.layers:
-            output = layer(
-                queries=output.unsqueeze(1) if output.ndim == 3 else output,
-                keys=memory.unsqueeze(1),
-                query_point_embedding=current_vision_position_embeddings.unsqueeze(1),
-                key_point_embedding=memory_posision_embeddings.unsqueeze(1),
-                num_k_exclude_rope=num_object_pointer_tokens,
-                rope_k_repeat=num_spatial_memory_tokens,
-            )
-
-        normed_output = self.layer_norm(output)
-
-        # Convert back to seq first
-        normed_output = normed_output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-
-        return normed_output
-
-
-# Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
-class EdgeTamMemoryFuserCXBlock(GradientCheckpointingLayer):
-    def __init__(self, config: EdgeTamConfig, drop_path: float = 0.0):
-        super().__init__()
-        memory_fuser_embed_dim = config.memory_fuser_embed_dim
-        memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
-        self.depthwise_conv = nn.Conv2d(
-            memory_fuser_embed_dim,
-            memory_fuser_embed_dim,
-            kernel_size=config.memory_fuser_kernel_size,
-            padding=config.memory_fuser_padding,
-            groups=memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
-        )  # depthwise conv
-        self.layer_norm = EdgeTamLayerNorm(memory_fuser_embed_dim, eps=1e-6)
-        self.activation = ACT2FN[config.memory_fuser_hidden_act]
-        self.pointwise_conv1 = nn.Linear(
-            memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
-        )  # pointwise/1x1 convs, implemented with linear layers
-        self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
-        self.scale = nn.Parameter(
-            memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
-        )
-        self.drop_path = EdgeTamDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-
-    def forward(self, hidden_states):
-        input = hidden_states
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-        hidden_states = self.scale * hidden_states
-        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        hidden_states = input + self.drop_path(hidden_states)
-        return hidden_states
-
-
-class EdgeTamMemoryFuser(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([EdgeTamMemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)])
-
-    def forward(self, hidden_states):
-        # normally hidden_states: (N, C, H, W)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
-class EdgeTamMaskDownSampler(nn.Module):
-    """
-    Progressively downsample a mask by total_stride, each time by stride.
-    Note that LayerNorm is applied per *token*, like in ViT.
-
-    With each downsample (by a factor stride**2), channel capacity increases by the same factor.
-    In the end, we linearly project to embed_dim channels.
-    """
-
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-
-        num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
-
-        self.encoder = nn.Sequential()
-        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
-        mask_in_chans, mask_out_chans = 1, 1
-        for _ in range(num_layers):
-            mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
-            self.encoder.append(
-                nn.Conv2d(
-                    mask_in_chans,
-                    mask_out_chans,
-                    kernel_size=config.mask_downsampler_kernel_size,
-                    stride=config.mask_downsampler_stride,
-                    padding=config.mask_downsampler_padding,
-                )
-            )
-            self.encoder.append(EdgeTamLayerNorm(mask_out_chans))
-            self.encoder.append(self.activation)
-            mask_in_chans = mask_out_chans
-
-        self.encoder.append(nn.Conv2d(mask_out_chans, config.mask_downsampler_embed_dim, kernel_size=1))
-
-    def forward(self, x):
-        return self.encoder(x)
-
-
-class EdgeTamMemoryEncoder(nn.Module):
-    def __init__(self, config: EdgeTamConfig):
-        super().__init__()
-
-        hidden_size = config.memory_encoder_hidden_size
-        output_channels = config.memory_encoder_output_channels
-        self.mask_downsampler = EdgeTamMaskDownSampler(config)
-        self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
-        self.memory_fuser = EdgeTamMemoryFuser(config)
-        self.position_encoding = EdgeTamPositionEmbeddingSine(num_pos_feats=output_channels)
-        self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
-
-    def forward(
-        self,
-        vision_features: torch.Tensor,
-        masks: torch.Tensor,
-        skip_mask_sigmoid: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        ## Process masks
-        # sigmoid, so that less domain shift from gt masks which are bool
-        if not skip_mask_sigmoid:
-            masks = F.sigmoid(masks)
-        masks = self.mask_downsampler(masks)
-        ## Fuse pixel_features and downsampled masks
-
-        vision_features = self.feature_projection(vision_features)
-        vision_features = vision_features + masks
-        vision_features = self.memory_fuser(vision_features)
-        vision_features = self.projection(vision_features)
-
-        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
-
-        return vision_features, [vision_pos_enc]
-
-
 CONNECTED_COMPONENTS_CUDA_KERNEL = None
 
 
@@ -2195,6 +1222,298 @@ def load_cuda_kernels():
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ],
     )
+
+
+class EdgeTamVideoInferenceCache:
+    """Cache for vision features and model constants."""
+
+    def __init__(
+        self,
+        inference_device: Union[torch.device, str] = "cpu",
+        inference_state_device: Union[torch.device, str] = "cpu",
+        max_vision_features_cache_size: int = 1,
+    ):
+        self.inference_device = inference_device
+        self.inference_state_device = inference_state_device
+        self.max_vision_features_cache_size = max_vision_features_cache_size
+
+        self._vision_features = {}
+        self._model_constants = {}
+
+    def cache_vision_features(self, frame_idx: int, features: dict):
+        """Cache vision features with automatic device management."""
+        cached = {}
+        if len(self._vision_features) >= self.max_vision_features_cache_size:
+            # remove the oldest frame
+            self._vision_features.pop(min(self._vision_features.keys()))
+
+        for key, value in features.items():
+            if isinstance(value, torch.Tensor):
+                cached[key] = value.to(self.inference_state_device, non_blocking=True)
+            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
+            else:
+                cached[key] = value
+        self._vision_features[frame_idx] = cached
+
+    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+        """Get cached vision features, automatically moved to inference device."""
+        if frame_idx not in self._vision_features:
+            return None
+
+        cached = self._vision_features[frame_idx]
+        moved = {}
+        for key, value in cached.items():
+            if isinstance(value, torch.Tensor):
+                moved[key] = value.to(self.inference_device, non_blocking=True)
+            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
+            else:
+                moved[key] = value
+        return moved
+
+    def cache_model_constant(self, key: str, value):
+        """Cache model constants that are reused across frames."""
+        if isinstance(value, torch.Tensor):
+            self._model_constants[key] = value.to(self.inference_state_device, non_blocking=True)
+        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+            self._model_constants[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
+        else:
+            self._model_constants[key] = value
+
+    def get_model_constant(self, key: str):
+        """Get cached model constant, automatically moved to inference device if needed."""
+        if key not in self._model_constants:
+            return None
+
+        value = self._model_constants[key]
+        if isinstance(value, torch.Tensor):
+            return value.to(self.inference_device, non_blocking=True)
+        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+            return [v.to(self.inference_device, non_blocking=True) for v in value]
+        return value
+
+    def clear_vision_cache(self):
+        """Clear vision feature cache (but keep model constants)."""
+        self._vision_features.clear()
+
+    def clear_all(self):
+        """Clear all cached data."""
+        self._vision_features.clear()
+        self._model_constants.clear()
+
+
+# a large negative value as a placeholder score for missing objects
+NO_OBJ_SCORE = -1024.0
+
+
+def get_1d_sine_pe(pos_inds, dim, temperature=10000):
+    """
+    Get 1D sine positional embedding as in the original Transformer paper.
+    """
+    pe_dim = dim // 2
+    dim_t = torch.arange(pe_dim, dtype=torch.float32, device=pos_inds.device)
+    dim_t = temperature ** (2 * (dim_t // 2) / pe_dim)
+
+    pos_embed = pos_inds.unsqueeze(-1) / dim_t
+    pos_embed = torch.cat([pos_embed.sin(), pos_embed.cos()], dim=-1)
+    return pos_embed
+
+
+def get_connected_components(mask):
+    """
+    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
+    Inputs:
+    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
+            background.
+    Outputs:
+    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
+              for foreground pixels and 0 for background pixels.
+    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
+              components for foreground pixels and 0 for background pixels.
+    """
+    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
+
+
+def fill_holes_in_mask_scores(mask, max_area):
+    """
+    A post processor to fill small holes in mask scores with area under `max_area`.
+    """
+    # Holes are those connected components in background with area <= self.max_area
+    # (background regions are those with mask scores <= 0)
+    if max_area <= 0:
+        raise ValueError("max_area must be positive")
+    input_mask = mask
+    try:
+        labels, areas = get_connected_components(mask <= 0)
+        is_hole = (labels > 0) & (areas <= max_area)
+        # We fill holes with a small positive mask score (0.1) to change them to foreground.
+        mask = torch.where(is_hole, 0.1, mask)
+    except Exception as e:
+        # Skip the post-processing step on removing small holes if the CUDA kernel fails
+        warnings.warn(
+            f"{e}\n\nSkipping the post-processing step due to the error above. You can "
+            "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
+            "functionality may be limited (which doesn't affect the results in most cases; see "
+            "https://github.com/facebookresearch/edgetam/blob/main/INSTALL.md).",
+            category=UserWarning,
+            stacklevel=2,
+        )
+        mask = input_mask
+
+    return mask
+
+
+@auto_docstring
+class EdgeTamPreTrainedModel(PreTrainedModel):
+    config_class = EdgeTamConfig
+    base_model_prefix = "edgetam"
+    main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        if isinstance(module, EdgeTamModel):
+            if module.no_memory_embedding is not None:
+                module.no_memory_embedding.data.zero_()
+        elif isinstance(module, EdgeTamVideoModel):
+            if module.no_memory_positional_encoding is not None:
+                module.no_memory_positional_encoding.data.zero_()
+            if module.memory_temporal_positional_encoding is not None:
+                module.memory_temporal_positional_encoding.data.zero_()
+            if module.no_object_pointer is not None:
+                module.no_object_pointer.data.zero_()
+            if module.occlusion_spatial_embedding_parameter is not None:
+                module.occlusion_spatial_embedding_parameter.data.zero_()
+        if isinstance(module, EdgeTamMemoryFuserCXBlock):
+            if module.scale is not None:
+                module.scale.data.zero_()
+
+
+class EdgeTamVisionNeck(nn.Module):
+    def __init__(self, config: EdgeTamVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.position_encoding = EdgeTamPositionEmbeddingSine(
+            num_pos_feats=config.fpn_hidden_size, normalize=True, temperature=10000
+        )
+        self.convs = nn.ModuleList()
+        for in_channels in config.backbone_channel_list:
+            self.convs.append(
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=config.fpn_hidden_size,
+                    kernel_size=config.fpn_kernel_size,
+                    stride=config.fpn_stride,
+                    padding=config.fpn_padding,
+                ),
+            )
+
+        self.fpn_interpolation_mode = config.fpn_interpolation_mode
+        self.fuse_type = config.fuse_type
+
+        # levels to have top-down features in its outputs
+        # e.g. if fpn_top_down_levels is [2, 3], then only outputs of level 2 and 3
+        # have top-down propagation, while outputs of level 0 and level 1 have only
+        # lateral features from the same backbone level.
+        if config.fpn_top_down_levels is None:
+            # default is to have top-down features on all levels
+            config.fpn_top_down_levels = range(len(self.convs))
+        self.fpn_top_down_levels = list(config.fpn_top_down_levels)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
+        fpn_hidden_states = ()
+        fpn_position_encoding = ()
+
+        # forward in top-down order (from low to high resolution)
+        n = len(self.convs) - 1
+        for i in range(n, -1, -1):
+            lateral_features = hidden_states[i].permute(0, 3, 1, 2)
+            lateral_features = self.convs[n - i](lateral_features)
+            if i not in self.fpn_top_down_levels or i == n:
+                prev_features = lateral_features
+            else:
+                top_down_features = F.interpolate(
+                    prev_features.to(dtype=torch.float32),
+                    scale_factor=2.0,
+                    mode=self.fpn_interpolation_mode,
+                    align_corners=(None if self.fpn_interpolation_mode == "nearest" else False),
+                    antialias=False,
+                ).to(lateral_features.dtype)
+                prev_features = lateral_features + top_down_features
+                if self.fuse_type == "average":
+                    prev_features /= 2
+
+            prev_position_encoding = self.position_encoding(prev_features).to(prev_features.dtype)
+
+            fpn_hidden_states += (prev_features,)
+            fpn_position_encoding += (prev_position_encoding,)
+
+        return fpn_hidden_states, fpn_position_encoding
+
+
+@auto_docstring(
+    custom_intro="""
+    The vision model from Sam without any head or projection on top.
+    """
+)
+class EdgeTamVisionModel(EdgeTamPreTrainedModel):
+    config_class = EdgeTamVisionConfig
+    main_input_name = "pixel_values"
+    _can_record_outputs = {"hidden_states": AutoModel, "attentions": AutoModel}
+
+    def __init__(self, config: EdgeTamVisionConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.backbone = AutoModel.from_config(config.backbone_config)
+
+        self.neck = EdgeTamVisionNeck(config)
+        self.num_feature_levels = config.num_feature_levels
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.backbone.get_input_embeddings()
+
+    @check_model_inputs
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        # Forward through backbone
+        backbone_output = self.backbone(pixel_values)
+        intermediate_hidden_states = backbone_output.last_hidden_state
+        intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
+
+        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
+        # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
+        fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
+        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
+
+        return EdgeTamVisionEncoderOutput(
+            last_hidden_state=intermediate_hidden_states[-1],
+            fpn_hidden_states=fpn_hidden_states,
+            fpn_position_encoding=fpn_position_encoding,
+        )
 
 
 @auto_docstring(
@@ -2591,85 +1910,6 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
 
 
-class EdgeTamVideoInferenceCache:
-    """Cache for vision features and model constants."""
-
-    def __init__(
-        self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        max_vision_features_cache_size: int = 1,
-    ):
-        self.inference_device = inference_device
-        self.inference_state_device = inference_state_device
-        self.max_vision_features_cache_size = max_vision_features_cache_size
-
-        self._vision_features = {}
-        self._model_constants = {}
-
-    def cache_vision_features(self, frame_idx: int, features: dict):
-        """Cache vision features with automatic device management."""
-        cached = {}
-        if len(self._vision_features) >= self.max_vision_features_cache_size:
-            # remove the oldest frame
-            self._vision_features.pop(min(self._vision_features.keys()))
-
-        for key, value in features.items():
-            if isinstance(value, torch.Tensor):
-                cached[key] = value.to(self.inference_state_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-            else:
-                cached[key] = value
-        self._vision_features[frame_idx] = cached
-
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
-        """Get cached vision features, automatically moved to inference device."""
-        if frame_idx not in self._vision_features:
-            return None
-
-        cached = self._vision_features[frame_idx]
-        moved = {}
-        for key, value in cached.items():
-            if isinstance(value, torch.Tensor):
-                moved[key] = value.to(self.inference_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
-            else:
-                moved[key] = value
-        return moved
-
-    def cache_model_constant(self, key: str, value):
-        """Cache model constants that are reused across frames."""
-        if isinstance(value, torch.Tensor):
-            self._model_constants[key] = value.to(self.inference_state_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            self._model_constants[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-        else:
-            self._model_constants[key] = value
-
-    def get_model_constant(self, key: str):
-        """Get cached model constant, automatically moved to inference device if needed."""
-        if key not in self._model_constants:
-            return None
-
-        value = self._model_constants[key]
-        if isinstance(value, torch.Tensor):
-            return value.to(self.inference_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            return [v.to(self.inference_device, non_blocking=True) for v in value]
-        return value
-
-    def clear_vision_cache(self):
-        """Clear vision feature cache (but keep model constants)."""
-        self._vision_features.clear()
-
-    def clear_all(self):
-        """Clear all cached data."""
-        self._vision_features.clear()
-        self._model_constants.clear()
-
-
 class EdgeTamVideoInferenceSession:
     """Manages video inference session parameters, state and cache."""
 
@@ -2898,65 +2138,667 @@ class EdgeTamVideoInferenceSession:
         self.cache.clear_all()
 
 
-# a large negative value as a placeholder score for missing objects
-NO_OBJ_SCORE = -1024.0
-
-
-def get_1d_sine_pe(pos_inds, dim, temperature=10000):
+def apply_rotary_pos_emb_2d_v2(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    repeat_freqs: int = 0,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Get 1D sine positional embedding as in the original Transformer paper.
-    """
-    pe_dim = dim // 2
-    dim_t = torch.arange(pe_dim, dtype=torch.float32, device=pos_inds.device)
-    dim_t = temperature ** (2 * (dim_t // 2) / pe_dim)
+    Apply rotary position embedding to query and key tensors for vision models.
+    Follows the standard transformers library pattern.
 
-    pos_embed = pos_inds.unsqueeze(-1) / dim_t
-    pos_embed = torch.cat([pos_embed.sin(), pos_embed.cos()], dim=-1)
-    return pos_embed
+    Args:
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
+        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
+
+    Returns:
+        Rotated (q, k) tensors
+    """
+    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
+    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
+    batch_size, num_heads, num_tokens, channels_per_head = x.shape
+    if num_tokens == cos.shape[-2]:
+        x_rope = x
+        x_no_rope = None
+    else:
+        rope_tokens = cos.shape[-2]
+        no_rope_tokens = num_tokens // repeat_freqs - rope_tokens
+        x = x.view(batch_size, num_heads, repeat_freqs, num_tokens // repeat_freqs, channels_per_head)
+        x_rope = x[..., no_rope_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
+        x_no_rope = x[..., :no_rope_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
+
+    if repeat_freqs > 1:
+        cos = cos.repeat(1, 1, repeat_freqs, 1)
+        sin = sin.repeat(1, 1, repeat_freqs, 1)
+    x_embed = (x_rope * cos) + (rotate_half(x_rope) * sin)
+    if x_no_rope is not None:
+        x_embed = x_embed.view(batch_size, num_heads, repeat_freqs, -1, channels_per_head)
+        x_no_rope = x_no_rope.view(batch_size, num_heads, repeat_freqs, -1, channels_per_head)
+        x_embed = torch.cat((x_no_rope, x_embed), dim=3).view(batch_size, num_heads, num_tokens, channels_per_head)
+    return x_embed.type_as(x)
 
 
-def get_connected_components(mask):
-    """
-    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
-    Inputs:
-    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
-            background.
-    Outputs:
-    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
-              for foreground pixels and 0 for background pixels.
-    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
-              components for foreground pixels and 0 for background pixels.
-    """
-    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
+class EdgeTamRoPEAttentionV2(EdgeTamAttention):
+    """Attention with rotary position encoding."""
 
+    def __init__(self, *args, dropout=0.0, rope_theta=10000.0, q_sizes=(64, 64), k_sizes=(16, 16), **kwargs):
+        super().__init__(*args, **kwargs)
 
-def fill_holes_in_mask_scores(mask, max_area):
-    """
-    A post processor to fill small holes in mask scores with area under `max_area`.
-    """
-    # Holes are those connected components in background with area <= self.max_area
-    # (background regions are those with mask scores <= 0)
-    if max_area <= 0:
-        raise ValueError("max_area must be positive")
-    input_mask = mask
-    try:
-        labels, areas = get_connected_components(mask <= 0)
-        is_hole = (labels > 0) & (areas <= max_area)
-        # We fill holes with a small positive mask score (0.1) to change them to foreground.
-        mask = torch.where(is_hole, 0.1, mask)
-    except Exception as e:
-        # Skip the post-processing step on removing small holes if the CUDA kernel fails
-        warnings.warn(
-            f"{e}\n\nSkipping the post-processing step due to the error above. You can "
-            "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
-            "functionality may be limited (which doesn't affect the results in most cases; see "
-            "https://github.com/facebookresearch/edgetam/blob/main/INSTALL.md).",
-            category=UserWarning,
-            stacklevel=2,
+        head_dim = self.internal_dim // self.num_attention_heads
+        self.rotary_emb_q = EdgeTamVisionRotaryEmbedding(
+            dim=head_dim, end_x=q_sizes[0], end_y=q_sizes[1], theta=rope_theta
         )
-        mask = input_mask
+        self.rotary_emb_k = EdgeTamVisionRotaryEmbedding(
+            dim=head_dim, end_x=k_sizes[0], end_y=k_sizes[1], theta=rope_theta
+        )
+        self.q_sizes = q_sizes
+        self.k_sizes = k_sizes
+        self.dropout_p = dropout
 
-    return mask
+        # Cache for position embeddings
+        self._cached_cos_q = None
+        self._cached_sin_q = None
+        self._cached_cos_k = None
+        self._cached_sin_k = None
+        self._cached_feat_sizes_q = None
+        self._cached_feat_sizes_k = None
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        num_k_exclude_rope: int = 0,
+        rope_k_repeat: int = 0,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tensor:
+        # Input projections
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        point_batch_size = query.shape[1]
+        # Separate into heads
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
+
+        # Determine feature map size - assume square for simplicity and infer from sequence length
+        seq_len_q = query.shape[-2]
+        width_q = height_q = int(math.sqrt(seq_len_q))
+        current_feat_sizes_q = (width_q, height_q)
+        seq_len_k = key.shape[-2]
+        width_k = height_k = int(math.sqrt(seq_len_k))
+        current_feat_sizes_k = (width_k, height_k)
+        # Generate or use cached position embeddings
+        if (
+            self._cached_cos_q is None
+            or self._cached_sin_q is None
+            or self._cached_feat_sizes_q != current_feat_sizes_q
+        ):
+            cos_q, sin_q = self.rotary_emb_q(current_feat_sizes_q)
+            self._cached_cos_q = cos_q
+            self._cached_sin_q = sin_q
+            self._cached_feat_sizes_q = current_feat_sizes_q
+        else:
+            cos_q = self._cached_cos_q
+            sin_q = self._cached_sin_q
+        if (
+            self._cached_cos_k is None
+            or self._cached_sin_k is None
+            or self._cached_feat_sizes_k != current_feat_sizes_k
+        ):
+            cos_k, sin_k = self.rotary_emb_k(current_feat_sizes_k)
+            self._cached_cos_k = cos_k
+            self._cached_sin_k = sin_k
+            self._cached_feat_sizes_k = current_feat_sizes_k
+        else:
+            cos_k = self._cached_cos_k
+            sin_k = self._cached_sin_k
+
+        query = apply_rotary_pos_emb_2d_v2(query, cos_q, sin_q, repeat_freqs=1)
+        num_k_rope = key.shape[-2] - num_k_exclude_rope
+        key[:, :, :num_k_rope] = apply_rotary_pos_emb_2d_v2(
+            key[:, :, :num_k_rope], cos_k, sin_k, repeat_freqs=rope_k_repeat
+        )
+        scale = query.shape[-1] ** -0.5
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+        return attn_output
+
+
+class EdgeTamMemoryAttentionLayer(nn.Module):
+    def __init__(self, config: EdgeTamConfig):
+        super().__init__()
+        hidden_size = config.memory_attention_hidden_size
+        self.self_attn = EdgeTamRoPEAttention(
+            config,
+            hidden_size=hidden_size,
+            num_attention_heads=config.memory_attention_num_attention_heads,
+            downsample_rate=config.memory_attention_downsample_rate,
+            rope_theta=config.memory_attention_rope_theta,
+            feat_sizes=config.memory_attention_rope_feat_sizes,
+            dropout=config.memory_attention_rope_dropout,
+        )
+        self.cross_attn_image = EdgeTamRoPEAttentionV2(
+            config,
+            hidden_size=hidden_size,
+            num_attention_heads=config.memory_attention_num_attention_heads,
+            downsample_rate=config.memory_attention_downsample_rate,
+            rope_theta=config.memory_attention_rope_theta,
+            dropout=config.memory_attention_rope_dropout,
+            q_sizes=config.memory_attention_rope_q_sizes,
+            k_sizes=config.memory_attention_rope_k_sizes,
+            kv_in_dim=64,
+        )
+
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
+        self.dropout = nn.Dropout(config.memory_attention_dropout)
+        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
+
+        self.layer_norm1 = nn.LayerNorm(hidden_size)
+        self.layer_norm2 = nn.LayerNorm(hidden_size)
+        self.layer_norm3 = nn.LayerNorm(hidden_size)
+        self.dropout1 = nn.Dropout(config.memory_attention_dropout)
+        self.dropout2 = nn.Dropout(config.memory_attention_dropout)
+        self.dropout3 = nn.Dropout(config.memory_attention_dropout)
+
+        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
+
+        # Where to add pos enc
+        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
+        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
+        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
+
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Optional[Tensor] = None,
+        key_point_embedding: Optional[Tensor] = None,
+        num_k_exclude_rope: int = 0,
+        rope_k_repeat: int = 0,
+    ) -> torch.Tensor:
+        # Self-Attention
+        query = self.layer_norm1(queries)
+        if self.apply_pe_at_self_attn:
+            query = self.self_attn(query=query + query_point_embedding, key=query + query_point_embedding, value=query)
+        else:
+            query = self.self_attn(query=query, key=query, value=query)
+        queries = queries + self.dropout1(query)
+
+        # Cross-Attention
+        query = self.layer_norm2(queries)
+        query = self.cross_attn_image(
+            query=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
+            key=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
+            value=keys,
+            num_k_exclude_rope=num_k_exclude_rope,
+            rope_k_repeat=rope_k_repeat,
+        )
+        queries = queries + self.dropout2(query)
+        # MLP
+        query = self.layer_norm3(queries)
+        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
+        queries = queries + self.dropout3(query)
+        return queries
+
+
+class EdgeTamPerceiverAttention(nn.Module):
+    def __init__(self, config, dim, dim_head=64, heads=8, dropout_p=0.05, concat_kv_latents=True):
+        super().__init__()
+        self.config = config
+        self.scale = dim_head**-0.5
+        self.heads = heads
+        inner_dim = dim_head * heads
+
+        self.layer_norm_x = nn.LayerNorm(dim)
+        self.layer_norm_latents = nn.LayerNorm(dim)
+
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+
+        self.dropout_p = dropout_p
+        self.concat_kv_latents = concat_kv_latents
+        self.is_causal = False
+
+    def _separate_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
+        b, n, c = x.shape
+        x = x.reshape(b, n, num_heads, c // num_heads)
+        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+
+    def _recombine_heads(self, x: torch.Tensor) -> torch.Tensor:
+        b, n_tokens, n_heads, c_per_head = x.shape
+        return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
+
+    def forward(self, latents, x, pos=None, **kwargs):
+        latents = self.layer_norm_latents(latents)
+        x = self.layer_norm_x(x)
+
+        q = self.to_q(latents)
+
+        # the paper differs from Perceiver in which they also concat the key / values derived from the latents to be attended to
+        if self.concat_kv_latents:
+            kv_input = torch.cat((x, latents), dim=-2)
+        else:
+            kv_input = x
+        k, v = self.to_kv(kv_input).chunk(2, dim=-1)
+
+        q = self._separate_heads(q, self.heads)
+        k = self._separate_heads(k, self.heads)
+        v = self._separate_heads(v, self.heads)
+
+        if pos is not None:
+            if self.concat_kv_latents:
+                raise ValueError("Position encoding is not supported when concat_kv_latents is True")
+            pos = self._separate_heads(pos, self.heads)
+            k, v = k + pos, v + pos
+
+        scale = q.shape[-1] ** -0.5
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output)
+        return self.to_out(attn_output)
+
+
+class EdgeTamPerceiverSelfAttention(nn.Module):
+    def __init__(self, config, dim, dim_head=64, heads=8, dropout_p=0.05):
+        super().__init__()
+        self.config = config
+        self.scale = dim_head**-0.5
+        self.heads = heads
+        inner_dim = dim_head * heads
+
+        self.layer_norm = nn.LayerNorm(dim)
+
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+
+        self.dropout_p = dropout_p
+        self.is_causal = False
+
+    def _separate_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
+        b, n, c = x.shape
+        x = x.reshape(b, n, num_heads, c // num_heads)
+        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+
+    def _recombine_heads(self, x: torch.Tensor) -> torch.Tensor:
+        b, n_tokens, n_heads, c_per_head = x.shape
+        return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
+
+    def forward(self, x, **kwargs):
+        x = self.layer_norm(x)
+
+        q = self.to_q(x)
+        k, v = self.to_kv(x).chunk(2, dim=-1)
+
+        q = self._separate_heads(q, self.heads)
+        k = self._separate_heads(k, self.heads)
+        v = self._separate_heads(v, self.heads)
+
+        scale = q.shape[-1] ** -0.5
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output)
+        return self.to_out(attn_output)
+
+
+def FeedForward(dim, mult=4):
+    inner_dim = int(dim * mult)
+    return nn.Sequential(
+        nn.LayerNorm(dim),
+        nn.Linear(dim, inner_dim, bias=False),
+        nn.GELU(),
+        nn.Linear(inner_dim, dim, bias=False),
+    )
+
+
+class EdgeTamPerceiverEncoderLayer(nn.Module):
+    def __init__(
+        self,
+        config,
+        dim,
+        dim_head=64,
+        heads=8,
+        ff_mult=4,
+        hidden_dropout_p=0.0,
+        attention_dropout_p=0.0,
+        concat_kv_latents=False,
+        use_self_attn=False,
+    ):
+        super().__init__()
+        self.attn = EdgeTamPerceiverAttention(
+            config,
+            dim=dim,
+            dim_head=dim_head,
+            heads=heads,
+            dropout_p=attention_dropout_p,
+            concat_kv_latents=concat_kv_latents,
+        )
+        self.ff = FeedForward(dim=dim, mult=ff_mult)
+        self.dropout = nn.Dropout(hidden_dropout_p)
+        self.use_self_attn = use_self_attn
+        if use_self_attn:
+            self.self_attn = EdgeTamPerceiverSelfAttention(
+                config,
+                dim=dim,
+                dim_head=dim_head,
+                heads=heads,
+                dropout_p=attention_dropout_p,
+            )
+            self.self_ff = FeedForward(dim=dim, mult=ff_mult)
+
+    def forward(self, latents, x, pos=None):
+        latents = self.attn(latents, x, pos) + latents
+        latents = self.dropout(latents)
+        latents = self.ff(latents) + latents
+        if self.use_self_attn:
+            latents = self.self_attn(latents) + latents
+            latents = self.self_ff(latents) + latents
+        return latents
+
+
+class EdgeTamPositionEmbeddingSine(nn.Module):
+    """
+    This is a more standard version of the position embedding, very similar to the one
+    used by the Attention Is All You Need paper, generalized to work on images.
+    """
+
+    def __init__(
+        self,
+        num_pos_feats,
+        temperature: int = 10000,
+        normalize: bool = True,
+        scale: Optional[float] = None,
+    ):
+        super().__init__()
+        assert num_pos_feats % 2 == 0, "Expecting even model width"
+        self.num_pos_feats = num_pos_feats // 2
+        self.temperature = temperature
+        self.normalize = normalize
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
+        if scale is None:
+            scale = 2 * math.pi
+        self.scale = scale
+
+        self.cache = {}
+
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor):
+        cache_key = (x.shape[-2], x.shape[-1])
+        if cache_key in self.cache:
+            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
+        y_embed = (
+            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
+            .view(1, -1, 1)
+            .repeat(x.shape[0], 1, x.shape[-1])
+        )
+        x_embed = (
+            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
+            .view(1, 1, -1)
+            .repeat(x.shape[0], x.shape[-2], 1)
+        )
+
+        if self.normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        self.cache[cache_key] = pos[0]
+        return pos
+
+
+def window_partition(hidden_state, window_size):
+    """
+    Partition into non-overlapping windows with padding if needed.
+
+    Args:
+        hidden_state (`torch.Tensor`):
+            Input tokens with [batch_size, height, width, num_channels].
+        window_size (`int`):
+            Window size.
+
+    Returns:
+        `tuple(torch.FloatTensor)` comprising various elements:
+        - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
+        - (padded_height, padded_width): padded height and width before partition
+    """
+    batch_size, height, width, num_channels = hidden_state.shape
+
+    pad_height = (window_size - height % window_size) % window_size
+    pad_width = (window_size - width % window_size) % window_size
+
+    # Noop in case pad_width == 0 and pad_height == 0.
+    hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))
+
+    padded_height, padded_width = height + pad_height, width + pad_width
+
+    hidden_state = hidden_state.view(
+        batch_size, padded_height // window_size, window_size, padded_width // window_size, window_size, num_channels
+    )
+    windows = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    return windows, (padded_height, padded_width)
+
+
+class EdgeTamPerceiverResampler(nn.Module):
+    def __init__(self, config: EdgeTamConfig):
+        super().__init__()
+        self.num_latents = config.num_latents
+        self.num_latents_2d = config.num_latents_2d
+
+        if self.num_latents > 0:
+            self.latents = nn.Parameter(torch.randn(self.num_latents, config.dim))
+        if self.num_latents_2d > 0:
+            self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, config.dim))
+        self.position_encoding = EdgeTamPositionEmbeddingSine(config.dim)
+
+        self.layers = nn.ModuleList([])
+        for _ in range(config.depth):
+            self.layers.append(
+                EdgeTamPerceiverEncoderLayer(
+                    config,
+                    dim=config.dim,
+                    dim_head=config.dim_head,
+                    heads=config.heads,
+                    ff_mult=config.ff_mult,
+                    hidden_dropout_p=config.hidden_dropout_p,
+                    attention_dropout_p=config.attention_dropout_p,
+                    concat_kv_latents=config.concat_kv_latents,
+                    use_self_attn=config.use_self_attn,
+                )
+            )
+
+        self.layer_norm = nn.LayerNorm(config.dim)
+        self.pos_enc_at_key_value = config.pos_enc_at_key_value
+
+    def forward(self, x, pos=None):
+        out_latents = []
+        out_pos = []
+        if self.num_latents > 0:
+            latents_1d, pos_1d = self.forward_1d(x, pos)
+            out_latents.append(latents_1d)
+            out_pos.append(pos_1d)
+        if self.num_latents_2d > 0:
+            latents_2d, pos_2d = self.forward_2d(x)
+            out_latents.append(latents_2d)
+            out_pos.append(pos_2d)
+
+        latents = torch.concat(out_latents, dim=1)
+        if pos is not None:
+            pos = torch.concat(out_pos, dim=1)
+
+        return latents, pos
+
+    def forward_1d(self, x, pos):
+        latents = self.latents.unsqueeze(0).expand(x.shape[0], -1, -1)
+        x = x.permute(0, 2, 3, 1).flatten(1, 2)
+
+        if not self.pos_enc_at_key_value:
+            _pos = None
+        if pos is not None:
+            _pos = pos.permute(0, 2, 3, 1).flatten(1, 2)
+        else:
+            _pos = None
+
+        for layer in self.layers:
+            latents = layer(latents, x, _pos)
+
+        if pos is not None:
+            pos = torch.zeros_like(latents)
+
+        latents = self.layer_norm(latents)
+        return latents, pos
+
+    def forward_2d(self, x):
+        B, C, H, W = x.shape
+
+        latents_2d = self.latents_2d.unsqueeze(0).expand(B, -1, -1).view(-1, 1, C)
+
+        num_window = int(math.sqrt(self.num_latents_2d))
+        window_size = H // num_window
+        x = x.permute(0, 2, 3, 1)
+
+        x, _ = window_partition(x, window_size)
+        x = x.flatten(1, 2)
+
+        for layer in self.layers:
+            latents_2d = layer(latents_2d, x)
+
+        latents_2d = latents_2d.view(B, num_window, num_window, C).permute(0, 3, 1, 2)
+
+        pos_2d = self.position_encoding(latents_2d).to(dtype=x.dtype)
+        pos_2d = pos_2d.permute(0, 2, 3, 1).flatten(1, 2)
+
+        latents_2d = latents_2d.permute(0, 2, 3, 1).flatten(1, 2)
+
+        latents_2d = self.layer_norm(latents_2d)
+
+        return latents_2d, pos_2d
+
+
+class EdgeTamMemoryAttention(nn.Module):
+    def __init__(self, config: EdgeTamConfig):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [EdgeTamMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
+        )
+        self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
+
+    def forward(
+        self,
+        current_vision_features: torch.Tensor,
+        memory: torch.Tensor,
+        current_vision_position_embeddings: Optional[Tensor] = None,
+        memory_posision_embeddings: Optional[Tensor] = None,
+        num_object_pointer_tokens: int = 0,
+        num_spatial_memory_tokens: int = -1,
+    ):
+        """
+        Args:
+            current_vision_features (`torch.FloatTensor`):
+                The current vision features used for self-attention.
+            memory (`torch.FloatTensor`):
+                The memory features used for cross-attention.
+            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
+                The position embeddings for the current vision features.
+            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
+                The position embeddings for the memory features.
+            num_object_pointer_tokens (`int`, *optional*, defaults to 0):
+                The number of object pointer tokens.
+        """
+        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
+            current_vision_features, current_vision_position_embeddings = (
+                current_vision_features[0],
+                current_vision_position_embeddings[0],
+            )
+
+        output = current_vision_features
+        if current_vision_position_embeddings is not None:
+            output = output + 0.1 * current_vision_position_embeddings
+
+        # Convert to batch first
+        output = output.transpose(0, 1)
+        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
+        memory = memory.transpose(0, 1)
+        memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
+
+        for layer in self.layers:
+            output = layer(
+                queries=output.unsqueeze(1) if output.ndim == 3 else output,
+                keys=memory.unsqueeze(1),
+                query_point_embedding=current_vision_position_embeddings.unsqueeze(1),
+                key_point_embedding=memory_posision_embeddings.unsqueeze(1),
+                num_k_exclude_rope=num_object_pointer_tokens,
+                rope_k_repeat=num_spatial_memory_tokens,
+            )
+
+        normed_output = self.layer_norm(output)
+
+        # Convert back to seq first
+        normed_output = normed_output.transpose(0, 1)
+        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
+
+        return normed_output
 
 
 @auto_docstring
@@ -2972,7 +2814,6 @@ class EdgeTamVideoModel(EdgeTamModel):
         # For video sequence inference
         self.memory_attention = EdgeTamMemoryAttention(config)
         self.memory_encoder = EdgeTamMemoryEncoder(config)
-        self.spatial_perceiver = PerceiverResampler(config)
         self.no_memory_positional_encoding = torch.nn.Parameter(
             torch.zeros(1, 1, config.vision_config.fpn_hidden_size)
         )
@@ -3024,6 +2865,7 @@ class EdgeTamVideoModel(EdgeTamModel):
         # Compatibility with EDGETAM
         self.preserve_temporal_direction_in_object_pointers = config.preserve_temporal_direction_in_object_pointers
         self.multimask_output_for_tracking = config.multimask_output_for_tracking
+        self.spatial_perceiver = EdgeTamPerceiverResampler(config)
 
         self.post_init()
 
@@ -4035,18 +3877,11 @@ class EdgeTamVideoModel(EdgeTamModel):
                 # Load memory features (potentially from CPU to GPU)
                 # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
                 memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
-                if memory_features.ndim == 3:  # (B, HW, C) because of spatial perceiver
-                    memories_to_concatenate.append(memory_features.permute(1, 0, 2))
-                else:  # (B, C, H, W)
-                    memories_to_concatenate.append(memory_features.flatten(2).permute(2, 0, 1))
+                memories_to_concatenate.append(memory_features.permute(1, 0, 2))
 
                 # Spatial positional encoding (potentially from CPU to GPU)
                 spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"][-1].to(device, non_blocking=True)
-                spatial_memory_pos_embed = spatial_memory_pos_embed.squeeze(1)
-                if spatial_memory_pos_embed.ndim == 3:  # (B, HW, C) because of spatial perceiver
-                    spatial_memory_pos_embed = spatial_memory_pos_embed.permute(1, 0, 2)
-                else:  # (B, C, H, W)
-                    spatial_memory_pos_embed = spatial_memory_pos_embed.flatten(2).permute(2, 0, 1)
+                spatial_memory_pos_embed = spatial_memory_pos_embed.squeeze(1).permute(1, 0, 2)
                 # Add temporal positional encoding
                 # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
                 temporal_encoding_index = self.num_maskmem - temporal_pos_offset - 1
