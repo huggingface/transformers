@@ -983,7 +983,7 @@ def pipeline(
         model_kwargs["device_map"] = device_map
 
         # BC for the `torch_dtype` argument
-        if (torch_dtype := kwargs.get("torch_dtype", None)) is not None:
+        if (torch_dtype := kwargs.get("torch_dtype")) is not None:
             logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
             # If both are provided, keep `dtype`
             dtype = torch_dtype if dtype == "auto" else dtype
