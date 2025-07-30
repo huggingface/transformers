@@ -601,6 +601,7 @@ def main(*args):
     tokenizer = GemmaTokenizerFast(
         _TOKENIZER_PATH.value,
         add_bos_token=True,
+        padding_side="right" if variant == _VARIANT_GEMMA_3_EMBEDDING else "left"
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
@@ -642,7 +643,7 @@ def main(*args):
     )
     generation_config.save_pretrained(output_path)
 
-    if _VARIANT.value == _VARIANT_GEMMA_3_EMBEDDING:
+    if variant == _VARIANT_GEMMA_3_EMBEDDING:
         from sentence_transformers import SentenceTransformer, models
 
         transformer = models.Transformer(output_path)
