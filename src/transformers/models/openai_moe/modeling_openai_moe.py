@@ -248,9 +248,7 @@ def eager_attention_forward(
     # TODO: check wether both produce the same results or not!
     # scale the logits to prevent overflows
     logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
-    # sinks = torch.exp(sinks - logits_max)
-    # unnormalized_scores = torch.exp(attn_weights - logits_max)
-    # lewtun: Prevent overflow in BF16/FP16: exp(>80) → inf
+    # prevent overflow in BF16/FP16 when training with bsz>1. we clamp in the range [-80, 80] because exp(>80) ~ inf
     sinks = torch.exp(torch.clamp(sinks - logits_max, max=80))
     unnormalized_scores = torch.exp(torch.clamp(attn_weights - logits_max, min=-80))
 
