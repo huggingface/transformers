@@ -813,6 +813,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -830,7 +831,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -864,6 +865,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu", "npu"]
+            and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
