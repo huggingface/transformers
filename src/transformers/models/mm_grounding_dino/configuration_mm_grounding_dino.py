@@ -123,19 +123,12 @@ class MMGroundingDinoConfig(PretrainedConfig):
             Whether to initialize the target with Embedding weights.
         query_dim (`int`, *optional*, defaults to 4):
             The dimension of the query vector.
-        decoder_bbox_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the bbox regression head for all decoder layers.
-        two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
-            generation.
         positional_embedding_temperature (`float`, *optional*, defaults to 20):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the class head for all decoder layers.
 
     Examples:
 
@@ -199,12 +192,9 @@ class MMGroundingDinoConfig(PretrainedConfig):
         fusion_dropout=0.0,
         embedding_init_target=True,
         query_dim=4,
-        decoder_bbox_embed_share=False,
-        two_stage_bbox_embed_share=False,
         positional_embedding_temperature=20,
         init_std=0.02,
         layer_norm_eps=1e-5,
-        decoder_cls_embed_share=False,
         **kwargs,
     ):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -286,14 +276,9 @@ class MMGroundingDinoConfig(PretrainedConfig):
         # Others
         self.embedding_init_target = embedding_init_target
         self.query_dim = query_dim
-        self.decoder_bbox_embed_share = decoder_bbox_embed_share
-        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
-        if two_stage_bbox_embed_share and not decoder_bbox_embed_share:
-            raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
-        self.decoder_cls_embed_share = decoder_cls_embed_share
 
     @property
     def num_attention_heads(self) -> int:

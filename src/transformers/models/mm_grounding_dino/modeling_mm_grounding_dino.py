@@ -34,7 +34,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring
 from ...utils.backbone_utils import load_backbone
-from ..auto import AutoModel
+from ..auto.modeling_auto import AutoModel
 from .configuration_mm_grounding_dino import MMGroundingDinoConfig
 
 
@@ -835,339 +835,6 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`MMGroundingDinoDecoderLayer`].
-
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-    Some tweaks for Grounding DINO:
-
-    - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
-    - it also returns a stack of intermediate outputs and reference points from all decoding layers.
-
-    Args:
-        config: MMGroundingDinoConfig
-    """
-
-    def __init__(self, config: MMGroundingDinoConfig):
-        super().__init__(config)
-
-        self.dropout = config.dropout
-        self.layer_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-        self.layers = nn.ModuleList([MMGroundingDinoDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.reference_points_head = MMGroundingDinoMLPPredictionHead(
-            config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
-        )
-        self.gradient_checkpointing = False
-
-        # hack implementation for iterative bounding box refinement as in two-stage Deformable DETR
-        self.bbox_embed = None
-        self.class_embed = None
-        self.query_scale = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        inputs_embeds,
-        vision_encoder_hidden_states,
-        vision_encoder_attention_mask=None,
-        text_encoder_hidden_states=None,
-        text_encoder_attention_mask=None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        valid_ratios=None,
-        self_attn_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            vision_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Last hidden state from encoder related to vision feature map.
-            vision_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-            text_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
-                Last hidden state from encoder related to text features.
-            text_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
-                Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
-                - 0 for text features that are real (i.e. **not masked**),
-                - 1 for text features that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            spatial_shapes_list (`list[tuple[int, int]]`):
-                Spatial shapes of the feature maps (but as list for export compatibility).
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
-            self_attn_mask (`torch.BoolTensor` of shape `(batch_size, text_seq_len)`):
-                Masks to avoid performing self-attention between vision hidden state. Mask values selected in `[0, 1]`:
-                - 1 for queries that are real (i.e. **not masked**),
-                - 0 for queries that are padding (i.e. **masked**).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_attns = () if output_attentions else None
-        all_cross_attns_vision = () if (output_attentions and vision_encoder_hidden_states is not None) else None
-        all_cross_attns_text = () if (output_attentions and text_encoder_hidden_states is not None) else None
-        intermediate = ()
-        intermediate_reference_points = ()
-
-        if text_encoder_attention_mask is not None:
-            dtype = text_encoder_hidden_states.dtype
-
-            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
-            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
-                1, self.config.decoder_attention_heads, self.config.num_queries, 1
-            )
-            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
-            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
-
-        for idx, decoder_layer in enumerate(self.layers):
-            num_coordinates = reference_points.shape[-1]
-            if num_coordinates == 4:
-                reference_points_input = (
-                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
-                )
-            elif num_coordinates == 2:
-                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
-            else:
-                raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
-            query_pos = self.reference_points_head(query_pos)
-
-            # In original implementation they apply layer norm before outputting intermediate hidden states
-            # Though that's not through between layers so the layers use as input the output of the previous layer
-            # without layer norm
-            if output_hidden_states:
-                all_hidden_states += (self.layer_norm(hidden_states),)
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    query_pos,
-                    reference_points_input,
-                    spatial_shapes,
-                    level_start_index,
-                    vision_encoder_hidden_states,
-                    vision_encoder_attention_mask,
-                    text_encoder_hidden_states,
-                    text_encoder_attention_mask,
-                    self_attn_mask,
-                    None,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states=hidden_states,
-                    position_embeddings=query_pos,
-                    reference_points=reference_points_input,
-                    spatial_shapes=spatial_shapes,
-                    spatial_shapes_list=spatial_shapes_list,
-                    level_start_index=level_start_index,
-                    vision_encoder_hidden_states=vision_encoder_hidden_states,
-                    vision_encoder_attention_mask=vision_encoder_attention_mask,
-                    text_encoder_hidden_states=text_encoder_hidden_states,
-                    text_encoder_attention_mask=text_encoder_attention_mask,
-                    self_attn_mask=self_attn_mask,
-                    output_attentions=output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            # hack implementation for iterative bounding box refinement
-            if self.bbox_embed is not None:
-                tmp = self.bbox_embed[idx](hidden_states)
-                num_coordinates = reference_points.shape[-1]
-                if num_coordinates == 4:
-                    new_reference_points = tmp + torch.special.logit(reference_points, eps=1e-5)
-                    new_reference_points = new_reference_points.sigmoid()
-                elif num_coordinates == 2:
-                    new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(reference_points, eps=1e-5)
-                    new_reference_points = new_reference_points.sigmoid()
-                else:
-                    raise ValueError(
-                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
-                    )
-                reference_points = new_reference_points.detach()
-
-            intermediate += (self.layer_norm(hidden_states),)
-            intermediate_reference_points += (reference_points,)
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if text_encoder_hidden_states is not None:
-                    all_cross_attns_text += (layer_outputs[2],)
-
-                if vision_encoder_hidden_states is not None:
-                    all_cross_attns_vision += (layer_outputs[3],)
-
-        # Keep batch_size as first dimension
-        intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
-        hidden_states = self.layer_norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if output_attentions:
-            all_attns += (all_self_attns, all_cross_attns_text, all_cross_attns_vision)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    intermediate,
-                    intermediate_reference_points,
-                    all_hidden_states,
-                    all_attns,
-                ]
-                if v is not None
-            )
-        return MMGroundingDinoDecoderOutput(
-            last_hidden_state=hidden_states,
-            intermediate_hidden_states=intermediate,
-            intermediate_reference_points=intermediate_reference_points,
-            hidden_states=all_hidden_states,
-            attentions=all_attns,
-        )
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
-    - vision and text last hidden states
-    - vision and text intermediate hidden states
-    """
-)
-class MMGroundingDinoEncoderOutput(ModelOutput):
-    r"""
-    last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the vision encoder.
-    last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the text encoder.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-        output of each layer plus the initial embedding outputs.
-    text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-        each layer plus the initial embedding outputs.
-    """
-
-    last_hidden_state_vision: Optional[torch.FloatTensor] = None
-    last_hidden_state_text: Optional[torch.FloatTensor] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the Grounding DINO encoder-decoder model.
-    """
-)
-class MMGroundingDinoModelOutput(ModelOutput):
-    r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
-        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
-        output of each layer plus the initial embedding outputs.
-    encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
-        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
-        each layer plus the initial embedding outputs.
-    encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
-        sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-        weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
-        multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
-        bi-attention heads.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
-        region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
-        background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-        Logits of top `config.num_queries` scoring bounding boxes in the first stage.
-    encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
-        Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
-    """
-
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
-    encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
-    encoder_vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_logits: Optional[torch.FloatTensor] = None
-    encoder_pred_boxes: Optional[torch.FloatTensor] = None
-
-
 class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -1313,34 +980,35 @@ class MMGroundingDinoConvModel(nn.Module):
         return out, pos
 
 
-class MMGroundingDinoSinePositionEmbedding(nn.Module):
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the MMGroundingDinoEncoder. This class extends BaseModelOutput, due to:
+    - vision and text last hidden states
+    - vision and text intermediate hidden states
     """
-    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
-    need paper, generalized to work on images.
+)
+class MMGroundingDinoEncoderOutput(ModelOutput):
+    r"""
+    last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the vision encoder.
+    last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the text encoder.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+        output of each layer plus the initial embedding outputs.
+    text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+        each layer plus the initial embedding outputs.
     """
 
-    def __init__(self, config):
-        super().__init__()
-        self.embedding_dim = config.d_model // 2
-        self.temperature = config.positional_embedding_temperature
-        self.scale = 2 * math.pi
-
-    def forward(self, pixel_values, pixel_mask):
-        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        eps = 1e-6
-        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+    last_hidden_state_vision: Optional[torch.FloatTensor] = None
+    last_hidden_state_text: Optional[torch.FloatTensor] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
 class MMGroundingDinoTextEnhancerLayer(nn.Module):
@@ -1761,6 +1429,338 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         )
 
 
+class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`MMGroundingDinoDecoderLayer`].
+
+    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
+
+    Some tweaks for Grounding DINO:
+
+    - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
+    - it also returns a stack of intermediate outputs and reference points from all decoding layers.
+
+    Args:
+        config: MMGroundingDinoConfig
+    """
+
+    def __init__(self, config: MMGroundingDinoConfig):
+        super().__init__(config)
+
+        self.dropout = config.dropout
+        self.layer_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.layers = nn.ModuleList([MMGroundingDinoDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.reference_points_head = MMGroundingDinoMLPPredictionHead(
+            config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
+        )
+        self.gradient_checkpointing = False
+
+        # hack implementation for iterative bounding box refinement as in two-stage Deformable DETR
+        self.bbox_embed = None
+        self.class_embed = None
+        self.query_scale = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        inputs_embeds,
+        vision_encoder_hidden_states,
+        vision_encoder_attention_mask=None,
+        text_encoder_hidden_states=None,
+        text_encoder_attention_mask=None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        level_start_index=None,
+        valid_ratios=None,
+        self_attn_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+                The query embeddings that are passed into the decoder.
+            vision_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Last hidden state from encoder related to vision feature map.
+            vision_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+                - 1 for pixel features that are real (i.e. **not masked**),
+                - 0 for pixel features that are padding (i.e. **masked**).
+            text_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+                Last hidden state from encoder related to text features.
+            text_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
+                Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
+                - 0 for text features that are real (i.e. **not masked**),
+                - 1 for text features that are padding (i.e. **masked**).
+            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+                Spatial shapes of the feature maps.
+            spatial_shapes_list (`list[tuple[int, int]]`):
+                Spatial shapes of the feature maps (but as list for export compatibility).
+            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+                Ratio of valid area in each feature level.
+            self_attn_mask (`torch.BoolTensor` of shape `(batch_size, text_seq_len)`):
+                Masks to avoid performing self-attention between vision hidden state. Mask values selected in `[0, 1]`:
+                - 1 for queries that are real (i.e. **not masked**),
+                - 0 for queries that are padding (i.e. **masked**).
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_attns = () if output_attentions else None
+        all_cross_attns_vision = () if (output_attentions and vision_encoder_hidden_states is not None) else None
+        all_cross_attns_text = () if (output_attentions and text_encoder_hidden_states is not None) else None
+        intermediate = ()
+        intermediate_reference_points = ()
+
+        if text_encoder_attention_mask is not None:
+            dtype = text_encoder_hidden_states.dtype
+
+            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
+            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
+                1, self.config.decoder_attention_heads, self.config.num_queries, 1
+            )
+            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
+            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
+
+        for idx, decoder_layer in enumerate(self.layers):
+            num_coordinates = reference_points.shape[-1]
+            if num_coordinates == 4:
+                reference_points_input = (
+                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                )
+            elif num_coordinates == 2:
+                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+            else:
+                raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+            query_pos = self.reference_points_head(query_pos)
+
+            # In original implementation they apply layer norm before outputting intermediate hidden states
+            # Though that's not through between layers so the layers use as input the output of the previous layer
+            # without layer norm
+            if output_hidden_states:
+                all_hidden_states += (self.layer_norm(hidden_states),)
+
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
+                    hidden_states,
+                    query_pos,
+                    reference_points_input,
+                    spatial_shapes,
+                    level_start_index,
+                    vision_encoder_hidden_states,
+                    vision_encoder_attention_mask,
+                    text_encoder_hidden_states,
+                    text_encoder_attention_mask,
+                    self_attn_mask,
+                    None,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states=hidden_states,
+                    position_embeddings=query_pos,
+                    reference_points=reference_points_input,
+                    spatial_shapes=spatial_shapes,
+                    spatial_shapes_list=spatial_shapes_list,
+                    level_start_index=level_start_index,
+                    vision_encoder_hidden_states=vision_encoder_hidden_states,
+                    vision_encoder_attention_mask=vision_encoder_attention_mask,
+                    text_encoder_hidden_states=text_encoder_hidden_states,
+                    text_encoder_attention_mask=text_encoder_attention_mask,
+                    self_attn_mask=self_attn_mask,
+                    output_attentions=output_attentions,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            # hack implementation for iterative bounding box refinement
+            if self.bbox_embed is not None:
+                tmp = self.bbox_embed[idx](hidden_states)
+                num_coordinates = reference_points.shape[-1]
+                if num_coordinates == 4:
+                    new_reference_points = tmp + torch.special.logit(reference_points, eps=1e-5)
+                    new_reference_points = new_reference_points.sigmoid()
+                elif num_coordinates == 2:
+                    new_reference_points = tmp
+                    new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(reference_points, eps=1e-5)
+                    new_reference_points = new_reference_points.sigmoid()
+                else:
+                    raise ValueError(
+                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+                    )
+                reference_points = new_reference_points.detach()
+
+            intermediate += (self.layer_norm(hidden_states),)
+            intermediate_reference_points += (reference_points,)
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+                if text_encoder_hidden_states is not None:
+                    all_cross_attns_text += (layer_outputs[2],)
+
+                if vision_encoder_hidden_states is not None:
+                    all_cross_attns_vision += (layer_outputs[3],)
+
+        # Keep batch_size as first dimension
+        intermediate = torch.stack(intermediate, dim=1)
+        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        hidden_states = self.layer_norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        if output_attentions:
+            all_attns += (all_self_attns, all_cross_attns_text, all_cross_attns_vision)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    intermediate,
+                    intermediate_reference_points,
+                    all_hidden_states,
+                    all_attns,
+                ]
+                if v is not None
+            )
+        return MMGroundingDinoDecoderOutput(
+            last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate,
+            intermediate_reference_points=intermediate_reference_points,
+            hidden_states=all_hidden_states,
+            attentions=all_attns,
+        )
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the Grounding DINO encoder-decoder model.
+    """
+)
+class MMGroundingDinoModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the encoder of the model.
+    encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+        layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+        output of each layer plus the initial embedding outputs.
+    encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+        of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+        each layer plus the initial embedding outputs.
+    encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+        sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+        weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
+        multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
+        bi-attention heads.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
+        region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
+        background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+        Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+    encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+        Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
+    encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
+    encoder_vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_text_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    encoder_logits: Optional[torch.FloatTensor] = None
+    encoder_pred_boxes: Optional[torch.FloatTensor] = None
+
+
+class MMGroundingDinoSinePositionEmbedding(nn.Module):
+    """
+    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
+    need paper, generalized to work on images.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.embedding_dim = config.d_model // 2
+        self.temperature = config.positional_embedding_temperature
+        self.scale = 2 * math.pi
+
+    def forward(self, pixel_values, pixel_mask):
+        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
+        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
+        eps = 1e-6
+        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        return pos
+
+
 def build_position_encoding(config):
     if config.position_embedding_type == "sine":
         position_embedding = MMGroundingDinoSinePositionEmbedding(config)
@@ -1873,23 +1873,11 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
 
         self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
 
-        if config.two_stage:
-            self.enc_output = nn.Linear(config.d_model, config.d_model)
-            self.enc_output_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-            if (
-                config.two_stage_bbox_embed_share
-                and config.decoder_bbox_embed_share
-                and self.decoder.bbox_embed is not None
-            ):
-                self.encoder_output_bbox_embed = self.decoder.bbox_embed
-            else:
-                self.encoder_output_bbox_embed = MMGroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-                )
-
-            self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
-        else:
-            self.reference_points = nn.Embedding(config.num_queries, 4)
+        self.enc_output = nn.Linear(config.d_model, config.d_model)
+        self.enc_output_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.encoder_output_bbox_embed = MMGroundingDinoMLPPredictionHead(
+            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+        )
         self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
 
         self.post_init()
@@ -2427,29 +2415,18 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
 
         self.model = MMGroundingDinoModel(config)
 
-        if config.decoder_cls_embed_share:
-            _class_embed = MMGroundingDinoContrastiveEmbedding(config)
-            self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
-        else:
-            module_list = []
-            for _ in range(config.decoder_layers):
-                _class_embed = MMGroundingDinoContrastiveEmbedding(config)
-                module_list.append(_class_embed)
-            self.class_embed = nn.ModuleList(module_list)
+        self.class_embed = nn.ModuleList(
+            [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
+        )
 
-        if config.decoder_bbox_embed_share:
-            _bbox_embed = MMGroundingDinoMLPPredictionHead(
-                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-            )
-            self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
-        else:
-            module_list = []
-            for _ in range(config.decoder_layers):
-                _bbox_embed = MMGroundingDinoMLPPredictionHead(
+        self.bbox_embed = nn.ModuleList(
+            [
+                MMGroundingDinoMLPPredictionHead(
                     input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
                 )
-                module_list.append(_bbox_embed)
-            self.bbox_embed = nn.ModuleList(module_list)
+                for _ in range(config.decoder_layers)
+            ]
+        )
 
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed

@@ -17,21 +17,30 @@ import math
 import torch
 from torch import nn
 
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
+from ..auto import CONFIG_MAPPING
+from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.configuration_grounding_dino import GroundingDinoConfig
 from ..grounding_dino.modeling_grounding_dino import (
     GroundingDinoContrastiveEmbedding,
+    GroundingDinoConvEncoder,
+    GroundingDinoConvModel,
     GroundingDinoDecoder,
+    GroundingDinoEncoder,
     GroundingDinoForObjectDetection,
     GroundingDinoMLPPredictionHead,
     GroundingDinoModel,
     GroundingDinoPreTrainedModel,
+    build_position_encoding,
 )
 
 
-# --- config --- #
+logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(GroundingDinoConfig):
+class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
@@ -126,19 +135,12 @@ class MMGroundingDinoConfig(GroundingDinoConfig):
             Whether to initialize the target with Embedding weights.
         query_dim (`int`, *optional*, defaults to 4):
             The dimension of the query vector.
-        decoder_bbox_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the bbox regression head for all decoder layers.
-        two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
-            generation.
         positional_embedding_temperature (`float`, *optional*, defaults to 20):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the class head for all decoder layers.
 
     Examples:
 
@@ -159,18 +161,132 @@ class MMGroundingDinoConfig(GroundingDinoConfig):
 
     def __init__(
         self,
-        decoder_bbox_embed_share=False,
-        decoder_cls_embed_share=False,
-        **super_kwargs,
+        backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
+        use_timm_backbone=False,
+        backbone_kwargs=None,
+        text_config=None,
+        num_queries=900,
+        encoder_layers=6,
+        encoder_ffn_dim=2048,
+        encoder_attention_heads=8,
+        decoder_layers=6,
+        decoder_ffn_dim=2048,
+        decoder_attention_heads=8,
+        is_encoder_decoder=True,
+        activation_function="relu",
+        d_model=256,
+        dropout=0.1,
+        attention_dropout=0.0,
+        activation_dropout=0.0,
+        auxiliary_loss=False,
+        position_embedding_type="sine",
+        num_feature_levels=4,
+        encoder_n_points=4,
+        decoder_n_points=4,
+        two_stage=True,
+        class_cost=1.0,
+        bbox_cost=5.0,
+        giou_cost=2.0,
+        bbox_loss_coefficient=5.0,
+        giou_loss_coefficient=2.0,
+        focal_alpha=0.25,
+        disable_custom_kernels=False,
+        # other parameters
+        max_text_len=256,
+        text_enhancer_dropout=0.0,
+        fusion_droppath=0.1,
+        fusion_dropout=0.0,
+        embedding_init_target=True,
+        query_dim=4,
+        positional_embedding_temperature=20,
+        init_std=0.02,
+        layer_norm_eps=1e-5,
+        **kwargs,
     ):
-        super().__init__(
-            decoder_bbox_embed_share=decoder_bbox_embed_share,
-            **super_kwargs,
+        PretrainedConfig.__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        if backbone_config is None and backbone is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
+            backbone_config = CONFIG_MAPPING["swin"](
+                window_size=7,
+                image_size=224,
+                embed_dim=96,
+                depths=[2, 2, 6, 2],
+                num_heads=[3, 6, 12, 24],
+                out_indices=[2, 3, 4],
+            )
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
         )
-        self.decoder_cls_embed_share = decoder_cls_embed_share
 
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
 
-# --- modeling --- #
+        self.backbone_config = backbone_config
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
+        self.num_queries = num_queries
+        self.d_model = d_model
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_layers = encoder_layers
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.activation_function = activation_function
+        self.auxiliary_loss = auxiliary_loss
+        self.position_embedding_type = position_embedding_type
+        # deformable attributes
+        self.num_feature_levels = num_feature_levels
+        self.encoder_n_points = encoder_n_points
+        self.decoder_n_points = decoder_n_points
+        self.two_stage = two_stage
+        # Hungarian matcher
+        self.class_cost = class_cost
+        self.bbox_cost = bbox_cost
+        self.giou_cost = giou_cost
+        # Loss coefficients
+        self.bbox_loss_coefficient = bbox_loss_coefficient
+        self.giou_loss_coefficient = giou_loss_coefficient
+        self.focal_alpha = focal_alpha
+        self.disable_custom_kernels = disable_custom_kernels
+        # Text backbone
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bert"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["bert"]()
+
+        self.text_config = text_config
+        self.max_text_len = max_text_len
+
+        # Text Enhancer
+        self.text_enhancer_dropout = text_enhancer_dropout
+        # Fusion
+        self.fusion_droppath = fusion_droppath
+        self.fusion_dropout = fusion_dropout
+        # Others
+        self.embedding_init_target = embedding_init_target
+        self.query_dim = query_dim
+        self.positional_embedding_temperature = positional_embedding_temperature
+        self.init_std = init_std
+        self.layer_norm_eps = layer_norm_eps
 
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
@@ -203,15 +319,82 @@ class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
             nn.init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
 
 
-# TODO: this one is useless, but without it class order in modeling gets messed up
+class MMGroundingDinoConvEncoder(GroundingDinoConvEncoder):
+    pass
+
+
+class MMGroundingDinoConvModel(GroundingDinoConvModel):
+    pass
+
+
+class MMGroundingDinoEncoder(GroundingDinoEncoder):
+    pass
+
+
 class MMGroundingDinoDecoder(GroundingDinoDecoder):
     pass
 
 
-class MMGroundingDinoModel(GroundingDinoModel):
+class MMGroundingDinoModel(GroundingDinoModel, MMGroundingDinoPreTrainedModel):
     def __init__(self, config: MMGroundingDinoConfig):
-        super().__init__(config)
+        MMGroundingDinoPreTrainedModel.__init__(config)
+
+        # Create backbone + positional encoding
+        backbone = MMGroundingDinoConvEncoder(config)
+        position_embeddings = build_position_encoding(config)
+        self.backbone = MMGroundingDinoConvModel(backbone, position_embeddings)
+
+        # Create input projection layers
+        if config.num_feature_levels > 1:
+            num_backbone_outs = len(backbone.intermediate_channel_sizes)
+            input_proj_list = []
+            for i in range(num_backbone_outs):
+                in_channels = backbone.intermediate_channel_sizes[i]
+                input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                )
+            for _ in range(config.num_feature_levels - num_backbone_outs):
+                input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                )
+                in_channels = config.d_model
+            self.input_proj_vision = nn.ModuleList(input_proj_list)
+        else:
+            self.input_proj_vision = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                ]
+            )
+
+        # Create text backbone
+        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
+        self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
+
+        if config.embedding_init_target or not config.two_stage:
+            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
+
+        self.encoder = MMGroundingDinoEncoder(config)
+        self.decoder = MMGroundingDinoDecoder(config)
+
+        self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+
+        self.enc_output = nn.Linear(config.d_model, config.d_model)
+        self.enc_output_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.encoder_output_bbox_embed = MMGroundingDinoMLPPredictionHead(
+            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+        )
         self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
+
+        self.post_init()
 
 
 class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
@@ -231,29 +414,18 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
 
         self.model = MMGroundingDinoModel(config)
 
-        if config.decoder_cls_embed_share:
-            _class_embed = MMGroundingDinoContrastiveEmbedding(config)
-            self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
-        else:
-            module_list = []
-            for _ in range(config.decoder_layers):
-                _class_embed = MMGroundingDinoContrastiveEmbedding(config)
-                module_list.append(_class_embed)
-            self.class_embed = nn.ModuleList(module_list)
+        self.class_embed = nn.ModuleList(
+            [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
+        )
 
-        if config.decoder_bbox_embed_share:
-            _bbox_embed = MMGroundingDinoMLPPredictionHead(
-                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-            )
-            self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
-        else:
-            module_list = []
-            for _ in range(config.decoder_layers):
-                _bbox_embed = MMGroundingDinoMLPPredictionHead(
+        self.bbox_embed = nn.ModuleList(
+            [
+                MMGroundingDinoMLPPredictionHead(
                     input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
                 )
-                module_list.append(_bbox_embed)
-            self.bbox_embed = nn.ModuleList(module_list)
+                for _ in range(config.decoder_layers)
+            ]
+        )
 
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed
