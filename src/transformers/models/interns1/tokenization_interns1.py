@@ -27,6 +27,7 @@ import sentencepiece as spm
 from ...models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -347,6 +348,7 @@ class SmilesCheckModule(InternS1CheckModuleMixin):
         return self.check_brackets(text)
 
 
+@requires(backends=("sentencepiece",))
 class InternS1Tokenizer(Qwen2Tokenizer):
     """
     Construct an InternS1 tokenizer. Based on byte-level Byte-Pair-Encoding.
