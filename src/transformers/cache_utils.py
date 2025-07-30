@@ -34,12 +34,10 @@ class CacheLayerMixin(ABC):
         self.keys, self.values = None, None
 
     @abstractmethod
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]: ...
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None) -> tuple[torch.Tensor, torch.Tensor]: ...
+
+    @abstractmethod
+    def lazy_initializion(self, key_states: torch.Tensor): ...
 
     @abstractmethod
     def get_seq_length(self, cache_position=None) -> int: ...
@@ -75,6 +73,10 @@ class DynamicLayer(CacheLayerMixin):
 
     is_sliding = False
 
+    def lazy_initializion(self, key_states: torch.Tensor):
+        dtype, device = key_states.dtype, key_states.device
+        self.keys, self.values = torch.tensor([], dtype=dtype, device=device), torch.tensor([], dtype=dtype, device=device)
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -95,12 +97,12 @@ class DynamicLayer(CacheLayerMixin):
         Return:
             A tuple containing the updated key and value states.
         """
+        # Lazy initialization
         if self.keys is None:
-            self.keys = key_states
-            self.values = value_states
-        else:
-            self.keys = torch.cat([self.keys, key_states], dim=-2)
-            self.values = torch.cat([self.values, value_states], dim=-2)
+            self.lazy_initializion(key_states, value_states)
+
+        self.keys = torch.cat([self.keys, key_states], dim=-2)
+        self.values = torch.cat([self.values, value_states], dim=-2)
         return self.keys, self.values
 
     def get_seq_length(self, cache_position=None) -> int:
@@ -186,37 +188,19 @@ class StaticLayer(CacheLayerMixin):
     is_compileable = True
     is_sliding = False
 
-    def __init__(
-        self,
-        max_cache_len: int,
-        batch_size: int,
-        num_heads: int,
-        head_dim: int,
-        dtype: torch.dtype = torch.float32,
-        device: str = "cpu",
-    ):
+    def __init__(self, max_cache_len: int):
         """
         Args:
             max_cache_len (`int`):
                 Maximum number of tokens that can be stored, used for tensor preallocation.
-            batch_size (`int`):
-                Maximum batch size the cache is pre-allocated for.
-            num_heads (`int`):
-                Number of attention heads.
-            head_dim (`int`):
-                Per-head hidden dimension.
-            dtype (`torch.dtype`, defaults to `torch.float32`):
-                Data type of the cache tensors.
-            device (`str` or `torch.device`, defaults to `"cpu"`):
-                Device on which the cache tensors will be materialised.
         """
+        super().__init__()
         self.max_cache_len = max_cache_len
-        self.max_batch_size = batch_size
-        self.num_heads = num_heads
-        self.head_dim = head_dim
-        self.dtype = dtype
-        self.device = torch.device(device)
 
+    def lazy_initializion(self, key_states):
+        self.max_batch_size, self.num_heads, _, self.head_dim = key_states.shape
+        self.dtype, self.device = key_states.dtype, key_states.device
+        
         self.keys = torch.zeros(
             (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
             dtype=self.dtype,
@@ -231,10 +215,6 @@ class StaticLayer(CacheLayerMixin):
         # preventing compiled graph breaks when updating the cache.
         torch._dynamo.mark_static_address(self.keys)
         torch._dynamo.mark_static_address(self.values)
-
-    def get_max_cache_shape(self) -> int:
-        """Return the maximum cache shape of the cache"""
-        return self.max_cache_len
 
     def update(
         self,
@@ -253,17 +233,11 @@ class StaticLayer(CacheLayerMixin):
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
         """
-        cache_position = cache_kwargs.get("cache_position")
-        key_states = key_states.to(self.keys.dtype)
-        value_states = value_states.to(self.values.dtype)
+        # Lazy initialization
+        if self.keys is None:
+            self.lazy_initializion(key_states, value_states)
 
-        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
-        # the device_map. However, even if it is the case, this will only run once, because then the new states received
-        # will always have the same device
-        if self.device != key_states.device:
-            self.device = key_states.device
-            self.keys = self.keys.to(self.device)
-            self.values = self.values.to(self.device)
+        cache_position = cache_kwargs.get("cache_position")
 
         # Update the cache
         try:
@@ -274,6 +248,10 @@ class StaticLayer(CacheLayerMixin):
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
         return self.keys, self.values
+    
+    def get_max_cache_shape(self) -> int:
+        """Return the maximum cache shape of the cache"""
+        return self.max_cache_len
 
     def get_seq_length(self, cache_position=None) -> int:
         """Returns the sequence length of the cached states."""
@@ -307,42 +285,16 @@ class SlidingWindowLayer(StaticLayer):
 
     is_sliding = True
 
-    def __init__(
-        self,
-        max_cache_len: int,
-        batch_size: int,
-        num_heads: int,
-        head_dim: int,
-        sliding_window: int,
-        dtype: torch.dtype = torch.float32,
-        device: str = "cpu",
-    ):
+    def __init__(self, max_cache_len: int, sliding_window: int):
         """
         Args:
             max_cache_len (`int`):
                 Maximum number of tokens that can be stored, used for tensor preallocation.
-            batch_size (`int`):
-                Maximum batch size the cache is pre-allocated for.
-            num_heads (`int`):
-                Number of attention heads.
-            head_dim (`int`):
-                Per-head hidden dimension.
             sliding_window (`int`):
                 The size of the sliding window.
-            dtype (`torch.dtype`, defaults to `torch.float32`):
-                Data type of the cache tensors.
-            device (`str` or `torch.device`, defaults to `"cpu"`):
-                Device on which the cache tensors will be materialised.
         """
         effective_max_cache_len = min(sliding_window, max_cache_len)
-        super().__init__(
-            max_cache_len=effective_max_cache_len,
-            batch_size=batch_size,
-            num_heads=num_heads,
-            head_dim=head_dim,
-            dtype=dtype,
-            device=device,
-        )
+        super().__init__(max_cache_len=effective_max_cache_len)
         self.cumulative_length = 0
 
     def update(
@@ -362,18 +314,11 @@ class SlidingWindowLayer(StaticLayer):
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
         """
+        # Lazy initialization
+        if self.keys is None:
+            self.lazy_initializion(key_states, value_states)
+
         cache_position = cache_kwargs.get("cache_position")
-
-        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
-        # the device_map. However, even if it is the case, this will only run once, because then the new states received
-        # will always have the same device
-        if self.device != key_states.device:
-            self.device = key_states.device
-            self.keys = self.keys.to(self.device)
-            self.values = self.values.to(self.device)
-
-        key_states = key_states.to(self.keys.dtype)
-        value_states = value_states.to(self.values.dtype)
 
         cumulative_length = self.cumulative_length
         # Update it now that we saved the value above
@@ -434,15 +379,11 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         value_states: torch.Tensor,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        cache_position = cache_kwargs.get("cache_position")
+        # Lazy initialization
+        if self.keys is None:
+            self.lazy_initializion(key_states, value_states)
 
-        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
-        # the device_map. However, even if it is the case, this will only run once, because then the new states received
-        # will always have the same device
-        if self.device != key_states.device:
-            self.device = key_states.device
-            self.keys = self.keys.to(self.device)
-            self.values = self.values.to(self.device)
+        cache_position = cache_kwargs.get("cache_position")
 
         cumulative_length = self.cumulative_length
         # Update it now that we saved the value above
@@ -1067,56 +1008,30 @@ class Cache:
         layer_classes (`type[CacheLayerMixin]` or `list[type[CacheLayerMixin]]`):
             A list of `CacheLayerMixin` classes to instantiate for the cache. If only a `CacheLayerMixin` class is
             provided, then it is used for all layers.
-        config (`PretrainedConfig`, *optional*):
-            Model configuration used to infer number of layers, head sizes, default
-            device/dtype, etc.
+        
         cache_processor (`CacheProcessor` or `str`, *optional*):
             Cache processor to apply (e.g., "offloaded", "quanto_quantized", "hqq_quantized")
             or a CacheProcessor class.
-        max_batch_size (`int`, *optional*): Maximum batch size for static caches.
-        max_cache_len (`int`, *optional*): Maximum sequence length. For hybrid caches, SlidingWindowLayers are
-            clamped to `min(sliding_window, max_cache_len)`, StaticLayers use full `max_cache_len`.
-        device (`torch.device`, *optional*): Device for cache tensors.
-        dtype (`torch.dtype`, *optional*): Data type for cache tensors.
-        layer_device_map (`dict[int, Union[str, torch.device]]`, *optional*): Per-layer device mapping.
-        tp_size (`int`, *optional*): Tensor parallel size to adjust the number of key/value heads.
-
-    Additional keyword arguments are forwarded to the chosen layers constructor(s) and CacheProcessors. See the
-    documentation of the relevant `CacheLayerMixin` class and `CacheProcessor` class for more details.
     """
 
     def __init__(
         self,
-        layer_classes: Union[list[type[CacheLayerMixin]], type[CacheLayerMixin]],
-        config: Optional[PretrainedConfig] = None,
-        cache_processor: Optional[Union[str, type[CacheProcessor]]] = None,
-        max_batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Union[torch.device, str, None] = None,
-        dtype: Optional[torch.dtype] = None,
-        layer_device_map: Optional[dict[int, torch.device]] = None,
-        tp_size: Optional[int] = None,
-        **kwargs,
+        layers: Optional[list[CacheLayerMixin]] = None,
+        layer_class_to_replicate: Optional[type[CacheLayerMixin]] = None,
+        cache_processor: Optional[CacheProcessor] = None,
     ):
-        self.layers: list[CacheLayerMixin] = []
-        self.layer_classes = layer_classes
-
-        processor_class = PROCESSOR_CLASS_MAP[cache_processor] if isinstance(cache_processor, str) else cache_processor
-        kwargs.update(
-            max_batch_size=max_batch_size,
-            max_cache_len=max_cache_len,
-            device=device,
-            dtype=dtype,
-            layer_device_map=layer_device_map,
-            tp_size=tp_size,
-        )
-        processor_kwargs, kwargs = parse_processor_args(processor_class, kwargs)
-
-        self.layer_init_kwargs = parse_layer_args_from_model_config(config, **kwargs)
-        self.num_hidden_layers = getattr(config, "num_hidden_layers", 1)
-
-        self.append_new_layers(self.num_hidden_layers - 1)
-        self.cache_processor = processor_class(self, **processor_kwargs) if processor_class is not None else None
+        if layers is not None and layer_class_to_replicate is not None:
+            raise ValueError(
+                "You can construct a Cache either from a list `layers` of all the predefined `CacheLayer`, or from a " 
+                "`layer_class_to_replicate`, in which case the Cache will append a new layer corresponding to "
+                "`layer_class_to_replicate` for each new call to `update` with an idx not already in the Cache.")
+        if layers is None and layer_class_to_replicate is None:
+            raise ValueError(
+                "You should provide exactly one of `layers` or `layer_class_to_replicate` to initialize a Cache."
+            )
+        self.layers = layers if layers is not None else []
+        self.layer_class_to_replicate = layer_class_to_replicate
+        self.cache_processor = cache_processor
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -1160,26 +1075,6 @@ class Cache:
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
 
-    def append_new_layers(self, layer_idx: int) -> None:
-        """
-        Appends layers to the cache until the layer `layer_idx` is reached.
-        Used for preallocation in static caches and on the fly in dynamic caches.
-
-        Args:
-            layer_idx (`int`):
-                The index of the layer to append.
-        """
-        while len(self.layers) <= layer_idx:
-            kwargs = self.layer_init_kwargs.copy()
-            if self.layer_init_kwargs.get("layer_device_map", None) is not None:
-                kwargs["device"] = kwargs.pop("layer_device_map")[len(self.layers)]
-
-            new_layer_class = (
-                self.layer_classes[len(self.layers)] if isinstance(self.layer_classes, list) else self.layer_classes
-            )
-            new_layer = new_layer_class(**kwargs)
-            self.layers.append(new_layer)
-
     @apply_processors
     def update(
         self,
@@ -1205,7 +1100,11 @@ class Cache:
         Return:
             A tuple containing the updated key and value states.
         """
-        self.append_new_layers(layer_idx)
+        # In this case, the `layers` were not provided, and we must append as much as `layer_idx`
+        if self.layer_class_to_replicate is not None:
+            while len(self.layers) <= layer_idx:
+                self.layers.append(self.layer_class_to_replicate())
+
         return self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
 
     def get_seq_length(self, layer_idx: int = 0, cache_position=None) -> int:
@@ -1221,11 +1120,9 @@ class Cache:
         """
         Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
         the given layer at `layer_idx`.
-        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
-        for each layer.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns for each layer.
         """
-        kv_length, kv_offset = self.layers[layer_idx].get_mask_sizes(cache_position)
-        return kv_length, kv_offset
+        return self.layers[layer_idx].get_mask_sizes(cache_position)
 
     @property
     def key_cache(self) -> KeyValuesWrapper:
@@ -1327,17 +1224,18 @@ class DynamicCache(Cache):
     """
 
     # Specialized constructor for DDP cache data, needed for BC
-    def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None, *args, **kwargs):
-        super().__init__(layer_classes=DynamicLayer, *args, **kwargs)
+    def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None):
         # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
         # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
         # (shape=[global batch size, num_heads, seq_len, head_dim]).
-        # WARNING: `ddp_cache_data` must be the first argument in `__init__`, otherwise we'll break
-        # compatibility. The name of the argument doesn't matter.
         if ddp_cache_data is not None:
+            layers = []
             for key_states, value_states in ddp_cache_data:
-                self.layers.append(DynamicLayer.from_tensors(key_states, value_states))
+                layers.append(DynamicLayer.from_tensors(key_states, value_states))
+            super().__init__(layers=layers)
+        else:
+            super().__init__(layer_class_to_replicate=DynamicLayer)
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
         """
@@ -1425,8 +1323,8 @@ class OffloadedCache(DynamicCache):
     """
 
     def __init__(self) -> None:
-        # Create the underlying cache with offload processor
-        super().__init__(cache_processor=OffloadedCacheProcessor)
+        super().__init__()
+        self.cache_processor = OffloadedCacheProcessor
 
 
 class StaticCache(Cache):
@@ -1455,8 +1353,9 @@ class StaticCache(Cache):
         ```
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(layer_classes=StaticLayer, *args, **kwargs)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+        layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
+        super().__init__(layers=layers)
 
 
 class OffloadedStaticCache(StaticCache):
@@ -1493,27 +1392,14 @@ class OffloadedStaticCache(StaticCache):
         ```
     """
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, cache_processor=OffloadedCacheProcessor, **kwargs)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+        super().__init__(max_cache_len, config)
+        self.cache_processor = OffloadedCacheProcessor
 
 
 class SlidingWindowCache(Cache):
     """
     Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
-    Every time when we try to update the cache, we compute the `indices` based on `cache_position >= self.sliding_window - 1`,
-    if true(which means the cache can not hold all the old key value states and new states together because of the sliding window constraint),
-    we need to do a cycle shift based on `indices` to replace the oldest states by the new key value states passed in.
-
-    The `to_shift` is only true once we are above sliding_window. Thus with `sliding_window==64`:
-
-    indices = (slicing + to_shift[-1].sum()-1) % self.sliding_window
-    tensor([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-        19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-        37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
-        55, 56, 57, 58, 59, 60, 61, 62, 63,  0])
-
-    We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window`)
-
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
@@ -1536,8 +1422,9 @@ class SlidingWindowCache(Cache):
         ```
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(layer_classes=SlidingWindowLayer, *args, **kwargs)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+        layers = [SlidingWindowLayer(max_cache_len, config.sliding_window) for _ in range(config.num_hidden_layers)]
+        super().__init__(layers=layers)
 
 
 class HybridCache(Cache):
@@ -1569,13 +1456,20 @@ class HybridCache(Cache):
         ```
     """
 
-    def __init__(self, config: PretrainedConfig, *args, **kwargs):
+    def __init__(self, max_cache_len: int, config: PretrainedConfig):
         if hasattr(config, "layer_types"):
-            layer_classes = [LAYER_CLASS_MAP[layer_type] for layer_type in config.layer_types]
+            layers = []
+            for layer_type in config.layer_types:
+                init_kwargs = {"max_cache_len": max_cache_len}
+                if layer_type == "sliding_attention":
+                    init_kwargs["sliding_window"] = config.sliding_window
+                elif layer_type == "chunked_attention":
+                    init_kwargs["sliding_window"] = config.attention_chunk_size
+                layers.append(LAYER_CLASS_MAP[layer_type](**init_kwargs))
         else:
             # In this case, fall back to StaticCache
-            layer_classes = [StaticLayer] * config.num_hidden_layers
-        super().__init__(config=config, layer_classes=layer_classes, *args, **kwargs)
+            layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
+        super().__init__(layers=layers)
 
 
 # The mapping already handles dispatching the correct layers in Hybrid, this is only used for BC
@@ -1593,8 +1487,9 @@ class OffloadedHybridCache(HybridChunkedCache):
     See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, cache_processor=OffloadedCacheProcessor, **kwargs)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+        super().__init__(max_cache_len, config)
+        self.cache_processor = OffloadedCacheProcessor
 
 
 class QuantizedCache(DynamicCache):
@@ -1613,15 +1508,15 @@ class QuantizedCache(DynamicCache):
     See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
-    def __init__(self, backend, **kwargs) -> None:
+    def __init__(self, backend) -> None:
         if backend == "quanto":
             processor = QuantoQuantizedCacheProcessor
         elif backend == "hqq":
             processor = HQQQuantizedCacheProcessor
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
-
-        super().__init__(cache_processor=processor, **kwargs)
+        super().__init__()
+        self.cache_processor = processor
 
 
 class QuantoQuantizedCache(QuantizedCache):
@@ -1661,8 +1556,8 @@ class QuantoQuantizedCache(QuantizedCache):
         ```
     """
 
-    def __init__(self, **kwargs) -> None:
-        DynamicCache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
+    def __init__(self):
+        super().__init__(backend="quanto")
 
 
 class HQQQuantizedCache(QuantizedCache):
@@ -1702,9 +1597,8 @@ class HQQQuantizedCache(QuantizedCache):
         ```
     """
 
-    def __init__(self, backend="HQQ", **kwargs) -> None:
-        assert backend == "HQQ"
-        DynamicCache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
+    def __init__(self):
+        super().__init__(backend="HQQ")
 
 
 class EncoderDecoderCache(Cache):
@@ -1912,81 +1806,6 @@ def parse_processor_args(processor_class: Optional[type["CacheProcessor"]], kwar
     remaining_kwargs = {k: v for k, v in kwargs.items() if k not in processor_kwargs}
     return processor_kwargs, remaining_kwargs
 
-
-def parse_layer_args_from_model_config(
-    config: Optional[PretrainedConfig],
-    batch_size: Optional[int] = None,
-    max_cache_len: Optional[int] = None,
-    device: Union[torch.device, str, None] = None,
-    dtype: Optional[torch.dtype] = None,
-    layer_device_map: Optional[dict[int, torch.device]] = None,
-    tp_size: Optional[int] = None,
-    max_batch_size: Optional[int] = None,
-) -> dict:
-    """
-    Parse layer arguments from model configuration for cache initialization.
-
-    Args:
-        config (`Optional[PretrainedConfig]`): Model configuration containing shape/device info.
-        batch_size (`Optional[int]`): Batch size for cache initialization.
-        max_cache_len (`Optional[int]`): Maximum sequence length for cache.
-        device (`Union[torch.device, str, None]`): Device for cache tensors.
-        dtype (`Optional[torch.dtype]`): Data type for cache tensors.
-        layer_device_map: Per-layer device mapping.
-        tp_size (`Optional[int]`): Tensor parallel size to adjust number of key/value heads.
-        max_batch_size (`Optional[int]`): Maximum batch size for cache initialization.
-
-    Returns:
-        `dict`: Dictionary containing parsed layer arguments for cache initialization.
-    """
-    # No model config -> must be a dynamic cache, return bare dict
-    if config is None:
-        return {}
-    # Build the args dict for hybrid, sliding or static
-    else:
-        # Hybrid/Sliding caches require a config that supports sliding_window (max_cache_len already used)
-        if (
-            getattr(config, "layer_types", None) is not None
-            and "sliding_attention" in config.layer_types
-            and "full_attention" in config.layer_types
-        ):
-            if getattr(config, "sliding_window", None) is None:
-                raise ValueError(
-                    "Setting up a hybrid or sliding window KVCache requires the model config supporting "
-                    "sliding window attention, please check if there is a `sliding_window` field in the model "
-                    "config and it's not set to None."
-                )
-        # Adjust max_cache_len for sliding window layers (they can't be larger than sliding window)
-        max_cache_len = max_cache_len or config.max_position_embeddings
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads:
-        head_dim = (
-            config.head_dim
-            if getattr(config, "head_dim", None) is not None
-            else config.hidden_size // config.num_attention_heads
-        )
-        num_heads = (
-            config.num_attention_heads
-            if getattr(config, "num_key_value_heads", None) is None
-            else config.num_key_value_heads
-        )
-        if tp_size is not None and tp_size > 1:
-            if num_heads % tp_size != 0:
-                raise ValueError(
-                    f"Number of key value heads {num_heads} must be divisible by tensor parallel size {tp_size}."
-                )
-            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            num_heads //= tp_size
-        layer_args = {
-            "batch_size": max_batch_size if max_batch_size is not None else batch_size,
-            "max_cache_len": max_cache_len,
-            "device": torch.device(device) if device is not None else None,
-            "dtype": dtype,
-            "layer_device_map": layer_device_map,
-            "head_dim": head_dim,
-            "num_heads": num_heads,
-            "sliding_window": getattr(config, "sliding_window", None),
-        }
-        return {k: v for k, v in layer_args.items() if v is not None}
 
 
 LAYER_CLASS_MAP: dict[str, type["CacheLayerMixin"]] = {
