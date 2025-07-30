@@ -163,6 +163,8 @@ class Glm4v_moeTextConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -237,7 +239,7 @@ class Glm4v_moeTextConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=1000000.0,
         rope_scaling=None,
-        attention_bias=False,
+        attention_bias=True,
         attention_dropout=0.0,
         moe_intermediate_size=1408,
         num_experts_per_tok=8,
