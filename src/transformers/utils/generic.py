@@ -413,11 +413,7 @@ class ModelOutput(OrderedDict):
             # set the associated fields
             if first_field_iterator:
                 for idx, element in enumerate(iterator):
-                    if (
-                        not isinstance(element, (list, tuple))
-                        or len(element) != 2
-                        or not isinstance(element[0], str)
-                    ):
+                    if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
                             # If we do not have an iterator of key/values, set it as attribute
                             self[class_fields[0].name] = first_field
