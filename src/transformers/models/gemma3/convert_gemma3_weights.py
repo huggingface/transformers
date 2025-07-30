@@ -468,7 +468,6 @@ def convert_transformer_weights(
             converted_paths = [f"{base_path}.self_attn.q_norm.weight"]
             converted_weights = [weights]
         elif path.endswith("mlp/gating_einsum"):
-
             converted_paths = [
                 f"{base_path}.mlp.gate_proj.weight",
                 f"{base_path}.mlp.up_proj.weight",
