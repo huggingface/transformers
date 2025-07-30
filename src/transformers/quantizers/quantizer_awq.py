@@ -104,9 +104,7 @@ class AwqQuantizer(HfQuantizer):
             )
             dtype = torch.float16
         elif dtype != torch.float16 and (torch.cuda.is_available() or torch.xpu.is_available()):
-            logger.warning(
-                "We suggest you to set `dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ."
-            )
+            logger.warning("We suggest you to set `dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ.")
         return dtype
 
     def _process_model_before_weight_loading(

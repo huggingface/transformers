@@ -358,7 +358,7 @@ class ServeArguments:
     torch_dtype: Optional[str] = field(
         default=None,
         metadata={
-            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.
+            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
             "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
