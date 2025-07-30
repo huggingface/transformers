@@ -793,6 +793,12 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
+        # For BC on the old `torch_dtype`
+        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # If both are present, use `dtype`
+            kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
+
         # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
 
@@ -819,7 +825,7 @@ class PretrainedConfig(PushToHubMixin):
                 if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
                     value = current_attr.__class__(**value)
                 setattr(config, key, value)
-                if key not in ("dtype", "torch_dtype"):
+                if key != "dtype":
                     to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
