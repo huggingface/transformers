@@ -251,10 +251,15 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, audio):
         output_dict = {}
 
+        if self.model.config.model_type == "csm":
+            waveform_key = "audio"
+        else:
+            waveform_key = "waveform"
+
         # We directly get the waveform
         if self.no_processor:
             if isinstance(audio, dict):
-                waveform = audio["waveform"]
+                waveform = audio[waveform_key]
             elif isinstance(audio, tuple):
                 waveform = audio[0]
             else:
