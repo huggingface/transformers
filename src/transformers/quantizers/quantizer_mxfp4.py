@@ -165,20 +165,23 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         loaded_weight = torch.nn.functional.pad(
                             param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         )
-                        quantized, weight_scale = quantize_to_mxfp4(loaded_weight)
+                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
                         module.gate_up_proj_precision_config = PrecisionConfig(
                             weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
                         )
-                        module.gate_up_proj = torch.nn.Parameter(quantized, requires_grad=False)
+                        module.gate_up_proj = triton_weight_tensor
+                        # module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
                     elif "down_proj" in param_name:
                         right_pad = module.down_proj_right_pad
                         bottom_pad = module.down_proj_bottom_pad
                         loaded_weight = torch.nn.functional.pad(
                             param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         ).to(target_device)
-                        quantized, weight_scale = quantize_to_mxfp4(loaded_weight)
+                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
                         module.down_proj_precision_config = PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData()))
-                        module.down_proj = torch.nn.Parameter(quantized, requires_grad=False)
+                        module.down_proj = triton_weight_tensor
+                        # module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
+
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
@@ -279,31 +282,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def update_tp_plan(self, config):
         if "OpenAIMoeConfig" in config.__class__.__name__:
-            if (not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None) or (
-                not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None
-            ):
-                return config
-
-            # Update TP plan with scales and blocks
-            config.base_model_tp_plan.update(
-                {
-                    "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
-                    "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
-                    "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
-                    "layers.*.mlp.experts.down_proj_scales": "local_colwise",
-                }
-            )
-
-            # Update EP plan with scales and blocks
-            config.base_model_ep_plan.update(
-                {
+            if getattr(config, "base_model_tp_plan", None) is not None:
+                config.base_model_tp_plan.update(
+                    {
                     "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
                     "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
                     "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
                     "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
-                }
-            )
-
+                    }
+                )
         return config
 
     def update_param_name(self, param_name: str) -> str:
