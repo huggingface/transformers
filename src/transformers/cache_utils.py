@@ -194,7 +194,6 @@ class StaticLayer(CacheLayerMixin):
         head_dim: int,
         dtype: torch.dtype = torch.float32,
         device: str = "cpu",
-        sliding_window: Optional[int] = None,
     ):
         """
         Args:
@@ -210,28 +209,23 @@ class StaticLayer(CacheLayerMixin):
                 Data type of the cache tensors.
             device (`str` or `torch.device`, defaults to `"cpu"`):
                 Device on which the cache tensors will be materialised.
-
-        Notes:
-            Static layers allocate their full backing tensors up-front and mutate them
-            in-place. See the documentation of `Cache` for shared helper methods that
-            operate uniformly across all layer types.
         """
         self.max_cache_len = max_cache_len
         self.max_batch_size = batch_size
         self.num_heads = num_heads
         self.head_dim = head_dim
         self.dtype = dtype
-        self.device = device
+        self.device = torch.device(device)
 
         self.keys = torch.zeros(
-            (batch_size, num_heads, self.max_cache_len, head_dim),
-            dtype=dtype,
-            device=device,
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            dtype=self.dtype,
+            device=self.device,
         )
         self.values = torch.zeros(
-            (batch_size, num_heads, self.max_cache_len, head_dim),
-            dtype=dtype,
-            device=device,
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            dtype=self.dtype,
+            device=self.device,
         )
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
         # preventing compiled graph breaks when updating the cache.
@@ -259,7 +253,7 @@ class StaticLayer(CacheLayerMixin):
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
         """
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
+        cache_position = cache_kwargs.get("cache_position")
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
@@ -271,20 +265,14 @@ class StaticLayer(CacheLayerMixin):
             self.keys = self.keys.to(self.device)
             self.values = self.values.to(self.device)
 
-        if cache_position is None:
-            # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
-            self.keys.copy_(key_states)
-            self.values.copy_(value_states)
-        else:
-            # Generation phase. Update specific positions.
-            # Use index_copy_ for in-place update (compile-friendly).
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
-                # Fallback for devices like MPS where index_copy_ might not be supported.
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
+        # Update the cache
+        try:
+            self.keys.index_copy_(2, cache_position, key_states)
+            self.values.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.keys[:, :, cache_position] = key_states
+            self.values[:, :, cache_position] = value_states
         return self.keys, self.values
 
     def get_seq_length(self, cache_position=None) -> int:
@@ -319,15 +307,43 @@ class SlidingWindowLayer(StaticLayer):
 
     is_sliding = True
 
-    def __init__(self, sliding_window, *args, **kwargs):
+    def __init__(
+        self,
+        max_cache_len: int,
+        batch_size: int,
+        num_heads: int,
+        head_dim: int,
+        sliding_window: int,
+        dtype: torch.dtype = torch.float32,
+        device: str = "cpu",
+    ):
         """
         Args:
+            max_cache_len (`int`):
+                Maximum number of tokens that can be stored, used for tensor preallocation.
+            batch_size (`int`):
+                Maximum batch size the cache is pre-allocated for.
+            num_heads (`int`):
+                Number of attention heads.
+            head_dim (`int`):
+                Per-head hidden dimension.
             sliding_window (`int`):
-                Effective window size: number of tokens that are kept on each update call.
+                The size of the sliding window.
+            dtype (`torch.dtype`, defaults to `torch.float32`):
+                Data type of the cache tensors.
+            device (`str` or `torch.device`, defaults to `"cpu"`):
+                Device on which the cache tensors will be materialised.
         """
-        max_cache_len = kwargs.pop("max_cache_len", None)
-        max_cache_len = min(sliding_window, max_cache_len) if max_cache_len is not None else sliding_window
-        super().__init__(*args, max_cache_len=max_cache_len, *args, **kwargs)
+        effective_max_cache_len = min(sliding_window, max_cache_len)
+        super().__init__(
+            max_cache_len=effective_max_cache_len,
+            batch_size=batch_size,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            dtype=dtype,
+            device=device,
+        )
+        self.cumulative_length = 0
 
     def update(
         self,
@@ -346,9 +362,7 @@ class SlidingWindowLayer(StaticLayer):
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
         """
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
-        if cache_position is None:
-            raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
+        cache_position = cache_kwargs.get("cache_position")
 
         # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
         # the device_map. However, even if it is the case, this will only run once, because then the new states received
@@ -361,39 +375,31 @@ class SlidingWindowLayer(StaticLayer):
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
+        cumulative_length = self.cumulative_length
+        # Update it now that we saved the value above
+        self.cumulative_length += key_states.shape[-2]
+        is_full = cumulative_length >= self.max_cache_len
+
         # Handle prefill phase when prompt length > sliding_window_size.
         # Note that we store cropped key/value states in the cache but return the full key/value states.
         if cache_position.shape[0] > self.max_cache_len:
-            new_k = key_states[:, :, -self.max_cache_len :, :]
-            new_v = value_states[:, :, -self.max_cache_len :, :]
-            self.keys.copy_(new_k)
-            self.values.copy_(new_v)
+            self.keys.copy_(key_states[:, :, -self.max_cache_len :, :])
+            self.values.copy_(value_states[:, :, -self.max_cache_len :, :])
+            # Return the full states here
             return key_states, value_states
 
-        # Sliding window logic for generation phase or prefill < window
-        slicing = torch.arange(self.max_cache_len, device=self.device)
-        current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
-        to_shift = current_seq_len > self.max_cache_len
-        indices = (slicing + to_shift.sum()) % self.max_cache_len
+        # Here we only assume decoding stage, i.e. 1 token at a time
+        if is_full:
+            self.keys.copy_(torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2))
+            self.values.copy_(torch.cat((self.values[:, :, 1:, :], value_states), dim=-2))
+        else:
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
 
-        k_out_shifted = self.keys[:, :, indices]
-        v_out_shifted = self.values[:, :, indices]
-
-        # Clamp cache_position to determine the *target index* within the shifted cache view
-        update_position = cache_position.clamp(min=0, max=self.max_cache_len - 1)
-
-        try:
-            k_out_updated = k_out_shifted.index_copy(2, update_position, key_states)
-            v_out_updated = v_out_shifted.index_copy(2, update_position, value_states)
-        except NotImplementedError:
-            # Fallback for MPS: clone and modify the clone
-            k_out_updated = k_out_shifted.clone()
-            v_out_updated = v_out_shifted.clone()
-            k_out_updated[:, :, update_position] = key_states
-            v_out_updated[:, :, update_position] = value_states
-
-        self.keys.copy_(k_out_updated)
-        self.values.copy_(v_out_updated)
         return self.keys, self.values
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
@@ -406,6 +412,14 @@ class SlidingWindowLayer(StaticLayer):
         kv_length = max(query_length, self.max_cache_len)
         return kv_length, kv_offset
 
+    def reset(self) -> None:
+        super().reset()
+        self.cumulative_length = 0
+
+    def get_seq_length(self, cache_position=None) -> int:
+        """Returns the sequence length of the cached states."""
+        return self.cumulative_length
+
 
 class ChunkedSlidingLayer(SlidingWindowLayer):
     """
@@ -414,9 +428,42 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
     See `SlidingWindowLayer` for details on common methods that are implemented by all cache layers.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.cumulative_length = 0
+    def __init__(
+        self,
+        max_cache_len: int,
+        batch_size: int,
+        num_heads: int,
+        head_dim: int,
+        sliding_window: int,
+        dtype: torch.dtype = torch.float32,
+        device: str = "cpu",
+    ):
+        """
+        Args:
+            max_cache_len (`int`):
+                Maximum number of tokens that can be stored, used for tensor preallocation.
+            batch_size (`int`):
+                Maximum batch size the cache is pre-allocated for.
+            num_heads (`int`):
+                Number of attention heads.
+            head_dim (`int`):
+                Per-head hidden dimension.
+            sliding_window (`int`):
+                The size of the sliding window.
+            dtype (`torch.dtype`, defaults to `torch.float32`):
+                Data type of the cache tensors.
+            device (`str` or `torch.device`, defaults to `"cpu"`):
+                Device on which the cache tensors will be materialised.
+        """
+        super().__init__(
+            max_cache_len=max_cache_len,
+            batch_size=batch_size,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            sliding_window=sliding_window,
+            dtype=dtype,
+            device=device,
+        )
 
     def update(
         self,
@@ -424,9 +471,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         value_states: torch.Tensor,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
-        if cache_position is None:
-            raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
+        cache_position = cache_kwargs.get("cache_position")
 
         # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
         # the device_map. However, even if it is the case, this will only run once, because then the new states received
@@ -437,6 +482,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
             self.values = self.values.to(self.device)
 
         cumulative_length = self.cumulative_length
+        # Update it now that we saved the value above
         self.cumulative_length += key_states.shape[-2]
         is_full = cumulative_length >= self.max_cache_len
 
@@ -451,6 +497,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
                 self.values.copy_(full_value_states)
                 return self.keys, self.values
         elif not is_full and cumulative_length + key_states.shape[2] > self.max_cache_len:
+            # Fast prefill path, no need to cat() in this case, as the cache is currently empty
             if cumulative_length == 0:
                 full_key_states = key_states
                 full_value_states = value_states
@@ -468,11 +515,9 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
 
         self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
         self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
+        # we should return the whole states instead of `self.keys/values` here, as otherwise we lose some context
+        # which is outside the window
         return full_key_states, full_value_states
-
-    def reset(self) -> None:
-        super().reset()
-        self.cumulative_length = 0
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         query_length = cache_position.shape[0]
