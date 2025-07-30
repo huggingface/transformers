@@ -605,6 +605,34 @@ class PipelineUtilsTest(unittest.TestCase):
         pipe = pipeline("text-generation", device=torch_device)
         _ = pipe("Hello")
 
+    @slow
+    @require_torch
+    def test_bc_torch_device(self):
+        import torch
+
+        from transformers.pipelines import get_supported_tasks
+
+        for task in get_supported_tasks():
+            # Check that it works for all dtypes
+            for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                pipe_torch_dtype = pipeline(task, torch_dtype=dtype)
+                pipe_dtype = pipeline(task, dtype=dtype)
+                # Make sure all parameters have the same dtype
+                for (k1, v1), (k2, v2) in zip(
+                    pipe_torch_dtype.model.named_parameters(), pipe_dtype.model.named_parameters()
+                ):
+                    self.assertEqual(k1, k2)
+                    self.assertEqual(v1.dtype, v2.dtype)
+
+                pipe_torch_dtype = pipeline(task, model_kwargs={"torch_dtype": dtype})
+                pipe_dtype = pipeline(task, model_kwargs={"dtype": dtype})
+                # Make sure all parameters have the same dtype
+                for (k1, v1), (k2, v2) in zip(
+                    pipe_torch_dtype.model.named_parameters(), pipe_dtype.model.named_parameters()
+                ):
+                    self.assertEqual(k1, k2)
+                    self.assertEqual(v1.dtype, v2.dtype)
+
     def check_default_pipeline(self, task, framework, set_seed_fn, check_models_equal_fn):
         from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
@@ -678,33 +706,6 @@ class PipelineUtilsTest(unittest.TestCase):
                 models_are_equal = False
 
         return models_are_equal
-
-    @require_torch
-    def test_bc_torch_device(self):
-        import torch
-
-        from transformers.pipelines import get_supported_tasks
-
-        for task in get_supported_tasks():
-            # Check that it works for all dtypes
-            for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
-                pipe_torch_dtype = pipeline(task, torch_dtype=dtype)
-                pipe_dtype = pipeline(task, dtype=dtype)
-                # Make sure all parameters have the same dtype
-                for (k1, v1), (k2, v2) in zip(
-                    pipe_torch_dtype.model.named_parameters(), pipe_dtype.model.named_parameters()
-                ):
-                    self.assertEqual(k1, k2)
-                    self.assertEqual(v1.dtype, v2.dtype)
-
-                pipe_torch_dtype = pipeline(task, model_kwargs={"torch_dtype": dtype})
-                pipe_dtype = pipeline(task, model_kwargs={"dtype": dtype})
-                # Make sure all parameters have the same dtype
-                for (k1, v1), (k2, v2) in zip(
-                    pipe_torch_dtype.model.named_parameters(), pipe_dtype.model.named_parameters()
-                ):
-                    self.assertEqual(k1, k2)
-                    self.assertEqual(v1.dtype, v2.dtype)
 
 
 class CustomPipeline(Pipeline):
