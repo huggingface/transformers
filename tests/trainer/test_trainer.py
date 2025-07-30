@@ -4563,9 +4563,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             "int64",
             "bool",
         ]:
-            dtype = getattr(torch, dtype)
+            torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
 
                 args_dict = args.to_dict()
                 self.assertIn("dtype", args_dict)

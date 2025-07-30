@@ -954,6 +954,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         binary_output: bool = False,
         **kwargs,
     ):
+        # We need to pop them for _sanitize_parameters call later
+        _, _, _ = kwargs.pop("args_parser", None), kwargs.pop("torch_dtype", None), kwargs.pop("dtype", None)
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
         if framework in ("tf", "jax"):
