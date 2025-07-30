@@ -982,10 +982,14 @@ def pipeline(
             )
         model_kwargs["device_map"] = device_map
 
-        # Kept here for BC with `torch_dtype` argument
-        torch_dtype = kwargs.get("torch_dtype", None)
-        dtype = torch_dtype if torch_dtype is not None and dtype == "auto" else dtype
+        # BC for the `torch_dtype` argument
+        if torch_dtype := kwargs.get("torch_dtype", None) is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # If both are provided, keep `dtype`
+            dtype = torch_dtype if dtype == "auto" else dtype
         if "torch_dtype" in model_kwargs or "dtype" in model_kwargs:
+            if "torch_dtype" in model_kwargs:
+                logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
             # If the user did not explicitly provide `dtype` (i.e. the function default "auto" is still
             # present) but a value is supplied inside `model_kwargs`, we silently defer to the latter instead of
             # raising. This prevents false positives like providing `dtype` only via `model_kwargs` while the

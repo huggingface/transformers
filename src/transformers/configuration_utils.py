@@ -261,6 +261,7 @@ class PretrainedConfig(PushToHubMixin):
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
+        # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
         if torch_dtype := kwargs.get("torch_dtype", None) is not None:
             dtype = dtype if dtype is not None else torch_dtype
         if dtype is not None and isinstance(dtype, str) and is_torch_available():
@@ -419,6 +420,16 @@ class PretrainedConfig(PushToHubMixin):
                     value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
                 )
                 subconfig._attn_implementation = sub_implementation
+
+    @property
+    def torch_dtype(self):
+        logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+        return self.dtype
+    
+    @torch_dtype.setter
+    def torch_dtype(self, value):
+        logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+        self.dtype = value
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
