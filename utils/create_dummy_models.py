@@ -1356,6 +1356,8 @@ def create_tiny_models(
     token,
     num_workers=1,
 ):
+    print("Create")
+
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
         raise ValueError(f"This script should be run from the root of the clone of `transformers` {clone_path}")
@@ -1398,7 +1400,7 @@ def create_tiny_models(
         for c, models_to_create in list(to_create.items()):
             all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
 
-        all_build_args = all_build_args[0:35]
+        all_build_args = all_build_args[0:7]
         with multiprocessing.Pool() as pool:
             results = pool.starmap(build, all_build_args)
             results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
