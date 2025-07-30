@@ -203,7 +203,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         if cls.model is None:
             cls.model = Cohere2VisionForConditionalGeneration.from_pretrained(
                 cls.model_checkpoint,
-                device_map=torch_device,
+                device_map="auto",
                 torch_dtype=torch_dtype,
                 load_in_4bit=load_in_4bit,
             )
@@ -211,7 +211,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_small_model_integration_forward(self):
+    def test_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         messages = [
@@ -238,7 +238,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
                 # 4-bit
                 ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
-                ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
+                ("cuda", 8): [2.4277, 1.6875, 1.8789, 2.1875, 1.9375],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
@@ -253,7 +253,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_deterministic_for_xpu
-    def test_small_model_integration_generate_text_only(self):
+    def test_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         messages = [
@@ -279,7 +279,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
-                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                ("cuda", 8): "**Haiku**\n\n*Softly falls the snow*\n*Blanketing the earth in white*\n*",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -289,7 +289,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_deterministic_for_xpu
-    def test_small_model_integration_generate_chat_template(self):
+    def test_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         messages = [
@@ -316,7 +316,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
                 # 4-bit
                 ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
-                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+                ("cuda", 8): 'The image depicts two cats lying on a bright pink blanket that covers a red couch. The cat',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -325,7 +325,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_small_model_integration_batched_generate(self):
+    def test_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         # Prepare inputs
@@ -362,7 +362,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
                 # 4-bit
                 ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
-                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+                ("cuda", 8): 'Dock stretches to calm,  \nMountains whisper through the trees,  \nLake mirrors the sky.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -381,7 +381,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
                 # 4-bit
                 ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
-                ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                ("cuda", 8): 'The image depicts a vibrant street scene in what appears to be a Chinatown district, likely in an urban area. The focal',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -395,7 +395,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_deterministic_for_xpu
-    def test_small_model_integration_batched_generate_multi_image(self):
+    def test_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         # Prepare inputs
@@ -441,7 +441,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
                 ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
-                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+                ("cuda", 8): 'Dock stretches to calm,  \nMountains whisper through the trees,  \nLake mirrors the sky.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -458,7 +458,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
                 ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
-                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
+                ("cuda", 8): 'The two landmarks depicted in the images are the Statue of Liberty and the Golden Gate Bridge. \n\n1. **Statue',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

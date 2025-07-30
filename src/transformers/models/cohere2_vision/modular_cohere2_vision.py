@@ -21,7 +21,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from transformers.models.aya_vision.configuration_aya_vision import AyaVisionConfig
 from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionCausalLMOutputWithPast,
     AyaVisionForConditionalGeneration,
@@ -40,53 +39,10 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import check_model_inputs
+from .configuration_cohere2_vision import Cohere2VisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class Cohere2VisionConfig(AyaVisionConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Cohere2VisionForConditionalGeneration`]. It is used to instantiate an
-    Cohere2 Vision model according to the specified arguments, defining the model architecture.
-
-    [CohereLabs/command-a-vision-07-2025](https://huggingface.co/CohereLabs/command-a-vision-07-2025)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Cohere2Config`):
-            The config object or dictionary of the text backbone.
-        downsample_factor (`int`, *optional*, defaults to 2):
-            The factor by which to downsample the input image.
-        image_token_id (`int`, *optional*, defaults to 255036):
-            The token ID to use as placeholder for the image input.
-        alignment_intermediate_size (`int`, *optional*, defaults to 36864):
-            The size of the intermediate layer for alignment.
-    """
-
-    model_type = "cohere2_vision"
-    attribute_map = {}
-
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        downsample_factor=2,
-        image_token_id=255036,
-        alignment_intermediate_size=36864,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        del self.vision_feature_select_strategy
-        del self.vision_feature_layer
-        del self.image_token_index
-        del self.adapter_layer_norm_eps
-        self.image_token_id = image_token_id
-        self.alignment_intermediate_size = alignment_intermediate_size
 
 
 class Cohere2VisionMultiModalProjector(nn.Module):
@@ -180,6 +136,10 @@ class Cohere2VisionModel(AyaVisionModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Cohere2VisionModelOutputWithPast]:
+        r"""
+        image_num_patches (`torch.Tensor` of shape `(num_images,)`):
+            Number of patches per input image.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -264,6 +224,8 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Cohere2VisionCausalLMOutputWithPast]:
         r"""
+        image_num_patches (`torch.Tensor` of shape `(num_images,)`):
+            Number of patches per input image.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -403,6 +365,7 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
     min_patches = 1
     max_patches = 12
     crop_to_patches = True
+    patch_size = 16
 
 
 __all__ = [
@@ -410,5 +373,4 @@ __all__ = [
     "Cohere2VisionPreTrainedModel",  # noqa: F822
     "Cohere2VisionModel",
     "Cohere2VisionImageProcessorFast",
-    "Cohere2VisionConfig",
 ]

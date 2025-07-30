@@ -79,10 +79,15 @@ print(
 [[autodoc]] Cohere2VisionForConditionalGeneration
     - forward
 
-## Cohere2VisionImageProcessor
+## Cohere2VisionModel
 
-[[autodoc]] Cohere2VisionImageProcessor
-    - process_image
+[[autodoc]] Cohere2VisionModel
+    - forward
+
+## Cohere2VisionImageProcessorFast
+
+[[autodoc]] Cohere2VisionImageProcessorFast
+    - preprocess
 
 ## Cohere2VisionProcessor
 
