@@ -172,8 +172,8 @@ class PerceptionLMModel(LlavaModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor,
-        video_features: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
     ):
         """
         Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -182,10 +182,12 @@ class PerceptionLMModel(LlavaModel):
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+            )
+            special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+            )
+            special_video_mask = special_video_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
             special_video_mask = input_ids == self.config.video_token_id

@@ -1141,10 +1141,12 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+            )
+            special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+            )
+            special_video_mask = special_video_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
             special_video_mask = input_ids == self.config.video_token_id
@@ -1160,7 +1162,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
             raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
 
         return special_image_mask, special_video_mask

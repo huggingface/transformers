@@ -1204,26 +1204,30 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+            )
+            special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
-            special_video_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
 
+        n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
         if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
             raise ValueError(
-                f"Image features and image tokens do not match: tokens: {special_image_mask.sum()}, features {image_features.numel()}"
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
             )
 
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
             raise ValueError(
-                f"Video features and video tokens do not match: tokens: {special_video_mask.sum()}, features {image_features.numel()}"
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
+
         return special_image_mask, special_video_mask
 
     @auto_docstring

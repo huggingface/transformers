@@ -808,7 +808,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            ).all(-1)
+            )
+            special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
