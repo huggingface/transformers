@@ -88,6 +88,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         self.llm.prepare_inputs_for_generation = types.MethodType(prepare_inputs_for_generation, self.llm)  # patch llm
 
         self.embed_dim = self.llm.config.hidden_size
+        self.scale_emb = getattr(self.llm.config, "scale_emb", 1.0)
 
         # init vision module
         if self.config.init_vision:
@@ -359,24 +360,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     else:
                         vision_hidden_states.append([])
             else:  # no image
-                if self.training:
-                    dummy_image = torch.zeros((1, 3, 224, 224), device=device, dtype=dtype)
-                    tgt_sizes = torch.Tensor(
-                        [[(224 // self.config.patch_size), math.ceil(224 / self.config.patch_size)]]
-                    ).type(torch.int32)
-                    dummy_feature = self.resampler(self.vpm(dummy_image).last_hidden_state, tgt_sizes)
-                else:
-                    dummy_feature = []
+                dummy_feature = []
                 for _ in range(len(pixel_values_list)):
                     vision_hidden_states.append(dummy_feature)
 
         else:
             vision_hidden_states = data["vision_hidden_states"]
 
-        if hasattr(self.llm.config, "scale_emb"):
-            vllm_embedding = self.llm.model.embed_tokens(data["input_ids"]) * self.llm.config.scale_emb
-        else:
-            vllm_embedding = self.llm.model.embed_tokens(data["input_ids"])
+        vllm_embedding = self.llm.model.embed_tokens(data["input_ids"]) * self.scale_emb
 
         new_vllm_embedding = vllm_embedding.clone()
         
@@ -406,7 +397,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         return new_vllm_embedding, vision_hidden_states
 
-    def get_audio_embedding_streaming(self, data):
+    def get_audio_embedding_streaming(self, audio_features: torch.FloatTensor = [], audio_feature_lens_raw: List[List[int]] = []):
         r"""
         Extract audio embeddings in a streaming manner using cached key-value pairs.
 
@@ -415,20 +406,16 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         for streaming scenarios.
 
         Args:
-            data (dict):
-                - **"audio_features"** (`torch.FloatTensor`): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
-                - **"audio_feature_lens"** (List[List[int]]): Lengths of each audio segment for each item in the batch.
+            audio_features (torch.FloatTensor): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
+            audio_feature_lens_raw (List[List[int]]): Lengths of each audio segment for each item in the batch.
 
         Returns:
             List[List[torch.Tensor]]: audio embeddings
         """
-        wavforms = data.get("audio_features", [])  # (bs, 80, frames) or [], multi audios need filled in advance
-        audio_feature_lens_raw = data.get("audio_feature_lens", [])  # list, [[x1, x2], [y1], [z1]]
-
         # exist audio
-        if len(wavforms) > 0:
+        if len(audio_features) > 0:
             audio_feature_lens = torch.hstack(audio_feature_lens_raw)
-            batch_size, _, max_mel_seq_len = wavforms.shape
+            batch_size, _, max_mel_seq_len = audio_features.shape
             assert batch_size == 1
             max_seq_len = (max_mel_seq_len - 1) // 2 + 1
 
@@ -441,7 +428,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     )
                     self.audio_past_key_values = None
 
-            audio_outputs = self.apm(wavforms, past_key_values=self.audio_past_key_values, use_cache=True)
+            audio_outputs = self.apm(audio_features, past_key_values=self.audio_past_key_values, use_cache=True)
             audio_states = audio_outputs.last_hidden_state  # [:, :audio_feat_lengths, :]
             self.audio_past_key_values = audio_outputs.past_key_values
 
@@ -467,7 +454,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             return []
 
-    def get_audio_embedding(self, data, chunk_length=-1, dummy=True):
+    def get_audio_embedding(self, audio_features: torch.FloatTensor = [], audio_feature_lens_raw: List[List[int]] = [], chunk_length=-1, dummy=True):
         r"""
         Extract full audio embeddings with optional chunk-based attention.
 
@@ -476,23 +463,18 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         not use key-value caching and is suitable for non-streaming inference.
 
         Args:
-            data (dict):
-                - **"audio_features"** (`torch.FloatTensor`): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
-                - **"audio_feature_lens"** (List[List[int]]): Lengths of each audio segment for each item in the batch.
+            audio_features (torch.FloatTensor): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
+            audio_feature_lens_raw (List[List[int]]): Lengths of each audio segment for each item in the batch.
             chunk_length (int, optional): Determines whether to use full attention (-1) or chunk-based
                 attention (>0) during embedding computation.
 
         Returns:
             List[List[torch.Tensor]]: audio embeddings
         """
-        
-        wavforms = data.get("audio_features", [])  # (bs, 80, frames) or [], multi audios need filled in advance
-        audio_feature_lens_raw = data.get("audio_feature_lens", [])  # list, [[x1, x2], [y1], [z1]]
-
         # exist audio
-        if len(wavforms) > 0:
+        if len(audio_features) > 0:
             audio_feature_lens = torch.hstack(audio_feature_lens_raw)
-            batch_size, _, max_mel_seq_len = wavforms.shape
+            batch_size, _, max_mel_seq_len = audio_features.shape
             max_seq_len = (max_mel_seq_len - 1) // 2 + 1
 
             # Create a sequence tensor of shape (batch_size, max_seq_len)
@@ -524,7 +506,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
             audio_attention_mask[audio_attention_mask_] = float("-inf")
             audio_states = self.apm(
-                wavforms, output_hidden_states=True, attention_mask=audio_attention_mask
+                audio_features, output_hidden_states=True, attention_mask=audio_attention_mask
             ).hidden_states[self.audio_encoder_layer]
             audio_embeds = self.audio_projection_layer(audio_states)
 
@@ -545,20 +527,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     idx += 1
                 final_audio_embeds.append(target_audio_embeds)
             return final_audio_embeds
-        elif self.training and dummy:
-            dtype = self.apm.embed_positions.weight.dtype
-            device = self.apm.embed_positions.weight.device
-
-            dummy_wavs = torch.zeros((1, 80, 100), device=device, dtype=dtype)
-            audio_states = self.apm(dummy_wavs, output_hidden_states=True).hidden_states[self.audio_encoder_layer]
-
-            audio_embeds = self.audio_projection_layer(audio_states)
-
-            audio_embeds = audio_embeds.transpose(1, 2)
-            audio_embeds = self.audio_avg_pooler(audio_embeds)
-            audio_embeds = audio_embeds.transpose(1, 2)
-            return [audio_embeds]
-
         else:
             return []
 
@@ -573,9 +541,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             final embeddings with audio feature
         """
         if stream_input:
-            audio_embeddings = self.get_audio_embedding_streaming(data)
+            audio_embeddings = self.get_audio_embedding_streaming(data.get("audio_features", []), data.get("audio_feature_lens", []))
         else:
-            audio_embeddings = self.get_audio_embedding(data, chunk_length)
+            audio_embeddings = self.get_audio_embedding(data.get("audio_features", []), data.get("audio_feature_lens", []), chunk_length)
 
         bs = len(input_embeddings)
         if len(data.get("audio_features", [])) > 0:
@@ -618,6 +586,32 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         return input_embeddings
 
     def forward(self, data, **kwargs):
+        r"""
+        Perform a forward pass with multimodal inputs including vision and optional audio features.
+
+        Args:
+            data (`Dict`):
+                A dictionary containing multimodal inputs required to compute embeddings:
+
+                - `pixel_values` (`torch.FloatTensor` of shape `(B, C, H, W)`): Image tensors used for visual embedding.
+                - `tgt_sizes` (`torch.LongTensor` of shape `(num_images, 2)`): Target spatial size (H, W) after patch embedding.
+                - `image_bound` (`torch.LongTensor` of shape `(num_images, 2)`): Token index boundaries in the input sequence for each image.
+                - `input_ids` (`torch.LongTensor`): Tokenized input ids including placeholders for multimodal tokens.
+                - `position_ids` (`torch.LongTensor`): Positional indices, will be cast to `torch.int64` if needed.
+                - `audio_values` (`torch.FloatTensor`, *optional*): Optional raw audio input, used if `config.init_audio` is True.
+
+            **kwargs:
+                Additional standard generation/model arguments passed to the underlying language model, e.g.:
+                - `attention_mask`
+                - `past_key_values`
+                - `use_cache`
+                - `output_attentions`
+                - `output_hidden_states`
+                - `return_dict`
+
+        Returns:
+            Model outputs from the underlying language model, depending on `return_dict`.
+        """
         vllm_embedding, vision_hidden_states = self.get_vllm_embedding(data)
 
         if self.config.init_audio:
@@ -664,105 +658,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         thread.start()
 
         return streamer
-
-    def _decode_text(self, result_ids, tokenizer):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
-        result_text = []
-        for result in result_ids:
-            result = result[result != 0]
-            if result[0] == tokenizer.bos_id:
-                result = result[1:]
-            if result[-1] in terminators:
-                result = result[:-1]
-            result_text.append(tokenizer.decode(result))
-        return result_text
-
-    def get_sys_prompt(self, ref_audio=None, mode="default", language="zh"):
-        """
-        Choose different system prompts according to different tasks
-        Args:
-            ref_audio: if ref_audio is not None, will use the voice cloning prompts, and the voice
-                       generated by the model will refer to the timbre of ref audio
-            mode:
-                "default": default system prompt and not refer to any task
-                "omni": input video and audio simultaneously
-                "audio_assistant": Default voice-only mode, the model will use the ref_audio's voice to reply user's question as a helpful assistant.
-                "audio_roleplay": Roleplay voice-only mode, the model will use the ref_audio's voice to reply, and also role-play the character based on the audio prompt.
-                "voice_cloning": TTS mode, the model will clone the voice of ref_audio.
-            language: prompts language, the model has the ability to automatically select the response language
-                    based on the question language
-        Returns:
-
-        """
-        if ref_audio is not None:
-            assert isinstance(ref_audio, np.ndarray), "ref_audio error"
-        if mode == "omni":
-            if language == "zh":
-                sys_prompt = "你是一个AI助手。你能接受视频，音频和文本输入并输出语音和文本。"
-                vc_prompt_prefix = sys_prompt + "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
-            else:
-                sys_prompt = "You are a helpful assistant. You can accept video, audio and text input and output voice and text. "
-                vc_prompt_prefix = sys_prompt + "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "As an assistant, you will speak using this voice style."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-
-            else:
-                sys_msgs = {"role": "user", "content": [sys_prompt]}
-
-            return sys_msgs
-        elif mode == "audio_assistant":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "As an assistant, you will speak using this voice style."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-
-            else:
-                logger.warning(
-                    "Warning: ref_audio is None, speech generation will be performed based on the default voice."
-                )
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
-
-            return sys_msgs
-        elif mode == "audio_roleplay":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "假装你是上述音频中的人物，与我进行对话。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "Try to role-play the character based on the audio prompt above."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-            else:
-                print("Warning: ref_audio is None, speech generation will be performed based on the default voice.")
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
-
-            return sys_msgs
-        elif mode == "voice_cloning":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio]}
-            else:
-                raise ValueError("ref_audio con't be None in voice_cloning mode.")
-
-            return sys_msgs
-        else:
-            sys_prompt = "You are a helpful assistant. You can accept audio and text input and output voice and text."
-            sys_msgs = {"role": "user", "content": [sys_prompt]}
-
-            return sys_msgs
 
     def generate(
         self,
@@ -813,8 +708,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 outputs = {}
             else:
                 outputs = self._decode(model_inputs["inputs_embeds"], tokenizer, attention_mask, **kwargs)
-
-                result = self._decode_text(outputs.sequences, tokenizer)
+                result = self.processor.decode_text(outputs.sequences, tokenizer, self.terminators)
 
         return result, outputs
 
@@ -2282,9 +2176,6 @@ class GFSQ(nn.Module):
         feat = self.quantizer.get_output_from_indices(x)
         return feat.transpose_(1, 2) if self.transpose else feat
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return super().__call__(x)
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.transpose:
             x.transpose_(1, 2)
@@ -2394,10 +2285,7 @@ class DVAE(nn.Module):
             del x
             return ind
 
-        if self.vq_layer is not None:
-            vq_feats = self.vq_layer._embed(inp)
-        else:
-            vq_feats = inp
+        vq_feats = self.vq_layer._embed(inp)
 
         vq_feats = (
             vq_feats.view(
