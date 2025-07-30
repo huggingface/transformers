@@ -156,7 +156,7 @@ class OpenAIMoeMLP(nn.Module):
     def forward(self, hidden_states):
         router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
         routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
-        return routed_out
+        return routed_out, router_scores
 
 
 class OpenAIMoeRotaryEmbedding(nn.Module):
@@ -315,8 +315,8 @@ class OpenAIMoeAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,  # main diff with Llama
-            s_aux=self.sinks,
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks,  # diff with Llama
             **kwargs,
         )
 
@@ -364,7 +364,7 @@ class OpenAIMoeDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)  # diff with llama: router scores
         hidden_states = residual + hidden_states
         return hidden_states
 
