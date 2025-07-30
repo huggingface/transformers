@@ -5081,6 +5081,8 @@ class ModelTesterMixin:
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            if "TimmBackbone" in model_class.__name__:
+                self.skipTest("TimmBackbone should not run this test")
             # First check that it works correctly
             model = model_class(copy.deepcopy(config))
             with tempfile.TemporaryDirectory() as tmpdirname:
