@@ -144,7 +144,7 @@ class ModelArguments:
             )
         },
     )
-    torch_dtype: Optional[str] = field(
+    dtype: Optional[str] = field(
         default=None,
         metadata={
             "help": (
@@ -487,10 +487,10 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        torch_dtype = (
-            model_args.torch_dtype
-            if model_args.torch_dtype in ["auto", None]
-            else getattr(torch, model_args.torch_dtype)
+        dtype = (
+            model_args.dtype
+            if model_args.dtype in ["auto", None]
+            else getattr(torch, model_args.dtype)
         )
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
@@ -500,7 +500,7 @@ def main():
             revision=model_args.model_revision,
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
     else:
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
