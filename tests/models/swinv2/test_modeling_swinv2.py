@@ -365,7 +365,7 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             [num_patches, self.model_tester.embed_dim],
         )
 
-        if not model_class.__name__ == "Swinv2Backbone":
+        if model_class.__name__ != "Swinv2Backbone":
             reshaped_hidden_states = outputs.reshaped_hidden_states
             self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 

@@ -3521,7 +3521,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             **kwargs,
         )
 
-        pair = bool(pair_ids is not None)
+        pair = pair_ids is not None
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
 

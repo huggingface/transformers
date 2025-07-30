@@ -495,7 +495,7 @@ def main():
 
         # region Training and validation
         if training_args.do_train:
-            if training_args.do_eval and not data_args.task_name == "mnli":
+            if training_args.do_eval and data_args.task_name != "mnli":
                 # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
                 # because MNLI has two validation sets
                 validation_data = tf_data["validation"]
