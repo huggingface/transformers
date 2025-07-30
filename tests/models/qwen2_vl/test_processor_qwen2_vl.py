@@ -20,18 +20,18 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import AutoProcessor, Qwen2Tokenizer
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers import AutoProcessor, Qwen2TokenizerFast
+from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2VLImageProcessor, Qwen2VLProcessor
+    from transformers import Qwen2VLProcessor
 
     if is_torchvision_available():
-        from transformers import Qwen2VLVideoProcessor
+        from transformers import Qwen2VLImageProcessorFast, Qwen2VLVideoProcessor
 
 if is_torch_available():
     import torch
@@ -39,6 +39,7 @@ if is_torch_available():
 
 @require_vision
 @require_torch
+@require_torchvision
 class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2VLProcessor
 
@@ -67,6 +68,19 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
+
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
@@ -76,12 +90,12 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = Qwen2VLProcessor.from_pretrained(self.tmpdirname, use_fast=True)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
+        self.assertIsInstance(processor.tokenizer, Qwen2TokenizerFast)
+        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessorFast)
         self.assertIsInstance(processor.video_processor, Qwen2VLVideoProcessor)
 
     def test_image_processor(self):
@@ -95,10 +109,10 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
+        input_image_proc = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
 
-        for key in input_image_proc.keys():
+        for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):

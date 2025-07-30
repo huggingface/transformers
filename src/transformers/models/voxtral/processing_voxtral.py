@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import io
+import warnings
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
@@ -165,7 +166,7 @@ class VoxtralProcessor(ProcessorMixin):
         }
 
         for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
                 value = kwargs.pop(key, default_value)
@@ -242,7 +243,7 @@ class VoxtralProcessor(ProcessorMixin):
         the text. Please refer to the docstring of the above methods for more information.
         This methods does not support audio. To prepare the audio, please use:
         1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
-        2. `apply_transcrition_request` [`~VoxtralProcessor.apply_transcrition_request`] method.
+        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
 
         Args:
             text (`str`, `list[str]`, `list[list[str]]`):
@@ -284,7 +285,7 @@ class VoxtralProcessor(ProcessorMixin):
         return BatchFeature(data=out, tensor_type=common_kwargs.pop("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
-    def apply_transcrition_request(
+    def apply_transcription_request(
         self,
         language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
@@ -306,7 +307,7 @@ class VoxtralProcessor(ProcessorMixin):
         language = "en"
         audio = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
 
-        inputs = processor.apply_transcrition_request(language=language, audio=audio, model_id=model_id)
+        inputs = processor.apply_transcription_request(language=language, audio=audio, model_id=model_id)
         ```
 
         Args:
@@ -430,6 +431,17 @@ class VoxtralProcessor(ProcessorMixin):
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
         return texts
+
+    # Deprecated typo'd method for backward compatibility
+    def apply_transcrition_request(self, *args, **kwargs):
+        """
+        Deprecated typo'd method. Use `apply_transcription_request` instead.
+        """
+        warnings.warn(
+            "`apply_transcrition_request` is deprecated due to a typo and will be removed in a future release. Please use `apply_transcription_request` instead.",
+            FutureWarning,
+        )
+        return self.apply_transcription_request(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """

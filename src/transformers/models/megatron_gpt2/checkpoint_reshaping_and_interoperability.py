@@ -189,7 +189,7 @@ def recursive_print(name, val, spaces=0):
     if isinstance(val, dict):
         if msg is not None:
             print(msg)
-        for k in val.keys():
+        for k in val:
             recursive_print(k, val[k], spaces + 2)
     elif isinstance(val, torch.Tensor):
         print(msg, ":", val.size())
@@ -448,7 +448,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         # The transformer.
         path = (
             "model.language_model.transformer"
-            if "transformer" in get_element_from_dict_by_path(tp_state_dicts[0], "model.language_model").keys()
+            if "transformer" in get_element_from_dict_by_path(tp_state_dicts[0], "model.language_model")
             else "model.language_model.encoder"
         )
         # Extract the layers.
@@ -793,9 +793,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         for layer in range(num_layers):
             pp_layer_id = layer + layer_offset
             layers_to_copy = [
-                layer_name
-                for layer_name in state_dict.keys()
-                if layer_name.startswith(f"transformer.h.{pp_layer_id}.")
+                layer_name for layer_name in state_dict if layer_name.startswith(f"transformer.h.{pp_layer_id}.")
             ]
 
             for layer_name in layers_to_copy:
@@ -844,7 +842,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                 # handle attention and mlp weights
                 elif weight_or_bias == "weight":
-                    out_name = transformers_to_megatron.get(op_name, None)
+                    out_name = transformers_to_megatron.get(op_name)
                     if out_name is None:
                         continue
                     params = params.transpose(0, 1)
@@ -852,7 +850,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                 # handle attention and mlp bias
                 elif weight_or_bias == "bias":
-                    out_name = transformers_to_megatron.get(op_name, None)
+                    out_name = transformers_to_megatron.get(op_name)
                     if out_name is None:
                         continue
                     layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"

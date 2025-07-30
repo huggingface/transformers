@@ -138,6 +138,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
         processed_grids = {}
         for shape, stacked_images in grouped_images.items():
+            resized_height, resized_width = stacked_images.shape[-2:]
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -188,9 +189,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         **kwargs: Unpack[Glm4vFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-        """
         return super().preprocess(images, **kwargs)
 
 

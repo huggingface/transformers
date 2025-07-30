@@ -763,7 +763,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
-        for key in cpu_outputs.keys():
+        for key in cpu_outputs:
             torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(
