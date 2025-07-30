@@ -351,7 +351,7 @@ class MllamaVisionEncoder(nn.Module):
 
         """
         encoder_states = ()
-        
+
         for encoder_layer in self.layers:
             encoder_states = encoder_states + (hidden_states,)
             hidden_states = encoder_layer(
@@ -360,7 +360,7 @@ class MllamaVisionEncoder(nn.Module):
             )
 
         encoder_states = encoder_states + (hidden_states,)
-        
+
         return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states)
 
 
