@@ -835,7 +835,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some key elements:\n\n* **A prominent red']  # fmt: skip
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @unittest.skip("For now, using a gemma model with the 3n class is not supported")
@@ -880,7 +880,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
+    @parameterized.expand([("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
@@ -897,6 +897,37 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+        ).to(torch_device)
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
+
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+
+        EXPECTED_COMPLETIONS = [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_generation_beyond_sliding_window_flash_attn(self):
+        """Test that we can correctly generate beyond the sliding window with flash attention 2.
+        This is non trivial as we need to correctly slice the attention mask in all cases (because we use a HybridCache).
+        Outputs for every attention functions should be coherent and identical.
+        """
+        model_id = "google/gemma-3n-E2B-it"
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
