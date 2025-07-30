@@ -157,7 +157,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             layers in the model "share" the KV values in that each local and global layer in this range uses the KV
             cache values computed for the last local or global layer, respectively, before entering this range. The
             value should be a multiple of the attention pattern size (see `layer_types` parameter).
-        laurel_rank (`int`, *optional*, defaults to 64):
+        laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
         activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,)`):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
