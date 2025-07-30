@@ -428,43 +428,6 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
     See `SlidingWindowLayer` for details on common methods that are implemented by all cache layers.
     """
 
-    def __init__(
-        self,
-        max_cache_len: int,
-        batch_size: int,
-        num_heads: int,
-        head_dim: int,
-        sliding_window: int,
-        dtype: torch.dtype = torch.float32,
-        device: str = "cpu",
-    ):
-        """
-        Args:
-            max_cache_len (`int`):
-                Maximum number of tokens that can be stored, used for tensor preallocation.
-            batch_size (`int`):
-                Maximum batch size the cache is pre-allocated for.
-            num_heads (`int`):
-                Number of attention heads.
-            head_dim (`int`):
-                Per-head hidden dimension.
-            sliding_window (`int`):
-                The size of the sliding window.
-            dtype (`torch.dtype`, defaults to `torch.float32`):
-                Data type of the cache tensors.
-            device (`str` or `torch.device`, defaults to `"cpu"`):
-                Device on which the cache tensors will be materialised.
-        """
-        super().__init__(
-            max_cache_len=max_cache_len,
-            batch_size=batch_size,
-            num_heads=num_heads,
-            head_dim=head_dim,
-            sliding_window=sliding_window,
-            dtype=dtype,
-            device=device,
-        )
-
     def update(
         self,
         key_states: torch.Tensor,
